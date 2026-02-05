@@ -1,0 +1,27 @@
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/medmodels/graphrecords"
+license = "MIT"
+readme = "README.md"
+description = "High-performance graph-based data records"
+
+[workspace.dependencies]
+hashbrown = { version = "0.14.5", features = ["serde"] }
+serde = { version = "1.0.203", features = ["derive"] }
+polars = { version = "0.48.1", features = ["polars-io", "dtype-full"] }
+chrono = { version = "0.4.38", features = ["serde"] }
+pyo3 = { version = "0.24", features = ["chrono", "extension-module"] }
+rayon = "1.10.0"
+bincode = "1.3.3"
+
+graphrecords = { version = "0.1.0", path = "crates/graphrecords" }
+graphrecords-core = { version = "0.1.0", path = "crates/graphrecords-core" }
+graphrecords-utils = { version = "0.1.0", path = "crates/graphrecords-utils" }
+graphrecords-python = { version = "0.1.0", path = "crates/graphrecords-python" }
+py-graphrecords = { version = "0.1.0", path = "crates/py-graphrecords" }
+graphrecords-pyo3-interop = { version = "0.1.0", path = "crates/graphrecords-pyo3-interop" }

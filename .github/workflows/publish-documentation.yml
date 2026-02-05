@@ -1,0 +1,17 @@
+name: Publish Documentation
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish-documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger medmodels/medmodels-website to publish documentation
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.MEDMODELS_WEBSITE_TOKEN }}
+          repository: medmodels/medmodels-website
+          event-type: publish-documentation-graphrecords
+          client-payload: '{"version": "${{ github.event.release.tag_name }}"}'

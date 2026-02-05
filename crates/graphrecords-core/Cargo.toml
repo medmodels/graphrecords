@@ -1,0 +1,22 @@
+[package]
+name = "graphrecords-core"
+version = { workspace = true }
+description = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+readme = "../../README.md"
+
+[dependencies]
+graphrecords-utils = { workspace = true }
+
+polars = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+rayon = { workspace = true }
+
+rand = "0.9.1"
+ron = "0.8.1"
+roaring = "0.10.6"
+itertools = "0.13.0"
+tabled = "0.20.0"
