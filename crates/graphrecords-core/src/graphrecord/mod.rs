@@ -3,6 +3,8 @@ pub mod datatypes;
 mod graph;
 mod group_mapping;
 pub mod overview;
+#[cfg(feature = "plugins")]
+pub mod plugin;
 mod polars;
 pub mod querying;
 pub mod schema;
@@ -29,13 +31,15 @@ use querying::{
     ReturnOperand, Selection, edges::EdgeOperand, nodes::NodeOperand, wrapper::Wrapper,
 };
 use schema::{GroupSchema, Schema, SchemaType};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, hash_map::Entry},
     fmt::{Display, Formatter},
-    fs, mem,
-    path::Path,
+    mem,
 };
+#[cfg(feature = "serde")]
+use std::{fs, path::Path};
 
 pub struct NodeDataFrameInput {
     dataframe: DataFrame,
@@ -125,8 +129,9 @@ fn dataframes_to_tuples(
     Ok((nodes, edges))
 }
 
+#[derive(Default, Debug, Clone)]
 #[allow(clippy::unsafe_derive_deserialize)]
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GraphRecord {
     graph: Graph,
     group_mapping: GroupMapping,
@@ -146,19 +151,14 @@ impl Display for GraphRecord {
 impl GraphRecord {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            graph: Graph::new(),
-            group_mapping: GroupMapping::new(),
-            schema: Schema::default(),
-        }
+        Self::default()
     }
 
     #[must_use]
     pub fn with_schema(schema: Schema) -> Self {
         Self {
-            graph: Graph::new(),
-            group_mapping: GroupMapping::new(),
             schema,
+            ..Default::default()
         }
     }
 
@@ -166,8 +166,8 @@ impl GraphRecord {
     pub fn with_capacity(nodes: usize, edges: usize, schema: Option<Schema>) -> Self {
         Self {
             graph: Graph::with_capacity(nodes, edges),
-            group_mapping: GroupMapping::new(),
             schema: schema.unwrap_or_default(),
+            ..Default::default()
         }
     }
 
@@ -214,6 +214,7 @@ impl GraphRecord {
         Self::from_tuples(nodes, None, schema)
     }
 
+    #[cfg(feature = "serde")]
     pub fn from_ron<P>(path: P) -> Result<Self, GraphRecordError>
     where
         P: AsRef<Path>,
@@ -228,6 +229,7 @@ impl GraphRecord {
         })
     }
 
+    #[cfg(feature = "serde")]
     pub fn to_ron<P>(&self, path: P) -> Result<(), GraphRecordError>
     where
         P: AsRef<Path>,
@@ -1140,12 +1142,6 @@ impl GraphRecord {
     }
 }
 
-impl Default for GraphRecord {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::{Attributes, GraphRecord, GraphRecordAttribute, NodeIndex};
@@ -1158,7 +1154,9 @@ mod test {
         },
     };
     use polars::prelude::{DataFrame, NamedFrom, PolarsError, Series};
-    use std::{collections::HashMap, fs};
+    use std::collections::HashMap;
+    #[cfg(feature = "serde")]
+    use std::fs;
 
     fn create_nodes() -> Vec<(NodeIndex, Attributes)> {
         vec![
@@ -1286,6 +1284,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn test_ron() {
         let graphrecord = create_graphrecord();
 

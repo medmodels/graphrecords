@@ -6,6 +6,7 @@ use crate::errors::GraphError;
 use edge::Edge;
 use graphrecords_utils::aliases::MrHashMap;
 use node::Node;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -16,7 +17,8 @@ pub type NodeIndex = GraphRecordAttribute;
 pub type EdgeIndex = u32;
 pub type Attributes = HashMap<GraphRecordAttribute, GraphRecordValue>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Default, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(super) struct Graph {
     pub(crate) nodes: MrHashMap<NodeIndex, Node>,
     pub(crate) edges: MrHashMap<EdgeIndex, Edge>,
@@ -572,7 +574,7 @@ mod test {
         assert_eq!(4, graph.node_count());
 
         let attributes = graph
-            .remove_node(&"0".into(), &mut GroupMapping::new())
+            .remove_node(&"0".into(), &mut GroupMapping::default())
             .unwrap();
 
         assert_eq!(3, graph.node_count());
@@ -589,7 +591,7 @@ mod test {
 
         assert!(
             graph
-                .remove_node(&0.into(), &mut GroupMapping::new())
+                .remove_node(&0.into(), &mut GroupMapping::default())
                 .is_ok()
         );
 
@@ -603,7 +605,7 @@ mod test {
 
         assert!(
             graph
-                .remove_node(&"50".into(), &mut GroupMapping::new())
+                .remove_node(&"50".into(), &mut GroupMapping::default())
                 .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
         );
     }

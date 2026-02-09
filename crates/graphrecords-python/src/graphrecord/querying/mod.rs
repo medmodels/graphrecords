@@ -32,7 +32,7 @@ use attributes::{
     PyNodeSingleAttributeWithIndexOperand, PyNodeSingleAttributeWithoutIndexOperand,
 };
 use edges::{PyEdgeIndexOperand, PyEdgeIndicesOperand};
-use graphrecords::core::{
+use graphrecords_core::{
     GraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{

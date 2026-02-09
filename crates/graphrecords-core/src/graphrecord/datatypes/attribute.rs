@@ -4,6 +4,7 @@ use super::{
 };
 use crate::errors::{GraphRecordError, GraphRecordResult};
 use graphrecords_utils::implement_from_for_wrapper;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
@@ -12,7 +13,8 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GraphRecordAttribute {
     Int(i64),
     String(String),

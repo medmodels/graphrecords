@@ -4,13 +4,15 @@ use crate::{
     graphrecord::{GraphRecordAttribute, datatypes::DataType},
 };
 use graphrecords_utils::aliases::MrHashMap;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, hash_map::Entry},
     ops::Deref,
 };
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum AttributeType {
     Categorical,
     Continuous,
@@ -66,7 +68,8 @@ impl DataType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct AttributeDataType {
     data_type: DataType,
     attribute_type: AttributeType,
@@ -205,7 +208,8 @@ impl AttributeSchemaKind<'_> {
 
 type AttributeSchemaMapping = HashMap<GraphRecordAttribute, AttributeDataType>;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct AttributeSchema(AttributeSchemaMapping);
 
 impl Deref for AttributeSchema {
@@ -319,7 +323,8 @@ impl AttributeSchema {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GroupSchema {
     nodes: AttributeSchema,
     edges: AttributeSchema,
@@ -376,14 +381,16 @@ impl GroupSchema {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SchemaType {
     #[default]
     Inferred,
     Provided,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Schema {
     groups: HashMap<Group, GroupSchema>,
     ungrouped: GroupSchema,

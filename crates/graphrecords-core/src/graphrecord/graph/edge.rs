@@ -1,7 +1,9 @@
 use super::{Attributes, NodeIndex};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Edge {
     pub(crate) attributes: Attributes,
     pub(crate) source_node_index: NodeIndex,

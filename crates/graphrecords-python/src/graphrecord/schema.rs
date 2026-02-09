@@ -5,7 +5,7 @@ use super::{
     errors::PyGraphRecordError,
     traits::{DeepFrom, DeepInto},
 };
-use graphrecords::core::{
+use graphrecords_core::{
     errors::GraphError,
     graphrecord::{
         EdgeIndex, Group,

@@ -5,6 +5,7 @@ use super::{
 use crate::errors::GraphRecordError;
 use chrono::{DateTime, NaiveDateTime, TimeDelta};
 use graphrecords_utils::implement_from_for_wrapper;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
@@ -12,7 +13,8 @@ use std::{
     ops::{Add, Div, Mul, Range, Sub},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GraphRecordValue {
     String(String),
     Int(i64),
