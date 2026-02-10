@@ -1,18 +1,22 @@
 use super::{
-    operation::{EdgeDirection, NodeIndexOperation, NodeIndicesOperation, NodeOperation},
     BinaryArithmeticKind, MultipleComparisonKind, NodeOperandContext, SingleComparisonKind,
     SingleKind, UnaryArithmeticKind,
+    operation::{EdgeDirection, NodeIndexOperation, NodeIndicesOperation, NodeOperation},
 };
 use crate::{
+    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
+        GraphRecordAttribute, Group, NodeIndex,
         querying::{
+            BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
+            GroupedIterator, ReduceInput, RootOperand,
             attributes::{AttributesTreeContext, AttributesTreeOperand},
             edges::{self, EdgeOperand},
             group_by::{GroupKey, GroupOperand, PartitionGroups},
             nodes::{
-                group_by::{self, NodeOperandGroupDiscriminator},
                 NodeIndicesOperandContext,
+                group_by::{self, NodeOperandGroupDiscriminator},
             },
             operand_traits::{
                 Abs, Add, Attribute, Attributes, Contains, Count, Edges, EitherOr, EndsWith,
@@ -23,13 +27,9 @@ use crate::{
             },
             values::{self, MultipleValuesWithIndexOperand},
             wrapper::{CardinalityWrapper, Wrapper},
-            BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
-            GroupedIterator, ReduceInput, RootOperand,
         },
-        GraphRecordAttribute, Group, NodeIndex,
     },
     prelude::GraphRecordValue,
-    GraphRecord,
 };
 use graphrecords_utils::traits::ReadWriteOrPanic;
 use std::{collections::HashSet, fmt::Debug};
@@ -428,7 +428,7 @@ impl Exclude for NodeOperand {
 }
 
 impl NodeOperand {
-    pub(crate) fn new(context: Option<NodeOperandContext>) -> Self {
+    pub(crate) const fn new(context: Option<NodeOperandContext>) -> Self {
         Self {
             context,
             operations: Vec::new(),
@@ -1007,14 +1007,14 @@ impl Exclude for NodeIndicesOperand {
 }
 
 impl NodeIndicesOperand {
-    pub(crate) fn new(context: NodeIndicesOperandContext) -> Self {
+    pub(crate) const fn new(context: NodeIndicesOperandContext) -> Self {
         Self {
             context,
             operations: Vec::new(),
         }
     }
 
-    pub(crate) fn push_merge_operation(&mut self, operand: Wrapper<NodeIndicesOperand>) {
+    pub(crate) fn push_merge_operation(&mut self, operand: Wrapper<Self>) {
         self.operations
             .push(NodeIndicesOperation::Merge { operand });
     }
@@ -1025,7 +1025,7 @@ impl Wrapper<NodeIndicesOperand> {
         NodeIndicesOperand::new(context).into()
     }
 
-    pub(crate) fn push_merge_operation(&self, operand: Wrapper<NodeIndicesOperand>) {
+    pub(crate) fn push_merge_operation(&self, operand: Self) {
         self.0.write_or_panic().push_merge_operation(operand);
     }
 }
@@ -1416,7 +1416,7 @@ impl Exclude for NodeIndexOperand {
 }
 
 impl NodeIndexOperand {
-    pub(crate) fn new(context: NodeIndicesOperand, kind: SingleKind) -> Self {
+    pub(crate) const fn new(context: NodeIndicesOperand, kind: SingleKind) -> Self {
         Self {
             context,
             kind,

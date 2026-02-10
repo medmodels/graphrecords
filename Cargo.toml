@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 repository = "https://github.com/medmodels/graphrecords"
 license = "MIT"
 readme = "README.md"
@@ -25,3 +25,17 @@ graphrecords-utils = { version = "0.1.0", path = "crates/graphrecords-utils" }
 graphrecords-python = { version = "0.1.0", path = "crates/graphrecords-python" }
 py-graphrecords = { version = "0.1.0", path = "crates/py-graphrecords" }
 graphrecords-pyo3-interop = { version = "0.1.0", path = "crates/graphrecords-pyo3-interop" }
+
+[workspace.lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+option_if_let_else = "allow"
+used_underscore_items = "allow"
+cast_precision_loss = "allow"
+cast_possible_wrap = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+too_many_lines = "allow"
+similar_names = "allow"
+# TODO(#13): Re-enable once docs are written
+missing_errors_doc = "allow"

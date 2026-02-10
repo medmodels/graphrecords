@@ -1,9 +1,9 @@
 use crate::{
+    GraphRecord,
     errors::GraphRecordError,
     prelude::{
         Attributes, EdgeIndex, GraphRecordAttribute, GraphRecordValue, Group, NodeIndex, SchemaType,
     },
-    GraphRecord,
 };
 
 macro_rules! impl_attributes_mut {

@@ -1,5 +1,8 @@
 use graphrecords::utils::aliases::MrHashMap;
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::HashMap,
+    hash::{BuildHasher, Hash},
+};
 
 pub trait DeepFrom<T> {
     fn deep_from(value: T) -> Self;
@@ -18,10 +21,11 @@ where
     }
 }
 
-impl<K, KF, V, VF> DeepFrom<HashMap<K, V>> for HashMap<KF, VF>
+impl<K, KF, V, VF, H> DeepFrom<HashMap<K, V>> for HashMap<KF, VF, H>
 where
     KF: Hash + Eq + DeepFrom<K>,
     VF: DeepFrom<V>,
+    H: BuildHasher + Default,
 {
     fn deep_from(value: HashMap<K, V>) -> Self {
         value
@@ -31,10 +35,11 @@ where
     }
 }
 
-impl<K, KF, V, VF> DeepFrom<MrHashMap<K, V>> for HashMap<KF, VF>
+impl<K, KF, V, VF, H> DeepFrom<MrHashMap<K, V>> for HashMap<KF, VF, H>
 where
     KF: Hash + Eq + DeepFrom<K>,
     VF: DeepFrom<V>,
+    H: BuildHasher + Default,
 {
     fn deep_from(value: MrHashMap<K, V>) -> Self {
         value
@@ -82,6 +87,6 @@ where
     VF: DeepFrom<V>,
 {
     fn deep_from(value: Option<V>) -> Self {
-        value.map(|v| v.deep_into())
+        value.map(DeepInto::deep_into)
     }
 }

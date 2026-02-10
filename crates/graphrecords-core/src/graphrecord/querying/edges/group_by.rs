@@ -1,16 +1,16 @@
 use super::EdgeOperand;
 use crate::{
+    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::querying::{
+        BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
+        GroupedIterator,
         edges::{EdgeIndexOperand, EdgeIndicesOperand, EdgeIndicesOperandContext},
         group_by::{GroupBy, GroupOperand, GroupedOperand, PartitionGroups, Ungroup},
         nodes::NodeOperand,
         wrapper::Wrapper,
-        BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
-        GroupedIterator,
     },
     prelude::GraphRecordAttribute,
-    GraphRecord,
 };
 
 #[derive(Debug, Clone)]
@@ -100,7 +100,7 @@ impl<'a> EvaluateBackward<'a> for GroupOperand<EdgeIndicesOperand> {
 
         let indices: Vec<_> = partitions
             .map(|(key, partition)| {
-                let reduced_partition: BoxedIterator<_> = Box::new(partition.cloned());
+                let reduced_partition: BoxedIterator<_> = Box::new(partition.copied());
 
                 Ok((key, reduced_partition))
             })

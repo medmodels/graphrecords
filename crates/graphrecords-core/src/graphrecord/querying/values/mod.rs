@@ -3,18 +3,18 @@ mod operand;
 mod operation;
 
 use super::{
+    BoxedIterator, EvaluateBackward, Index, RootOperand,
     attributes::{MultipleAttributesWithIndexOperand, MultipleAttributesWithIndexOperation},
     edges::EdgeOperand,
     group_by::GroupOperand,
     nodes::NodeOperand,
-    BoxedIterator, EvaluateBackward, Index, RootOperand,
 };
 use crate::{
+    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
-        querying::DeepClone, EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex,
+        EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex, querying::DeepClone,
     },
-    GraphRecord,
 };
 pub use operand::{
     EdgeMultipleValuesWithIndexOperand, EdgeMultipleValuesWithoutIndexOperand,
@@ -39,7 +39,7 @@ impl<O: RootOperand> MultipleValuesWithIndexContext<O> {
     pub(crate) fn get_values<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a>
+    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a + use<'a, O>>
     where
         O: 'a,
     {
@@ -80,7 +80,7 @@ impl<O: RootOperand> MultipleValuesWithoutIndexContext<O> {
     pub(crate) fn get_values<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<impl Iterator<Item = GraphRecordValue> + 'a>
+    ) -> GraphRecordResult<impl Iterator<Item = GraphRecordValue> + 'a + use<'a, O>>
     where
         O: 'a,
     {
@@ -189,12 +189,12 @@ pub enum BinaryArithmeticKind {
 impl Display for BinaryArithmeticKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BinaryArithmeticKind::Add => write!(f, "add"),
-            BinaryArithmeticKind::Sub => write!(f, "sub"),
-            BinaryArithmeticKind::Mul => write!(f, "mul"),
-            BinaryArithmeticKind::Div => write!(f, "div"),
-            BinaryArithmeticKind::Pow => write!(f, "pow"),
-            BinaryArithmeticKind::Mod => write!(f, "mod"),
+            Self::Add => write!(f, "add"),
+            Self::Sub => write!(f, "sub"),
+            Self::Mul => write!(f, "mul"),
+            Self::Div => write!(f, "div"),
+            Self::Pow => write!(f, "pow"),
+            Self::Mod => write!(f, "mod"),
         }
     }
 }
@@ -257,7 +257,7 @@ impl GetValues<NodeIndex> for NodeOperand {
     where
         NodeIndex: 'a,
     {
-        node_indices.flat_map(move |node_index| {
+        node_indices.filter_map(move |node_index| {
             let attribute = graphrecord
                 .node_attributes(node_index)
                 .expect("Node must exist")
@@ -295,7 +295,7 @@ impl GetValues<EdgeIndex> for EdgeOperand {
     where
         EdgeIndex: 'a,
     {
-        edge_indices.flat_map(move |edge_index| {
+        edge_indices.filter_map(move |edge_index| {
             Some((
                 edge_index,
                 graphrecord

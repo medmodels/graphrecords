@@ -1,7 +1,7 @@
 use crate::graphrecord::querying::{
+    DeepClone,
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
-    DeepClone,
 };
 use graphrecords_utils::traits::ReadWriteOrPanic;
 
@@ -12,6 +12,7 @@ pub trait Index {
 }
 
 impl<O: Index> Wrapper<O> {
+    #[must_use]
     pub fn index(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().index()
     }

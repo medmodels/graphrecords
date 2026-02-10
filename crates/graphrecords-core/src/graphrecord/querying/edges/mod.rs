@@ -3,15 +3,15 @@ mod operand;
 mod operation;
 
 use crate::{
-    errors::GraphRecordResult,
-    graphrecord::querying::{group_by::GroupOperand, BoxedIterator, EvaluateBackward},
-    prelude::EdgeIndex,
     GraphRecord,
+    errors::GraphRecordResult,
+    graphrecord::querying::{BoxedIterator, EvaluateBackward, group_by::GroupOperand},
+    prelude::EdgeIndex,
 };
 
 use super::{
-    nodes::{EdgeDirection, NodeOperand},
     DeepClone,
+    nodes::{EdgeDirection, NodeOperand},
 };
 pub use group_by::EdgeOperandGroupDiscriminator;
 pub use operand::{
@@ -76,7 +76,7 @@ impl<'a> EvaluateBackward<'a> for EdgeIndicesOperandContext {
     ) -> GraphRecordResult<Self::ReturnValue> {
         Ok(match self {
             Self::EdgeOperand(operand) => {
-                Box::new(operand.evaluate_backward(graphrecord)?.cloned())
+                Box::new(operand.evaluate_backward(graphrecord)?.copied())
             }
             Self::EdgeIndexGroupByOperand(operand) => Box::new(
                 operand
@@ -132,11 +132,11 @@ pub enum BinaryArithmeticKind {
 impl Display for BinaryArithmeticKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BinaryArithmeticKind::Add => write!(f, "add"),
-            BinaryArithmeticKind::Sub => write!(f, "sub"),
-            BinaryArithmeticKind::Mul => write!(f, "mul"),
-            BinaryArithmeticKind::Pow => write!(f, "pow"),
-            BinaryArithmeticKind::Mod => write!(f, "mod"),
+            Self::Add => write!(f, "add"),
+            Self::Sub => write!(f, "sub"),
+            Self::Mul => write!(f, "mul"),
+            Self::Pow => write!(f, "pow"),
+            Self::Mod => write!(f, "mod"),
         }
     }
 }

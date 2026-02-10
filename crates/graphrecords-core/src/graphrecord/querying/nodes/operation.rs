@@ -1,28 +1,28 @@
 use super::{
+    BinaryArithmeticKind, MultipleComparisonKind, NodeOperand, SingleComparisonKind, SingleKind,
+    UnaryArithmeticKind,
     operand::{
         NodeIndexComparisonOperand, NodeIndexOperand, NodeIndicesComparisonOperand,
         NodeIndicesOperand,
     },
-    BinaryArithmeticKind, MultipleComparisonKind, NodeOperand, SingleComparisonKind, SingleKind,
-    UnaryArithmeticKind,
 };
 use crate::{
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
+        GraphRecord, GraphRecordAttribute, GraphRecordValue, Group, NodeIndex,
         datatypes::{
             Abs, Contains, DataType, EndsWith, Lowercase, Mod, Pow, Slice, StartsWith, Trim,
             TrimEnd, TrimStart, Uppercase,
         },
         querying::{
+            BoxedIterator, DeepClone, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
             attributes::AttributesTreeOperand,
             edges::EdgeOperand,
             group_by::{GroupOperand, PartitionGroups},
             tee_grouped_iterator,
             values::{MultipleValuesWithIndexContext, MultipleValuesWithIndexOperand},
             wrapper::{CardinalityWrapper, MatchMode, Wrapper},
-            BoxedIterator, DeepClone, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
         },
-        GraphRecord, GraphRecordAttribute, GraphRecordValue, Group, NodeIndex,
     },
 };
 use graphrecords_utils::{aliases::MrHashSet, traits::ReadWriteOrPanic};
@@ -206,7 +206,7 @@ impl NodeOperation {
         node_indices: impl Iterator<Item = &'a NodeIndex>,
         attribute: GraphRecordAttribute,
     ) -> impl Iterator<Item = (&'a NodeIndex, GraphRecordValue)> {
-        node_indices.flat_map(move |node_index| {
+        node_indices.filter_map(move |node_index| {
             Some((
                 node_index,
                 graphrecord
@@ -219,11 +219,14 @@ impl NodeOperation {
     }
 
     #[inline]
-    fn evaluate_values<'a>(
+    fn evaluate_values<'a, T>(
         graphrecord: &'a GraphRecord,
-        node_indices: impl Iterator<Item = &'a NodeIndex> + 'a,
+        node_indices: T,
         operand: &Wrapper<MultipleValuesWithIndexOperand<NodeOperand>>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a NodeIndex> + 'a,
+    {
         let MultipleValuesWithIndexContext::Operand((_, ref attribute)) =
             operand.0.read_or_panic().context
         else {
@@ -254,11 +257,14 @@ impl NodeOperation {
     }
 
     #[inline]
-    fn evaluate_attributes<'a>(
+    fn evaluate_attributes<'a, T>(
         graphrecord: &'a GraphRecord,
-        node_indices: impl Iterator<Item = &'a NodeIndex> + 'a,
+        node_indices: T,
         operand: &Wrapper<AttributesTreeOperand<NodeOperand>>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a NodeIndex> + 'a,
+    {
         let attributes = Self::get_attributes(graphrecord, node_indices);
 
         Ok(operand
@@ -267,11 +273,14 @@ impl NodeOperation {
     }
 
     #[inline]
-    fn evaluate_indices<'a>(
+    fn evaluate_indices<'a, T>(
         graphrecord: &GraphRecord,
-        node_indices: impl Iterator<Item = &'a NodeIndex>,
+        node_indices: T,
         operand: &Wrapper<NodeIndicesOperand>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a NodeIndex>,
+    {
         let (node_indices_1, node_indices_2) = Itertools::tee(node_indices);
 
         let result: MrHashSet<_> = operand
@@ -347,12 +356,15 @@ impl NodeOperation {
     }
 
     #[inline]
-    fn evaluate_edges<'a>(
+    fn evaluate_edges<'a, T>(
         graphrecord: &'a GraphRecord,
-        node_indices: impl Iterator<Item = &'a NodeIndex>,
+        node_indices: T,
         operand: &Wrapper<EdgeOperand>,
         direction: EdgeDirection,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a NodeIndex>,
+    {
         let (node_indices_1, node_indices_2) = Itertools::tee(node_indices);
 
         let edge_indices: BoxedIterator<_> = match direction {
@@ -408,12 +420,15 @@ impl NodeOperation {
     }
 
     #[inline]
-    fn evaluate_neighbors<'a>(
+    fn evaluate_neighbors<'a, T>(
         graphrecord: &'a GraphRecord,
-        node_indices: impl Iterator<Item = &'a NodeIndex> + 'a,
+        node_indices: T,
         operand: &Wrapper<NodeOperand>,
         direction: EdgeDirection,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a NodeIndex> + 'a,
+    {
         let (node_indices_1, node_indices_2) = Itertools::tee(node_indices);
 
         let neighbor_indices: BoxedIterator<_> = match direction {
@@ -461,11 +476,14 @@ impl NodeOperation {
         }))
     }
 
-    fn evaluate_group_by<'a>(
+    fn evaluate_group_by<'a, T>(
         graphrecord: &'a GraphRecord,
-        node_indices: impl Iterator<Item = &'a NodeIndex> + 'a,
+        node_indices: T,
         operand: &Wrapper<GroupOperand<NodeOperand>>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a NodeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a NodeIndex> + 'a,
+    {
         Ok(NodeOperand::merge(
             operand.evaluate_forward(graphrecord, Box::new(node_indices))?,
         ))
@@ -479,16 +497,16 @@ impl NodeOperation {
         node_indices: GroupedIterator<'a, BoxedIterator<'a, &'a NodeIndex>>,
     ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a NodeIndex>>> {
         Ok(match self {
-            NodeOperation::Values { operand } => {
+            Self::Values { operand } => {
                 Self::evaluate_values_grouped(graphrecord, node_indices, operand)?
             }
-            NodeOperation::Attributes { operand } => {
+            Self::Attributes { operand } => {
                 Self::evaluate_attributes_grouped(graphrecord, node_indices, operand)?
             }
-            NodeOperation::Indices { operand } => {
+            Self::Indices { operand } => {
                 Self::evaluate_indices_grouped(graphrecord, node_indices, operand)?
             }
-            NodeOperation::InGroup { group } => {
+            Self::InGroup { group } => {
                 let group = group.clone();
 
                 Box::new(node_indices.map(move |(key, node_indices)| {
@@ -502,7 +520,7 @@ impl NodeOperation {
                     )
                 }))
             }
-            NodeOperation::HasAttribute { attribute } => {
+            Self::HasAttribute { attribute } => {
                 let attribute = attribute.clone();
 
                 Box::new(node_indices.map(move |(key, node_indices)| {
@@ -516,22 +534,22 @@ impl NodeOperation {
                     )
                 }))
             }
-            NodeOperation::Edges { operand, direction } => {
+            Self::Edges { operand, direction } => {
                 Self::evaluate_edges_grouped(graphrecord, node_indices, operand, direction.clone())?
             }
-            NodeOperation::Neighbors { operand, direction } => Self::evaluate_neighbors_grouped(
+            Self::Neighbors { operand, direction } => Self::evaluate_neighbors_grouped(
                 graphrecord,
                 node_indices,
                 operand,
                 direction.clone(),
             )?,
-            NodeOperation::EitherOr { either, or } => {
+            Self::EitherOr { either, or } => {
                 Self::evaluate_either_or_grouped(graphrecord, node_indices, either, or)?
             }
-            NodeOperation::Exclude { operand } => {
+            Self::Exclude { operand } => {
                 Self::evaluate_exclude_grouped(graphrecord, node_indices, operand)?
             }
-            NodeOperation::GroupBy { operand: _ } => unreachable!(),
+            Self::GroupBy { operand: _ } => unreachable!(),
         })
     }
 
@@ -1088,11 +1106,11 @@ impl NodeIndicesOperation {
         let kind = &operand.0.read_or_panic().kind;
 
         let index = match kind {
-            SingleKind::Max => NodeIndicesOperation::get_max(indices_1)?,
-            SingleKind::Min => NodeIndicesOperation::get_min(indices_1)?,
-            SingleKind::Count => Some(NodeIndicesOperation::get_count(indices_1)),
-            SingleKind::Sum => NodeIndicesOperation::get_sum(indices_1)?,
-            SingleKind::Random => NodeIndicesOperation::get_random(indices_1),
+            SingleKind::Max => Self::get_max(indices_1)?,
+            SingleKind::Min => Self::get_min(indices_1)?,
+            SingleKind::Count => Some(Self::get_count(indices_1)),
+            SingleKind::Sum => Self::get_sum(indices_1)?,
+            SingleKind::Random => Self::get_random(indices_1),
         };
 
         Ok(match operand.evaluate_forward(graphrecord, index)? {
@@ -1108,9 +1126,9 @@ impl NodeIndicesOperation {
         comparison_operand: &NodeIndexComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<BoxedIterator<'a, NodeIndex>> {
-        let comparison_index = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No index to compare".to_string()),
-        )?;
+        let comparison_index = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No index to compare".to_string()))?;
 
         match kind {
             SingleComparisonKind::GreaterThan => Ok(Box::new(
@@ -1163,18 +1181,18 @@ impl NodeIndicesOperation {
     }
 
     #[inline]
-    fn evaluate_binary_arithmetic_operation(
+    fn evaluate_binary_arithmetic_operation<T>(
         graphrecord: &GraphRecord,
-        indices: impl Iterator<Item = NodeIndex>,
+        indices: T,
         operand: &NodeIndexComparisonOperand,
         kind: &BinaryArithmeticKind,
-    ) -> GraphRecordResult<impl Iterator<Item = NodeIndex>> {
-        let arithmetic_index =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No index to compare".to_string(),
-                ))?;
+    ) -> GraphRecordResult<impl Iterator<Item = NodeIndex> + use<T>>
+    where
+        T: Iterator<Item = NodeIndex>,
+    {
+        let arithmetic_index = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No index to compare".to_string()))?;
 
         let indices = indices
             .map(move |index| {
@@ -1182,13 +1200,13 @@ impl NodeIndicesOperation {
                     BinaryArithmeticKind::Add => index.add(arithmetic_index.clone()),
                     BinaryArithmeticKind::Sub => index.sub(arithmetic_index.clone()),
                     BinaryArithmeticKind::Mul => {
-                        index.clone().mul(arithmetic_index.clone())
+                        index.mul(arithmetic_index.clone())
                     }
                     BinaryArithmeticKind::Pow => {
-                        index.clone().pow(arithmetic_index.clone())
+                        index.pow(arithmetic_index.clone())
                     }
                     BinaryArithmeticKind::Mod => {
-                        index.clone().r#mod(arithmetic_index.clone())
+                        index.r#mod(arithmetic_index.clone())
                     }
                 }
                 .map_err(|_| {
@@ -1310,10 +1328,10 @@ impl NodeIndicesOperation {
         node_indices: GroupedIterator<'a, BoxedIterator<'a, NodeIndex>>,
     ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, NodeIndex>>> {
         Ok(match self {
-            NodeIndicesOperation::NodeIndexOperation { operand } => {
+            Self::NodeIndexOperation { operand } => {
                 Self::evaluate_node_index_operation_grouped(graphrecord, node_indices, operand)?
             }
-            NodeIndicesOperation::NodeIndexComparisonOperation { operand, kind } => Box::new(
+            Self::NodeIndexComparisonOperation { operand, kind } => Box::new(
                 node_indices
                     .map(move |(key, node_indices)| {
                         Ok((
@@ -1329,7 +1347,7 @@ impl NodeIndicesOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            NodeIndicesOperation::NodeIndicesComparisonOperation { operand, kind } => Box::new(
+            Self::NodeIndicesComparisonOperation { operand, kind } => Box::new(
                 node_indices
                     .map(move |(key, node_indices)| {
                         Ok((
@@ -1345,7 +1363,7 @@ impl NodeIndicesOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            NodeIndicesOperation::BinaryArithmeticOperation { operand, kind } => Box::new(
+            Self::BinaryArithmeticOperation { operand, kind } => Box::new(
                 node_indices
                     .map(move |(key, node_indices)| {
                         Ok((
@@ -1361,7 +1379,7 @@ impl NodeIndicesOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            NodeIndicesOperation::UnaryArithmeticOperation { kind } => {
+            Self::UnaryArithmeticOperation { kind } => {
                 let kind = kind.clone();
 
                 Box::new(node_indices.map(move |(key, node_indices)| {
@@ -1374,7 +1392,7 @@ impl NodeIndicesOperation {
                     )
                 }))
             }
-            NodeIndicesOperation::Slice(range) => {
+            Self::Slice(range) => {
                 let range = range.clone();
 
                 Box::new(node_indices.map(move |(key, node_indices)| {
@@ -1385,19 +1403,19 @@ impl NodeIndicesOperation {
                     )
                 }))
             }
-            NodeIndicesOperation::IsString => Box::new(node_indices.map(|(key, node_indices)| {
+            Self::IsString => Box::new(node_indices.map(|(key, node_indices)| {
                 (
                     key,
                     Box::new(Self::evaluate_is_string(node_indices)) as BoxedIterator<_>,
                 )
             })),
-            NodeIndicesOperation::IsInt => Box::new(node_indices.map(|(key, node_indices)| {
+            Self::IsInt => Box::new(node_indices.map(|(key, node_indices)| {
                 (
                     key,
                     Box::new(Self::evaluate_is_int(node_indices)) as BoxedIterator<_>,
                 )
             })),
-            NodeIndicesOperation::IsMax => Box::new(
+            Self::IsMax => Box::new(
                 node_indices
                     .map(move |(key, node_indices)| {
                         Ok((
@@ -1408,7 +1426,7 @@ impl NodeIndicesOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            NodeIndicesOperation::IsMin => Box::new(
+            Self::IsMin => Box::new(
                 node_indices
                     .map(move |(key, node_indices)| {
                         Ok((
@@ -1419,13 +1437,13 @@ impl NodeIndicesOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            NodeIndicesOperation::EitherOr { either, or } => {
+            Self::EitherOr { either, or } => {
                 Self::evaluate_either_or_grouped(graphrecord, node_indices, either, or)?
             }
-            NodeIndicesOperation::Exclude { operand } => {
+            Self::Exclude { operand } => {
                 Self::evaluate_exclude_grouped(graphrecord, node_indices, operand)?
             }
-            NodeIndicesOperation::Merge { operand } => {
+            Self::Merge { operand } => {
                 let (node_indices_1, node_indices_2) = tee_grouped_iterator(node_indices);
 
                 let node_indices_1 = node_indices_1.flat_map(|(_, value)| value);
@@ -1463,11 +1481,11 @@ impl NodeIndicesOperation {
                 Ok((
                     key,
                     match kind {
-                        SingleKind::Max => NodeIndicesOperation::get_max(node_indices)?,
-                        SingleKind::Min => NodeIndicesOperation::get_min(node_indices)?,
-                        SingleKind::Count => Some(NodeIndicesOperation::get_count(node_indices)),
-                        SingleKind::Sum => NodeIndicesOperation::get_sum(node_indices)?,
-                        SingleKind::Random => NodeIndicesOperation::get_random(node_indices),
+                        SingleKind::Max => Self::get_max(node_indices)?,
+                        SingleKind::Min => Self::get_min(node_indices)?,
+                        SingleKind::Count => Some(Self::get_count(node_indices)),
+                        SingleKind::Sum => Self::get_sum(node_indices)?,
+                        SingleKind::Random => Self::get_random(node_indices),
                     },
                 ))
             })
@@ -1516,7 +1534,7 @@ impl NodeIndicesOperation {
             let node_indices: BoxedIterator<_> = Box::new(
                 either_indices
                     .chain(or_indices)
-                    .unique_by(|node_index| node_index.clone()),
+                    .unique_by(std::clone::Clone::clone),
             );
 
             (key, node_indices)
@@ -1674,11 +1692,7 @@ impl NodeIndexOperation {
                     .evaluate_forward(graphrecord, Some(node_index.clone()))?
                     .is_some();
 
-                if result {
-                    None
-                } else {
-                    Some(node_index)
-                }
+                if result { None } else { Some(node_index) }
             }
             Self::Merge { operand: _ } => unreachable!(),
         })
@@ -1691,9 +1705,9 @@ impl NodeIndexOperation {
         comparison_operand: &NodeIndexComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<Option<NodeIndex>> {
-        let comparison_index = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No index to compare".to_string()),
-        )?;
+        let comparison_index = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No index to compare".to_string()))?;
 
         let comparison_result = match kind {
             SingleComparisonKind::GreaterThan => index > comparison_index,
@@ -1734,12 +1748,9 @@ impl NodeIndexOperation {
         operand: &NodeIndexComparisonOperand,
         kind: &BinaryArithmeticKind,
     ) -> GraphRecordResult<Option<NodeIndex>> {
-        let arithmetic_index =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No index to compare".to_string(),
-                ))?;
+        let arithmetic_index = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No index to compare".to_string()))?;
 
         Ok(Some(match kind {
             BinaryArithmeticKind::Add => index.add(arithmetic_index)?,
@@ -1774,7 +1785,7 @@ impl NodeIndexOperation {
     fn evaluate_is_string(node_index: NodeIndex) -> Option<NodeIndex> {
         match node_index {
             NodeIndex::String(_) => Some(node_index),
-            _ => None,
+            NodeIndex::Int(_) => None,
         }
     }
 
@@ -1782,7 +1793,7 @@ impl NodeIndexOperation {
     fn evaluate_is_int(node_index: NodeIndex) -> Option<NodeIndex> {
         match node_index {
             NodeIndex::Int(_) => Some(node_index),
-            _ => None,
+            NodeIndex::String(_) => None,
         }
     }
 
@@ -1811,7 +1822,7 @@ impl NodeIndexOperation {
         node_indices: GroupedIterator<'a, Option<NodeIndex>>,
     ) -> GraphRecordResult<GroupedIterator<'a, Option<NodeIndex>>> {
         Ok(match self {
-            NodeIndexOperation::NodeIndexComparisonOperation { operand, kind } => Box::new(
+            Self::NodeIndexComparisonOperation { operand, kind } => Box::new(
                 node_indices
                     .map(move |(key, node_index)| {
                         let Some(node_index) = node_index else {
@@ -1831,7 +1842,7 @@ impl NodeIndexOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            NodeIndexOperation::NodeIndicesComparisonOperation { operand, kind } => Box::new(
+            Self::NodeIndicesComparisonOperation { operand, kind } => Box::new(
                 node_indices
                     .map(move |(key, node_index)| {
                         let Some(node_index) = node_index else {
@@ -1851,7 +1862,7 @@ impl NodeIndexOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            NodeIndexOperation::BinaryArithmeticOperation { operand, kind } => Box::new(
+            Self::BinaryArithmeticOperation { operand, kind } => Box::new(
                 node_indices
                     .map(move |(key, node_index)| {
                         let Some(node_index) = node_index else {
@@ -1871,7 +1882,7 @@ impl NodeIndexOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            NodeIndexOperation::UnaryArithmeticOperation { kind } => {
+            Self::UnaryArithmeticOperation { kind } => {
                 let kind = kind.clone();
 
                 Box::new(node_indices.map(move |(key, node_index)| {
@@ -1885,7 +1896,7 @@ impl NodeIndexOperation {
                     )
                 }))
             }
-            NodeIndexOperation::Slice(range) => {
+            Self::Slice(range) => {
                 let range = range.clone();
 
                 Box::new(node_indices.map(move |(key, node_index)| {
@@ -1896,27 +1907,27 @@ impl NodeIndexOperation {
                     (key, Some(Self::evaluate_slice(node_index, &range)))
                 }))
             }
-            NodeIndexOperation::IsString => Box::new(node_indices.map(move |(key, node_index)| {
+            Self::IsString => Box::new(node_indices.map(move |(key, node_index)| {
                 let Some(node_index) = node_index else {
                     return (key, None);
                 };
 
                 (key, Self::evaluate_is_string(node_index))
             })),
-            NodeIndexOperation::IsInt => Box::new(node_indices.map(move |(key, node_index)| {
+            Self::IsInt => Box::new(node_indices.map(move |(key, node_index)| {
                 let Some(node_index) = node_index else {
                     return (key, None);
                 };
 
                 (key, Self::evaluate_is_int(node_index))
             })),
-            NodeIndexOperation::EitherOr { either, or } => {
+            Self::EitherOr { either, or } => {
                 Self::evaluate_either_or_grouped(graphrecord, node_indices, either, or)?
             }
-            NodeIndexOperation::Exclude { operand } => {
+            Self::Exclude { operand } => {
                 Self::evaluate_exclude_grouped(graphrecord, node_indices, operand)?
             }
-            NodeIndexOperation::Merge { operand } => {
+            Self::Merge { operand } => {
                 let (node_indices_1, node_indices_2) = Itertools::tee(node_indices);
 
                 let node_indices_1 = node_indices_1.filter_map(|(_, node_index)| node_index);

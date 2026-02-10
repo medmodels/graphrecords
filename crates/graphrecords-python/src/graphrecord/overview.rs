@@ -56,6 +56,7 @@ impl PyAttributeOverview {
     }
 
     #[getter]
+    #[allow(clippy::missing_panics_doc)]
     pub fn data(&self, py: Python<'_>) -> PyObject {
         let dict = PyDict::new(py);
 
@@ -144,7 +145,7 @@ impl AsRef<NodeGroupOverview> for PyNodeGroupOverview {
 #[pymethods]
 impl PyNodeGroupOverview {
     #[getter]
-    pub fn count(&self) -> usize {
+    pub const fn count(&self) -> usize {
         self.0.count
     }
 
@@ -196,7 +197,7 @@ impl AsRef<EdgeGroupOverview> for PyEdgeGroupOverview {
 #[pymethods]
 impl PyEdgeGroupOverview {
     #[getter]
-    pub fn count(&self) -> usize {
+    pub const fn count(&self) -> usize {
         self.0.count
     }
 

@@ -9,3 +9,6 @@ readme = "../../README.md"
 
 [dependencies]
 hashbrown = { workspace = true }
+
+[lints]
+workspace = true

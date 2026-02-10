@@ -1,20 +1,20 @@
 use super::{MultipleValuesWithIndexOperand, SingleValueWithIndexOperand};
 use crate::{
+    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::querying::{
+        BoxedIterator, DeepClone, EvaluateBackward, EvaluateForwardGrouped, GroupedIterator,
+        RootOperand,
         attributes::{MultipleAttributesWithIndexOperand, MultipleAttributesWithIndexOperation},
         group_by::{GroupOperand, GroupedOperand, Ungroup},
         values::{
+            MultipleValuesWithIndexContext, MultipleValuesWithoutIndexContext,
+            SingleKindWithoutIndex, SingleValueWithoutIndexOperand,
             operand::MultipleValuesWithoutIndexOperand,
-            operation::MultipleValuesWithoutIndexOperation, MultipleValuesWithIndexContext,
-            MultipleValuesWithoutIndexContext, SingleKindWithoutIndex,
-            SingleValueWithoutIndexOperand,
+            operation::MultipleValuesWithoutIndexOperation,
         },
         wrapper::Wrapper,
-        BoxedIterator, DeepClone, EvaluateBackward, EvaluateForwardGrouped, GroupedIterator,
-        RootOperand,
     },
-    GraphRecord,
 };
 use graphrecords_utils::traits::ReadWriteOrPanic;
 use std::fmt::Debug;
@@ -54,9 +54,9 @@ impl<O: RootOperand> GroupedOperand for MultipleValuesWithIndexOperand<O> {
     type Context = MultipleValuesWithIndexOperandContext<O>;
 }
 
-impl<'a, O: RootOperand> EvaluateBackward<'a> for GroupOperand<MultipleValuesWithIndexOperand<O>>
+impl<'a, O> EvaluateBackward<'a> for GroupOperand<MultipleValuesWithIndexOperand<O>>
 where
-    O: 'a,
+    O: RootOperand + 'a,
 {
     type ReturnValue = GroupedIterator<
         'a,
@@ -207,7 +207,7 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a>
                         MultipleValuesWithoutIndexOperation::<O>::get_median(partition)?
                     }
                     SingleKindWithoutIndex::Mode => {
-                        MultipleValuesWithoutIndexOperation::<O>::get_mode(partition)?
+                        MultipleValuesWithoutIndexOperation::<O>::get_mode(partition)
                     }
                     SingleKindWithoutIndex::Std => {
                         MultipleValuesWithoutIndexOperation::<O>::get_std(partition)?

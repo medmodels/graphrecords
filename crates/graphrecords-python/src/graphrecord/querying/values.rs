@@ -2,7 +2,9 @@ use crate::graphrecord::{errors::PyGraphRecordError, value::PyGraphRecordValue};
 use graphrecords::core::{
     errors::GraphRecordError,
     graphrecord::{
+        GraphRecordValue,
         querying::{
+            DeepClone,
             edges::EdgeOperand,
             group_by::GroupOperand,
             nodes::NodeOperand,
@@ -12,15 +14,12 @@ use graphrecords::core::{
                 SingleValueWithIndexOperand, SingleValueWithoutIndexOperand,
             },
             wrapper::Wrapper,
-            DeepClone,
         },
-        GraphRecordValue,
     },
 };
 use pyo3::{
-    pyclass, pymethods,
+    Bound, FromPyObject, PyAny, PyResult, pyclass, pymethods,
     types::{PyAnyMethods, PyFunction},
-    Bound, FromPyObject, PyAny, PyResult,
 };
 use std::ops::Deref;
 
@@ -41,23 +40,35 @@ impl From<PySingleValueComparisonOperand> for SingleValueComparisonOperand {
 
 impl FromPyObject<'_> for PySingleValueComparisonOperand {
     fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(value) = ob.extract::<PyGraphRecordValue>() {
-            Ok(SingleValueComparisonOperand::Value(value.into()).into())
-        } else if let Ok(operand) = ob.extract::<PyNodeSingleValueWithIndexOperand>() {
-            Ok(PySingleValueComparisonOperand(operand.0.into()))
-        } else if let Ok(operand) = ob.extract::<PyNodeSingleValueWithoutIndexOperand>() {
-            Ok(PySingleValueComparisonOperand(operand.0.into()))
-        } else if let Ok(operand) = ob.extract::<PyEdgeSingleValueWithIndexOperand>() {
-            Ok(PySingleValueComparisonOperand(operand.0.into()))
-        } else if let Ok(operand) = ob.extract::<PyEdgeSingleValueWithoutIndexOperand>() {
-            Ok(PySingleValueComparisonOperand(operand.0.into()))
-        } else {
+        match ob.extract::<PyGraphRecordValue>() {
+            Ok(value) => Ok(SingleValueComparisonOperand::Value(value.into()).into()),
+            _ => {
+                match ob.extract::<PyNodeSingleValueWithIndexOperand>() {
+                    Ok(operand) => Ok(Self(operand.0.into())),
+                    _ => {
+                        match ob.extract::<PyNodeSingleValueWithoutIndexOperand>() {
+                            Ok(operand) => Ok(Self(operand.0.into())),
+                            _ => {
+                                match ob.extract::<PyEdgeSingleValueWithIndexOperand>() {
+                                    Ok(operand) => Ok(Self(operand.0.into())),
+                                    _ => {
+                                        match ob.extract::<PyEdgeSingleValueWithoutIndexOperand>() { Ok(operand) => {
+            Ok(Self(operand.0.into()))
+        } _ => {
             Err(
                 PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
                     "Failed to convert {ob} into GraphRecordValue or SingleValueOperand",
                 )))
                 .into(),
             )
+        }}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -79,26 +90,38 @@ impl From<PyMultipleValuesComparisonOperand> for MultipleValuesComparisonOperand
 
 impl FromPyObject<'_> for PyMultipleValuesComparisonOperand {
     fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(values) = ob.extract::<Vec<PyGraphRecordValue>>() {
-            Ok(MultipleValuesComparisonOperand::Values(
+        match ob.extract::<Vec<PyGraphRecordValue>>() {
+            Ok(values) => Ok(MultipleValuesComparisonOperand::Values(
                 values.into_iter().map(GraphRecordValue::from).collect(),
             )
-            .into())
-        } else if let Ok(operand) = ob.extract::<PyNodeMultipleValuesWithIndexOperand>() {
-            Ok(PyMultipleValuesComparisonOperand(operand.0.into()))
-        } else if let Ok(operand) = ob.extract::<PyNodeMultipleValuesWithoutIndexOperand>() {
-            Ok(PyMultipleValuesComparisonOperand(operand.0.into()))
-        } else if let Ok(operand) = ob.extract::<PyEdgeMultipleValuesWithIndexOperand>() {
-            Ok(PyMultipleValuesComparisonOperand(operand.0.into()))
-        } else if let Ok(operand) = ob.extract::<PyEdgeMultipleValuesWithoutIndexOperand>() {
-            Ok(PyMultipleValuesComparisonOperand(operand.0.into()))
-        } else {
+            .into()),
+            _ => {
+                match ob.extract::<PyNodeMultipleValuesWithIndexOperand>() {
+                    Ok(operand) => Ok(Self(operand.0.into())),
+                    _ => {
+                        match ob.extract::<PyNodeMultipleValuesWithoutIndexOperand>() {
+                            Ok(operand) => Ok(Self(operand.0.into())),
+                            _ => {
+                                match ob.extract::<PyEdgeMultipleValuesWithIndexOperand>() {
+                                    Ok(operand) => Ok(Self(operand.0.into())),
+                                    _ => {
+                                        match ob.extract::<PyEdgeMultipleValuesWithoutIndexOperand>() { Ok(operand) => {
+            Ok(Self(operand.0.into()))
+        } _ => {
             Err(
                 PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
                     "Failed to convert {ob} into List[GraphRecordValue] or MultipleValuesOperand",
                 )))
                 .into(),
             )
+        }}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

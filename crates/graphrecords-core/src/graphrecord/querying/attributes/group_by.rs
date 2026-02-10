@@ -1,20 +1,20 @@
 use crate::{
+    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::querying::{
+        BoxedIterator, DeepClone, EvaluateBackward, EvaluateForwardGrouped, GroupedIterator,
+        RootOperand,
         attributes::{
-            operation::AttributesTreeOperation, AttributesTreeContext, AttributesTreeOperand,
-            MultipleAttributesWithIndexContext, MultipleAttributesWithIndexOperand,
-            MultipleAttributesWithIndexOperation, MultipleAttributesWithoutIndexContext,
-            MultipleAttributesWithoutIndexOperand, MultipleAttributesWithoutIndexOperation,
-            MultipleKind, SingleAttributeWithIndexOperand, SingleAttributeWithoutIndexOperand,
-            SingleKindWithIndex, SingleKindWithoutIndex,
+            AttributesTreeContext, AttributesTreeOperand, MultipleAttributesWithIndexContext,
+            MultipleAttributesWithIndexOperand, MultipleAttributesWithIndexOperation,
+            MultipleAttributesWithoutIndexContext, MultipleAttributesWithoutIndexOperand,
+            MultipleAttributesWithoutIndexOperation, MultipleKind, SingleAttributeWithIndexOperand,
+            SingleAttributeWithoutIndexOperand, SingleKindWithIndex, SingleKindWithoutIndex,
+            operation::AttributesTreeOperation,
         },
         group_by::{GroupOperand, GroupedOperand, Ungroup},
         wrapper::Wrapper,
-        BoxedIterator, DeepClone, EvaluateBackward, EvaluateForwardGrouped, GroupedIterator,
-        RootOperand,
     },
-    GraphRecord,
 };
 use graphrecords_utils::traits::ReadWriteOrPanic;
 
@@ -96,7 +96,7 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a>
                         Box::new(AttributesTreeOperation::<O>::get_min(partition)?)
                     }
                     MultipleKind::Count => {
-                        Box::new(AttributesTreeOperation::<O>::get_count(partition)?)
+                        Box::new(AttributesTreeOperation::<O>::get_count(partition))
                     }
                     MultipleKind::Sum => {
                         Box::new(AttributesTreeOperation::<O>::get_sum(partition)?)

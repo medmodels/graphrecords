@@ -1,22 +1,26 @@
 use super::{
+    BinaryArithmeticKind, MultipleComparisonKind, MultipleKind, SingleComparisonKind,
+    SingleKindWithIndex, UnaryArithmeticKind,
     operation::{
         AttributesTreeOperation, MultipleAttributesWithIndexOperation,
         SingleAttributeWithIndexOperation,
     },
-    BinaryArithmeticKind, MultipleComparisonKind, MultipleKind, SingleComparisonKind,
-    SingleKindWithIndex, UnaryArithmeticKind,
 };
 use crate::{
+    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
+        EdgeOperand, GraphRecordAttribute, NodeOperand, Wrapper,
         querying::{
+            BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
+            GroupedIterator, ReduceInput, RootOperand,
             attributes::{
-                operation::{
-                    MultipleAttributesWithoutIndexOperation, SingleAttributeWithoutIndexOperation,
-                },
                 AttributesTreeContext, MultipleAttributesWithIndexContext,
                 MultipleAttributesWithoutIndexContext, SingleAttributeWithoutIndexContext,
                 SingleKindWithoutIndex,
+                operation::{
+                    MultipleAttributesWithoutIndexOperation, SingleAttributeWithoutIndexOperation,
+                },
             },
             operand_traits::{
                 Abs, Add, Contains, Count, EitherOr, EndsWith, EqualTo, Exclude, GreaterThan,
@@ -25,12 +29,8 @@ use crate::{
                 StartsWith, Sub, Sum, ToValues, Trim, TrimEnd, TrimStart, Uppercase,
             },
             values::{MultipleValuesWithIndexContext, MultipleValuesWithIndexOperand},
-            BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
-            GroupedIterator, ReduceInput, RootOperand,
         },
-        EdgeOperand, GraphRecordAttribute, NodeOperand, Wrapper,
     },
-    GraphRecord,
 };
 use graphrecords_utils::{aliases::MrHashSet, traits::ReadWriteOrPanic};
 use std::collections::HashSet;
@@ -770,14 +770,14 @@ impl<O: RootOperand> Exclude for AttributesTreeOperand<O> {
 }
 
 impl<O: RootOperand> AttributesTreeOperand<O> {
-    pub(crate) fn new(context: AttributesTreeContext<O>) -> Self {
+    pub(crate) const fn new(context: AttributesTreeContext<O>) -> Self {
         Self {
             context,
             operations: Vec::new(),
         }
     }
 
-    pub(crate) fn push_merge_operation(&mut self, operand: Wrapper<AttributesTreeOperand<O>>) {
+    pub(crate) fn push_merge_operation(&mut self, operand: Wrapper<Self>) {
         self.operations
             .push(AttributesTreeOperation::Merge { operand });
     }
@@ -788,7 +788,7 @@ impl<O: RootOperand> Wrapper<AttributesTreeOperand<O>> {
         AttributesTreeOperand::new(context).into()
     }
 
-    pub(crate) fn push_merge_operation(&self, operand: Wrapper<AttributesTreeOperand<O>>) {
+    pub(crate) fn push_merge_operation(&self, operand: Self) {
         self.0.write_or_panic().push_merge_operation(operand);
     }
 }
@@ -1309,17 +1309,14 @@ impl<O: RootOperand> Exclude for MultipleAttributesWithIndexOperand<O> {
 }
 
 impl<O: RootOperand> MultipleAttributesWithIndexOperand<O> {
-    pub(crate) fn new(context: MultipleAttributesWithIndexContext<O>) -> Self {
+    pub(crate) const fn new(context: MultipleAttributesWithIndexContext<O>) -> Self {
         Self {
             context,
             operations: Vec::new(),
         }
     }
 
-    pub(crate) fn push_merge_operation(
-        &mut self,
-        operand: Wrapper<MultipleAttributesWithIndexOperand<O>>,
-    ) {
+    pub(crate) fn push_merge_operation(&mut self, operand: Wrapper<Self>) {
         self.operations
             .push(MultipleAttributesWithIndexOperation::Merge { operand });
     }
@@ -1330,11 +1327,8 @@ impl<O: RootOperand> Wrapper<MultipleAttributesWithIndexOperand<O>> {
         MultipleAttributesWithIndexOperand::new(context).into()
     }
 
-    pub(crate) fn push_merge_operation(
-        &self,
-        operand: Wrapper<MultipleAttributesWithIndexOperand<O>>,
-    ) {
-        self.0.write_or_panic().push_merge_operation(operand)
+    pub(crate) fn push_merge_operation(&self, operand: Self) {
+        self.0.write_or_panic().push_merge_operation(operand);
     }
 }
 
@@ -1837,7 +1831,7 @@ impl<O: RootOperand> Exclude for MultipleAttributesWithoutIndexOperand<O> {
 }
 
 impl<O: RootOperand> MultipleAttributesWithoutIndexOperand<O> {
-    pub(crate) fn new(context: MultipleAttributesWithoutIndexContext<O>) -> Self {
+    pub(crate) const fn new(context: MultipleAttributesWithoutIndexContext<O>) -> Self {
         Self {
             context,
             operations: Vec::new(),
@@ -2270,7 +2264,7 @@ impl<O: RootOperand> Exclude for SingleAttributeWithIndexOperand<O> {
 }
 
 impl<O: RootOperand> SingleAttributeWithIndexOperand<O> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         context: MultipleAttributesWithIndexOperand<O>,
         kind: SingleKindWithIndex,
     ) -> Self {
@@ -2302,7 +2296,7 @@ impl<O: RootOperand> Wrapper<SingleAttributeWithIndexOperand<O>> {
         &self,
         operand: Wrapper<MultipleAttributesWithIndexOperand<O>>,
     ) {
-        self.0.write_or_panic().push_merge_operation(operand)
+        self.0.write_or_panic().push_merge_operation(operand);
     }
 }
 
@@ -2719,7 +2713,7 @@ impl<O: RootOperand> Exclude for SingleAttributeWithoutIndexOperand<O> {
 }
 
 impl<O: RootOperand> SingleAttributeWithoutIndexOperand<O> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         context: SingleAttributeWithoutIndexContext<O>,
         kind: SingleKindWithoutIndex,
     ) -> Self {
@@ -2751,6 +2745,6 @@ impl<O: RootOperand> Wrapper<SingleAttributeWithoutIndexOperand<O>> {
         &self,
         operand: Wrapper<MultipleAttributesWithoutIndexOperand<O>>,
     ) {
-        self.0.write_or_panic().push_merge_operation(operand)
+        self.0.write_or_panic().push_merge_operation(operand);
     }
 }

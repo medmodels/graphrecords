@@ -16,7 +16,7 @@ impl<O: Round> Wrapper<O> {
 
 impl<O: GroupedOperand + Round> Round for GroupOperand<O> {
     fn round(&mut self) {
-        self.operand.round()
+        self.operand.round();
     }
 }
 
@@ -32,7 +32,7 @@ impl<O: Ceil> Wrapper<O> {
 
 impl<O: GroupedOperand + Ceil> Ceil for GroupOperand<O> {
     fn ceil(&mut self) {
-        self.operand.ceil()
+        self.operand.ceil();
     }
 }
 
@@ -48,7 +48,7 @@ impl<O: Floor> Wrapper<O> {
 
 impl<O: GroupedOperand + Floor> Floor for GroupOperand<O> {
     fn floor(&mut self) {
-        self.operand.floor()
+        self.operand.floor();
     }
 }
 
@@ -64,6 +64,6 @@ impl<O: Sqrt> Wrapper<O> {
 
 impl<O: GroupedOperand + Sqrt> Sqrt for GroupOperand<O> {
     fn sqrt(&mut self) {
-        self.operand.sqrt()
+        self.operand.sqrt();
     }
 }

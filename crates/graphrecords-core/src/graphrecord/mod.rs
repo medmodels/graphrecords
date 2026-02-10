@@ -16,7 +16,7 @@ use crate::{
     errors::GraphRecordError,
     graphrecord::{
         attributes::{EdgeAttributesMut, NodeAttributesMut},
-        overview::{GroupOverview, Overview, DEFAULT_TRUNCATE_DETAILS},
+        overview::{DEFAULT_TRUNCATE_DETAILS, GroupOverview, Overview},
         polars::DataFramesExport,
     },
 };
@@ -26,12 +26,12 @@ use graphrecords_utils::aliases::MrHashSet;
 use group_mapping::GroupMapping;
 use polars::{dataframe_to_edges, dataframe_to_nodes};
 use querying::{
-    edges::EdgeOperand, nodes::NodeOperand, wrapper::Wrapper, ReturnOperand, Selection,
+    ReturnOperand, Selection, edges::EdgeOperand, nodes::NodeOperand, wrapper::Wrapper,
 };
 use schema::{GroupSchema, Schema, SchemaType};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     fmt::{Display, Formatter},
     fs, mem,
     path::Path,
@@ -54,7 +54,7 @@ where
     S: Into<String>,
 {
     fn from(val: (D, S)) -> Self {
-        NodeDataFrameInput {
+        Self {
             dataframe: val.0.into(),
             index_column: val.1.into(),
         }
@@ -67,7 +67,7 @@ where
     S: Into<String>,
 {
     fn from(val: (D, S, S)) -> Self {
-        EdgeDataFrameInput {
+        Self {
             dataframe: val.0.into(),
             source_index_column: val.1.into(),
             target_index_column: val.2.into(),
@@ -125,6 +125,7 @@ fn dataframes_to_tuples(
     Ok((nodes, edges))
 }
 
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GraphRecord {
     graph: Graph,
@@ -143,14 +144,16 @@ impl Display for GraphRecord {
 }
 
 impl GraphRecord {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             graph: Graph::new(),
             group_mapping: GroupMapping::new(),
-            schema: Default::default(),
+            schema: Schema::default(),
         }
     }
 
+    #[must_use]
     pub fn with_schema(schema: Schema) -> Self {
         Self {
             graph: Graph::new(),
@@ -159,6 +162,7 @@ impl GraphRecord {
         }
     }
 
+    #[must_use]
     pub fn with_capacity(nodes: usize, edges: usize, schema: Option<Schema>) -> Self {
         Self {
             graph: Graph::with_capacity(nodes, edges),
@@ -174,7 +178,7 @@ impl GraphRecord {
     ) -> Result<Self, GraphRecordError> {
         let mut graphrecord = Self::with_capacity(
             nodes.len(),
-            edges.as_ref().map(|vec| vec.len()).unwrap_or(0),
+            edges.as_ref().map_or(0, std::vec::Vec::len),
             schema,
         );
 
@@ -195,7 +199,7 @@ impl GraphRecord {
         nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
         edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
         schema: Option<Schema>,
-    ) -> Result<GraphRecord, GraphRecordError> {
+    ) -> Result<Self, GraphRecordError> {
         let (nodes, edges) = dataframes_to_tuples(nodes_dataframes, edges_dataframes)?;
 
         Self::from_tuples(nodes, Some(edges), schema)
@@ -204,13 +208,13 @@ impl GraphRecord {
     pub fn from_nodes_dataframes(
         nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
         schema: Option<Schema>,
-    ) -> Result<GraphRecord, GraphRecordError> {
+    ) -> Result<Self, GraphRecordError> {
         let nodes = node_dataframes_to_tuples(nodes_dataframes)?;
 
         Self::from_tuples(nodes, None, schema)
     }
 
-    pub fn from_ron<P>(path: P) -> Result<GraphRecord, GraphRecordError>
+    pub fn from_ron<P>(path: P) -> Result<Self, GraphRecordError>
     where
         P: AsRef<Path>,
     {
@@ -251,47 +255,21 @@ impl GraphRecord {
         DataFramesExport::new(self)
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn set_schema(&mut self, mut schema: Schema) -> Result<(), GraphRecordError> {
         let mut nodes_group_cache = HashMap::<&Group, usize>::new();
         let mut nodes_ungrouped_visited = false;
         let mut edges_group_cache = HashMap::<&Group, usize>::new();
         let mut edges_ungrouped_visited = false;
 
-        for (node_index, node) in self.graph.nodes.iter() {
+        for (node_index, node) in &self.graph.nodes {
+            #[expect(clippy::missing_panics_doc, reason = "infallible")]
             let groups_of_node: Vec<_> = self
                 .groups_of_node(node_index)
                 .expect("groups of node must exist")
                 .collect();
 
-            if !groups_of_node.is_empty() {
-                for group in groups_of_node {
-                    match schema.schema_type() {
-                        SchemaType::Inferred => match nodes_group_cache.entry(group) {
-                            Entry::Occupied(entry) => {
-                                schema.update_node(
-                                    &node.attributes,
-                                    Some(group),
-                                    *entry.get() == 0,
-                                );
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(
-                                    self.group_mapping
-                                        .nodes_in_group
-                                        .get(group)
-                                        .map(|nodes| nodes.len())
-                                        .unwrap_or(0),
-                                );
-
-                                schema.update_node(&node.attributes, Some(group), true);
-                            }
-                        },
-                        SchemaType::Provided => {
-                            schema.validate_node(node_index, &node.attributes, Some(group))?;
-                        }
-                    }
-                }
-            } else {
+            if groups_of_node.is_empty() {
                 match schema.schema_type() {
                     SchemaType::Inferred => {
                         let nodes_in_groups = self.group_mapping.nodes_in_group.len();
@@ -310,22 +288,13 @@ impl GraphRecord {
                         schema.validate_node(node_index, &node.attributes, None)?;
                     }
                 }
-            }
-        }
-
-        for (edge_index, edge) in self.graph.edges.iter() {
-            let groups_of_edge: Vec<_> = self
-                .groups_of_edge(edge_index)
-                .expect("groups of edge must exist")
-                .collect();
-
-            if !groups_of_edge.is_empty() {
-                for group in groups_of_edge {
+            } else {
+                for group in groups_of_node {
                     match schema.schema_type() {
-                        SchemaType::Inferred => match edges_group_cache.entry(group) {
+                        SchemaType::Inferred => match nodes_group_cache.entry(group) {
                             Entry::Occupied(entry) => {
-                                schema.update_edge(
-                                    &edge.attributes,
+                                schema.update_node(
+                                    &node.attributes,
                                     Some(group),
                                     *entry.get() == 0,
                                 );
@@ -333,21 +302,30 @@ impl GraphRecord {
                             Entry::Vacant(entry) => {
                                 entry.insert(
                                     self.group_mapping
-                                        .edges_in_group
+                                        .nodes_in_group
                                         .get(group)
-                                        .map(|edges| edges.len())
-                                        .unwrap_or(0),
+                                        .map_or(0, MrHashSet::len),
                                 );
 
-                                schema.update_edge(&edge.attributes, Some(group), true);
+                                schema.update_node(&node.attributes, Some(group), true);
                             }
                         },
                         SchemaType::Provided => {
-                            schema.validate_edge(edge_index, &edge.attributes, Some(group))?;
+                            schema.validate_node(node_index, &node.attributes, Some(group))?;
                         }
                     }
                 }
-            } else {
+            }
+        }
+
+        for (edge_index, edge) in &self.graph.edges {
+            #[expect(clippy::missing_panics_doc, reason = "infallible")]
+            let groups_of_edge: Vec<_> = self
+                .groups_of_edge(edge_index)
+                .expect("groups of edge must exist")
+                .collect();
+
+            if groups_of_edge.is_empty() {
                 match schema.schema_type() {
                     SchemaType::Inferred => {
                         let edges_in_groups = self.group_mapping.edges_in_group.len();
@@ -366,6 +344,33 @@ impl GraphRecord {
                         schema.validate_edge(edge_index, &edge.attributes, None)?;
                     }
                 }
+            } else {
+                for group in groups_of_edge {
+                    match schema.schema_type() {
+                        SchemaType::Inferred => match edges_group_cache.entry(group) {
+                            Entry::Occupied(entry) => {
+                                schema.update_edge(
+                                    &edge.attributes,
+                                    Some(group),
+                                    *entry.get() == 0,
+                                );
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(
+                                    self.group_mapping
+                                        .edges_in_group
+                                        .get(group)
+                                        .map_or(0, MrHashSet::len),
+                                );
+
+                                schema.update_edge(&edge.attributes, Some(group), true);
+                            }
+                        },
+                        SchemaType::Provided => {
+                            schema.validate_edge(edge_index, &edge.attributes, Some(group))?;
+                        }
+                    }
+                }
             }
         }
 
@@ -377,19 +382,19 @@ impl GraphRecord {
     /// # Safety
     ///
     /// This function should only be used if the data has been validated against the schema.
-    pub unsafe fn set_schema_unchecked(&mut self, schema: &mut Schema) {
+    pub const unsafe fn set_schema_unchecked(&mut self, schema: &mut Schema) {
         mem::swap(&mut self.schema, schema);
     }
 
-    pub fn get_schema(&self) -> &Schema {
+    pub const fn get_schema(&self) -> &Schema {
         &self.schema
     }
 
-    pub fn freeze_schema(&mut self) {
+    pub const fn freeze_schema(&mut self) {
         self.schema.freeze();
     }
 
-    pub fn unfreeze_schema(&mut self) {
+    pub const fn unfreeze_schema(&mut self) {
         self.schema.unfreeze();
     }
 
@@ -413,7 +418,7 @@ impl GraphRecord {
     pub fn outgoing_edges(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &EdgeIndex>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphRecordError> {
         self.graph
             .outgoing_edges(node_index)
             .map_err(GraphRecordError::from)
@@ -422,7 +427,7 @@ impl GraphRecord {
     pub fn incoming_edges(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &EdgeIndex>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphRecordError> {
         self.graph
             .incoming_edges(node_index)
             .map_err(GraphRecordError::from)
@@ -497,6 +502,7 @@ impl GraphRecord {
     }
 
     // TODO: Add tests
+    #[allow(clippy::needless_pass_by_value)]
     pub fn add_node_with_group(
         &mut self,
         node_index: NodeIndex,
@@ -509,8 +515,7 @@ impl GraphRecord {
                     .group_mapping
                     .nodes_in_group
                     .get(&group)
-                    .map(|nodes| nodes.len())
-                    .unwrap_or(0);
+                    .map_or(0, MrHashSet::len);
 
                 self.schema
                     .update_node(&attributes, Some(&group), nodes_in_group == 0);
@@ -528,6 +533,7 @@ impl GraphRecord {
         self.group_mapping
             .add_node_to_group(group, node_index.clone())
             .inspect_err(|_| {
+                #[expect(clippy::missing_panics_doc, reason = "infallible")]
                 self.graph
                     .remove_node(&node_index, &mut self.group_mapping)
                     .expect("Node must exist");
@@ -546,7 +552,7 @@ impl GraphRecord {
         &mut self,
         nodes: Vec<(NodeIndex, Attributes)>,
     ) -> Result<(), GraphRecordError> {
-        for (node_index, attributes) in nodes.into_iter() {
+        for (node_index, attributes) in nodes {
             self.add_node(node_index, attributes)?;
         }
 
@@ -554,6 +560,7 @@ impl GraphRecord {
     }
 
     // TODO: Add tests
+    #[allow(clippy::needless_pass_by_value)]
     pub fn add_nodes_with_group(
         &mut self,
         nodes: Vec<(NodeIndex, Attributes)>,
@@ -563,7 +570,7 @@ impl GraphRecord {
             self.add_group(group.clone(), None, None)?;
         }
 
-        for (node_index, attributes) in nodes.into_iter() {
+        for (node_index, attributes) in nodes {
             self.add_node_with_group(node_index, attributes, group.clone())?;
         }
 
@@ -610,6 +617,7 @@ impl GraphRecord {
         self.add_nodes_with_group(nodes, group)
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     pub fn add_edge(
         &mut self,
         source_node_index: NodeIndex,
@@ -618,7 +626,7 @@ impl GraphRecord {
     ) -> Result<EdgeIndex, GraphRecordError> {
         let edge_index = self
             .graph
-            .add_edge(source_node_index, target_node_index, attributes.to_owned())
+            .add_edge(source_node_index, target_node_index, attributes.clone())
             .map_err(GraphRecordError::from)?;
 
         match self.schema.schema_type() {
@@ -636,6 +644,7 @@ impl GraphRecord {
                 match self.schema.validate_edge(&edge_index, &attributes, None) {
                     Ok(()) => Ok(edge_index),
                     Err(e) => {
+                        #[expect(clippy::missing_panics_doc, reason = "infallible")]
                         self.graph
                             .remove_edge(&edge_index)
                             .expect("Edge must exist");
@@ -648,6 +657,7 @@ impl GraphRecord {
     }
 
     // TODO: Add tests
+    #[allow(clippy::needless_pass_by_value)]
     pub fn add_edge_with_group(
         &mut self,
         source_node_index: NodeIndex,
@@ -657,7 +667,7 @@ impl GraphRecord {
     ) -> Result<EdgeIndex, GraphRecordError> {
         let edge_index = self
             .graph
-            .add_edge(source_node_index, target_node_index, attributes.to_owned())
+            .add_edge(source_node_index, target_node_index, attributes.clone())
             .map_err(GraphRecordError::from)?;
 
         match self.schema.schema_type() {
@@ -666,8 +676,7 @@ impl GraphRecord {
                     .group_mapping
                     .edges_in_group
                     .get(&group)
-                    .map(|edges| edges.len())
-                    .unwrap_or(0);
+                    .map_or(0, MrHashSet::len);
 
                 self.schema
                     .update_edge(&attributes, Some(&group), edges_in_group == 0);
@@ -676,6 +685,7 @@ impl GraphRecord {
                 self.schema
                     .validate_edge(&edge_index, &attributes, Some(&group))
                     .inspect_err(|_| {
+                        #[expect(clippy::missing_panics_doc, reason = "infallible")]
                         self.graph
                             .remove_edge(&edge_index)
                             .expect("Edge must exist");
@@ -686,6 +696,7 @@ impl GraphRecord {
         self.group_mapping
             .add_edge_to_group(group, edge_index)
             .inspect_err(|_| {
+                #[expect(clippy::missing_panics_doc, reason = "infallible")]
                 self.graph
                     .remove_edge(&edge_index)
                     .expect("Edge must exist");
@@ -718,9 +729,9 @@ impl GraphRecord {
     pub fn add_edges_with_group(
         &mut self,
         edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
-        group: Group,
+        group: &Group,
     ) -> Result<Vec<EdgeIndex>, GraphRecordError> {
-        if !self.contains_group(&group) {
+        if !self.contains_group(group) {
             self.add_group(group.clone(), None, None)?;
         }
 
@@ -764,7 +775,7 @@ impl GraphRecord {
     pub fn add_edges_dataframes_with_group(
         &mut self,
         edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-        group: Group,
+        group: &Group,
     ) -> Result<Vec<EdgeIndex>, GraphRecordError> {
         let edges = edges_dataframes
             .into_iter()
@@ -805,7 +816,7 @@ impl GraphRecord {
                     )));
                 }
             }
-        };
+        }
 
         if let Some(ref edge_indices) = edge_indices {
             for edge_index in edge_indices {
@@ -815,7 +826,7 @@ impl GraphRecord {
                     )));
                 }
             }
-        };
+        }
 
         match self.schema.schema_type() {
             SchemaType::Inferred => {
@@ -877,6 +888,7 @@ impl GraphRecord {
             }
         }
 
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         self.group_mapping
             .add_group(group, node_indices, edge_indices)
             .expect("Group must not exist");
@@ -901,8 +913,7 @@ impl GraphRecord {
                     .group_mapping
                     .nodes_in_group
                     .get(&group)
-                    .map(|nodes| nodes.len())
-                    .unwrap_or(0);
+                    .map_or(0, MrHashSet::len);
 
                 self.schema
                     .update_node(node_attributes, Some(&group), nodes_in_group == 0);
@@ -929,8 +940,7 @@ impl GraphRecord {
                     .group_mapping
                     .edges_in_group
                     .get(&group)
-                    .map(|edges| edges.len())
-                    .unwrap_or(0);
+                    .map_or(0, MrHashSet::len);
 
                 self.schema
                     .update_edge(edge_attributes, Some(&group), edges_in_group == 0);
@@ -979,14 +989,17 @@ impl GraphRecord {
     pub fn nodes_in_group(
         &self,
         group: &Group,
-    ) -> Result<impl Iterator<Item = &NodeIndex>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphRecordError> {
         self.group_mapping.nodes_in_group(group)
     }
 
     pub fn ungrouped_nodes(&self) -> impl Iterator<Item = &NodeIndex> {
         let nodes_in_groups: MrHashSet<_> = self
             .groups()
-            .flat_map(|group| self.nodes_in_group(group).expect("Group must exist"))
+            .flat_map(|group| {
+                #[expect(clippy::missing_panics_doc, reason = "infallible")]
+                self.nodes_in_group(group).expect("Group must exist")
+            })
             .collect();
 
         self.graph
@@ -997,14 +1010,17 @@ impl GraphRecord {
     pub fn edges_in_group(
         &self,
         group: &Group,
-    ) -> Result<impl Iterator<Item = &EdgeIndex>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphRecordError> {
         self.group_mapping.edges_in_group(group)
     }
 
     pub fn ungrouped_edges(&self) -> impl Iterator<Item = &EdgeIndex> {
         let edges_in_groups: MrHashSet<_> = self
             .groups()
-            .flat_map(|group| self.edges_in_group(group).expect("Group must exist"))
+            .flat_map(|group| {
+                #[expect(clippy::missing_panics_doc, reason = "infallible")]
+                self.edges_in_group(group).expect("Group must exist")
+            })
             .collect();
 
         self.graph
@@ -1015,7 +1031,7 @@ impl GraphRecord {
     pub fn groups_of_node(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &Group>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &Group> + use<'_>, GraphRecordError> {
         if !self.graph.contains_node(node_index) {
             return Err(GraphRecordError::IndexError(format!(
                 "Cannot find node with index {node_index}",
@@ -1028,7 +1044,7 @@ impl GraphRecord {
     pub fn groups_of_edge(
         &self,
         edge_index: &EdgeIndex,
-    ) -> Result<impl Iterator<Item = &Group>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &Group> + use<'_>, GraphRecordError> {
         if !self.graph.contains_edge(edge_index) {
             return Err(GraphRecordError::IndexError(format!(
                 "Cannot find edge with index {edge_index}",
@@ -1065,7 +1081,7 @@ impl GraphRecord {
     pub fn neighbors_outgoing(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &NodeIndex>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphRecordError> {
         self.graph
             .neighbors_outgoing(node_index)
             .map_err(GraphRecordError::from)
@@ -1075,7 +1091,7 @@ impl GraphRecord {
     pub fn neighbors_incoming(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &NodeIndex>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphRecordError> {
         self.graph
             .neighbors_incoming(node_index)
             .map_err(GraphRecordError::from)
@@ -1084,7 +1100,7 @@ impl GraphRecord {
     pub fn neighbors_undirected(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &NodeIndex>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphRecordError> {
         self.graph
             .neighbors_undirected(node_index)
             .map_err(GraphRecordError::from)
@@ -1136,9 +1152,9 @@ mod test {
     use crate::{
         errors::GraphRecordError,
         graphrecord::{
+            SchemaType,
             datatypes::DataType,
             schema::{AttributeSchema, GroupSchema, Schema},
-            SchemaType,
         },
     };
     use polars::prelude::{DataFrame, NamedFrom, PolarsError, Series};
@@ -1222,20 +1238,24 @@ mod test {
         let nodes = create_nodes();
 
         // Adding an edge pointing to a non-existing node should fail
-        assert!(GraphRecord::from_tuples(
-            nodes.clone(),
-            Some(vec![("0".into(), "50".into(), HashMap::new())]),
-            None
-        )
-        .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            GraphRecord::from_tuples(
+                nodes.clone(),
+                Some(vec![("0".into(), "50".into(), HashMap::new())]),
+                None
+            )
+            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Adding an edge from a non-existing should fail
-        assert!(GraphRecord::from_tuples(
-            nodes,
-            Some(vec![("50".into(), "0".into(), HashMap::new())]),
-            None
-        )
-        .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            GraphRecord::from_tuples(
+                nodes,
+                Some(vec![("50".into(), "0".into(), HashMap::new())]),
+                None
+            )
+            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -1307,7 +1327,7 @@ mod test {
             )
             .unwrap();
 
-        let schema = Schema::new_provided(Default::default(), group_schema.clone());
+        let schema = Schema::new_provided(HashMap::default(), group_schema.clone());
 
         assert!(graphrecord.set_schema(schema.clone()).is_ok());
 
@@ -1369,7 +1389,7 @@ mod test {
             )
             .unwrap();
 
-        let inferred_schema = Schema::new_inferred(Default::default(), Default::default());
+        let inferred_schema = Schema::new_inferred(HashMap::default(), GroupSchema::default());
 
         assert!(graphrecord.set_schema(inferred_schema).is_ok());
 
@@ -1385,7 +1405,7 @@ mod test {
             .unwrap();
 
         let schema = Schema::new_provided(
-            Default::default(),
+            HashMap::default(),
             GroupSchema::new(
                 AttributeSchema::from([("attribute".into(), DataType::Int.into())]),
                 AttributeSchema::from([("attribute".into(), DataType::Int.into())]),
@@ -1394,9 +1414,11 @@ mod test {
 
         let previous_schema = graphrecord.get_schema().clone();
 
-        assert!(graphrecord
-            .set_schema(schema.clone())
-            .is_err_and(|e| { matches!(e, GraphRecordError::SchemaError(_)) }));
+        assert!(
+            graphrecord
+                .set_schema(schema.clone())
+                .is_err_and(|e| { matches!(e, GraphRecordError::SchemaError(_)) })
+        );
 
         assert_eq!(previous_schema, *graphrecord.get_schema());
 
@@ -1418,9 +1440,11 @@ mod test {
 
         let previous_schema = graphrecord.get_schema().clone();
 
-        assert!(graphrecord
-            .set_schema(schema.clone())
-            .is_err_and(|e| { matches!(e, GraphRecordError::SchemaError(_)) }));
+        assert!(
+            graphrecord
+                .set_schema(schema)
+                .is_err_and(|e| { matches!(e, GraphRecordError::SchemaError(_)) })
+        );
 
         assert_eq!(previous_schema, *graphrecord.get_schema());
     }
@@ -1444,7 +1468,7 @@ mod test {
 
     #[test]
     fn test_unfreeze_schema() {
-        let schema = Schema::new_provided(Default::default(), Default::default());
+        let schema = Schema::new_provided(HashMap::default(), GroupSchema::default());
         let mut graphrecord = GraphRecord::with_schema(schema);
 
         assert_eq!(
@@ -1488,9 +1512,11 @@ mod test {
         let graphrecord = create_graphrecord();
 
         // Querying a non-existing node should fail
-        assert!(graphrecord
-            .node_attributes(&"50".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .node_attributes(&"50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -1517,9 +1543,11 @@ mod test {
         let mut graphrecord = create_graphrecord();
 
         // Accessing the node attributes of a non-existing node should fail
-        assert!(graphrecord
-            .node_attributes_mut(&"50".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .node_attributes_mut(&"50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -1535,9 +1563,11 @@ mod test {
     fn test_invalid_outgoing_edges() {
         let graphrecord = create_graphrecord();
 
-        assert!(graphrecord
-            .outgoing_edges(&"50".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))))
+        assert!(
+            graphrecord
+                .outgoing_edges(&"50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -1553,9 +1583,11 @@ mod test {
     fn test_invalid_incoming_edges() {
         let graphrecord = create_graphrecord();
 
-        assert!(graphrecord
-            .incoming_edges(&"50".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))))
+        assert!(
+            graphrecord
+                .incoming_edges(&"50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -1582,9 +1614,11 @@ mod test {
         let graphrecord = create_graphrecord();
 
         // Querying a non-existing node should fail
-        assert!(graphrecord
-            .edge_attributes(&50)
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .edge_attributes(&50)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -1607,9 +1641,11 @@ mod test {
         let mut graphrecord = create_graphrecord();
 
         // Accessing the edge attributes of a non-existing edge should fail
-        assert!(graphrecord
-            .edge_attributes_mut(&50)
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .edge_attributes_mut(&50)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -1630,9 +1666,11 @@ mod test {
         let graphrecord = create_graphrecord();
 
         // Accessing the edge endpoints of a non-existing edge should fail
-        assert!(graphrecord
-            .edge_endpoints(&50)
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .edge_endpoints(&50)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -1713,15 +1751,19 @@ mod test {
     fn test_invalid_add_node() {
         let mut graphrecord = create_graphrecord();
 
-        assert!(graphrecord
-            .add_node("0".into(), HashMap::new())
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            graphrecord
+                .add_node("0".into(), HashMap::new())
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
 
         graphrecord.freeze_schema();
 
-        assert!(graphrecord
-            .add_node("4".into(), HashMap::from([("attribute".into(), 1.into())]))
-            .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_))));
+        assert!(
+            graphrecord
+                .add_node("4".into(), HashMap::from([("attribute".into(), 1.into())]))
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
     }
 
     #[test]
@@ -1791,9 +1833,11 @@ mod test {
         let mut graphrecord = create_graphrecord();
 
         // Removing a non-existing node should fail
-        assert!(graphrecord
-            .remove_node(&"50".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .remove_node(&"50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -1815,9 +1859,11 @@ mod test {
 
         let nodes = create_nodes();
 
-        assert!(graphrecord
-            .add_nodes(nodes)
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            graphrecord
+                .add_nodes(nodes)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
     }
 
     #[test]
@@ -1865,24 +1911,30 @@ mod test {
         graphrecord.add_nodes(nodes).unwrap();
 
         // Adding an edge pointing to a non-existing node should fail
-        assert!(graphrecord
-            .add_edge("0".into(), "50".into(), HashMap::new())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .add_edge("0".into(), "50".into(), HashMap::new())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Adding an edge from a non-existing node should fail
-        assert!(graphrecord
-            .add_edge("50".into(), "0".into(), HashMap::new())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .add_edge("50".into(), "0".into(), HashMap::new())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         graphrecord.freeze_schema();
 
-        assert!(graphrecord
-            .add_edge(
-                "0".into(),
-                "3".into(),
-                HashMap::from([("attribute".into(), 1.into())])
-            )
-            .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_))));
+        assert!(
+            graphrecord
+                .add_edge(
+                    "0".into(),
+                    "3".into(),
+                    HashMap::from([("attribute".into(), 1.into())])
+                )
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
     }
 
     #[test]
@@ -1899,9 +1951,11 @@ mod test {
         let mut graphrecord = create_graphrecord();
 
         // Removing a non-existing edge should fail
-        assert!(graphrecord
-            .remove_edge(&50)
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .remove_edge(&50)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -1964,36 +2018,48 @@ mod test {
         let mut graphrecord = create_graphrecord();
 
         // Adding a group with a non-existing node should fail
-        assert!(graphrecord
-            .add_group("0".into(), Some(vec!["50".into()]), None)
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .add_group("0".into(), Some(vec!["50".into()]), None)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Adding a group with a non-existing edge should fail
-        assert!(graphrecord
-            .add_group("0".into(), None, Some(vec![50]))
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .add_group("0".into(), None, Some(vec![50]))
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         graphrecord.add_group("0".into(), None, None).unwrap();
 
         // Adding an already existing group should fail
-        assert!(graphrecord
-            .add_group("0".into(), None, None)
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            graphrecord
+                .add_group("0".into(), None, None)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
 
         graphrecord.freeze_schema();
 
-        assert!(graphrecord
-            .add_group("2".into(), None, None)
-            .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_))));
+        assert!(
+            graphrecord
+                .add_group("2".into(), None, None)
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
 
         graphrecord.remove_group(&"0".into()).unwrap();
 
-        assert!(graphrecord
-            .add_group("0".into(), Some(vec!["0".into()]), None)
-            .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_))));
-        assert!(graphrecord
-            .add_group("0".into(), None, Some(vec![0]))
-            .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_))));
+        assert!(
+            graphrecord
+                .add_group("0".into(), Some(vec!["0".into()]), None)
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
+        assert!(
+            graphrecord
+                .add_group("0".into(), None, Some(vec![0]))
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
     }
 
     #[test]
@@ -2014,9 +2080,11 @@ mod test {
         let mut graphrecord = GraphRecord::new();
 
         // Removing a non-existing group should fail
-        assert!(graphrecord
-            .remove_group(&"0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .remove_group(&"0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -2049,9 +2117,11 @@ mod test {
             .add_node("5".into(), HashMap::from([("test".into(), "test".into())]))
             .unwrap();
 
-        assert!(graphrecord
-            .add_node_to_group("1".into(), "5".into())
-            .is_ok());
+        assert!(
+            graphrecord
+                .add_node_to_group("1".into(), "5".into())
+                .is_ok()
+        );
 
         assert_eq!(2, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
     }
@@ -2065,14 +2135,18 @@ mod test {
             .unwrap();
 
         // Adding a non-existing node to a group should fail
-        assert!(graphrecord
-            .add_node_to_group("0".into(), "50".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .add_node_to_group("0".into(), "50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Adding a node to a group that already is in the group should fail
-        assert!(graphrecord
-            .add_node_to_group("0".into(), "0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            graphrecord
+                .add_node_to_group("0".into(), "0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
 
         let mut graphrecord = GraphRecord::new();
 
@@ -2083,9 +2157,11 @@ mod test {
 
         graphrecord.freeze_schema();
 
-        assert!(graphrecord
-            .add_node_to_group("group".into(), "0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_))));
+        assert!(
+            graphrecord
+                .add_node_to_group("group".into(), "0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
     }
 
     #[test]
@@ -2116,9 +2192,11 @@ mod test {
             .add_edge("0".into(), "1".into(), HashMap::new())
             .unwrap();
 
-        assert!(graphrecord
-            .add_edge_to_group("1".into(), edge_index)
-            .is_ok());
+        assert!(
+            graphrecord
+                .add_edge_to_group("1".into(), edge_index)
+                .is_ok()
+        );
 
         assert_eq!(2, graphrecord.edges_in_group(&"1".into()).unwrap().count());
     }
@@ -2132,14 +2210,18 @@ mod test {
             .unwrap();
 
         // Adding a non-existing edge to a group should fail
-        assert!(graphrecord
-            .add_edge_to_group("0".into(), 50)
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .add_edge_to_group("0".into(), 50)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Adding an edge to a group that already is in the group should fail
-        assert!(graphrecord
-            .add_edge_to_group("0".into(), 0)
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            graphrecord
+                .add_edge_to_group("0".into(), 0)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
 
         let mut graphrecord = GraphRecord::new();
 
@@ -2155,9 +2237,11 @@ mod test {
 
         graphrecord.freeze_schema();
 
-        assert!(graphrecord
-            .add_edge_to_group("group".into(), 0)
-            .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_))));
+        assert!(
+            graphrecord
+                .add_edge_to_group("group".into(), 0)
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
     }
 
     #[test]
@@ -2186,19 +2270,25 @@ mod test {
             .unwrap();
 
         // Removing a node from a non-existing group should fail
-        assert!(graphrecord
-            .remove_node_from_group(&"50".into(), &"0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .remove_node_from_group(&"50".into(), &"0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Removing a non-existing node from a group should fail
-        assert!(graphrecord
-            .remove_node_from_group(&"0".into(), &"50".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .remove_node_from_group(&"0".into(), &"50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Removing a node from a group it is not in should fail
-        assert!(graphrecord
-            .remove_node_from_group(&"0".into(), &"1".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            graphrecord
+                .remove_node_from_group(&"0".into(), &"1".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
     }
 
     #[test]
@@ -2225,19 +2315,25 @@ mod test {
             .unwrap();
 
         // Removing an edge from a non-existing group should fail
-        assert!(graphrecord
-            .remove_edge_from_group(&"50".into(), &0)
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .remove_edge_from_group(&"50".into(), &0)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Removing a non-existing edge from a group should fail
-        assert!(graphrecord
-            .remove_edge_from_group(&"0".into(), &50)
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .remove_edge_from_group(&"0".into(), &50)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Removing an edge from a group it is not in should fail
-        assert!(graphrecord
-            .remove_edge_from_group(&"0".into(), &1)
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            graphrecord
+                .remove_edge_from_group(&"0".into(), &1)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
     }
 
     #[test]
@@ -2271,9 +2367,11 @@ mod test {
         let graphrecord = create_graphrecord();
 
         // Querying a non-existing group should fail
-        assert!(graphrecord
-            .nodes_in_group(&"0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .nodes_in_group(&"0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -2296,9 +2394,11 @@ mod test {
         let graphrecord = create_graphrecord();
 
         // Querying a non-existing group should fail
-        assert!(graphrecord
-            .edges_in_group(&"0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .edges_in_group(&"0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -2317,9 +2417,11 @@ mod test {
         let graphrecord = create_graphrecord();
 
         // Queyring the groups of a non-existing node should fail
-        assert!(graphrecord
-            .groups_of_node(&"50".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))))
+        assert!(
+            graphrecord
+                .groups_of_node(&"50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -2338,9 +2440,11 @@ mod test {
         let graphrecord = create_graphrecord();
 
         // Queyring the groups of a non-existing edge should fail
-        assert!(graphrecord
-            .groups_of_edge(&50)
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))))
+        assert!(
+            graphrecord
+                .groups_of_edge(&50)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -2424,9 +2528,11 @@ mod test {
         let graphrecord = GraphRecord::new();
 
         // Querying neighbors of a non-existing node sohuld fail
-        assert!(graphrecord
-            .neighbors_outgoing(&"0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .neighbors_outgoing(&"0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -2444,9 +2550,11 @@ mod test {
     fn test_invalid_neighbors_undirected() {
         let graphrecord = create_graphrecord();
 
-        assert!(graphrecord
-            .neighbors_undirected(&"50".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            graphrecord
+                .neighbors_undirected(&"50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
