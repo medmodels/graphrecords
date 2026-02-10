@@ -1,0 +1,176 @@
+name: Epic Sub-Issues
+
+on:
+  issues:
+    types: [opened, labeled]
+  pull_request:
+    types: [opened]
+
+jobs:
+  validate-and-label:
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Validate and label sub-issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let parent;
+            try {
+              const resp = await github.request(
+                "GET /repos/{owner}/{repo}/issues/{issue_number}/parent",
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                },
+              );
+              parent = resp.data;
+            } catch (e) {
+              if (e.status === 404) return;
+              throw e;
+            }
+
+            const parentLabels = parent.labels.map((l) => l.name);
+
+            if (!parentLabels.includes("epic")) {
+              await github.request(
+                "DELETE /repos/{owner}/{repo}/issues/{issue_number}/sub_issue",
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: parent.number,
+                  sub_issue_id: context.payload.issue.id,
+                },
+              );
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `This issue was removed as a sub-issue of #${parent.number} because that issue is not an epic. Sub-issues should only be created under issues with the \`epic\` label.`,
+              });
+              return;
+            }
+
+            const labels = ["epic-task"];
+            const priority = parentLabels.find((l) => l.startsWith("p-"));
+            if (priority) labels.push(priority);
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels,
+            });
+
+  create-sub-issue-branch:
+    if: >-
+      github.event_name == 'issues'
+      && github.event.label.name == 'accepted'
+      && contains(github.event.issue.labels.*.name, 'epic-task')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create branch from epic branch
+        uses: actions/github-script@v7
+        id: branch
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const toKebab = (s) =>
+              s
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-|-$/g, "");
+
+            const { data: parent } = await github.request(
+              "GET /repos/{owner}/{repo}/issues/{issue_number}/parent",
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              },
+            );
+
+            const epicBranch = `epic/${parent.number}-${toKebab(parent.title)}`;
+            const newBranch = `${context.issue.number}-${toKebab(context.payload.issue.title)}`;
+
+            const { data: ref } = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `heads/${epicBranch}`,
+            });
+
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/heads/${newBranch}`,
+              sha: ref.object.sha,
+            });
+
+            core.setOutput("branch", newBranch);
+            core.setOutput("epic_branch", epicBranch);
+
+      - name: Link branch to issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue develop ${{ github.event.issue.number }} \
+            --name "${{ steps.branch.outputs.branch }}" \
+            --base "${{ steps.branch.outputs.epic_branch }}"
+
+  check-pr-base:
+    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read
+      pull-requests: write
+
+    steps:
+      - name: Warn if base doesn't match epic branch
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const toKebab = (s) =>
+              s
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-|-$/g, "");
+
+            const headRef = context.payload.pull_request.head.ref;
+            const suffix = headRef.includes("/") ? headRef.split("/").pop() : headRef;
+            const match = suffix.match(/^(\d+)/);
+            if (!match) return;
+
+            let parent;
+            try {
+              const resp = await github.request(
+                "GET /repos/{owner}/{repo}/issues/{issue_number}/parent",
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: parseInt(match[1]),
+                },
+              );
+              parent = resp.data;
+            } catch (e) {
+              if (e.status === 404) return;
+              throw e;
+            }
+
+            const expectedBase = `epic/${parent.number}-${toKebab(parent.title)}`;
+            const actualBase = context.payload.pull_request.base.ref;
+
+            if (actualBase !== expectedBase) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `**Warning:** This PR targets \`${actualBase}\`, but the issue is a sub-issue of epic #${parent.number}. The base branch should be \`${expectedBase}\`.`,
+              });
+            }
