@@ -16,3 +16,6 @@ graphrecords = { workspace = true }
 graphrecords-python = { workspace = true }
 
 pyo3 = { workspace = true }
+
+[lints]
+workspace = true

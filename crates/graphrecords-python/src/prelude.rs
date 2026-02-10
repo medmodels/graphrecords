@@ -1,4 +1,5 @@
 pub use crate::graphrecord::{
+    PyAttributes, PyEdgeIndex, PyGraphRecord, PyGroup, PyNodeIndex,
     attribute::PyGraphRecordAttribute,
     datatype::{
         PyAny, PyBool, PyDateTime, PyDuration, PyFloat, PyInt, PyNull, PyOption, PyString, PyUnion,
@@ -8,6 +9,7 @@ pub use crate::graphrecord::{
         PyAttributeOverview, PyEdgeGroupOverview, PyGroupOverview, PyNodeGroupOverview, PyOverview,
     },
     querying::{
+        PyMatchMode,
         attributes::{
             PyEdgeAttributesTreeGroupOperand, PyEdgeAttributesTreeOperand,
             PyEdgeMultipleAttributesWithIndexGroupOperand,
@@ -39,9 +41,7 @@ pub use crate::graphrecord::{
             PyNodeSingleValueWithIndexGroupOperand, PyNodeSingleValueWithIndexOperand,
             PyNodeSingleValueWithoutIndexGroupOperand, PyNodeSingleValueWithoutIndexOperand,
         },
-        PyMatchMode,
     },
     schema::{PyAttributeDataType, PyAttributeType, PyGroupSchema, PySchema, PySchemaType},
     value::PyGraphRecordValue,
-    PyAttributes, PyEdgeIndex, PyGraphRecord, PyGroup, PyNodeIndex,
 };

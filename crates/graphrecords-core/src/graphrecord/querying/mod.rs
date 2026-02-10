@@ -133,9 +133,9 @@ pub trait RootOperand:
     ) -> BoxedIterator<'a, &'a Self::Index>;
 }
 
-impl<'a, O: RootOperand> EvaluateForward<'a> for O
+impl<'a, O> EvaluateForward<'a> for O
 where
-    O: 'a,
+    O: RootOperand + 'a,
 {
     type InputValue = BoxedIterator<'a, &'a O::Index>;
     type ReturnValue = BoxedIterator<'a, &'a O::Index>;
@@ -176,9 +176,9 @@ pub(crate) fn tee_grouped_iterator<'a, O: 'a + Clone>(
     )
 }
 
-impl<'a, O: RootOperand> EvaluateForwardGrouped<'a> for O
+impl<'a, O> EvaluateForwardGrouped<'a> for O
 where
-    O: 'a,
+    O: RootOperand + 'a,
 {
     fn evaluate_forward_grouped(
         &self,
@@ -189,9 +189,9 @@ where
     }
 }
 
-impl<'a, O: RootOperand> EvaluateBackward<'a> for O
+impl<'a, O> EvaluateBackward<'a> for O
 where
-    O: 'a,
+    O: RootOperand + 'a,
 {
     type ReturnValue = BoxedIterator<'a, &'a O::Index>;
 
@@ -203,9 +203,9 @@ where
     }
 }
 
-impl<'a, O: RootOperand> EvaluateBackward<'a> for GroupOperand<O>
+impl<'a, O> EvaluateBackward<'a> for GroupOperand<O>
 where
-    O: 'a,
+    O: RootOperand + 'a,
 {
     type ReturnValue = GroupedIterator<'a, BoxedIterator<'a, &'a O::Index>>;
 
@@ -228,9 +228,9 @@ impl<O: RootOperand> GroupBy for O {
     }
 }
 
-impl<'a, O: RootOperand> PartitionGroups<'a> for O
+impl<'a, O> PartitionGroups<'a> for O
 where
-    O: 'a,
+    O: RootOperand + 'a,
 {
     type Values = BoxedIterator<'a, &'a O::Index>;
 
@@ -333,24 +333,25 @@ impl<'a, O> Wrapper<O> {
 }
 
 pub trait DeepClone {
+    #[must_use]
     fn deep_clone(&self) -> Self;
 }
 
 impl<T: DeepClone> DeepClone for Option<T> {
     fn deep_clone(&self) -> Self {
-        self.as_ref().map(|value| value.deep_clone())
+        self.as_ref().map(DeepClone::deep_clone)
     }
 }
 
 impl<T: DeepClone> DeepClone for Box<T> {
     fn deep_clone(&self) -> Self {
-        Box::new(T::deep_clone(self))
+        Self::new(T::deep_clone(self))
     }
 }
 
 impl<T: DeepClone> DeepClone for Vec<T> {
     fn deep_clone(&self) -> Self {
-        self.iter().map(|value| value.deep_clone()).collect()
+        self.iter().map(DeepClone::deep_clone).collect()
     }
 }
 
@@ -452,7 +453,9 @@ impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11);
 impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12);
 impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13);
 impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15);
+impl_return_operand_for_tuples!(
+    R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15
+);
 
 impl<'a, R: ReturnOperand<'a>> ReturnOperand<'a> for &R {
     type ReturnValue = R::ReturnValue;

@@ -19,3 +19,6 @@ bincode = { workspace = true }
 
 pyo3-polars = "0.21.0"
 numpy = "0.24.0"
+
+[lints]
+workspace = true

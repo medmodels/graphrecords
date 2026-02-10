@@ -1,12 +1,16 @@
 use super::{
-    operation::{MultipleValuesWithIndexOperation, SingleValueWithIndexOperation},
     BinaryArithmeticKind, MultipleComparisonKind, MultipleValuesWithIndexContext,
     SingleComparisonKind, SingleKindWithIndex, UnaryArithmeticKind,
+    operation::{MultipleValuesWithIndexOperation, SingleValueWithIndexOperation},
 };
 use crate::{
+    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
+        EdgeOperand, GraphRecordValue, NodeOperand, Wrapper,
         querying::{
+            BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
+            GroupedIterator, ReduceInput, RootOperand,
             operand_traits::{
                 Abs, Add, Ceil, Contains, Count, Div, EitherOr, EndsWith, EqualTo, Exclude, Floor,
                 GreaterThan, GreaterThanOrEqualTo, IsBool, IsDateTime, IsDuration, IsFloat, IsIn,
@@ -15,18 +19,14 @@ use crate::{
                 Slice, Sqrt, StartsWith, Std, Sub, Sum, Trim, TrimEnd, TrimStart, Uppercase, Var,
             },
             values::{
+                MultipleValuesWithoutIndexContext, SingleKindWithoutIndex,
+                SingleValueWithoutIndexContext,
                 operation::{
                     MultipleValuesWithoutIndexOperation, SingleValueWithoutIndexOperation,
                 },
-                MultipleValuesWithoutIndexContext, SingleKindWithoutIndex,
-                SingleValueWithoutIndexContext,
             },
-            BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
-            GroupedIterator, ReduceInput, RootOperand,
         },
-        EdgeOperand, GraphRecordValue, NodeOperand, Wrapper,
     },
-    GraphRecord,
 };
 use graphrecords_utils::traits::ReadWriteOrPanic;
 
@@ -917,7 +917,7 @@ impl<O: RootOperand> Exclude for MultipleValuesWithIndexOperand<O> {
 }
 
 impl<O: RootOperand> MultipleValuesWithIndexOperand<O> {
-    pub(crate) fn new(context: MultipleValuesWithIndexContext<O>) -> Self {
+    pub(crate) const fn new(context: MultipleValuesWithIndexContext<O>) -> Self {
         Self {
             context,
             operations: Vec::new(),
@@ -935,7 +935,7 @@ impl<O: RootOperand> Wrapper<MultipleValuesWithIndexOperand<O>> {
         MultipleValuesWithIndexOperand::new(context).into()
     }
 
-    pub(crate) fn push_merge_operation(&self, operand: Wrapper<MultipleValuesWithIndexOperand<O>>) {
+    pub(crate) fn push_merge_operation(&self, operand: Self) {
         self.0.write_or_panic().push_merge_operation(operand);
     }
 }
@@ -1569,10 +1569,8 @@ impl<O: RootOperand> EitherOr for MultipleValuesWithoutIndexOperand<O> {
         EQ: FnOnce(&mut Wrapper<Self::QueryOperand>),
         OQ: FnOnce(&mut Wrapper<Self::QueryOperand>),
     {
-        let mut either_operand =
-            Wrapper::<MultipleValuesWithoutIndexOperand<O>>::new(self.context.clone());
-        let mut or_operand =
-            Wrapper::<MultipleValuesWithoutIndexOperand<O>>::new(self.context.clone());
+        let mut either_operand = Wrapper::<Self>::new(self.context.clone());
+        let mut or_operand = Wrapper::<Self>::new(self.context.clone());
 
         either_query(&mut either_operand);
         or_query(&mut or_operand);
@@ -1602,7 +1600,7 @@ impl<O: RootOperand> Exclude for MultipleValuesWithoutIndexOperand<O> {
 }
 
 impl<O: RootOperand> MultipleValuesWithoutIndexOperand<O> {
-    pub(crate) fn new(context: MultipleValuesWithoutIndexContext<O>) -> Self {
+    pub(crate) const fn new(context: MultipleValuesWithoutIndexContext<O>) -> Self {
         Self {
             context,
             operations: Vec::new(),
@@ -2063,10 +2061,8 @@ impl<O: RootOperand> EitherOr for SingleValueWithIndexOperand<O> {
         EQ: FnOnce(&mut Wrapper<Self::QueryOperand>),
         OQ: FnOnce(&mut Wrapper<Self::QueryOperand>),
     {
-        let mut either_operand =
-            Wrapper::<SingleValueWithIndexOperand<O>>::new(self.context.clone(), self.kind.clone());
-        let mut or_operand =
-            Wrapper::<SingleValueWithIndexOperand<O>>::new(self.context.clone(), self.kind.clone());
+        let mut either_operand = Wrapper::<Self>::new(self.context.clone(), self.kind.clone());
+        let mut or_operand = Wrapper::<Self>::new(self.context.clone(), self.kind.clone());
 
         either_query(&mut either_operand);
         or_query(&mut or_operand);
@@ -2086,8 +2082,7 @@ impl<O: RootOperand> Exclude for SingleValueWithIndexOperand<O> {
     where
         Q: FnOnce(&mut Wrapper<Self::QueryOperand>),
     {
-        let mut operand =
-            Wrapper::<SingleValueWithIndexOperand<O>>::new(self.context.clone(), self.kind.clone());
+        let mut operand = Wrapper::<Self>::new(self.context.clone(), self.kind.clone());
 
         query(&mut operand);
 
@@ -2097,7 +2092,7 @@ impl<O: RootOperand> Exclude for SingleValueWithIndexOperand<O> {
 }
 
 impl<O: RootOperand> SingleValueWithIndexOperand<O> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         context: MultipleValuesWithIndexOperand<O>,
         kind: SingleKindWithIndex,
     ) -> Self {
@@ -2202,7 +2197,7 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a> for SingleValueWithoutIndexOp
                 MultipleValuesWithoutIndexOperation::<O>::get_median(values)?
             }
             SingleKindWithoutIndex::Mode => {
-                MultipleValuesWithoutIndexOperation::<O>::get_mode(values)?
+                MultipleValuesWithoutIndexOperation::<O>::get_mode(values)
             }
             SingleKindWithoutIndex::Std => {
                 MultipleValuesWithoutIndexOperation::<O>::get_std(values)?
@@ -2600,14 +2595,8 @@ impl<O: RootOperand> EitherOr for SingleValueWithoutIndexOperand<O> {
         EQ: FnOnce(&mut Wrapper<Self::QueryOperand>),
         OQ: FnOnce(&mut Wrapper<Self::QueryOperand>),
     {
-        let mut either_operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            self.context.clone(),
-            self.kind.clone(),
-        );
-        let mut or_operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            self.context.clone(),
-            self.kind.clone(),
-        );
+        let mut either_operand = Wrapper::<Self>::new(self.context.clone(), self.kind.clone());
+        let mut or_operand = Wrapper::<Self>::new(self.context.clone(), self.kind.clone());
 
         either_query(&mut either_operand);
         or_query(&mut or_operand);
@@ -2627,10 +2616,7 @@ impl<O: RootOperand> Exclude for SingleValueWithoutIndexOperand<O> {
     where
         Q: FnOnce(&mut Wrapper<Self::QueryOperand>),
     {
-        let mut operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            self.context.clone(),
-            self.kind.clone(),
-        );
+        let mut operand = Wrapper::<Self>::new(self.context.clone(), self.kind.clone());
 
         query(&mut operand);
 
@@ -2640,7 +2626,7 @@ impl<O: RootOperand> Exclude for SingleValueWithoutIndexOperand<O> {
 }
 
 impl<O: RootOperand> SingleValueWithoutIndexOperand<O> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         context: SingleValueWithoutIndexContext<O>,
         kind: SingleKindWithoutIndex,
     ) -> Self {

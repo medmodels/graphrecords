@@ -1,7 +1,7 @@
 mod edge;
 mod node;
 
-use super::{group_mapping::GroupMapping, GraphRecordAttribute, GraphRecordValue};
+use super::{GraphRecordAttribute, GraphRecordValue, group_mapping::GroupMapping};
 use crate::errors::GraphError;
 use edge::Edge;
 use graphrecords_utils::aliases::MrHashMap;
@@ -98,12 +98,9 @@ impl Graph {
         node_index: &NodeIndex,
         group_mapping: &mut GroupMapping,
     ) -> Result<Attributes, GraphError> {
-        let node = self
-            .nodes
-            .remove(node_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find node with index {node_index}"
-            )))?;
+        let node = self.nodes.remove(node_index).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+        })?;
 
         let edge_indices = node
             .outgoing_edge_indices
@@ -165,12 +162,9 @@ impl Graph {
 
         let edge_index = self.get_edge_index();
 
-        let outgoing_node =
-            self.nodes
-                .get_mut(&source_node_index)
-                .ok_or(GraphError::IndexError(format!(
-                    "Cannot find node with index {source_node_index}"
-                )))?;
+        let outgoing_node = self.nodes.get_mut(&source_node_index).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find node with index {source_node_index}"))
+        })?;
 
         outgoing_node.outgoing_edge_indices.insert(edge_index);
 
@@ -188,13 +182,11 @@ impl Graph {
         Ok(edge_index)
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> Result<Attributes, GraphError> {
-        let edge = self
-            .edges
-            .remove(edge_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find edge with index {edge_index}"
-            )))?;
+        let edge = self.edges.remove(edge_index).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
+        })?;
 
         self.nodes
             .get_mut(&edge.target_node_index)
@@ -215,9 +207,9 @@ impl Graph {
         Ok(&self
             .nodes
             .get(node_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find node with index {node_index}"
-            )))?
+            .ok_or_else(|| {
+                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            })?
             .attributes)
     }
 
@@ -228,9 +220,9 @@ impl Graph {
         Ok(&mut self
             .nodes
             .get_mut(node_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find node with index {node_index}"
-            )))?
+            .ok_or_else(|| {
+                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            })?
             .attributes)
     }
 
@@ -246,16 +238,18 @@ impl Graph {
         self.nodes.keys()
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn edge_attributes(&self, edge_index: &EdgeIndex) -> Result<&Attributes, GraphError> {
         Ok(&self
             .edges
             .get(edge_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find edge with index {edge_index}"
-            )))?
+            .ok_or_else(|| {
+                GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
+            })?
             .attributes)
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn edge_attributes_mut(
         &mut self,
         edge_index: &EdgeIndex,
@@ -263,9 +257,9 @@ impl Graph {
         Ok(&mut self
             .edges
             .get_mut(edge_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find edge with index {edge_index}"
-            )))?
+            .ok_or_else(|| {
+                GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
+            })?
             .attributes)
     }
 
@@ -277,16 +271,14 @@ impl Graph {
         self.edges.values_mut().map(|edge| &mut edge.attributes)
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn edge_endpoints(
         &self,
         edge_index: &EdgeIndex,
     ) -> Result<(&NodeIndex, &NodeIndex), GraphError> {
-        let edge = self
-            .edges
-            .get(edge_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find edge with index {edge_index}"
-            )))?;
+        let edge = self.edges.get(edge_index).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
+        })?;
 
         Ok((&edge.source_node_index, &edge.target_node_index))
     }
@@ -294,13 +286,13 @@ impl Graph {
     pub fn outgoing_edges(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &EdgeIndex>, GraphError> {
+    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphError> {
         Ok(self
             .nodes
             .get(node_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find node with index {node_index}"
-            )))?
+            .ok_or_else(|| {
+                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            })?
             .outgoing_edge_indices
             .iter())
     }
@@ -308,13 +300,13 @@ impl Graph {
     pub fn incoming_edges(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &EdgeIndex>, GraphError> {
+    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphError> {
         Ok(self
             .nodes
             .get(node_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find node with index {node_index}"
-            )))?
+            .ok_or_else(|| {
+                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            })?
             .incoming_edge_indices
             .iter())
     }
@@ -353,6 +345,7 @@ impl Graph {
             .map(|(edge_index, _)| edge_index)
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn contains_edge(&self, edge_index: &EdgeIndex) -> bool {
         self.edges.contains_key(edge_index)
     }
@@ -360,13 +353,13 @@ impl Graph {
     pub fn neighbors_outgoing(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &NodeIndex>, GraphError> {
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
         Ok(self
             .nodes
             .get(node_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find node with index {node_index}"
-            )))?
+            .ok_or_else(|| {
+                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            })?
             .outgoing_edge_indices
             .iter()
             .map(|edge_index| {
@@ -382,13 +375,13 @@ impl Graph {
     pub fn neighbors_incoming(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &NodeIndex>, GraphError> {
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
         Ok(self
             .nodes
             .get(node_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find node with index {node_index}"
-            )))?
+            .ok_or_else(|| {
+                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            })?
             .incoming_edge_indices
             .iter()
             .map(|edge_index| {
@@ -403,13 +396,10 @@ impl Graph {
     pub fn neighbors_undirected(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &NodeIndex>, GraphError> {
-        let node = self
-            .nodes
-            .get(node_index)
-            .ok_or(GraphError::IndexError(format!(
-                "Cannot find node with index {node_index}"
-            )))?;
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
+        let node = self.nodes.get(node_index).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+        })?;
 
         Ok(node
             .outgoing_edge_indices
@@ -568,9 +558,11 @@ mod test {
     fn test_invalid_add_node() {
         let mut graph = create_graph();
 
-        assert!(graph
-            .add_node("0".into(), HashMap::new())
-            .is_err_and(|e| matches!(e, GraphError::AssertionError(_))));
+        assert!(
+            graph
+                .add_node("0".into(), HashMap::new())
+                .is_err_and(|e| matches!(e, GraphError::AssertionError(_)))
+        );
     }
 
     #[test]
@@ -595,9 +587,11 @@ mod test {
         assert_eq!(1, graph.node_count());
         assert_eq!(1, graph.edge_count());
 
-        assert!(graph
-            .remove_node(&0.into(), &mut GroupMapping::new())
-            .is_ok());
+        assert!(
+            graph
+                .remove_node(&0.into(), &mut GroupMapping::new())
+                .is_ok()
+        );
 
         assert_eq!(0, graph.node_count());
         assert_eq!(0, graph.edge_count());
@@ -607,9 +601,11 @@ mod test {
     fn test_invalid_remove_node() {
         let mut graph = create_graph();
 
-        assert!(graph
-            .remove_node(&"50".into(), &mut GroupMapping::new())
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .remove_node(&"50".into(), &mut GroupMapping::new())
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -640,14 +636,18 @@ mod test {
         graph.add_node(0.into(), HashMap::new()).unwrap();
 
         // Adding an edge pointing to a non-existing node should fail
-        assert!(graph
-            .add_edge("0".into(), "50".into(), HashMap::new())
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .add_edge("0".into(), "50".into(), HashMap::new())
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
 
         // Adding an edge from a non-existing node should fail
-        assert!(graph
-            .add_edge("50".into(), "0".into(), HashMap::new())
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .add_edge("50".into(), "0".into(), HashMap::new())
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -666,9 +666,11 @@ mod test {
         let mut graph = create_graph();
 
         // Removing an edge with a non-existing edge index should fail
-        assert!(graph
-            .remove_edge(&50)
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .remove_edge(&50)
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -686,9 +688,11 @@ mod test {
         let graph = create_graph();
 
         // Accessing the node attributes of a non-existing node should fail
-        assert!(graph
-            .node_attributes(&"50".into())
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .node_attributes(&"50".into())
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -711,9 +715,11 @@ mod test {
         let mut graph = create_graph();
 
         // Accessing the node attributes of a non-existing node should fail
-        assert!(graph
-            .node_attributes_mut(&"50".into())
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .node_attributes_mut(&"50".into())
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -778,9 +784,11 @@ mod test {
         let graph = create_graph();
 
         // Accessing the edge attributes of a non-existing edge should fail
-        assert!(graph
-            .edge_attributes(&50)
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .edge_attributes(&50)
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -803,9 +811,11 @@ mod test {
         let mut graph = create_graph();
 
         // Accessing the edge attributes of a non-existing edge should fail
-        assert!(graph
-            .edge_attributes_mut(&50)
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .edge_attributes_mut(&50)
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -862,9 +872,11 @@ mod test {
         let graph = create_graph();
 
         // Accessing the edge endpoints of a non-existing edge should fail
-        assert!(graph
-            .edge_endpoints(&50)
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .edge_endpoints(&50)
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -955,9 +967,11 @@ mod test {
     fn test_invalid_neighbors() {
         let graph = create_graph();
 
-        assert!(graph
-            .neighbors_outgoing(&"50".into())
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .neighbors_outgoing(&"50".into())
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -975,8 +989,10 @@ mod test {
     fn test_invalid_neighbors_undirected() {
         let graph = create_graph();
 
-        assert!(graph
-            .neighbors_undirected(&"50".into())
-            .is_err_and(|e| matches!(e, GraphError::IndexError(_))));
+        assert!(
+            graph
+                .neighbors_undirected(&"50".into())
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
     }
 }

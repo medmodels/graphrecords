@@ -20,7 +20,7 @@ impl<O: GroupedOperand + Add> Add for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn add<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.add(value)
+        self.operand.add(value);
     }
 }
 
@@ -40,7 +40,7 @@ impl<O: GroupedOperand + Sub> Sub for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn sub<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.sub(value)
+        self.operand.sub(value);
     }
 }
 
@@ -60,7 +60,7 @@ impl<O: GroupedOperand + Mul> Mul for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn mul<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.mul(value)
+        self.operand.mul(value);
     }
 }
 
@@ -80,7 +80,7 @@ impl<O: GroupedOperand + Div> Div for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn div<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.div(value)
+        self.operand.div(value);
     }
 }
 
@@ -100,7 +100,7 @@ impl<O: GroupedOperand + Pow> Pow for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn pow<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.pow(value)
+        self.operand.pow(value);
     }
 }
 
@@ -120,7 +120,7 @@ impl<O: GroupedOperand + Mod> Mod for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn r#mod<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.r#mod(value)
+        self.operand.r#mod(value);
     }
 }
 

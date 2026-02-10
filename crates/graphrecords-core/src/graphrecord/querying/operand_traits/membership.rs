@@ -20,7 +20,7 @@ impl<O: GroupedOperand + IsIn> IsIn for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn is_in<V: Into<Self::ComparisonOperand>>(&mut self, values: V) {
-        self.operand.is_in(values)
+        self.operand.is_in(values);
     }
 }
 
@@ -40,6 +40,6 @@ impl<O: GroupedOperand + IsNotIn> IsNotIn for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn is_not_in<V: Into<Self::ComparisonOperand>>(&mut self, values: V) {
-        self.operand.is_not_in(values)
+        self.operand.is_not_in(values);
     }
 }

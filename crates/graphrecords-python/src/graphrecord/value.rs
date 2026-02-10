@@ -1,10 +1,10 @@
-use super::{traits::DeepFrom, Lut};
+use super::{Lut, traits::DeepFrom};
 use crate::{gil_hash_map::GILHashMap, graphrecord::errors::PyGraphRecordError};
 use chrono::{NaiveDateTime, TimeDelta};
 use graphrecords::core::{errors::GraphRecordError, graphrecord::GraphRecordValue};
 use pyo3::{
-    types::{PyAnyMethods, PyBool, PyDateTime, PyDelta, PyFloat, PyInt, PyString},
     Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
+    types::{PyAnyMethods, PyBool, PyDateTime, PyDelta, PyFloat, PyInt, PyString},
 };
 use std::ops::Deref;
 
@@ -46,6 +46,7 @@ impl Deref for PyGraphRecordValue {
 
 static GRAPHRECORDVALUE_CONVERSION_LUT: Lut<GraphRecordValue> = GILHashMap::new();
 
+#[allow(clippy::unnecessary_wraps)]
 pub(crate) fn convert_pyobject_to_graphrecordvalue(
     ob: &Bound<'_, PyAny>,
 ) -> PyResult<GraphRecordValue> {
@@ -86,7 +87,7 @@ pub(crate) fn convert_pyobject_to_graphrecordvalue(
         ))
     }
 
-    fn convert_null(_ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
+    const fn convert_null(_ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
         Ok(GraphRecordValue::Null)
     }
 
@@ -130,7 +131,7 @@ pub(crate) fn convert_pyobject_to_graphrecordvalue(
 
 impl FromPyObject<'_> for PyGraphRecordValue {
     fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_graphrecordvalue(ob).map(PyGraphRecordValue::from)
+        convert_pyobject_to_graphrecordvalue(ob).map(Self::from)
     }
 }
 

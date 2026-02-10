@@ -1,7 +1,7 @@
 use crate::graphrecord::querying::{
+    DeepClone,
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
-    DeepClone,
 };
 use graphrecords_utils::traits::ReadWriteOrPanic;
 
@@ -12,6 +12,7 @@ pub trait Max {
 }
 
 impl<O: Max> Wrapper<O> {
+    #[must_use]
     pub fn max(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().max()
     }
@@ -39,6 +40,7 @@ pub trait Min {
 }
 
 impl<O: Min> Wrapper<O> {
+    #[must_use]
     pub fn min(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().min()
     }
@@ -66,6 +68,7 @@ pub trait Count {
 }
 
 impl<O: Count> Wrapper<O> {
+    #[must_use]
     pub fn count(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().count()
     }
@@ -93,6 +96,7 @@ pub trait Sum {
 }
 
 impl<O: Sum> Wrapper<O> {
+    #[must_use]
     pub fn sum(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().sum()
     }
@@ -120,6 +124,7 @@ pub trait Mean {
 }
 
 impl<O: Mean> Wrapper<O> {
+    #[must_use]
     pub fn mean(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().mean()
     }
@@ -147,6 +152,7 @@ pub trait Median {
 }
 
 impl<O: Median> Wrapper<O> {
+    #[must_use]
     pub fn median(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().median()
     }
@@ -174,6 +180,7 @@ pub trait Mode {
 }
 
 impl<O: Mode> Wrapper<O> {
+    #[must_use]
     pub fn mode(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().mode()
     }
@@ -201,6 +208,7 @@ pub trait Std {
 }
 
 impl<O: Std> Wrapper<O> {
+    #[must_use]
     pub fn std(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().std()
     }
@@ -228,6 +236,7 @@ pub trait Var {
 }
 
 impl<O: Var> Wrapper<O> {
+    #[must_use]
     pub fn var(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().var()
     }

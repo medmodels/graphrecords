@@ -1,15 +1,18 @@
 use super::{
+    BinaryArithmeticKind, EdgeOperand, MultipleComparisonKind, SingleComparisonKind,
     operand::{
         EdgeIndexComparisonOperand, EdgeIndexOperand, EdgeIndicesComparisonOperand,
         EdgeIndicesOperand,
     },
-    BinaryArithmeticKind, EdgeOperand, MultipleComparisonKind, SingleComparisonKind,
 };
 use crate::{
+    GraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
+        EdgeIndex, GraphRecordAttribute, GraphRecordValue, Group,
         datatypes::{Contains, EndsWith, Mod, StartsWith},
         querying::{
+            BoxedIterator, DeepClone, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
             attributes::AttributesTreeOperand,
             edges::SingleKind,
             group_by::{GroupOperand, PartitionGroups},
@@ -17,11 +20,8 @@ use crate::{
             tee_grouped_iterator,
             values::{MultipleValuesWithIndexContext, MultipleValuesWithIndexOperand},
             wrapper::{CardinalityWrapper, MatchMode, Wrapper},
-            BoxedIterator, DeepClone, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
         },
-        EdgeIndex, GraphRecordAttribute, GraphRecordValue, Group,
     },
-    GraphRecord,
 };
 use graphrecords_utils::{aliases::MrHashSet, traits::ReadWriteOrPanic};
 use itertools::Itertools;
@@ -180,7 +180,7 @@ impl EdgeOperation {
         edge_indices: impl Iterator<Item = &'a EdgeIndex>,
         attribute: GraphRecordAttribute,
     ) -> impl Iterator<Item = (&'a EdgeIndex, GraphRecordValue)> {
-        edge_indices.flat_map(move |edge_index| {
+        edge_indices.filter_map(move |edge_index| {
             Some((
                 edge_index,
                 graphrecord
@@ -193,11 +193,14 @@ impl EdgeOperation {
     }
 
     #[inline]
-    fn evaluate_values<'a>(
+    fn evaluate_values<'a, T>(
         graphrecord: &'a GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex> + 'a,
+        edge_indices: T,
         operand: &Wrapper<MultipleValuesWithIndexOperand<EdgeOperand>>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a EdgeIndex> + 'a,
+    {
         let MultipleValuesWithIndexContext::Operand((_, ref attribute)) =
             operand.0.read_or_panic().context
         else {
@@ -228,11 +231,14 @@ impl EdgeOperation {
     }
 
     #[inline]
-    fn evaluate_attributes<'a>(
+    fn evaluate_attributes<'a, T>(
         graphrecord: &'a GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex> + 'a,
+        edge_indices: T,
         operand: &Wrapper<AttributesTreeOperand<EdgeOperand>>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a EdgeIndex> + 'a,
+    {
         let attributes = Self::get_attributes(graphrecord, edge_indices);
 
         Ok(operand
@@ -241,15 +247,18 @@ impl EdgeOperation {
     }
 
     #[inline]
-    fn evaluate_indices<'a>(
+    fn evaluate_indices<'a, T>(
         graphrecord: &GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex>,
+        edge_indices: T,
         operand: &Wrapper<EdgeIndicesOperand>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a EdgeIndex>,
+    {
         let (edge_indices_1, edge_indices_2) = Itertools::tee(edge_indices);
 
         let result: MrHashSet<_> = operand
-            .evaluate_forward(graphrecord, Box::new(edge_indices_1.cloned()))?
+            .evaluate_forward(graphrecord, Box::new(edge_indices_1.copied()))?
             .collect();
 
         Ok(edge_indices_2
@@ -321,11 +330,14 @@ impl EdgeOperation {
     }
 
     #[inline]
-    fn evaluate_source_node<'a>(
+    fn evaluate_source_node<'a, T>(
         graphrecord: &'a GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex> + 'a,
+        edge_indices: T,
         operand: &Wrapper<NodeOperand>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a EdgeIndex> + 'a,
+    {
         let (edge_indices_1, edge_indices_2) = Itertools::tee(edge_indices);
 
         let node_indices = edge_indices_1.map(|edge_index| {
@@ -350,11 +362,14 @@ impl EdgeOperation {
     }
 
     #[inline]
-    fn evaluate_target_node<'a>(
+    fn evaluate_target_node<'a, T>(
         graphrecord: &'a GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex> + 'a,
+        edge_indices: T,
         operand: &Wrapper<NodeOperand>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a EdgeIndex> + 'a,
+    {
         let (edge_indices_1, edge_indices_2) = Itertools::tee(edge_indices);
 
         let node_indices = edge_indices_1.map(|edge_index| {
@@ -378,11 +393,14 @@ impl EdgeOperation {
         }))
     }
 
-    fn evaluate_group_by<'a>(
+    fn evaluate_group_by<'a, T>(
         graphrecord: &'a GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex> + 'a,
+        edge_indices: T,
         operand: &Wrapper<GroupOperand<EdgeOperand>>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex>> {
+    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    where
+        T: Iterator<Item = &'a EdgeIndex> + 'a,
+    {
         Ok(EdgeOperand::merge(
             operand.evaluate_forward(graphrecord, Box::new(edge_indices))?,
         ))
@@ -396,22 +414,22 @@ impl EdgeOperation {
         edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>,
     ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>> {
         Ok(match self {
-            EdgeOperation::Values { operand } => Box::new(Self::evaluate_values_grouped(
+            Self::Values { operand } => Box::new(Self::evaluate_values_grouped(
                 graphrecord,
                 edge_indices,
                 operand,
             )?),
-            EdgeOperation::Attributes { operand } => Box::new(Self::evaluate_attributes_grouped(
+            Self::Attributes { operand } => Box::new(Self::evaluate_attributes_grouped(
                 graphrecord,
                 edge_indices,
                 operand,
             )?),
-            EdgeOperation::Indices { operand } => Box::new(Self::evaluate_indices_grouped(
+            Self::Indices { operand } => Box::new(Self::evaluate_indices_grouped(
                 graphrecord,
                 edge_indices,
                 operand,
             )?),
-            EdgeOperation::InGroup { group } => {
+            Self::InGroup { group } => {
                 let group = group.clone();
 
                 Box::new(edge_indices.map(move |(key, edge_indices)| {
@@ -425,7 +443,7 @@ impl EdgeOperation {
                     )
                 }))
             }
-            EdgeOperation::HasAttribute { attribute } => {
+            Self::HasAttribute { attribute } => {
                 let attribute = attribute.clone();
 
                 Box::new(edge_indices.map(move |(key, edge_indices)| {
@@ -439,28 +457,28 @@ impl EdgeOperation {
                     )
                 }))
             }
-            EdgeOperation::SourceNode { operand } => Box::new(Self::evaluate_source_node_grouped(
+            Self::SourceNode { operand } => Box::new(Self::evaluate_source_node_grouped(
                 graphrecord,
                 edge_indices,
                 operand,
             )?),
-            EdgeOperation::TargetNode { operand } => Box::new(Self::evaluate_target_node_grouped(
+            Self::TargetNode { operand } => Box::new(Self::evaluate_target_node_grouped(
                 graphrecord,
                 edge_indices,
                 operand,
             )?),
-            EdgeOperation::EitherOr { either, or } => Box::new(Self::evaluate_either_or_grouped(
+            Self::EitherOr { either, or } => Box::new(Self::evaluate_either_or_grouped(
                 graphrecord,
                 edge_indices,
                 either,
                 or,
             )?),
-            EdgeOperation::Exclude { operand } => Box::new(Self::evaluate_exclude_grouped(
+            Self::Exclude { operand } => Box::new(Self::evaluate_exclude_grouped(
                 graphrecord,
                 edge_indices,
                 operand,
             )?),
-            EdgeOperation::GroupBy { operand: _ } => unreachable!(),
+            Self::GroupBy { operand: _ } => unreachable!(),
         })
     }
 
@@ -535,7 +553,7 @@ impl EdgeOperation {
         let (edge_indices_1, edge_indices_2) = tee_grouped_iterator(edge_indices);
 
         let edge_indices_1 = edge_indices_1
-            .map(|(key, edge_indices)| (key, Box::new(edge_indices.cloned()) as BoxedIterator<_>));
+            .map(|(key, edge_indices)| (key, Box::new(edge_indices.copied()) as BoxedIterator<_>));
 
         let mut edge_indices_1: Vec<_> = operand
             .evaluate_forward_grouped(graphrecord, Box::new(edge_indices_1))?
@@ -866,11 +884,11 @@ impl EdgeIndicesOperation {
         let kind = &operand.0.read_or_panic().kind;
 
         let index = match kind {
-            SingleKind::Max => EdgeIndicesOperation::get_max(indices_1),
-            SingleKind::Min => EdgeIndicesOperation::get_min(indices_1),
-            SingleKind::Count => Some(EdgeIndicesOperation::get_count(indices_1)),
-            SingleKind::Sum => Some(EdgeIndicesOperation::get_sum(indices_1)),
-            SingleKind::Random => EdgeIndicesOperation::get_random(indices_1),
+            SingleKind::Max => Self::get_max(indices_1),
+            SingleKind::Min => Self::get_min(indices_1),
+            SingleKind::Count => Some(Self::get_count(indices_1)),
+            SingleKind::Sum => Some(Self::get_sum(indices_1)),
+            SingleKind::Random => Self::get_random(indices_1),
         };
 
         Ok(match operand.evaluate_forward(graphrecord, index)? {
@@ -886,9 +904,9 @@ impl EdgeIndicesOperation {
         comparison_operand: &EdgeIndexComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<BoxedIterator<'a, EdgeIndex>> {
-        let comparison_index = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No index to compare".to_string()),
-        )?;
+        let comparison_index = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No index to compare".to_string()))?;
 
         match kind {
             SingleComparisonKind::GreaterThan => Ok(Box::new(
@@ -941,18 +959,18 @@ impl EdgeIndicesOperation {
     }
 
     #[inline]
-    fn evaluate_binary_arithmetic_operation(
+    fn evaluate_binary_arithmetic_operation<T>(
         graphrecord: &GraphRecord,
-        indices: impl Iterator<Item = EdgeIndex>,
+        indices: T,
         operand: &EdgeIndexComparisonOperand,
         kind: &BinaryArithmeticKind,
-    ) -> GraphRecordResult<impl Iterator<Item = EdgeIndex>> {
-        let arithmetic_index =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No index to compare".to_string(),
-                ))?;
+    ) -> GraphRecordResult<impl Iterator<Item = EdgeIndex> + use<T>>
+    where
+        T: Iterator<Item = EdgeIndex>,
+    {
+        let arithmetic_index = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No index to compare".to_string()))?;
 
         Ok(indices
             .map(move |index| match kind {
@@ -1036,10 +1054,10 @@ impl EdgeIndicesOperation {
         edge_indices: GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>,
     ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>> {
         Ok(match self {
-            EdgeIndicesOperation::EdgeIndexOperation { operand } => Box::new(
+            Self::EdgeIndexOperation { operand } => Box::new(
                 Self::evaluate_edge_index_operation_grouped(graphrecord, edge_indices, operand)?,
             ),
-            EdgeIndicesOperation::EdgeIndexComparisonOperation { operand, kind } => Box::new(
+            Self::EdgeIndexComparisonOperation { operand, kind } => Box::new(
                 edge_indices
                     .map(move |(key, edge_indices)| {
                         Ok((
@@ -1055,7 +1073,7 @@ impl EdgeIndicesOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            EdgeIndicesOperation::EdgeIndicesComparisonOperation { operand, kind } => Box::new(
+            Self::EdgeIndicesComparisonOperation { operand, kind } => Box::new(
                 edge_indices
                     .map(move |(key, edge_indices)| {
                         Ok((
@@ -1071,7 +1089,7 @@ impl EdgeIndicesOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            EdgeIndicesOperation::BinaryArithmeticOperation { operand, kind } => Box::new(
+            Self::BinaryArithmeticOperation { operand, kind } => Box::new(
                 edge_indices
                     .map(move |(key, edge_indices)| {
                         Ok((
@@ -1087,23 +1105,26 @@ impl EdgeIndicesOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            EdgeIndicesOperation::IsMax => Box::new(
+            Self::IsMax => Box::new(
                 edge_indices
                     .map(move |(key, edge_indices)| (key, Self::evaluate_is_max(edge_indices))),
             ),
-            EdgeIndicesOperation::IsMin => Box::new(
+            Self::IsMin => Box::new(
                 edge_indices
                     .map(move |(key, edge_indices)| (key, Self::evaluate_is_min(edge_indices))),
             ),
-            EdgeIndicesOperation::EitherOr { either, or } => Box::new(
-                Self::evaluate_either_or_grouped(graphrecord, edge_indices, either, or)?,
-            ),
-            EdgeIndicesOperation::Exclude { operand } => Box::new(Self::evaluate_exclude_grouped(
+            Self::EitherOr { either, or } => Box::new(Self::evaluate_either_or_grouped(
+                graphrecord,
+                edge_indices,
+                either,
+                or,
+            )?),
+            Self::Exclude { operand } => Box::new(Self::evaluate_exclude_grouped(
                 graphrecord,
                 edge_indices,
                 operand,
             )?),
-            EdgeIndicesOperation::Merge { operand } => {
+            Self::Merge { operand } => {
                 let (edge_indices_1, edge_indices_2) = tee_grouped_iterator(edge_indices);
 
                 let edge_indices_1 = edge_indices_1.flat_map(|(_, value)| value);
@@ -1141,11 +1162,11 @@ impl EdgeIndicesOperation {
                 Ok((
                     key,
                     match kind {
-                        SingleKind::Max => EdgeIndicesOperation::get_max(edge_indices),
-                        SingleKind::Min => EdgeIndicesOperation::get_min(edge_indices),
-                        SingleKind::Count => Some(EdgeIndicesOperation::get_count(edge_indices)),
-                        SingleKind::Sum => Some(EdgeIndicesOperation::get_sum(edge_indices)),
-                        SingleKind::Random => EdgeIndicesOperation::get_random(edge_indices),
+                        SingleKind::Max => Self::get_max(edge_indices),
+                        SingleKind::Min => Self::get_min(edge_indices),
+                        SingleKind::Count => Some(Self::get_count(edge_indices)),
+                        SingleKind::Sum => Some(Self::get_sum(edge_indices)),
+                        SingleKind::Random => Self::get_random(edge_indices),
                     },
                 ))
             })
@@ -1335,9 +1356,9 @@ impl EdgeIndexOperation {
         comparison_operand: &EdgeIndexComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<Option<EdgeIndex>> {
-        let comparison_index = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No index to compare".to_string()),
-        )?;
+        let comparison_index = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No index to compare".to_string()))?;
 
         let comparison_result = match kind {
             SingleComparisonKind::GreaterThan => index > comparison_index,
@@ -1378,12 +1399,9 @@ impl EdgeIndexOperation {
         operand: &EdgeIndexComparisonOperand,
         kind: &BinaryArithmeticKind,
     ) -> GraphRecordResult<Option<EdgeIndex>> {
-        let arithmetic_index =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No index to compare".to_string(),
-                ))?;
+        let arithmetic_index = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No index to compare".to_string()))?;
 
         Ok(Some(match kind {
             BinaryArithmeticKind::Add => index.add(arithmetic_index),
@@ -1419,7 +1437,7 @@ impl EdgeIndexOperation {
         edge_indices: GroupedIterator<'a, Option<EdgeIndex>>,
     ) -> GraphRecordResult<GroupedIterator<'a, Option<EdgeIndex>>> {
         Ok(match self {
-            EdgeIndexOperation::EdgeIndexComparisonOperation { operand, kind } => Box::new(
+            Self::EdgeIndexComparisonOperation { operand, kind } => Box::new(
                 edge_indices
                     .map(move |(key, edge_index)| {
                         let Some(edge_index) = edge_index else {
@@ -1439,7 +1457,7 @@ impl EdgeIndexOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            EdgeIndexOperation::EdgeIndicesComparisonOperation { operand, kind } => Box::new(
+            Self::EdgeIndicesComparisonOperation { operand, kind } => Box::new(
                 edge_indices
                     .map(move |(key, edge_index)| {
                         let Some(edge_index) = edge_index else {
@@ -1459,7 +1477,7 @@ impl EdgeIndexOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            EdgeIndexOperation::BinaryArithmeticOperation { operand, kind } => Box::new(
+            Self::BinaryArithmeticOperation { operand, kind } => Box::new(
                 edge_indices
                     .map(move |(key, edge_index)| {
                         let Some(edge_index) = edge_index else {
@@ -1479,13 +1497,13 @@ impl EdgeIndexOperation {
                     .collect::<GraphRecordResult<Vec<_>>>()?
                     .into_iter(),
             ),
-            EdgeIndexOperation::EitherOr { either, or } => {
+            Self::EitherOr { either, or } => {
                 Self::evaluate_either_or_grouped(graphrecord, edge_indices, either, or)?
             }
-            EdgeIndexOperation::Exclude { operand } => {
+            Self::Exclude { operand } => {
                 Self::evaluate_exclude_grouped(graphrecord, edge_indices, operand)?
             }
-            EdgeIndexOperation::Merge { operand } => {
+            Self::Merge { operand } => {
                 let (edge_indices_1, edge_indices_2) = Itertools::tee(edge_indices);
 
                 let edge_indices_1 = edge_indices_1.filter_map(|(_, indices)| indices);

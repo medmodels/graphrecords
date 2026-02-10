@@ -24,7 +24,7 @@ use pyo3::{
     types::{PyBytes, PyDict, PyFunction},
 };
 use pyo3_polars::PyDataFrame;
-use querying::{edges::PyEdgeOperand, nodes::PyNodeOperand, PyReturnOperand, PyReturnValue};
+use querying::{PyReturnOperand, PyReturnValue, edges::PyEdgeOperand, nodes::PyNodeOperand};
 use schema::PySchema;
 use std::collections::HashMap;
 use traits::DeepInto;
@@ -144,20 +144,24 @@ impl PyGraphRecord {
             let group_dict = PyDict::new(py);
 
             let nodes_df = PyDataFrame(group_export.nodes);
+            #[expect(clippy::missing_panics_doc, reason = "infallible")]
             group_dict
                 .set_item("nodes", nodes_df)
                 .expect("Setting item must succeed");
 
             let edges_df = PyDataFrame(group_export.edges);
+            #[expect(clippy::missing_panics_doc, reason = "infallible")]
             group_dict
                 .set_item("edges", edges_df)
                 .expect("Setting item must succeed");
 
+            #[expect(clippy::missing_panics_doc, reason = "infallible")]
             inner_dict
                 .set_item(PyGraphRecordAttribute::from(group), group_dict)
                 .expect("Setting item must succeed");
         }
 
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         outer_dict
             .set_item("groups", inner_dict)
             .expect("Setting item must succeed");
@@ -165,15 +169,18 @@ impl PyGraphRecord {
         let ungrouped_dict = PyDict::new(py);
 
         let nodes_df = PyDataFrame(export.ungrouped.nodes);
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         ungrouped_dict
             .set_item("nodes", nodes_df)
             .expect("Setting item must succeed");
 
         let edges_df = PyDataFrame(export.ungrouped.edges);
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         ungrouped_dict
             .set_item("edges", edges_df)
             .expect("Setting item must succeed");
 
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         outer_dict
             .set_item("ungrouped", ungrouped_dict)
             .expect("Setting item must succeed");
@@ -192,12 +199,12 @@ impl PyGraphRecord {
             .map_err(PyGraphRecordError::from)?)
     }
 
-    pub fn freeze_schema(&mut self) {
-        self.0.freeze_schema()
+    pub const fn freeze_schema(&mut self) {
+        self.0.freeze_schema();
     }
 
-    pub fn unfreeze_schema(&mut self) {
-        self.0.unfreeze_schema()
+    pub const fn unfreeze_schema(&mut self) {
+        self.0.unfreeze_schema();
     }
 
     #[getter]
@@ -564,7 +571,7 @@ impl PyGraphRecord {
     ) -> PyResult<Vec<EdgeIndex>> {
         Ok(self
             .0
-            .add_edges_with_group(relations.deep_into(), group.into())
+            .add_edges_with_group(relations.deep_into(), &group)
             .map_err(PyGraphRecordError::from)?)
     }
 
@@ -585,7 +592,7 @@ impl PyGraphRecord {
     ) -> PyResult<Vec<EdgeIndex>> {
         Ok(self
             .0
-            .add_edges_dataframes_with_group(edges_dataframes, group.into())
+            .add_edges_dataframes_with_group(edges_dataframes, &group)
             .map_err(PyGraphRecordError::from)?)
     }
 
@@ -821,13 +828,16 @@ impl PyGraphRecord {
         self.0.clear();
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn query_nodes(&self, query: &Bound<'_, PyFunction>) -> PyResult<PyReturnValue<'_>> {
         Ok(self
             .0
             .query_nodes(|nodes| {
                 let result = query
                     .call1((PyNodeOperand::from(nodes.clone()),))
-                    .expect("Call must succeed");
+                    .expect("Call should succeed");
 
                 result
                     .extract::<PyReturnOperand>()
@@ -837,13 +847,16 @@ impl PyGraphRecord {
             .map_err(PyGraphRecordError::from)?)
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn query_edges(&self, query: &Bound<'_, PyFunction>) -> PyResult<PyReturnValue<'_>> {
         Ok(self
             .0
             .query_edges(|edges| {
                 let result = query
                     .call1((PyEdgeOperand::from(edges.clone()),))
-                    .expect("Call must succeed");
+                    .expect("Call should succeed");
 
                 result
                     .extract::<PyReturnOperand>()
