@@ -1,8 +1,8 @@
-use super::{wrapper::Wrapper, DeepClone};
+use super::{DeepClone, wrapper::Wrapper};
 use crate::{
+    GraphRecord,
     graphrecord::querying::GroupedIterator,
     prelude::{GraphRecordValue, NodeIndex},
-    GraphRecord,
 };
 use graphrecords_utils::traits::ReadWriteOrPanic;
 use std::fmt::Debug;
@@ -30,7 +30,7 @@ pub enum GroupKey<'a> {
     NodeIndex(&'a NodeIndex),
     Value(&'a GraphRecordValue),
     OptionalValue(Option<&'a GraphRecordValue>),
-    TupleKey((Box<GroupKey<'a>>, Box<GroupKey<'a>>)),
+    TupleKey((Box<Self>, Box<Self>)),
 }
 
 pub trait PartitionGroups<'a>: GroupBy {
@@ -52,6 +52,7 @@ pub trait Ungroup {
 }
 
 impl<O: Ungroup> Wrapper<O> {
+    #[must_use]
     pub fn ungroup(&self) -> Wrapper<O::OutputOperand> {
         self.0.read_or_panic().ungroup()
     }
@@ -73,7 +74,7 @@ impl<O: GroupedOperand + DeepClone> DeepClone for GroupOperand<O> {
 }
 
 impl<O: GroupedOperand> GroupOperand<O> {
-    pub(crate) fn new(context: O::Context, operand: Wrapper<O>) -> Self {
+    pub(crate) const fn new(context: O::Context, operand: Wrapper<O>) -> Self {
         Self { context, operand }
     }
 }

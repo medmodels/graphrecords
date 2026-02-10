@@ -4,8 +4,8 @@ pub mod nodes;
 pub mod values;
 
 use super::{
-    attribute::PyGraphRecordAttribute, errors::PyGraphRecordError, traits::DeepFrom,
-    value::PyGraphRecordValue, Lut, PyNodeIndex,
+    Lut, PyNodeIndex, attribute::PyGraphRecordAttribute, errors::PyGraphRecordError,
+    traits::DeepFrom, value::PyGraphRecordValue,
 };
 use crate::{
     gil_hash_map::GILHashMap,
@@ -33,9 +33,12 @@ use attributes::{
 };
 use edges::{PyEdgeIndexOperand, PyEdgeIndicesOperand};
 use graphrecords::core::{
+    GraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
+        GraphRecordAttribute,
         querying::{
+            ReturnOperand,
             attributes::{
                 EdgeAttributesTreeOperand, EdgeMultipleAttributesWithIndexOperand,
                 EdgeMultipleAttributesWithoutIndexOperand, EdgeSingleAttributeWithIndexOperand,
@@ -53,17 +56,13 @@ use graphrecords::core::{
                 NodeSingleValueWithIndexOperand, NodeSingleValueWithoutIndexOperand,
             },
             wrapper::{CardinalityWrapper, MatchMode, Wrapper},
-            ReturnOperand,
         },
-        GraphRecordAttribute,
     },
-    GraphRecord,
 };
 use nodes::{PyNodeIndexOperand, PyNodeIndicesOperand};
 use pyo3::{
-    pyclass,
+    Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python, pyclass,
     types::{PyAnyMethods, PyList},
-    Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
 };
 use std::collections::HashMap;
 use values::{
@@ -85,8 +84,8 @@ pub enum PyMatchMode {
 impl From<MatchMode> for PyMatchMode {
     fn from(mode: MatchMode) -> Self {
         match mode {
-            MatchMode::Any => PyMatchMode::Any,
-            MatchMode::All => PyMatchMode::All,
+            MatchMode::Any => Self::Any,
+            MatchMode::All => Self::All,
         }
     }
 }
@@ -94,8 +93,8 @@ impl From<MatchMode> for PyMatchMode {
 impl From<PyMatchMode> for MatchMode {
     fn from(mode: PyMatchMode) -> Self {
         match mode {
-            PyMatchMode::Any => MatchMode::Any,
-            PyMatchMode::All => MatchMode::All,
+            PyMatchMode::Any => Self::Any,
+            PyMatchMode::All => Self::All,
         }
     }
 }
@@ -105,21 +104,20 @@ pub enum PyGroupKey {
     NodeIndex(PyNodeIndex),
     Value(PyGraphRecordValue),
     OptionalValue(Option<PyGraphRecordValue>),
-    TupleKey((Box<PyGroupKey>, Box<PyGroupKey>)),
+    TupleKey((Box<Self>, Box<Self>)),
 }
 
 impl From<GroupKey<'_>> for PyGroupKey {
     fn from(key: GroupKey<'_>) -> Self {
         match key {
-            GroupKey::NodeIndex(index) => PyGroupKey::NodeIndex(PyNodeIndex::from(index.clone())),
-            GroupKey::Value(value) => PyGroupKey::Value(PyGraphRecordValue::from(value.clone())),
+            GroupKey::NodeIndex(index) => Self::NodeIndex(PyNodeIndex::from(index.clone())),
+            GroupKey::Value(value) => Self::Value(PyGraphRecordValue::from(value.clone())),
             GroupKey::OptionalValue(value) => {
-                PyGroupKey::OptionalValue(value.cloned().map(PyGraphRecordValue::from))
+                Self::OptionalValue(value.cloned().map(PyGraphRecordValue::from))
             }
-            GroupKey::TupleKey((left, right)) => PyGroupKey::TupleKey((
-                Box::new(PyGroupKey::from(*left)),
-                Box::new(PyGroupKey::from(*right)),
-            )),
+            GroupKey::TupleKey((left, right)) => {
+                Self::TupleKey((Box::new(Self::from(*left)), Box::new(Self::from(*right))))
+            }
         }
     }
 }
@@ -131,10 +129,10 @@ impl<'py> IntoPyObject<'py> for PyGroupKey {
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match self {
-            PyGroupKey::NodeIndex(index) => index.into_pyobject(py),
-            PyGroupKey::Value(value) => value.into_pyobject(py),
-            PyGroupKey::OptionalValue(value) => value.into_pyobject(py),
-            PyGroupKey::TupleKey((left, right)) => {
+            Self::NodeIndex(index) => index.into_pyobject(py),
+            Self::Value(value) => value.into_pyobject(py),
+            Self::OptionalValue(value) => value.into_pyobject(py),
+            Self::TupleKey((left, right)) => {
                 let left = left.into_pyobject(py)?;
                 let right = right.into_pyobject(py)?;
                 (left, right).into_bound_py_any(py)
@@ -190,129 +188,126 @@ pub enum PyReturnOperand {
 impl<'a> ReturnOperand<'a> for PyReturnOperand {
     type ReturnValue = PyReturnValue<'a>;
 
+    #[allow(clippy::too_many_lines)]
     fn evaluate(&self, graphrecord: &'a GraphRecord) -> GraphRecordResult<Self::ReturnValue> {
         match self {
-            PyReturnOperand::NodeAttributesTree(operand) => operand
+            Self::NodeAttributesTree(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeAttributesTree),
-            PyReturnOperand::NodeAttributesTreeGroup(operand) => operand
+            Self::NodeAttributesTreeGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeAttributesTreeGroup),
-            PyReturnOperand::EdgeAttributesTree(operand) => operand
+            Self::EdgeAttributesTree(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeAttributesTree),
-            PyReturnOperand::EdgeAttributesTreeGroup(operand) => operand
+            Self::EdgeAttributesTreeGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeAttributesTreeGroup),
-            PyReturnOperand::NodeMultipleAttributesWithIndex(operand) => operand
+            Self::NodeMultipleAttributesWithIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeMultipleAttributesWithIndex),
-            PyReturnOperand::NodeMultipleAttributesWithIndexGroup(operand) => operand
+            Self::NodeMultipleAttributesWithIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeMultipleAttributesWithIndexGroup),
-            PyReturnOperand::NodeMultipleAttributesWithoutIndex(operand) => operand
+            Self::NodeMultipleAttributesWithoutIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeMultipleAttributesWithoutIndex),
-            PyReturnOperand::EdgeMultipleAttributesWithIndex(operand) => operand
+            Self::EdgeMultipleAttributesWithIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeMultipleAttributesWithIndex),
-            PyReturnOperand::EdgeMultipleAttributesWithIndexGroup(operand) => operand
+            Self::EdgeMultipleAttributesWithIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeMultipleAttributesWithIndexGroup),
-            PyReturnOperand::EdgeMultipleAttributesWithoutIndex(operand) => operand
+            Self::EdgeMultipleAttributesWithoutIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeMultipleAttributesWithoutIndex),
-            PyReturnOperand::NodeSingleAttributeWithIndex(operand) => operand
+            Self::NodeSingleAttributeWithIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeSingleAttributeWithIndex),
-            PyReturnOperand::NodeSingleAttributeWithIndexGroup(operand) => operand
+            Self::NodeSingleAttributeWithIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeSingleAttributeWithIndexGroup),
-            PyReturnOperand::NodeSingleAttributeWithoutIndex(operand) => operand
+            Self::NodeSingleAttributeWithoutIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeSingleAttributeWithoutIndex),
-            PyReturnOperand::NodeSingleAttributeWithoutIndexGroup(operand) => operand
+            Self::NodeSingleAttributeWithoutIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeSingleAttributeWithoutIndexGroup),
-            PyReturnOperand::EdgeSingleAttributeWithIndex(operand) => operand
+            Self::EdgeSingleAttributeWithIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeSingleAttributeWithIndex),
-            PyReturnOperand::EdgeSingleAttributeWithIndexGroup(operand) => operand
+            Self::EdgeSingleAttributeWithIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeSingleAttributeWithIndexGroup),
-            PyReturnOperand::EdgeSingleAttributeWithoutIndex(operand) => operand
+            Self::EdgeSingleAttributeWithoutIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeSingleAttributeWithoutIndex),
-            PyReturnOperand::EdgeSingleAttributeWithoutIndexGroup(operand) => operand
+            Self::EdgeSingleAttributeWithoutIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeSingleAttributeWithoutIndexGroup),
-            PyReturnOperand::EdgeIndices(operand) => operand
+            Self::EdgeIndices(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeIndices),
-            PyReturnOperand::EdgeIndicesGroup(operand) => operand
+            Self::EdgeIndicesGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeIndicesGroup),
-            PyReturnOperand::EdgeIndex(operand) => {
-                operand.evaluate(graphrecord).map(PyReturnValue::EdgeIndex)
-            }
-            PyReturnOperand::EdgeIndexGroup(operand) => operand
+            Self::EdgeIndex(operand) => operand.evaluate(graphrecord).map(PyReturnValue::EdgeIndex),
+            Self::EdgeIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeIndexGroup),
-            PyReturnOperand::NodeIndices(operand) => operand
+            Self::NodeIndices(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeIndices),
-            PyReturnOperand::NodeIndicesGroup(operand) => operand
+            Self::NodeIndicesGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeIndicesGroup),
-            PyReturnOperand::NodeIndex(operand) => {
-                operand.evaluate(graphrecord).map(PyReturnValue::NodeIndex)
-            }
-            PyReturnOperand::NodeIndexGroup(operand) => operand
+            Self::NodeIndex(operand) => operand.evaluate(graphrecord).map(PyReturnValue::NodeIndex),
+            Self::NodeIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeIndexGroup),
-            PyReturnOperand::NodeMultipleValuesWithIndex(operand) => operand
+            Self::NodeMultipleValuesWithIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeMultipleValuesWithIndex),
-            PyReturnOperand::NodeMultipleValuesWithIndexGroup(operand) => operand
+            Self::NodeMultipleValuesWithIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeMultipleValuesWithIndexGroup),
-            PyReturnOperand::NodeMultipleValuesWithoutIndex(operand) => operand
+            Self::NodeMultipleValuesWithoutIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeMultipleValuesWithoutIndex),
-            PyReturnOperand::EdgeMultipleValuesWithIndex(operand) => operand
+            Self::EdgeMultipleValuesWithIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeMultipleValuesWithIndex),
-            PyReturnOperand::EdgeMultipleValuesWithIndexGroup(operand) => operand
+            Self::EdgeMultipleValuesWithIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeMultipleValuesWithIndexGroup),
-            PyReturnOperand::EdgeMultipleValuesWithoutIndex(operand) => operand
+            Self::EdgeMultipleValuesWithoutIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeMultipleValuesWithoutIndex),
-            PyReturnOperand::NodeSingleValueWithIndex(operand) => operand
+            Self::NodeSingleValueWithIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeSingleValueWithIndex),
-            PyReturnOperand::NodeSingleValueWithIndexGroup(operand) => operand
+            Self::NodeSingleValueWithIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeSingleValueWithIndexGroup),
-            PyReturnOperand::NodeSingleValueWithoutIndex(operand) => operand
+            Self::NodeSingleValueWithoutIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeSingleValueWithoutIndex),
-            PyReturnOperand::NodeSingleValueWithoutIndexGroup(operand) => operand
+            Self::NodeSingleValueWithoutIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::NodeSingleValueWithoutIndexGroup),
-            PyReturnOperand::EdgeSingleValueWithIndex(operand) => operand
+            Self::EdgeSingleValueWithIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeSingleValueWithIndex),
-            PyReturnOperand::EdgeSingleValueWithIndexGroup(operand) => operand
+            Self::EdgeSingleValueWithIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeSingleValueWithIndexGroup),
-            PyReturnOperand::EdgeSingleValueWithoutIndex(operand) => operand
+            Self::EdgeSingleValueWithoutIndex(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeSingleValueWithoutIndex),
-            PyReturnOperand::EdgeSingleValueWithoutIndexGroup(operand) => operand
+            Self::EdgeSingleValueWithoutIndexGroup(operand) => operand
                 .evaluate(graphrecord)
                 .map(PyReturnValue::EdgeSingleValueWithoutIndexGroup),
-            PyReturnOperand::Vector(operand) => operand
+            Self::Vector(operand) => operand
                 .iter()
                 .map(|item| item.evaluate(graphrecord))
                 .collect::<GraphRecordResult<Vec<_>>>()
@@ -323,6 +318,7 @@ impl<'a> ReturnOperand<'a> for PyReturnOperand {
 
 static RETURNOPERAND_CONVERSION_LUT: Lut<PyReturnOperand> = GILHashMap::new();
 
+#[allow(clippy::unnecessary_wraps, clippy::too_many_lines)]
 pub(crate) fn convert_pyobject_to_pyreturnoperand(
     ob: &Bound<'_, PyAny>,
 ) -> PyResult<PyReturnOperand> {
@@ -888,6 +884,7 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
     type Output = Bound<'py, Self::Target>;
     type Error = PyErr;
 
+    #[allow(clippy::too_many_lines)]
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match self {
             PyReturnValue::NodeAttributesTree(iterator) => iterator
@@ -955,7 +952,9 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                 })
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
-            PyReturnValue::NodeMultipleAttributesWithoutIndex(iterator) => iterator
+            PyReturnValue::NodeMultipleAttributesWithoutIndex(iterator)
+            | PyReturnValue::EdgeMultipleAttributesWithoutIndex(iterator)
+            | PyReturnValue::NodeIndices(iterator) => iterator
                 .map(PyGraphRecordAttribute::from)
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
@@ -972,10 +971,6 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                             .collect::<HashMap<_, _>>(),
                     )
                 })
-                .collect::<Vec<_>>()
-                .into_bound_py_any(py),
-            PyReturnValue::EdgeMultipleAttributesWithoutIndex(iterator) => iterator
-                .map(PyGraphRecordAttribute::from)
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
             PyReturnValue::NodeSingleAttributeWithIndex(attribute) => attribute
@@ -1000,7 +995,8 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                 })
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
-            PyReturnValue::NodeSingleAttributeWithoutIndex(attribute) => attribute
+            PyReturnValue::NodeSingleAttributeWithoutIndex(attribute)
+            | PyReturnValue::EdgeSingleAttributeWithoutIndex(attribute) => attribute
                 .map(PyGraphRecordAttribute::from)
                 .into_bound_py_any(py),
             PyReturnValue::NodeSingleAttributeWithoutIndexGroup(attribute) => attribute
@@ -1024,9 +1020,6 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                 })
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
-            PyReturnValue::EdgeSingleAttributeWithoutIndex(attribute) => attribute
-                .map(PyGraphRecordAttribute::from)
-                .into_bound_py_any(py),
             PyReturnValue::EdgeSingleAttributeWithoutIndexGroup(attribute) => attribute
                 .map(|(key, item)| {
                     (
@@ -1046,10 +1039,6 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
             PyReturnValue::EdgeIndex(index) => index.into_bound_py_any(py),
             PyReturnValue::EdgeIndexGroup(index) => index
                 .map(|(key, index)| (PyGroupKey::from(key), index))
-                .collect::<Vec<_>>()
-                .into_bound_py_any(py),
-            PyReturnValue::NodeIndices(iterator) => iterator
-                .map(PyGraphRecordAttribute::from)
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
             PyReturnValue::NodeIndicesGroup(iterator) => iterator
@@ -1100,7 +1089,8 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                 })
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
-            PyReturnValue::NodeMultipleValuesWithoutIndex(iterator) => iterator
+            PyReturnValue::NodeMultipleValuesWithoutIndex(iterator)
+            | PyReturnValue::EdgeMultipleValuesWithoutIndex(iterator) => iterator
                 .map(PyGraphRecordValue::from)
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
@@ -1117,10 +1107,6 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                             .collect::<HashMap<_, _>>(),
                     )
                 })
-                .collect::<Vec<_>>()
-                .into_bound_py_any(py),
-            PyReturnValue::EdgeMultipleValuesWithoutIndex(iterator) => iterator
-                .map(PyGraphRecordValue::from)
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
             PyReturnValue::NodeSingleValueWithIndex(value) => value
@@ -1145,7 +1131,8 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                 })
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
-            PyReturnValue::NodeSingleValueWithoutIndex(value) => {
+            PyReturnValue::NodeSingleValueWithoutIndex(value)
+            | PyReturnValue::EdgeSingleValueWithoutIndex(value) => {
                 value.map(PyGraphRecordValue::from).into_bound_py_any(py)
             }
             PyReturnValue::NodeSingleValueWithoutIndexGroup(value) => value
@@ -1164,9 +1151,6 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                 })
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
-            PyReturnValue::EdgeSingleValueWithoutIndex(value) => {
-                value.map(PyGraphRecordValue::from).into_bound_py_any(py)
-            }
             PyReturnValue::EdgeSingleValueWithoutIndexGroup(value) => value
                 .map(|(key, item)| (PyGroupKey::from(key), item.map(PyGraphRecordValue::from)))
                 .collect::<Vec<_>>()
@@ -1193,9 +1177,9 @@ impl From<PyGraphRecordAttributeCardinalityWrapper> for CardinalityWrapper<Graph
 
 impl FromPyObject<'_> for PyGraphRecordAttributeCardinalityWrapper {
     fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(attribute) = ob.extract::<PyGraphRecordAttribute>() {
+        match ob.extract::<PyGraphRecordAttribute>() { Ok(attribute) => {
             Ok(CardinalityWrapper::Single(GraphRecordAttribute::from(attribute)).into())
-        } else if let Ok(attributes) = ob.extract::<Vec<PyGraphRecordAttribute>>() {
+        } _ => { match ob.extract::<Vec<PyGraphRecordAttribute>>() { Ok(attributes) => {
             Ok(CardinalityWrapper::from(
                 attributes
                     .into_iter()
@@ -1203,7 +1187,7 @@ impl FromPyObject<'_> for PyGraphRecordAttributeCardinalityWrapper {
                     .collect::<Vec<_>>(),
             )
             .into())
-        } else if let Ok(attributes) = ob.extract::<(Vec<PyGraphRecordAttribute>, PyMatchMode)>() {
+        } _ => { match ob.extract::<(Vec<PyGraphRecordAttribute>, PyMatchMode)>() { Ok(attributes) => {
             Ok(CardinalityWrapper::from((
                 attributes
                     .0
@@ -1213,14 +1197,14 @@ impl FromPyObject<'_> for PyGraphRecordAttributeCardinalityWrapper {
                 attributes.1.into(),
             ))
             .into())
-        } else {
+        } _ => {
             Err(
                 PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
                     "Failed to convert {ob} into GraphRecordAttribute, List[GraphRecordAttribute] or (List[GraphRecordAttribute], MatchMode)",
                 )))
                 .into(),
             )
-        }
+        }}}}}}
     }
 }
 

@@ -23,6 +23,7 @@ impl GroupMapping {
         }
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     pub fn add_group(
         &mut self,
         group: Group,
@@ -35,9 +36,13 @@ impl GroupMapping {
                 o.key()
             ))),
             MrHashMapEntry::Vacant(v) => {
-                v.insert(MrHashSet::from_iter(
-                    node_indices.clone().unwrap_or_default().into_iter(),
-                ));
+                v.insert(
+                    node_indices
+                        .clone()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .collect(),
+                );
                 Ok(())
             }
         }?;
@@ -48,9 +53,13 @@ impl GroupMapping {
                 o.key()
             ))),
             MrHashMapEntry::Vacant(v) => {
-                v.insert(MrHashSet::from_iter(
-                    edge_indices.clone().unwrap_or_default().into_iter(),
-                ));
+                v.insert(
+                    edge_indices
+                        .clone()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .collect(),
+                );
                 Ok(())
             }
         }?;
@@ -88,7 +97,7 @@ impl GroupMapping {
                         .insert(group.clone());
                 }
             }
-        };
+        }
 
         Ok(())
     }
@@ -103,7 +112,7 @@ impl GroupMapping {
 
         if let MrHashMapEntry::Vacant(_) = nodes_in_group {
             self.edges_in_group
-                .insert(group.clone(), Default::default());
+                .insert(group.clone(), MrHashSet::default());
         }
 
         let nodes_in_group = nodes_in_group.or_default();
@@ -132,7 +141,7 @@ impl GroupMapping {
 
         if let MrHashMapEntry::Vacant(_) = edges_in_group {
             self.nodes_in_group
-                .insert(group.clone(), Default::default());
+                .insert(group.clone(), MrHashSet::default());
         }
 
         let edges_in_group = edges_in_group.or_default();
@@ -152,12 +161,10 @@ impl GroupMapping {
     }
 
     pub fn remove_group(&mut self, group: &Group) -> Result<(), GraphRecordError> {
-        let nodes_in_group =
-            self.nodes_in_group
-                .remove(group)
-                .ok_or(GraphRecordError::IndexError(format!(
-                    "Cannot find group {group}"
-                )))?;
+        let nodes_in_group = self
+            .nodes_in_group
+            .remove(group)
+            .ok_or_else(|| GraphRecordError::IndexError(format!("Cannot find group {group}")))?;
 
         for node in nodes_in_group {
             self.groups_of_node
@@ -166,12 +173,10 @@ impl GroupMapping {
                 .remove(group);
         }
 
-        let edges_in_group =
-            self.edges_in_group
-                .remove(group)
-                .ok_or(GraphRecordError::IndexError(format!(
-                    "Cannot find group {group}"
-                )))?;
+        let edges_in_group = self
+            .edges_in_group
+            .remove(group)
+            .ok_or_else(|| GraphRecordError::IndexError(format!("Cannot find group {group}")))?;
 
         for edge in edges_in_group {
             self.groups_of_edge
@@ -198,6 +203,7 @@ impl GroupMapping {
         }
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn remove_edge(&mut self, edge_index: &EdgeIndex) {
         let groups_of_edge = self.groups_of_edge.remove(edge_index);
 
@@ -218,39 +224,40 @@ impl GroupMapping {
         group: &Group,
         node_index: &NodeIndex,
     ) -> Result<(), GraphRecordError> {
-        let nodes_in_group =
-            self.nodes_in_group
-                .get_mut(group)
-                .ok_or(GraphRecordError::IndexError(format!(
-                    "Cannot find group {group}"
-                )))?;
+        let nodes_in_group = self
+            .nodes_in_group
+            .get_mut(group)
+            .ok_or_else(|| GraphRecordError::IndexError(format!("Cannot find group {group}")))?;
 
         nodes_in_group
             .remove(node_index)
             .then_some(())
-            .ok_or(GraphRecordError::AssertionError(format!(
-                "Node with index {node_index} not in group {group}"
-            )))
+            .ok_or_else(|| {
+                GraphRecordError::AssertionError(format!(
+                    "Node with index {node_index} not in group {group}"
+                ))
+            })
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn remove_edge_from_group(
         &mut self,
         group: &Group,
         edge_index: &EdgeIndex,
     ) -> Result<(), GraphRecordError> {
-        let edges_in_group =
-            self.edges_in_group
-                .get_mut(group)
-                .ok_or(GraphRecordError::IndexError(format!(
-                    "Cannot find group {group}"
-                )))?;
+        let edges_in_group = self
+            .edges_in_group
+            .get_mut(group)
+            .ok_or_else(|| GraphRecordError::IndexError(format!("Cannot find group {group}")))?;
 
         edges_in_group
             .remove(edge_index)
             .then_some(())
-            .ok_or(GraphRecordError::AssertionError(format!(
-                "Edge with index {edge_index} not in group {group}"
-            )))
+            .ok_or_else(|| {
+                GraphRecordError::AssertionError(format!(
+                    "Edge with index {edge_index} not in group {group}"
+                ))
+            })
     }
 
     pub fn groups(&self) -> impl Iterator<Item = &Group> {
@@ -260,34 +267,31 @@ impl GroupMapping {
     pub fn nodes_in_group(
         &self,
         group: &Group,
-    ) -> Result<impl Iterator<Item = &NodeIndex>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphRecordError> {
         Ok(self
             .nodes_in_group
             .get(group)
-            .ok_or(GraphRecordError::IndexError(format!(
-                "Cannot find group {group}"
-            )))?
+            .ok_or_else(|| GraphRecordError::IndexError(format!("Cannot find group {group}")))?
             .iter())
     }
 
     pub fn edges_in_group(
         &self,
         group: &Group,
-    ) -> Result<impl Iterator<Item = &EdgeIndex>, GraphRecordError> {
+    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphRecordError> {
         Ok(self
             .edges_in_group
             .get(group)
-            .ok_or(GraphRecordError::IndexError(format!(
-                "Cannot find group {group}"
-            )))?
+            .ok_or_else(|| GraphRecordError::IndexError(format!("Cannot find group {group}")))?
             .iter())
     }
 
-    pub fn groups_of_node(&self, node_index: &NodeIndex) -> impl Iterator<Item = &Group> {
+    pub fn groups_of_node(&self, node_index: &NodeIndex) -> impl Iterator<Item = &Group> + use<'_> {
         self.groups_of_node.get(node_index).into_iter().flatten()
     }
 
-    pub fn groups_of_edge(&self, edge_index: &EdgeIndex) -> impl Iterator<Item = &Group> {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn groups_of_edge(&self, edge_index: &EdgeIndex) -> impl Iterator<Item = &Group> + use<'_> {
         self.groups_of_edge.get(edge_index).into_iter().flatten()
     }
 
@@ -348,9 +352,11 @@ mod test {
         group_mapping.add_group("0".into(), None, None).unwrap();
 
         // Adding an already existing group should fail
-        assert!(group_mapping
-            .add_group("0".into(), None, None)
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            group_mapping
+                .add_group("0".into(), None, None)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
     }
 
     #[test]
@@ -383,9 +389,11 @@ mod test {
             .unwrap();
 
         // Adding a node to a group that already is in the group should fail
-        assert!(group_mapping
-            .add_node_to_group("0".into(), "0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            group_mapping
+                .add_node_to_group("0".into(), "0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
     }
 
     #[test]
@@ -416,9 +424,11 @@ mod test {
             .unwrap();
 
         // Adding an edge to a group that already is in the group should fail
-        assert!(group_mapping
-            .add_edge_to_group("0".into(), 0)
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            group_mapping
+                .add_edge_to_group("0".into(), 0)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
     }
 
     #[test]
@@ -439,9 +449,11 @@ mod test {
         let mut group_mapping = GroupMapping::new();
 
         // Removing a non-existing group should fail
-        assert!(group_mapping
-            .remove_group(&"0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            group_mapping
+                .remove_group(&"0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -518,14 +530,18 @@ mod test {
             .unwrap();
 
         // Removing a node from a non-existing group should fail
-        assert!(group_mapping
-            .remove_node_from_group(&"50".into(), &"0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            group_mapping
+                .remove_node_from_group(&"50".into(), &"0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Removing a non-existing node from a group should fail
-        assert!(group_mapping
-            .remove_node_from_group(&"0".into(), &"50".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            group_mapping
+                .remove_node_from_group(&"0".into(), &"50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
     }
 
     #[test]
@@ -560,14 +576,18 @@ mod test {
             .unwrap();
 
         // Removing an edge from a non-existing group should fail
-        assert!(group_mapping
-            .remove_edge_from_group(&"50".into(), &0)
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            group_mapping
+                .remove_edge_from_group(&"50".into(), &0)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
 
         // Removing a non-existing edge from a group should fail
-        assert!(group_mapping
-            .remove_edge_from_group(&"0".into(), &50)
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_))));
+        assert!(
+            group_mapping
+                .remove_edge_from_group(&"0".into(), &50)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
     }
 
     #[test]
@@ -598,9 +618,11 @@ mod test {
         let group_mapping = GroupMapping::new();
 
         // Querying the nodes in a non-existing group should fail
-        assert!(group_mapping
-            .nodes_in_group(&"0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            group_mapping
+                .nodes_in_group(&"0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]
@@ -622,9 +644,11 @@ mod test {
         let group_mapping = GroupMapping::new();
 
         // Querying the edges in a non-existing group should fail
-        assert!(group_mapping
-            .edges_in_group(&"0".into())
-            .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_))));
+        assert!(
+            group_mapping
+                .edges_in_group(&"0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
     }
 
     #[test]

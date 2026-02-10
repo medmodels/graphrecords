@@ -1,30 +1,29 @@
 use super::{
+    BinaryArithmeticKind, MultipleComparisonKind, SingleComparisonKind, SingleKindWithIndex,
+    UnaryArithmeticKind,
     operand::{
         MultipleValuesComparisonOperand, MultipleValuesWithIndexOperand,
         SingleValueComparisonOperand, SingleValueWithIndexOperand,
     },
-    BinaryArithmeticKind, MultipleComparisonKind, SingleComparisonKind, SingleKindWithIndex,
-    UnaryArithmeticKind,
 };
 use crate::{
+    GraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
+        GraphRecordValue, Wrapper,
         datatypes::{
             Abs, Ceil, Contains, DataType, EndsWith, Floor, Lowercase, Mod, Pow, Round, Slice,
             Sqrt, StartsWith, Trim, TrimEnd, TrimStart, Uppercase,
         },
         querying::{
-            tee_grouped_iterator,
-            values::{
-                operand::{MultipleValuesWithoutIndexOperand, SingleValueWithoutIndexOperand},
-                SingleKindWithoutIndex,
-            },
             BoxedIterator, DeepClone, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
-            RootOperand,
+            RootOperand, tee_grouped_iterator,
+            values::{
+                SingleKindWithoutIndex,
+                operand::{MultipleValuesWithoutIndexOperand, SingleValueWithoutIndexOperand},
+            },
         },
-        GraphRecordValue, Wrapper,
     },
-    GraphRecord,
 };
 use graphrecords_utils::{aliases::MrHashSet, traits::ReadWriteOrPanic};
 use itertools::Itertools;
@@ -291,11 +290,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
         let kind = &operand.0.read_or_panic().kind;
 
         let value = match kind {
-            SingleKindWithIndex::Max => MultipleValuesWithIndexOperation::<O>::get_max(values_1)?,
-            SingleKindWithIndex::Min => MultipleValuesWithIndexOperation::<O>::get_min(values_1)?,
-            SingleKindWithIndex::Random => {
-                MultipleValuesWithIndexOperation::<O>::get_random(values_1)
-            }
+            SingleKindWithIndex::Max => Self::get_max(values_1)?,
+            SingleKindWithIndex::Min => Self::get_min(values_1)?,
+            SingleKindWithIndex::Random => Self::get_random(values_1),
         };
 
         Ok(match operand.evaluate_forward(graphrecord, value)? {
@@ -332,7 +329,7 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
                 MultipleValuesWithoutIndexOperation::<O>::get_median(values_1)?
             }
             SingleKindWithoutIndex::Mode => {
-                MultipleValuesWithoutIndexOperation::<O>::get_mode(values_1)?
+                MultipleValuesWithoutIndexOperation::<O>::get_mode(values_1)
             }
             SingleKindWithoutIndex::Std => {
                 MultipleValuesWithoutIndexOperation::<O>::get_std(values_1)?
@@ -364,9 +361,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
         comparison_operand: &SingleValueComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>> {
-        let comparison_value = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No value to compare".to_string()),
-        )?;
+        let comparison_value = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
 
         match kind {
             SingleComparisonKind::GreaterThan => Ok(Box::new(
@@ -429,21 +426,19 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_binary_arithmetic_operation<'a>(
+    fn evaluate_binary_arithmetic_operation<'a, T>(
         graphrecord: &GraphRecord,
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
+        values: T,
         operand: &SingleValueComparisonOperand,
         kind: &BinaryArithmeticKind,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordValue)>>
+    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + use<'a, O, T>>
     where
         O: 'a,
+        T: Iterator<Item = (&'a O::Index, GraphRecordValue)>,
     {
-        let arithmetic_value =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No value to compare".to_string(),
-                ))?;
+        let arithmetic_value = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
 
         let values = values
             .map(move |(t, value)| {
@@ -451,16 +446,16 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
                     BinaryArithmeticKind::Add => value.add(arithmetic_value.clone()),
                     BinaryArithmeticKind::Sub => value.sub(arithmetic_value.clone()),
                     BinaryArithmeticKind::Mul => {
-                        value.clone().mul(arithmetic_value.clone())
+                        value.mul(arithmetic_value.clone())
                     }
                     BinaryArithmeticKind::Div => {
-                        value.clone().div(arithmetic_value.clone())
+                        value.div(arithmetic_value.clone())
                     }
                     BinaryArithmeticKind::Pow => {
-                        value.clone().pow(arithmetic_value.clone())
+                        value.pow(arithmetic_value.clone())
                     }
                     BinaryArithmeticKind::Mod => {
-                        value.clone().r#mod(arithmetic_value.clone())
+                        value.r#mod(arithmetic_value.clone())
                     }
                 }
                 .map_err(|_| {
@@ -857,15 +852,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
         let values_1: Vec<_> = values_1
             .map(|(key, values)| {
                 let value = match kind {
-                    SingleKindWithIndex::Max => {
-                        MultipleValuesWithIndexOperation::<O>::get_max(values)?
-                    }
-                    SingleKindWithIndex::Min => {
-                        MultipleValuesWithIndexOperation::<O>::get_min(values)?
-                    }
-                    SingleKindWithIndex::Random => {
-                        MultipleValuesWithIndexOperation::<O>::get_random(values)
-                    }
+                    SingleKindWithIndex::Max => Self::get_max(values)?,
+                    SingleKindWithIndex::Min => Self::get_min(values)?,
+                    SingleKindWithIndex::Random => Self::get_random(values),
                 };
 
                 Ok((key, value))
@@ -921,7 +910,7 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
                         MultipleValuesWithoutIndexOperation::<O>::get_median(values)?
                     }
                     SingleKindWithoutIndex::Mode => {
-                        MultipleValuesWithoutIndexOperation::<O>::get_mode(values)?
+                        MultipleValuesWithoutIndexOperation::<O>::get_mode(values)
                     }
                     SingleKindWithoutIndex::Std => {
                         MultipleValuesWithoutIndexOperation::<O>::get_std(values)?
@@ -1251,7 +1240,7 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
             }
         })?;
 
-        Ok(Some(sum.div(GraphRecordValue::Int(count as i64))?))
+        Ok(Some(sum.div(GraphRecordValue::Int(i64::from(count)))?))
     }
 
     // TODO: This is a temporary solution. It should be optimized.
@@ -1346,16 +1335,12 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
     #[inline]
     pub(crate) fn get_mode(
         values: impl Iterator<Item = GraphRecordValue>,
-    ) -> GraphRecordResult<Option<GraphRecordValue>> {
+    ) -> Option<GraphRecordValue> {
         let values: Vec<_> = values.collect();
 
         let most_common_value = values.first();
 
-        let Some(most_common_value) = most_common_value else {
-            return Ok(None);
-        };
-
-        let most_common_value = most_common_value.clone();
+        let most_common_value = most_common_value?.clone();
 
         let most_common_count = values
             .iter()
@@ -1367,15 +1352,11 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
             |acc, value| {
                 let count = values.iter().filter(|v| **v == value).count();
 
-                if count > acc.0 {
-                    (count, value)
-                } else {
-                    acc
-                }
+                if count > acc.0 { (count, value) } else { acc }
             },
         );
 
-        Ok(Some(most_common_value.clone()))
+        Some(most_common_value)
     }
 
     #[inline]
@@ -1412,9 +1393,9 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
         let GraphRecordValue::Float(mean) = mean else {
             let data_type = DataType::from(mean);
 
-            return Err(GraphRecordError::QueryError(
-                format!("Cannot calculate variance of data type {data_type}. Consider narrowing down the values using .is_int() or .is_float()"),
-            ));
+            return Err(GraphRecordError::QueryError(format!(
+                "Cannot calculate variance of data type {data_type}. Consider narrowing down the values using .is_int() or .is_float()"
+            )));
         };
 
         let values = values_2
@@ -1490,36 +1471,16 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
         let kind = &operand.0.read_or_panic().kind;
 
         let value = match kind {
-            SingleKindWithoutIndex::Max => {
-                MultipleValuesWithoutIndexOperation::<O>::get_max(values_1)?
-            }
-            SingleKindWithoutIndex::Min => {
-                MultipleValuesWithoutIndexOperation::<O>::get_min(values_1)?
-            }
-            SingleKindWithoutIndex::Mean => {
-                MultipleValuesWithoutIndexOperation::<O>::get_mean(values_1)?
-            }
-            SingleKindWithoutIndex::Median => {
-                MultipleValuesWithoutIndexOperation::<O>::get_median(values_1)?
-            }
-            SingleKindWithoutIndex::Mode => {
-                MultipleValuesWithoutIndexOperation::<O>::get_mode(values_1)?
-            }
-            SingleKindWithoutIndex::Std => {
-                MultipleValuesWithoutIndexOperation::<O>::get_std(values_1)?
-            }
-            SingleKindWithoutIndex::Var => {
-                MultipleValuesWithoutIndexOperation::<O>::get_var(values_1)?
-            }
-            SingleKindWithoutIndex::Count => Some(
-                MultipleValuesWithoutIndexOperation::<O>::get_count(values_1),
-            ),
-            SingleKindWithoutIndex::Sum => {
-                MultipleValuesWithoutIndexOperation::<O>::get_sum(values_1)?
-            }
-            SingleKindWithoutIndex::Random => {
-                MultipleValuesWithoutIndexOperation::<O>::get_random(values_1)
-            }
+            SingleKindWithoutIndex::Max => Self::get_max(values_1)?,
+            SingleKindWithoutIndex::Min => Self::get_min(values_1)?,
+            SingleKindWithoutIndex::Mean => Self::get_mean(values_1)?,
+            SingleKindWithoutIndex::Median => Self::get_median(values_1)?,
+            SingleKindWithoutIndex::Mode => Self::get_mode(values_1),
+            SingleKindWithoutIndex::Std => Self::get_std(values_1)?,
+            SingleKindWithoutIndex::Var => Self::get_var(values_1)?,
+            SingleKindWithoutIndex::Count => Some(Self::get_count(values_1)),
+            SingleKindWithoutIndex::Sum => Self::get_sum(values_1)?,
+            SingleKindWithoutIndex::Random => Self::get_random(values_1),
         };
 
         Ok(match operand.evaluate_forward(graphrecord, value)? {
@@ -1535,9 +1496,9 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
         comparison_operand: &SingleValueComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<BoxedIterator<'a, GraphRecordValue>> {
-        let comparison_value = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No value to compare".to_string()),
-        )?;
+        let comparison_value = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
 
         match kind {
             SingleComparisonKind::GreaterThan => Ok(Box::new(
@@ -1590,18 +1551,18 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_binary_arithmetic_operation(
+    fn evaluate_binary_arithmetic_operation<T>(
         graphrecord: &GraphRecord,
-        values: impl Iterator<Item = GraphRecordValue>,
+        values: T,
         operand: &SingleValueComparisonOperand,
         kind: &BinaryArithmeticKind,
-    ) -> GraphRecordResult<impl Iterator<Item = GraphRecordValue>> {
-        let arithmetic_value =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No value to compare".to_string(),
-                ))?;
+    ) -> GraphRecordResult<impl Iterator<Item = GraphRecordValue> + use<O, T>>
+    where
+        T: Iterator<Item = GraphRecordValue>,
+    {
+        let arithmetic_value = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
 
         let values = values
             .map(move |value| {
@@ -1609,16 +1570,16 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
                     BinaryArithmeticKind::Add => value.add(arithmetic_value.clone()),
                     BinaryArithmeticKind::Sub => value.sub(arithmetic_value.clone()),
                     BinaryArithmeticKind::Mul => {
-                        value.clone().mul(arithmetic_value.clone())
+                        value.mul(arithmetic_value.clone())
                     }
                     BinaryArithmeticKind::Div => {
-                        value.clone().div(arithmetic_value.clone())
+                        value.div(arithmetic_value.clone())
                     }
                     BinaryArithmeticKind::Pow => {
-                        value.clone().pow(arithmetic_value.clone())
+                        value.pow(arithmetic_value.clone())
                     }
                     BinaryArithmeticKind::Mod => {
-                        value.clone().r#mod(arithmetic_value.clone())
+                        value.r#mod(arithmetic_value.clone())
                     }
                 }
                 .map_err(|_| {
@@ -1632,12 +1593,12 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_unary_arithmetic_operation<'a>(
-        values: impl Iterator<Item = GraphRecordValue>,
+    fn evaluate_unary_arithmetic_operation<T>(
+        values: T,
         kind: UnaryArithmeticKind,
-    ) -> impl Iterator<Item = GraphRecordValue>
+    ) -> impl Iterator<Item = GraphRecordValue> + use<O, T>
     where
-        O: 'a,
+        T: Iterator<Item = GraphRecordValue>,
     {
         values.map(move |value| match kind {
             UnaryArithmeticKind::Round => value.round(),
@@ -1654,82 +1615,68 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_slice<'a>(
-        values: impl Iterator<Item = GraphRecordValue>,
+    fn evaluate_slice<T>(
+        values: T,
         range: Range<usize>,
-    ) -> impl Iterator<Item = GraphRecordValue>
+    ) -> impl Iterator<Item = GraphRecordValue> + use<O, T>
     where
-        O: 'a,
+        T: Iterator<Item = GraphRecordValue>,
     {
         values.map(move |value| value.slice(range.clone()))
     }
 
     #[inline]
-    fn evaluate_is_string<'a>(
-        values: impl Iterator<Item = GraphRecordValue>,
-    ) -> impl Iterator<Item = GraphRecordValue>
+    fn evaluate_is_string<T>(values: T) -> impl Iterator<Item = GraphRecordValue> + use<O, T>
     where
-        O: 'a,
+        T: Iterator<Item = GraphRecordValue>,
     {
         values.filter(|value| matches!(value, GraphRecordValue::String(_)))
     }
 
     #[inline]
-    fn evaluate_is_int<'a>(
-        values: impl Iterator<Item = GraphRecordValue>,
-    ) -> impl Iterator<Item = GraphRecordValue>
+    fn evaluate_is_int<T>(values: T) -> impl Iterator<Item = GraphRecordValue> + use<O, T>
     where
-        O: 'a,
+        T: Iterator<Item = GraphRecordValue>,
     {
         values.filter(|value| matches!(value, GraphRecordValue::Int(_)))
     }
 
     #[inline]
-    fn evaluate_is_float<'a>(
-        values: impl Iterator<Item = GraphRecordValue>,
-    ) -> impl Iterator<Item = GraphRecordValue>
+    fn evaluate_is_float<T>(values: T) -> impl Iterator<Item = GraphRecordValue> + use<O, T>
     where
-        O: 'a,
+        T: Iterator<Item = GraphRecordValue>,
     {
         values.filter(|value| matches!(value, GraphRecordValue::Float(_)))
     }
 
     #[inline]
-    fn evaluate_is_bool<'a>(
-        values: impl Iterator<Item = GraphRecordValue>,
-    ) -> impl Iterator<Item = GraphRecordValue>
+    fn evaluate_is_bool<T>(values: T) -> impl Iterator<Item = GraphRecordValue> + use<O, T>
     where
-        O: 'a,
+        T: Iterator<Item = GraphRecordValue>,
     {
         values.filter(|value| matches!(value, GraphRecordValue::Bool(_)))
     }
 
     #[inline]
-    fn evaluate_is_datetime<'a>(
-        values: impl Iterator<Item = GraphRecordValue>,
-    ) -> impl Iterator<Item = GraphRecordValue>
+    fn evaluate_is_datetime<T>(values: T) -> impl Iterator<Item = GraphRecordValue> + use<O, T>
     where
-        O: 'a,
+        T: Iterator<Item = GraphRecordValue>,
     {
         values.filter(|value| matches!(value, GraphRecordValue::DateTime(_)))
     }
 
     #[inline]
-    fn evaluate_is_duration<'a>(
-        values: impl Iterator<Item = GraphRecordValue>,
-    ) -> impl Iterator<Item = GraphRecordValue>
+    fn evaluate_is_duration<T>(values: T) -> impl Iterator<Item = GraphRecordValue> + use<O, T>
     where
-        O: 'a,
+        T: Iterator<Item = GraphRecordValue>,
     {
         values.filter(|value| matches!(value, GraphRecordValue::Duration(_)))
     }
 
     #[inline]
-    fn evaluate_is_null<'a>(
-        values: impl Iterator<Item = GraphRecordValue>,
-    ) -> impl Iterator<Item = GraphRecordValue>
+    fn evaluate_is_null<T>(values: T) -> impl Iterator<Item = GraphRecordValue> + use<O, T>
     where
-        O: 'a,
+        T: Iterator<Item = GraphRecordValue>,
     {
         values.filter(|value| matches!(value, GraphRecordValue::Null))
     }
@@ -1956,9 +1903,9 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
         comparison_operand: &SingleValueComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordValue)>> {
-        let comparison_value = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No value to compare".to_string()),
-        )?;
+        let comparison_value = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
 
         let comparison_result = match kind {
             SingleComparisonKind::GreaterThan => value.1 > comparison_value,
@@ -1999,12 +1946,9 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
         operand: &SingleValueComparisonOperand,
         kind: &BinaryArithmeticKind,
     ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordValue)>> {
-        let arithmetic_value =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No value to compare".to_string(),
-                ))?;
+        let arithmetic_value = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
 
         Ok(Some(match kind {
             BinaryArithmeticKind::Add => (value.0, value.1.add(arithmetic_value)?),
@@ -2135,7 +2079,7 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
 }
 
 impl<O: RootOperand> SingleValueWithIndexOperation<O> {
-    #[allow(clippy::type_complexity)]
+    #[allow(clippy::type_complexity, clippy::too_many_lines)]
     pub(crate) fn evaluate_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,
@@ -2520,9 +2464,9 @@ impl<O: RootOperand> SingleValueWithoutIndexOperation<O> {
         comparison_operand: &SingleValueComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<Option<GraphRecordValue>> {
-        let comparison_value = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No value to compare".to_string()),
-        )?;
+        let comparison_value = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
 
         let comparison_result = match kind {
             SingleComparisonKind::GreaterThan => value > comparison_value,
@@ -2563,12 +2507,9 @@ impl<O: RootOperand> SingleValueWithoutIndexOperation<O> {
         operand: &SingleValueComparisonOperand,
         kind: &BinaryArithmeticKind,
     ) -> GraphRecordResult<Option<GraphRecordValue>> {
-        let arithmetic_value =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No value to compare".to_string(),
-                ))?;
+        let arithmetic_value = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
 
         Ok(Some(match kind {
             BinaryArithmeticKind::Add => value.add(arithmetic_value)?,
@@ -2679,6 +2620,7 @@ impl<O: RootOperand> SingleValueWithoutIndexOperation<O> {
 }
 
 impl<O: RootOperand> SingleValueWithoutIndexOperation<O> {
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn evaluate_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,

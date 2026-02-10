@@ -1,8 +1,8 @@
 use crate::{
     graphrecord::querying::{
+        DeepClone,
         group_by::{GroupOperand, GroupedOperand},
         wrapper::{CardinalityWrapper, Wrapper},
-        DeepClone,
     },
     prelude::{EdgeDirection, GraphRecordAttribute, Group},
 };
@@ -45,6 +45,7 @@ pub trait Attributes {
 }
 
 impl<O: Attributes> Wrapper<O> {
+    #[must_use]
     pub fn attributes(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().attributes()
     }
@@ -104,6 +105,7 @@ pub trait Edges {
 }
 
 impl<O: Edges> Wrapper<O> {
+    #[must_use]
     pub fn edges(&self, edge_direction: EdgeDirection) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().edges(edge_direction)
     }
@@ -131,6 +133,7 @@ pub trait Neighbors {
 }
 
 impl<O: Neighbors> Wrapper<O> {
+    #[must_use]
     pub fn neighbors(&self, edge_direction: EdgeDirection) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().neighbors(edge_direction)
     }
@@ -158,6 +161,7 @@ pub trait SourceNode {
 }
 
 impl<O: SourceNode> Wrapper<O> {
+    #[must_use]
     pub fn source_node(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().source_node()
     }
@@ -185,6 +189,7 @@ pub trait TargetNode {
 }
 
 impl<O: TargetNode> Wrapper<O> {
+    #[must_use]
     pub fn target_node(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().target_node()
     }
@@ -212,6 +217,7 @@ pub trait ToValues {
 }
 
 impl<O: ToValues> Wrapper<O> {
+    #[must_use]
     pub fn to_values(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().to_values()
     }

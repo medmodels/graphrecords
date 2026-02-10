@@ -41,8 +41,8 @@ impl TryFrom<GraphRecordValue> for GraphRecordAttribute {
 
     fn try_from(value: GraphRecordValue) -> Result<Self, Self::Error> {
         match value {
-            GraphRecordValue::String(value) => Ok(GraphRecordAttribute::String(value)),
-            GraphRecordValue::Int(value) => Ok(GraphRecordAttribute::Int(value)),
+            GraphRecordValue::String(value) => Ok(Self::String(value)),
+            GraphRecordValue::Int(value) => Ok(Self::Int(value)),
             _ => Err(GraphRecordError::ConversionError(format!(
                 "Cannot convert {value} into GraphRecordAttribute"
             ))),
@@ -53,10 +53,8 @@ impl TryFrom<GraphRecordValue> for GraphRecordAttribute {
 impl PartialEq for GraphRecordAttribute {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::String(other)) => {
-                value == other
-            }
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::Int(other)) => value == other,
+            (Self::String(value), Self::String(other)) => value == other,
+            (Self::Int(value), Self::Int(other)) => value == other,
             _ => false,
         }
     }
@@ -67,12 +65,8 @@ impl Eq for GraphRecordAttribute {}
 impl PartialOrd for GraphRecordAttribute {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::String(other)) => {
-                Some(value.cmp(other))
-            }
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::Int(other)) => {
-                Some(value.cmp(other))
-            }
+            (Self::String(value), Self::String(other)) => Some(value.cmp(other)),
+            (Self::Int(value), Self::Int(other)) => Some(value.cmp(other)),
             _ => None,
         }
     }
@@ -93,18 +87,14 @@ impl Add for GraphRecordAttribute {
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::String(rhs)) => {
-                Ok(GraphRecordAttribute::String(value + rhs.as_str()))
-            }
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::Int(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot add {rhs} to {value}")),
-            ),
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::String(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot add {rhs} to {value}")),
-            ),
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::Int(rhs)) => {
-                Ok(GraphRecordAttribute::Int(value + rhs))
-            }
+            (Self::String(value), Self::String(rhs)) => Ok(Self::String(value + rhs.as_str())),
+            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot add {rhs} to {value}"),
+            )),
+            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot add {rhs} to {value}"),
+            )),
+            (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value + rhs)),
         }
     }
 }
@@ -115,18 +105,16 @@ impl Sub for GraphRecordAttribute {
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::String(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot subtract {rhs} from {value}")),
-            ),
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::Int(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot subtract {rhs} from {value}")),
-            ),
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::String(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot subtract {rhs} from {value}")),
-            ),
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::Int(rhs)) => {
-                Ok(GraphRecordAttribute::Int(value - rhs))
-            }
+            (Self::String(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot subtract {rhs} from {value}"),
+            )),
+            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot subtract {rhs} from {value}"),
+            )),
+            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot subtract {rhs} from {value}"),
+            )),
+            (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value - rhs)),
         }
     }
 }
@@ -137,18 +125,16 @@ impl Mul for GraphRecordAttribute {
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::String(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot multiply {value} by {rhs}")),
-            ),
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::Int(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot multiply {value} by {rhs}")),
-            ),
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::String(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot multiply {value} by {rhs}")),
-            ),
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::Int(rhs)) => {
-                Ok(GraphRecordAttribute::Int(value * rhs))
-            }
+            (Self::String(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot multiply {value} by {rhs}"),
+            )),
+            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot multiply {value} by {rhs}"),
+            )),
+            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot multiply {value} by {rhs}"),
+            )),
+            (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value * rhs)),
         }
     }
 }
@@ -157,24 +143,16 @@ impl Mul for GraphRecordAttribute {
 impl Pow for GraphRecordAttribute {
     fn pow(self, rhs: Self) -> GraphRecordResult<Self> {
         match (self, rhs) {
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::String(rhs)) => {
-                Err(GraphRecordError::AssertionError(format!(
-                    "Cannot raise {value} to the power of {rhs}"
-                )))
-            }
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::Int(rhs)) => {
-                Err(GraphRecordError::AssertionError(format!(
-                    "Cannot raise {value} to the power of {rhs}"
-                )))
-            }
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::String(rhs)) => {
-                Err(GraphRecordError::AssertionError(format!(
-                    "Cannot raise {value} to the power of {rhs}"
-                )))
-            }
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::Int(rhs)) => {
-                Ok(GraphRecordAttribute::Int(value.pow(rhs as u32)))
-            }
+            (Self::String(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot raise {value} to the power of {rhs}"),
+            )),
+            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot raise {value} to the power of {rhs}"),
+            )),
+            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot raise {value} to the power of {rhs}"),
+            )),
+            (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value.pow(rhs as u32))),
         }
     }
 }
@@ -183,18 +161,16 @@ impl Pow for GraphRecordAttribute {
 impl Mod for GraphRecordAttribute {
     fn r#mod(self, rhs: Self) -> GraphRecordResult<Self> {
         match (self, rhs) {
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::String(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot mod {value} by {rhs}")),
-            ),
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::Int(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot mod {value} by {rhs}")),
-            ),
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::String(rhs)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot mod {value} by {rhs}")),
-            ),
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::Int(rhs)) => {
-                Ok(GraphRecordAttribute::Int(value % rhs))
-            }
+            (Self::String(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot mod {value} by {rhs}"),
+            )),
+            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot mod {value} by {rhs}"),
+            )),
+            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
+                format!("Cannot mod {value} by {rhs}"),
+            )),
+            (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value % rhs)),
         }
     }
 }
@@ -203,8 +179,8 @@ impl Mod for GraphRecordAttribute {
 impl Abs for GraphRecordAttribute {
     fn abs(self) -> Self {
         match self {
-            GraphRecordAttribute::Int(value) => GraphRecordAttribute::Int(value.abs()),
-            _ => self,
+            Self::Int(value) => Self::Int(value.abs()),
+            Self::String(_) => self,
         }
     }
 }
@@ -212,16 +188,10 @@ impl Abs for GraphRecordAttribute {
 impl StartsWith for GraphRecordAttribute {
     fn starts_with(&self, other: &Self) -> bool {
         match (self, other) {
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::String(other)) => {
-                value.starts_with(other)
-            }
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::Int(other)) => {
-                value.starts_with(&other.to_string())
-            }
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::String(other)) => {
-                value.to_string().starts_with(other)
-            }
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::Int(other)) => {
+            (Self::String(value), Self::String(other)) => value.starts_with(other),
+            (Self::String(value), Self::Int(other)) => value.starts_with(&other.to_string()),
+            (Self::Int(value), Self::String(other)) => value.to_string().starts_with(other),
+            (Self::Int(value), Self::Int(other)) => {
                 value.to_string().starts_with(&other.to_string())
             }
         }
@@ -231,18 +201,10 @@ impl StartsWith for GraphRecordAttribute {
 impl EndsWith for GraphRecordAttribute {
     fn ends_with(&self, other: &Self) -> bool {
         match (self, other) {
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::String(other)) => {
-                value.ends_with(other)
-            }
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::Int(other)) => {
-                value.ends_with(&other.to_string())
-            }
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::String(other)) => {
-                value.to_string().ends_with(other)
-            }
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::Int(other)) => {
-                value.to_string().ends_with(&other.to_string())
-            }
+            (Self::String(value), Self::String(other)) => value.ends_with(other),
+            (Self::String(value), Self::Int(other)) => value.ends_with(&other.to_string()),
+            (Self::Int(value), Self::String(other)) => value.to_string().ends_with(other),
+            (Self::Int(value), Self::Int(other)) => value.to_string().ends_with(&other.to_string()),
         }
     }
 }
@@ -250,18 +212,10 @@ impl EndsWith for GraphRecordAttribute {
 impl Contains for GraphRecordAttribute {
     fn contains(&self, other: &Self) -> bool {
         match (self, other) {
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::String(other)) => {
-                value.contains(other)
-            }
-            (GraphRecordAttribute::String(value), GraphRecordAttribute::Int(other)) => {
-                value.contains(&other.to_string())
-            }
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::String(other)) => {
-                value.to_string().contains(other)
-            }
-            (GraphRecordAttribute::Int(value), GraphRecordAttribute::Int(other)) => {
-                value.to_string().contains(&other.to_string())
-            }
+            (Self::String(value), Self::String(other)) => value.contains(other),
+            (Self::String(value), Self::Int(other)) => value.contains(&other.to_string()),
+            (Self::Int(value), Self::String(other)) => value.to_string().contains(other),
+            (Self::Int(value), Self::Int(other)) => value.to_string().contains(&other.to_string()),
         }
     }
 }
@@ -270,8 +224,8 @@ impl Contains for GraphRecordAttribute {
 impl Slice for GraphRecordAttribute {
     fn slice(self, range: std::ops::Range<usize>) -> Self {
         match self {
-            GraphRecordAttribute::String(value) => value[range].into(),
-            GraphRecordAttribute::Int(value) => value.to_string()[range].into(),
+            Self::String(value) => value[range].into(),
+            Self::Int(value) => value.to_string()[range].into(),
         }
     }
 }
@@ -280,10 +234,8 @@ impl Slice for GraphRecordAttribute {
 impl Trim for GraphRecordAttribute {
     fn trim(self) -> Self {
         match self {
-            GraphRecordAttribute::String(value) => {
-                GraphRecordAttribute::String(value.trim().to_string())
-            }
-            _ => self,
+            Self::String(value) => Self::String(value.trim().to_string()),
+            Self::Int(_) => self,
         }
     }
 }
@@ -292,10 +244,8 @@ impl Trim for GraphRecordAttribute {
 impl TrimStart for GraphRecordAttribute {
     fn trim_start(self) -> Self {
         match self {
-            GraphRecordAttribute::String(value) => {
-                GraphRecordAttribute::String(value.trim_start().to_string())
-            }
-            _ => self,
+            Self::String(value) => Self::String(value.trim_start().to_string()),
+            Self::Int(_) => self,
         }
     }
 }
@@ -304,10 +254,8 @@ impl TrimStart for GraphRecordAttribute {
 impl TrimEnd for GraphRecordAttribute {
     fn trim_end(self) -> Self {
         match self {
-            GraphRecordAttribute::String(value) => {
-                GraphRecordAttribute::String(value.trim_end().to_string())
-            }
-            _ => self,
+            Self::String(value) => Self::String(value.trim_end().to_string()),
+            Self::Int(_) => self,
         }
     }
 }
@@ -316,10 +264,8 @@ impl TrimEnd for GraphRecordAttribute {
 impl Lowercase for GraphRecordAttribute {
     fn lowercase(self) -> Self {
         match self {
-            GraphRecordAttribute::String(value) => {
-                GraphRecordAttribute::String(value.to_lowercase())
-            }
-            _ => self,
+            Self::String(value) => Self::String(value.to_lowercase()),
+            Self::Int(_) => self,
         }
     }
 }
@@ -328,10 +274,8 @@ impl Lowercase for GraphRecordAttribute {
 impl Uppercase for GraphRecordAttribute {
     fn uppercase(self) -> Self {
         match self {
-            GraphRecordAttribute::String(value) => {
-                GraphRecordAttribute::String(value.to_uppercase())
-            }
-            _ => self,
+            Self::String(value) => Self::String(value.to_uppercase()),
+            Self::Int(_) => self,
         }
     }
 }
@@ -342,8 +286,8 @@ mod test {
     use crate::{
         errors::GraphRecordError,
         graphrecord::{
-            datatypes::{Contains, EndsWith, StartsWith},
             GraphRecordValue,
+            datatypes::{Contains, EndsWith, StartsWith},
         },
     };
 
@@ -351,7 +295,7 @@ mod test {
     fn test_from_str() {
         let attribute = GraphRecordAttribute::from("value");
 
-        assert_eq!(GraphRecordAttribute::String("value".to_string()), attribute)
+        assert_eq!(GraphRecordAttribute::String("value".to_string()), attribute);
     }
 
     #[test]
@@ -378,11 +322,15 @@ mod test {
 
         assert_eq!(GraphRecordAttribute::Int(0), attribute);
 
-        assert!(GraphRecordAttribute::try_from(GraphRecordValue::from(true))
-            .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_))));
+        assert!(
+            GraphRecordAttribute::try_from(GraphRecordValue::from(true))
+                .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_)))
+        );
 
-        assert!(GraphRecordAttribute::try_from(GraphRecordValue::from(0.0))
-            .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_))));
+        assert!(
+            GraphRecordAttribute::try_from(GraphRecordValue::from(0.0))
+                .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_)))
+        );
     }
 
     #[test]
@@ -462,61 +410,89 @@ mod test {
 
     #[test]
     fn test_starts_with() {
-        assert!(GraphRecordAttribute::String("value".to_string())
-            .starts_with(&GraphRecordAttribute::String("val".to_string())));
-        assert!(!GraphRecordAttribute::String("value".to_string())
-            .starts_with(&GraphRecordAttribute::String("not_val".to_string())));
-        assert!(GraphRecordAttribute::String("10".to_string())
-            .starts_with(&GraphRecordAttribute::Int(1)));
-        assert!(!GraphRecordAttribute::String("10".to_string())
-            .starts_with(&GraphRecordAttribute::Int(0)));
+        assert!(
+            GraphRecordAttribute::String("value".to_string())
+                .starts_with(&GraphRecordAttribute::String("val".to_string()))
+        );
+        assert!(
+            !GraphRecordAttribute::String("value".to_string())
+                .starts_with(&GraphRecordAttribute::String("not_val".to_string()))
+        );
+        assert!(
+            GraphRecordAttribute::String("10".to_string())
+                .starts_with(&GraphRecordAttribute::Int(1))
+        );
+        assert!(
+            !GraphRecordAttribute::String("10".to_string())
+                .starts_with(&GraphRecordAttribute::Int(0))
+        );
 
-        assert!(GraphRecordAttribute::Int(10)
-            .starts_with(&GraphRecordAttribute::String("1".to_string())));
-        assert!(!GraphRecordAttribute::Int(10)
-            .starts_with(&GraphRecordAttribute::String("0".to_string())));
+        assert!(
+            GraphRecordAttribute::Int(10)
+                .starts_with(&GraphRecordAttribute::String("1".to_string()))
+        );
+        assert!(
+            !GraphRecordAttribute::Int(10)
+                .starts_with(&GraphRecordAttribute::String("0".to_string()))
+        );
         assert!(GraphRecordAttribute::Int(10).starts_with(&GraphRecordAttribute::Int(1)));
         assert!(!GraphRecordAttribute::Int(10).starts_with(&GraphRecordAttribute::Int(0)));
     }
 
     #[test]
     fn test_ends_with() {
-        assert!(GraphRecordAttribute::String("value".to_string())
-            .ends_with(&GraphRecordAttribute::String("ue".to_string())));
-        assert!(!GraphRecordAttribute::String("value".to_string())
-            .ends_with(&GraphRecordAttribute::String("not_ue".to_string())));
+        assert!(
+            GraphRecordAttribute::String("value".to_string())
+                .ends_with(&GraphRecordAttribute::String("ue".to_string()))
+        );
+        assert!(
+            !GraphRecordAttribute::String("value".to_string())
+                .ends_with(&GraphRecordAttribute::String("not_ue".to_string()))
+        );
         assert!(
             GraphRecordAttribute::String("10".to_string()).ends_with(&GraphRecordAttribute::Int(0))
         );
-        assert!(!GraphRecordAttribute::String("10".to_string())
-            .ends_with(&GraphRecordAttribute::Int(1)));
+        assert!(
+            !GraphRecordAttribute::String("10".to_string())
+                .ends_with(&GraphRecordAttribute::Int(1))
+        );
 
         assert!(
             GraphRecordAttribute::Int(10).ends_with(&GraphRecordAttribute::String("0".to_string()))
         );
-        assert!(!GraphRecordAttribute::Int(10)
-            .ends_with(&GraphRecordAttribute::String("1".to_string())));
+        assert!(
+            !GraphRecordAttribute::Int(10)
+                .ends_with(&GraphRecordAttribute::String("1".to_string()))
+        );
         assert!(GraphRecordAttribute::Int(10).ends_with(&GraphRecordAttribute::Int(0)));
         assert!(!GraphRecordAttribute::Int(10).ends_with(&GraphRecordAttribute::Int(1)));
     }
 
     #[test]
     fn test_contains() {
-        assert!(GraphRecordAttribute::String("value".to_string())
-            .contains(&GraphRecordAttribute::String("al".to_string())));
-        assert!(!GraphRecordAttribute::String("value".to_string())
-            .contains(&GraphRecordAttribute::String("not_al".to_string())));
+        assert!(
+            GraphRecordAttribute::String("value".to_string())
+                .contains(&GraphRecordAttribute::String("al".to_string()))
+        );
+        assert!(
+            !GraphRecordAttribute::String("value".to_string())
+                .contains(&GraphRecordAttribute::String("not_al".to_string()))
+        );
         assert!(
             GraphRecordAttribute::String("101".to_string()).contains(&GraphRecordAttribute::Int(0))
         );
-        assert!(!GraphRecordAttribute::String("101".to_string())
-            .contains(&GraphRecordAttribute::Int(2)));
+        assert!(
+            !GraphRecordAttribute::String("101".to_string())
+                .contains(&GraphRecordAttribute::Int(2))
+        );
 
         assert!(
             GraphRecordAttribute::Int(101).contains(&GraphRecordAttribute::String("0".to_string()))
         );
-        assert!(!GraphRecordAttribute::Int(101)
-            .contains(&GraphRecordAttribute::String("2".to_string())));
+        assert!(
+            !GraphRecordAttribute::Int(101)
+                .contains(&GraphRecordAttribute::String("2".to_string()))
+        );
         assert!(GraphRecordAttribute::Int(101).contains(&GraphRecordAttribute::Int(0)));
         assert!(!GraphRecordAttribute::Int(101).contains(&GraphRecordAttribute::Int(2)));
     }

@@ -3,20 +3,20 @@ mod operand;
 mod operation;
 
 use super::{
+    EvaluateBackward,
     edges::{EdgeOperand, EdgeOperation},
     nodes::{NodeOperand, NodeOperation},
-    EvaluateBackward,
 };
 use crate::{
+    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
-        querying::{
-            attributes::operation::AttributesTreeOperation, group_by::GroupOperand, BoxedIterator,
-            DeepClone, RootOperand,
-        },
         Attributes, EdgeIndex, GraphRecordAttribute, NodeIndex,
+        querying::{
+            BoxedIterator, DeepClone, RootOperand, attributes::operation::AttributesTreeOperation,
+            group_by::GroupOperand,
+        },
     },
-    GraphRecord,
 };
 pub use operand::{
     AttributesTreeOperand, EdgeAttributesTreeOperand, EdgeMultipleAttributesWithIndexOperand,
@@ -105,7 +105,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexContext<O> {
                         Box::new(AttributesTreeOperation::<O>::get_min(attributes)?)
                     }
                     MultipleKind::Count => {
-                        Box::new(AttributesTreeOperation::<O>::get_count(attributes)?)
+                        Box::new(AttributesTreeOperation::<O>::get_count(attributes))
                     }
                     MultipleKind::Sum => {
                         Box::new(AttributesTreeOperation::<O>::get_sum(attributes)?)
@@ -258,11 +258,11 @@ pub enum BinaryArithmeticKind {
 impl Display for BinaryArithmeticKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BinaryArithmeticKind::Add => write!(f, "add"),
-            BinaryArithmeticKind::Sub => write!(f, "sub"),
-            BinaryArithmeticKind::Mul => write!(f, "mul"),
-            BinaryArithmeticKind::Pow => write!(f, "pow"),
-            BinaryArithmeticKind::Mod => write!(f, "mod"),
+            Self::Add => write!(f, "add"),
+            Self::Sub => write!(f, "sub"),
+            Self::Mul => write!(f, "mul"),
+            Self::Pow => write!(f, "pow"),
+            Self::Mod => write!(f, "mod"),
         }
     }
 }
@@ -333,7 +333,7 @@ impl GetAllAttributes<NodeIndex> for NodeOperand {
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<impl Iterator<Item = (&'a NodeIndex, Vec<GraphRecordAttribute>)> + 'a>
     where
-        NodeOperand: 'a,
+        Self: 'a,
     {
         let node_indices = self.evaluate_backward(graphrecord)?;
 

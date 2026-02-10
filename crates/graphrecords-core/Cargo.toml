@@ -20,3 +20,6 @@ ron = "0.8.1"
 roaring = "0.10.6"
 itertools = "0.13.0"
 tabled = "0.20.0"
+
+[lints]
+workspace = true

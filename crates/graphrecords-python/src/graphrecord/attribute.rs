@@ -50,7 +50,7 @@ pub(crate) fn convert_pyobject_to_graphrecordattribute(
 
 impl FromPyObject<'_> for PyGraphRecordAttribute {
     fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_graphrecordattribute(ob).map(PyGraphRecordAttribute::from)
+        convert_pyobject_to_graphrecordattribute(ob).map(Self::from)
     }
 }
 

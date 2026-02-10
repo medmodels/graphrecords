@@ -1,7 +1,7 @@
 use graphrecords::core::GraphRecord;
 use pyo3::{
-    types::{PyAnyMethods, PyBytes, PyBytesMethods},
     Bound, FromPyObject, IntoPyObject, PyAny, PyErr, PyResult, Python,
+    types::{PyAnyMethods, PyBytes, PyBytesMethods},
 };
 
 #[repr(transparent)]
@@ -10,7 +10,7 @@ pub struct PyGraphRecord(pub GraphRecord);
 
 impl From<GraphRecord> for PyGraphRecord {
     fn from(value: GraphRecord) -> Self {
-        PyGraphRecord(value)
+        Self(value)
     }
 }
 

@@ -1,8 +1,8 @@
 use crate::{
+    GraphRecord,
     errors::GraphRecordError,
     graphrecord::{Attributes, GraphRecordAttribute, GraphRecordValue, NodeIndex},
     prelude::{EdgeIndex, Group},
-    GraphRecord,
 };
 use chrono::{DateTime, TimeDelta};
 use graphrecords_utils::aliases::MrHashMap;
@@ -15,52 +15,56 @@ impl<'a> TryFrom<AnyValue<'a>> for GraphRecordValue {
 
     fn try_from(value: AnyValue<'a>) -> Result<Self, Self::Error> {
         match value {
-            AnyValue::String(value) => Ok(GraphRecordValue::String(value.into())),
-            AnyValue::StringOwned(value) => Ok(GraphRecordValue::String((*value).into())),
-            AnyValue::Int8(value) => Ok(GraphRecordValue::Int(value.into())),
-            AnyValue::Int16(value) => Ok(GraphRecordValue::Int(value.into())),
-            AnyValue::Int32(value) => Ok(GraphRecordValue::Int(value.into())),
-            AnyValue::Int64(value) => Ok(GraphRecordValue::Int(value)),
-            AnyValue::UInt8(value) => Ok(GraphRecordValue::Int(value.into())),
-            AnyValue::UInt16(value) => Ok(GraphRecordValue::Int(value.into())),
-            AnyValue::UInt32(value) => Ok(GraphRecordValue::Int(value.into())),
-            AnyValue::Float32(value) => Ok(GraphRecordValue::Float(value.into())),
-            AnyValue::Float64(value) => Ok(GraphRecordValue::Float(value)),
-            AnyValue::Boolean(value) => Ok(GraphRecordValue::Bool(value)),
+            AnyValue::String(value) => Ok(Self::String(value.into())),
+            AnyValue::StringOwned(value) => Ok(Self::String((*value).into())),
+            AnyValue::Int8(value) => Ok(Self::Int(value.into())),
+            AnyValue::Int16(value) => Ok(Self::Int(value.into())),
+            AnyValue::Int32(value) => Ok(Self::Int(value.into())),
+            AnyValue::Int64(value) => Ok(Self::Int(value)),
+            AnyValue::UInt8(value) => Ok(Self::Int(value.into())),
+            AnyValue::UInt16(value) => Ok(Self::Int(value.into())),
+            AnyValue::UInt32(value) => Ok(Self::Int(value.into())),
+            AnyValue::Float32(value) => Ok(Self::Float(value.into())),
+            AnyValue::Float64(value) => Ok(Self::Float(value)),
+            AnyValue::Boolean(value) => Ok(Self::Bool(value)),
             AnyValue::Datetime(value, unit, _) => {
                 // TODO: handle timezone
                 Ok(match unit {
-                    polars::prelude::TimeUnit::Nanoseconds => GraphRecordValue::DateTime(
-                        DateTime::from_timestamp_nanos(value).naive_utc(),
-                    ),
-                    polars::prelude::TimeUnit::Microseconds => GraphRecordValue::DateTime(
+                    polars::prelude::TimeUnit::Nanoseconds => {
+                        Self::DateTime(DateTime::from_timestamp_nanos(value).naive_utc())
+                    }
+                    polars::prelude::TimeUnit::Microseconds => Self::DateTime(
                         DateTime::from_timestamp_micros(value)
-                            .ok_or(GraphRecordError::ConversionError(format!(
-                                "Cannot convert {value}ms into GraphRecordValue"
-                            )))?
+                            .ok_or_else(|| {
+                                GraphRecordError::ConversionError(format!(
+                                    "Cannot convert {value}ms into GraphRecordValue"
+                                ))
+                            })?
                             .naive_utc(),
                     ),
-                    polars::prelude::TimeUnit::Milliseconds => GraphRecordValue::DateTime(
+                    polars::prelude::TimeUnit::Milliseconds => Self::DateTime(
                         DateTime::from_timestamp_millis(value)
-                            .ok_or(GraphRecordError::ConversionError(format!(
-                                "Cannot convert {value}ms into GraphRecordValue"
-                            )))?
+                            .ok_or_else(|| {
+                                GraphRecordError::ConversionError(format!(
+                                    "Cannot convert {value}ms into GraphRecordValue"
+                                ))
+                            })?
                             .naive_utc(),
                     ),
                 })
             }
             AnyValue::Duration(value, unit) => Ok(match unit {
                 polars::prelude::TimeUnit::Nanoseconds => {
-                    GraphRecordValue::Duration(TimeDelta::nanoseconds(value))
+                    Self::Duration(TimeDelta::nanoseconds(value))
                 }
                 polars::prelude::TimeUnit::Microseconds => {
-                    GraphRecordValue::Duration(TimeDelta::microseconds(value))
+                    Self::Duration(TimeDelta::microseconds(value))
                 }
                 polars::prelude::TimeUnit::Milliseconds => {
-                    GraphRecordValue::Duration(TimeDelta::milliseconds(value))
+                    Self::Duration(TimeDelta::milliseconds(value))
                 }
             }),
-            AnyValue::Null => Ok(GraphRecordValue::Null),
+            AnyValue::Null => Ok(Self::Null),
             _ => Err(GraphRecordError::ConversionError(format!(
                 "Cannot convert {value} into GraphRecordValue"
             ))),
@@ -73,15 +77,15 @@ impl<'a> TryFrom<AnyValue<'a>> for GraphRecordAttribute {
 
     fn try_from(value: AnyValue<'a>) -> Result<Self, Self::Error> {
         match value {
-            AnyValue::String(value) => Ok(GraphRecordAttribute::String(value.into())),
-            AnyValue::StringOwned(value) => Ok(GraphRecordAttribute::String((*value).into())),
-            AnyValue::Int8(value) => Ok(GraphRecordAttribute::Int(value.into())),
-            AnyValue::Int16(value) => Ok(GraphRecordAttribute::Int(value.into())),
-            AnyValue::Int32(value) => Ok(GraphRecordAttribute::Int(value.into())),
-            AnyValue::Int64(value) => Ok(GraphRecordAttribute::Int(value)),
-            AnyValue::UInt8(value) => Ok(GraphRecordAttribute::Int(value.into())),
-            AnyValue::UInt16(value) => Ok(GraphRecordAttribute::Int(value.into())),
-            AnyValue::UInt32(value) => Ok(GraphRecordAttribute::Int(value.into())),
+            AnyValue::String(value) => Ok(Self::String(value.into())),
+            AnyValue::StringOwned(value) => Ok(Self::String((*value).into())),
+            AnyValue::Int8(value) => Ok(Self::Int(value.into())),
+            AnyValue::Int16(value) => Ok(Self::Int(value.into())),
+            AnyValue::Int32(value) => Ok(Self::Int(value.into())),
+            AnyValue::Int64(value) => Ok(Self::Int(value)),
+            AnyValue::UInt8(value) => Ok(Self::Int(value.into())),
+            AnyValue::UInt16(value) => Ok(Self::Int(value.into())),
+            AnyValue::UInt32(value) => Ok(Self::Int(value.into())),
             _ => Err(GraphRecordError::ConversionError(format!(
                 "Cannot convert {value} into GraphRecordAttribute"
             ))),
@@ -89,7 +93,7 @@ impl<'a> TryFrom<AnyValue<'a>> for GraphRecordAttribute {
     }
 }
 
-impl<'a> From<GraphRecordValue> for AnyValue<'a> {
+impl From<GraphRecordValue> for AnyValue<'_> {
     fn from(value: GraphRecordValue) -> Self {
         match value {
             GraphRecordValue::String(value) => AnyValue::StringOwned(value.into()),
@@ -111,7 +115,7 @@ impl<'a> From<GraphRecordValue> for AnyValue<'a> {
     }
 }
 
-impl<'a> From<GraphRecordAttribute> for AnyValue<'a> {
+impl From<GraphRecordAttribute> for AnyValue<'_> {
     fn from(value: GraphRecordAttribute) -> Self {
         match value {
             GraphRecordAttribute::String(value) => AnyValue::StringOwned(value.into()),
@@ -120,7 +124,7 @@ impl<'a> From<GraphRecordAttribute> for AnyValue<'a> {
     }
 }
 
-pub(crate) fn dataframe_to_nodes(
+pub fn dataframe_to_nodes(
     mut nodes: DataFrame,
     index_column_name: &str,
 ) -> Result<Vec<(NodeIndex, Attributes)>, GraphRecordError> {
@@ -170,7 +174,7 @@ pub(crate) fn dataframe_to_nodes(
         .collect()
 }
 
-pub(crate) fn dataframe_to_edges(
+pub fn dataframe_to_edges(
     mut edges: DataFrame,
     source_index_column_name: &str,
     target_index_column_name: &str,
@@ -288,7 +292,7 @@ impl DataFramesGroupExport {
                 .expect("Attribute must exist in columns")
                 .push(node_index.clone().into());
 
-            for attribute_name in node_attributes.iter() {
+            for attribute_name in &node_attributes {
                 let attribute_value = attributes
                     .get(attribute_name)
                     .cloned()
@@ -376,7 +380,7 @@ impl DataFramesGroupExport {
                 .expect("Attribute must exist in columns")
                 .push(edge_endpoints.1.clone().into());
 
-            for attribute_name in edge_attributes.iter() {
+            for attribute_name in &edge_attributes {
                 let attribute_value = attributes
                     .get(attribute_name)
                     .cloned()
@@ -400,7 +404,7 @@ impl DataFramesGroupExport {
             ))
         })?;
 
-        Ok(DataFramesGroupExport {
+        Ok(Self {
             nodes: node_dataframe,
             edges: edge_dataframe,
         })
@@ -426,13 +430,13 @@ impl DataFramesExport {
             })
             .collect::<Result<_, _>>()?;
 
-        Ok(DataFramesExport { ungrouped, groups })
+        Ok(Self { ungrouped, groups })
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{dataframe_to_edges, dataframe_to_nodes, GraphRecordValue};
+    use super::{GraphRecordValue, dataframe_to_edges, dataframe_to_nodes};
     use crate::errors::GraphRecordError;
     use chrono::NaiveDateTime;
     use polars::prelude::*;
@@ -579,8 +583,10 @@ mod test {
         let nodes_dataframe = DataFrame::new(vec![s0.into(), s1.into()]).unwrap();
 
         // Providing the wrong index column name should fail
-        assert!(dataframe_to_nodes(nodes_dataframe, "wrong_column")
-            .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_))));
+        assert!(
+            dataframe_to_nodes(nodes_dataframe, "wrong_column")
+                .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_)))
+        );
     }
 
     #[test]

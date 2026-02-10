@@ -1,14 +1,18 @@
 use super::{
-    operation::{EdgeIndexOperation, EdgeIndicesOperation, EdgeOperation},
     BinaryArithmeticKind, EdgeOperandContext, MultipleComparisonKind, SingleComparisonKind,
     SingleKind,
+    operation::{EdgeIndexOperation, EdgeIndicesOperation, EdgeOperation},
 };
 use crate::{
+    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
+        EdgeIndex, GraphRecordAttribute, Group,
         querying::{
+            BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
+            GroupedIterator, ReduceInput, RootOperand,
             attributes::{AttributesTreeContext, AttributesTreeOperand},
-            edges::{group_by, EdgeIndicesOperandContext, EdgeOperandGroupDiscriminator},
+            edges::{EdgeIndicesOperandContext, EdgeOperandGroupDiscriminator, group_by},
             group_by::{GroupKey, GroupOperand, PartitionGroups},
             nodes::{self, NodeOperand},
             operand_traits::{
@@ -19,13 +23,9 @@ use crate::{
             },
             values::{self, MultipleValuesWithIndexOperand},
             wrapper::{CardinalityWrapper, Wrapper},
-            BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
-            GroupedIterator, ReduceInput, RootOperand,
         },
-        EdgeIndex, GraphRecordAttribute, Group,
     },
     prelude::GraphRecordValue,
-    GraphRecord,
 };
 use graphrecords_utils::{aliases::MrHashSet, traits::ReadWriteOrPanic};
 use std::{
@@ -46,7 +46,7 @@ impl DeepClone for EdgeOperand {
             operations: self
                 .operations
                 .iter()
-                .map(|operation| operation.deep_clone())
+                .map(super::super::DeepClone::deep_clone)
                 .collect(),
         }
     }
@@ -443,7 +443,7 @@ impl Exclude for EdgeOperand {
 }
 
 impl EdgeOperand {
-    pub(crate) fn new(context: Option<EdgeOperandContext>) -> Self {
+    pub(crate) const fn new(context: Option<EdgeOperandContext>) -> Self {
         Self {
             context,
             operations: Vec::new(),
@@ -943,17 +943,16 @@ impl Exclude for EdgeIndicesOperand {
 }
 
 impl EdgeIndicesOperand {
-    pub(crate) fn new(context: EdgeIndicesOperandContext) -> Self {
+    pub(crate) const fn new(context: EdgeIndicesOperandContext) -> Self {
         Self {
             context,
             operations: Vec::new(),
         }
     }
 
-    pub(crate) fn push_merge_operation(&mut self, operand: Wrapper<EdgeIndicesOperand>) {
-        self.operations.push(EdgeIndicesOperation::Merge {
-            operand: operand.clone(),
-        });
+    pub(crate) fn push_merge_operation(&mut self, operand: Wrapper<Self>) {
+        self.operations
+            .push(EdgeIndicesOperation::Merge { operand });
     }
 }
 
@@ -962,7 +961,7 @@ impl Wrapper<EdgeIndicesOperand> {
         EdgeIndicesOperand::new(context).into()
     }
 
-    pub(crate) fn push_merge_operation(&self, operand: Wrapper<EdgeIndicesOperand>) {
+    pub(crate) fn push_merge_operation(&self, operand: Self) {
         self.0.write_or_panic().push_merge_operation(operand);
     }
 }
@@ -1278,7 +1277,7 @@ impl Exclude for EdgeIndexOperand {
 }
 
 impl EdgeIndexOperand {
-    pub(crate) fn new(context: EdgeIndicesOperand, kind: SingleKind) -> Self {
+    pub(crate) const fn new(context: EdgeIndicesOperand, kind: SingleKind) -> Self {
         Self {
             context,
             kind,

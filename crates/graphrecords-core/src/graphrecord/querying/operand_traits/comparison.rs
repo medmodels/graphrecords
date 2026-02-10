@@ -20,7 +20,7 @@ impl<O: GroupedOperand + GreaterThan> GreaterThan for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn greater_than<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.greater_than(value)
+        self.operand.greater_than(value);
     }
 }
 
@@ -40,7 +40,7 @@ impl<O: GroupedOperand + GreaterThanOrEqualTo> GreaterThanOrEqualTo for GroupOpe
     type ComparisonOperand = O::ComparisonOperand;
 
     fn greater_than_or_equal_to<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.greater_than_or_equal_to(value)
+        self.operand.greater_than_or_equal_to(value);
     }
 }
 
@@ -60,7 +60,7 @@ impl<O: GroupedOperand + LessThan> LessThan for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn less_than<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.less_than(value)
+        self.operand.less_than(value);
     }
 }
 
@@ -80,7 +80,7 @@ impl<O: GroupedOperand + LessThanOrEqualTo> LessThanOrEqualTo for GroupOperand<O
     type ComparisonOperand = O::ComparisonOperand;
 
     fn less_than_or_equal_to<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.less_than_or_equal_to(value)
+        self.operand.less_than_or_equal_to(value);
     }
 }
 
@@ -100,7 +100,7 @@ impl<O: GroupedOperand + EqualTo> EqualTo for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn equal_to<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.equal_to(value)
+        self.operand.equal_to(value);
     }
 }
 
@@ -120,6 +120,6 @@ impl<O: GroupedOperand + NotEqualTo> NotEqualTo for GroupOperand<O> {
     type ComparisonOperand = O::ComparisonOperand;
 
     fn not_equal_to<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operand.not_equal_to(value)
+        self.operand.not_equal_to(value);
     }
 }

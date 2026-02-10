@@ -16,7 +16,7 @@ impl<O: IsFloat> Wrapper<O> {
 
 impl<O: GroupedOperand + IsFloat> IsFloat for GroupOperand<O> {
     fn is_float(&mut self) {
-        self.operand.is_float()
+        self.operand.is_float();
     }
 }
 
@@ -32,7 +32,7 @@ impl<O: IsBool> Wrapper<O> {
 
 impl<O: GroupedOperand + IsBool> IsBool for GroupOperand<O> {
     fn is_bool(&mut self) {
-        self.operand.is_bool()
+        self.operand.is_bool();
     }
 }
 
@@ -48,7 +48,7 @@ impl<O: IsDateTime> Wrapper<O> {
 
 impl<O: GroupedOperand + IsDateTime> IsDateTime for GroupOperand<O> {
     fn is_datetime(&mut self) {
-        self.operand.is_datetime()
+        self.operand.is_datetime();
     }
 }
 
@@ -64,7 +64,7 @@ impl<O: IsDuration> Wrapper<O> {
 
 impl<O: GroupedOperand + IsDuration> IsDuration for GroupOperand<O> {
     fn is_duration(&mut self) {
-        self.operand.is_duration()
+        self.operand.is_duration();
     }
 }
 
@@ -80,7 +80,7 @@ impl<O: IsNull> Wrapper<O> {
 
 impl<O: GroupedOperand + IsNull> IsNull for GroupOperand<O> {
     fn is_null(&mut self) {
-        self.operand.is_null()
+        self.operand.is_null();
     }
 }
 
@@ -96,7 +96,7 @@ impl<O: IsString> Wrapper<O> {
 
 impl<O: GroupedOperand + IsString> IsString for GroupOperand<O> {
     fn is_string(&mut self) {
-        self.operand.is_string()
+        self.operand.is_string();
     }
 }
 
@@ -112,6 +112,6 @@ impl<O: IsInt> Wrapper<O> {
 
 impl<O: GroupedOperand + IsInt> IsInt for GroupOperand<O> {
     fn is_int(&mut self) {
-        self.operand.is_int()
+        self.operand.is_int();
     }
 }

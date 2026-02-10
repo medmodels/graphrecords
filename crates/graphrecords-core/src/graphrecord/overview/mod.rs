@@ -3,12 +3,12 @@
 mod tabled_modifiers;
 
 use crate::{
+    GraphRecord,
     errors::GraphRecordError,
     graphrecord::overview::tabled_modifiers::MergeDuplicatesVerticalByColumn,
     prelude::{
         AttributeType, DataType, GraphRecordAttribute, GraphRecordValue, Group, GroupSchema,
     },
-    GraphRecord,
 };
 use graphrecords_utils::aliases::MrHashMap;
 use itertools::Itertools;
@@ -20,7 +20,7 @@ use std::{
 };
 use tabled::{
     builder::Builder,
-    settings::{object::Columns, themes::BorderCorrection, Alignment, Panel, Style, Width},
+    settings::{Alignment, Panel, Style, Width, object::Columns, themes::BorderCorrection},
 };
 
 pub const DEFAULT_TRUNCATE_DETAILS: usize = 80;
@@ -45,7 +45,7 @@ pub enum AttributeOverviewData {
 }
 
 impl AttributeOverviewData {
-    fn attribute_type_name(&self) -> &'static str {
+    const fn attribute_type_name(&self) -> &'static str {
         match self {
             Self::Categorical { .. } => "Categorical",
             Self::Continuous { .. } => "Continuous",
@@ -59,17 +59,20 @@ impl AttributeOverviewData {
             Self::Categorical { distinct_values } => {
                 format!(
                     "Distinct values: [{}]",
-                    distinct_values.iter().map(|v| v.to_string()).join(", ")
+                    distinct_values
+                        .iter()
+                        .map(std::string::ToString::to_string)
+                        .join(", ")
                 )
             }
             Self::Continuous { min, mean, max } => {
-                format!("Min: {}\nMean: {}\nMax: {}", min, mean, max)
+                format!("Min: {min}\nMean: {mean}\nMax: {max}")
             }
             Self::Temporal { min, max } => {
-                format!("Min: {}\nMax: {}", min, max)
+                format!("Min: {min}\nMax: {max}")
             }
             Self::Unstructured { distinct_count } => {
-                format!("Distinct value count: {}", distinct_count)
+                format!("Distinct value count: {distinct_count}")
             }
         }
     }
@@ -188,9 +191,9 @@ impl NodeGroupOverview {
                             })
                             .evaluate()?;
 
-                        let min = min.map(|min| min.1).unwrap_or(GraphRecordValue::Null);
+                        let min = min.map_or(GraphRecordValue::Null, |min| min.1);
                         let mean = mean.unwrap_or(GraphRecordValue::Null);
-                        let max = max.map(|max| max.1).unwrap_or(GraphRecordValue::Null);
+                        let max = max.map_or(GraphRecordValue::Null, |max| max.1);
 
                         AttributeOverview {
                             data_type,
@@ -213,8 +216,8 @@ impl NodeGroupOverview {
                             .evaluate()
                             .unwrap();
 
-                        let min = min.map(|min| min.1).unwrap_or(GraphRecordValue::Null);
-                        let max = max.map(|max| max.1).unwrap_or(GraphRecordValue::Null);
+                        let min = min.map_or(GraphRecordValue::Null, |min| min.1);
+                        let max = max.map_or(GraphRecordValue::Null, |max| max.1);
 
                         AttributeOverview {
                             data_type,
@@ -222,7 +225,7 @@ impl NodeGroupOverview {
                         }
                     }
                     AttributeType::Unstructured => {
-                        let values: Vec<_> = graphrecord
+                        let distinct_count = graphrecord
                             .query_nodes(|nodes| {
                                 nodes.index().is_in(nodes_in_group.clone());
 
@@ -233,13 +236,11 @@ impl NodeGroupOverview {
                             .map(|(_, value)| value)
                             .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
                             .dedup_by(|a, b| a == b)
-                            .collect();
+                            .count();
 
                         AttributeOverview {
                             data_type,
-                            data: AttributeOverviewData::Unstructured {
-                                distinct_count: values.len(),
-                            },
+                            data: AttributeOverviewData::Unstructured { distinct_count },
                         }
                     }
                 };
@@ -311,8 +312,8 @@ impl EdgeGroupOverview {
         truncate_details: Option<usize>,
     ) -> Result<Self, GraphRecordError> {
         let edges_in_group: HashSet<_> = match group {
-            Some(group) => graphrecord.edges_in_group(group)?.cloned().collect(),
-            None => graphrecord.ungrouped_edges().cloned().collect(),
+            Some(group) => graphrecord.edges_in_group(group)?.copied().collect(),
+            None => graphrecord.ungrouped_edges().copied().collect(),
         };
         let count = edges_in_group.len();
 
@@ -359,9 +360,9 @@ impl EdgeGroupOverview {
                             })
                             .evaluate()?;
 
-                        let min = min.map(|min| min.1).unwrap_or(GraphRecordValue::Null);
+                        let min = min.map_or(GraphRecordValue::Null, |min| min.1);
                         let mean = mean.unwrap_or(GraphRecordValue::Null);
-                        let max = max.map(|max| max.1).unwrap_or(GraphRecordValue::Null);
+                        let max = max.map_or(GraphRecordValue::Null, |max| max.1);
 
                         AttributeOverview {
                             data_type,
@@ -383,8 +384,8 @@ impl EdgeGroupOverview {
                             })
                             .evaluate()?;
 
-                        let min = min.map(|min| min.1).unwrap_or(GraphRecordValue::Null);
-                        let max = max.map(|max| max.1).unwrap_or(GraphRecordValue::Null);
+                        let min = min.map_or(GraphRecordValue::Null, |min| min.1);
+                        let max = max.map_or(GraphRecordValue::Null, |max| max.1);
 
                         AttributeOverview {
                             data_type,
@@ -392,7 +393,7 @@ impl EdgeGroupOverview {
                         }
                     }
                     AttributeType::Unstructured => {
-                        let values: Vec<_> = graphrecord
+                        let distinct_count = graphrecord
                             .query_edges(|edges| {
                                 edges.index().is_in(edges_in_group.clone());
 
@@ -402,13 +403,11 @@ impl EdgeGroupOverview {
                             .map(|(_, value)| value)
                             .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
                             .dedup_by(|a, b| a == b)
-                            .collect();
+                            .count();
 
                         AttributeOverview {
                             data_type,
-                            data: AttributeOverviewData::Unstructured {
-                                distinct_count: values.len(),
-                            },
+                            data: AttributeOverviewData::Unstructured { distinct_count },
                         }
                     }
                 };
@@ -492,9 +491,8 @@ impl Display for Overview {
         for (group, group_overview) in std::iter::once((None, &self.ungrouped_overview))
             .chain(self.grouped_overviews.iter().map(|(g, o)| (Some(g), o)))
         {
-            let group_name = group
-                .map(|g| g.to_string())
-                .unwrap_or_else(|| "Ungrouped".to_string());
+            let group_name =
+                group.map_or_else(|| "Ungrouped".to_string(), std::string::ToString::to_string);
             let count = group_overview.node_overview.count;
 
             for (attribute, overview) in &group_overview.node_overview.attributes {
@@ -542,9 +540,8 @@ impl Display for Overview {
         for (group, group_overview) in std::iter::once((None, &self.ungrouped_overview))
             .chain(self.grouped_overviews.iter().map(|(g, o)| (Some(g), o)))
         {
-            let group_name = group
-                .map(|g| g.to_string())
-                .unwrap_or_else(|| "Ungrouped".to_string());
+            let group_name =
+                group.map_or_else(|| "Ungrouped".to_string(), std::string::ToString::to_string);
             let count = group_overview.edge_overview.count;
 
             for (attribute, overview) in &group_overview.edge_overview.attributes {

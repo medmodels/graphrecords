@@ -1,8 +1,9 @@
 use super::{
-    attributes::PyNodeAttributesTreeOperand, edges::PyEdgeOperand,
     PyGraphRecordAttributeCardinalityWrapper, PyGroupCardinalityWrapper,
+    attributes::PyNodeAttributesTreeOperand, edges::PyEdgeOperand,
 };
 use crate::graphrecord::{
+    PyNodeIndex,
     attribute::PyGraphRecordAttribute,
     errors::PyGraphRecordError,
     querying::{
@@ -10,32 +11,30 @@ use crate::graphrecord::{
         edges::PyEdgeGroupOperand,
         values::{PyNodeMultipleValuesWithIndexGroupOperand, PyNodeMultipleValuesWithIndexOperand},
     },
-    PyNodeIndex,
 };
 use graphrecords::core::{
     errors::GraphRecordError,
     graphrecord::{
+        NodeIndex,
         querying::{
+            DeepClone,
             group_by::GroupOperand,
             nodes::{
                 self, EdgeDirection, NodeIndexComparisonOperand, NodeIndexOperand,
                 NodeIndicesComparisonOperand, NodeIndicesOperand, NodeOperand,
             },
             wrapper::Wrapper,
-            DeepClone,
         },
-        NodeIndex,
     },
 };
 use pyo3::{
-    pyclass, pymethods,
+    Bound, FromPyObject, PyAny, PyResult, pyclass, pymethods,
     types::{PyAnyMethods, PyFunction},
-    Bound, FromPyObject, PyAny, PyResult,
 };
 use std::ops::Deref;
 
 #[pyclass(eq, eq_int)]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum PyEdgeDirection {
     Incoming = 0,
     Outgoing = 1,
@@ -123,28 +122,34 @@ impl PyNodeOperand {
         self.0.edges(direction.into()).into()
     }
 
-    pub fn neighbors(&mut self, direction: PyEdgeDirection) -> PyNodeOperand {
+    pub fn neighbors(&mut self, direction: PyEdgeDirection) -> Self {
         self.0.neighbors(direction.into()).into()
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
-                    .call1((PyNodeOperand::from(operand.clone()),))
+                    .call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
             |operand| {
-                or.call1((PyNodeOperand::from(operand.clone()),))
+                or.call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
-                .call1((PyNodeOperand::from(operand.clone()),))
+                .call1((Self::from(operand.clone()),))
                 .expect("Call must succeed");
         });
     }
@@ -203,10 +208,12 @@ impl PyNodeGroupOperand {
         self.0.edges(direction.into()).into()
     }
 
-    pub fn neighbors(&mut self, direction: PyEdgeDirection) -> PyNodeGroupOperand {
+    pub fn neighbors(&mut self, direction: PyEdgeDirection) -> Self {
         self.0.neighbors(direction.into()).into()
     }
-
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
@@ -221,6 +228,9 @@ impl PyNodeGroupOperand {
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
@@ -251,17 +261,17 @@ impl From<PyNodeIndexComparisonOperand> for NodeIndexComparisonOperand {
 
 impl FromPyObject<'_> for PyNodeIndexComparisonOperand {
     fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(index) = ob.extract::<PyNodeIndex>() {
-            Ok(NodeIndexComparisonOperand::Index(NodeIndex::from(index)).into())
-        } else if let Ok(operand) = ob.extract::<PyNodeIndexOperand>() {
-            Ok(PyNodeIndexComparisonOperand(operand.0.into()))
-        } else {
-            Err(
-                PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                    "Failed to convert {ob} into NodeIndex or NodeIndexOperand",
-                )))
-                .into(),
-            )
+        match ob.extract::<PyNodeIndex>() {
+            Ok(index) => Ok(NodeIndexComparisonOperand::Index(NodeIndex::from(index)).into()),
+            _ => match ob.extract::<PyNodeIndexOperand>() {
+                Ok(operand) => Ok(Self(operand.0.into())),
+                _ => Err(
+                    PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
+                        "Failed to convert {ob} into NodeIndex or NodeIndexOperand",
+                    )))
+                    .into(),
+                ),
+            },
         }
     }
 }
@@ -283,20 +293,20 @@ impl From<PyNodeIndicesComparisonOperand> for NodeIndicesComparisonOperand {
 
 impl FromPyObject<'_> for PyNodeIndicesComparisonOperand {
     fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(indices) = ob.extract::<Vec<PyNodeIndex>>() {
-            Ok(NodeIndicesComparisonOperand::Indices(
+        match ob.extract::<Vec<PyNodeIndex>>() {
+            Ok(indices) => Ok(NodeIndicesComparisonOperand::Indices(
                 indices.into_iter().map(NodeIndex::from).collect(),
             )
-            .into())
-        } else if let Ok(operand) = ob.extract::<PyNodeIndicesOperand>() {
-            Ok(PyNodeIndicesComparisonOperand(operand.0.into()))
-        } else {
-            Err(
-                PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                    "Failed to convert {ob} into List[NodeIndex] or NodeIndicesOperand",
-                )))
-                .into(),
-            )
+            .into()),
+            _ => match ob.extract::<PyNodeIndicesOperand>() {
+                Ok(operand) => Ok(Self(operand.0.into())),
+                _ => Err(
+                    PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
+                        "Failed to convert {ob} into List[NodeIndex] or NodeIndicesOperand",
+                    )))
+                    .into(),
+                ),
+            },
         }
     }
 }
@@ -456,24 +466,30 @@ impl PyNodeIndicesOperand {
         self.0.is_min();
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
-                    .call1((PyNodeIndicesOperand::from(operand.clone()),))
+                    .call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
             |operand| {
-                or.call1((PyNodeIndicesOperand::from(operand.clone()),))
+                or.call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
-                .call1((PyNodeIndicesOperand::from(operand.clone()),))
+                .call1((Self::from(operand.clone()),))
                 .expect("Call must succeed");
         });
     }
@@ -638,6 +654,9 @@ impl PyNodeIndicesGroupOperand {
         self.0.is_min();
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
@@ -652,6 +671,9 @@ impl PyNodeIndicesGroupOperand {
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
@@ -796,24 +818,30 @@ impl PyNodeIndexOperand {
         self.0.is_int();
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
-                    .call1((PyNodeIndexOperand::from(operand.clone()),))
+                    .call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
             |operand| {
-                or.call1((PyNodeIndexOperand::from(operand.clone()),))
+                or.call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
-                .call1((PyNodeIndexOperand::from(operand.clone()),))
+                .call1((Self::from(operand.clone()),))
                 .expect("Call must succeed");
         });
     }
@@ -950,6 +978,9 @@ impl PyNodeIndexGroupOperand {
         self.0.is_int();
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
@@ -964,6 +995,9 @@ impl PyNodeIndexGroupOperand {
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query

@@ -3,7 +3,7 @@ use std::{
     fmt::{Display, Formatter, Result},
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum GraphRecordError {
     IndexError(String),
     KeyError(String),
@@ -16,12 +16,12 @@ pub enum GraphRecordError {
 impl Error for GraphRecordError {
     fn description(&self) -> &str {
         match self {
-            GraphRecordError::IndexError(message) => message,
-            GraphRecordError::KeyError(message) => message,
-            GraphRecordError::ConversionError(message) => message,
-            GraphRecordError::AssertionError(message) => message,
-            GraphRecordError::SchemaError(message) => message,
-            GraphRecordError::QueryError(message) => message,
+            Self::IndexError(message)
+            | Self::KeyError(message)
+            | Self::ConversionError(message)
+            | Self::AssertionError(message)
+            | Self::SchemaError(message)
+            | Self::QueryError(message) => message,
         }
     }
 }

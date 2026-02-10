@@ -4,10 +4,10 @@ mod operation;
 
 use super::edges::EdgeOperand;
 use crate::{
-    errors::GraphRecordResult,
-    graphrecord::querying::{group_by::GroupOperand, BoxedIterator, DeepClone, EvaluateBackward},
-    prelude::NodeIndex,
     GraphRecord,
+    errors::GraphRecordResult,
+    graphrecord::querying::{BoxedIterator, DeepClone, EvaluateBackward, group_by::GroupOperand},
+    prelude::NodeIndex,
 };
 pub use group_by::NodeOperandGroupDiscriminator;
 pub use operand::{
@@ -140,11 +140,11 @@ pub enum BinaryArithmeticKind {
 impl Display for BinaryArithmeticKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BinaryArithmeticKind::Add => write!(f, "add"),
-            BinaryArithmeticKind::Sub => write!(f, "sub"),
-            BinaryArithmeticKind::Mul => write!(f, "mul"),
-            BinaryArithmeticKind::Pow => write!(f, "pow"),
-            BinaryArithmeticKind::Mod => write!(f, "mod"),
+            Self::Add => write!(f, "add"),
+            Self::Sub => write!(f, "sub"),
+            Self::Mul => write!(f, "mul"),
+            Self::Pow => write!(f, "pow"),
+            Self::Mod => write!(f, "mod"),
         }
     }
 }

@@ -13,9 +13,9 @@ pub enum GraphError {
 impl Error for GraphError {
     fn description(&self) -> &str {
         match self {
-            GraphError::IndexError(message) => message,
-            GraphError::AssertionError(message) => message,
-            GraphError::SchemaError(message) => message,
+            Self::IndexError(message)
+            | Self::AssertionError(message)
+            | Self::SchemaError(message) => message,
         }
     }
 }
@@ -23,9 +23,9 @@ impl Error for GraphError {
 impl Display for GraphError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
-            GraphError::IndexError(message) => write!(f, "IndexError: {message}"),
-            GraphError::AssertionError(message) => write!(f, "AssertionError: {message}"),
-            GraphError::SchemaError(message) => write!(f, "SchemaError: {message}"),
+            Self::IndexError(message) => write!(f, "IndexError: {message}"),
+            Self::AssertionError(message) => write!(f, "AssertionError: {message}"),
+            Self::SchemaError(message) => write!(f, "SchemaError: {message}"),
         }
     }
 }
