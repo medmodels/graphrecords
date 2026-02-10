@@ -10,3 +10,6 @@ readme = "../../README.md"
 [dependencies]
 graphrecords-core = { workspace = true }
 graphrecords-utils = { workspace = true }
+
+[lints]
+workspace = true

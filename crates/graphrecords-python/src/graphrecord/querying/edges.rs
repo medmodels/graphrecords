@@ -1,6 +1,6 @@
 use super::{
-    attributes::PyEdgeAttributesTreeOperand, nodes::PyNodeOperand,
     PyGraphRecordAttributeCardinalityWrapper, PyGroupCardinalityWrapper,
+    attributes::PyEdgeAttributesTreeOperand, nodes::PyNodeOperand,
 };
 use crate::graphrecord::{
     attribute::PyGraphRecordAttribute,
@@ -14,22 +14,21 @@ use crate::graphrecord::{
 use graphrecords::core::{
     errors::GraphRecordError,
     graphrecord::{
+        EdgeIndex,
         querying::{
+            DeepClone,
             edges::{
                 self, EdgeIndexComparisonOperand, EdgeIndexOperand, EdgeIndicesComparisonOperand,
                 EdgeIndicesOperand, EdgeOperand,
             },
             group_by::GroupOperand,
             wrapper::Wrapper,
-            DeepClone,
         },
-        EdgeIndex,
     },
 };
 use pyo3::{
-    pyclass, pymethods,
+    Bound, FromPyObject, PyAny, PyResult, pyclass, pymethods,
     types::{PyAnyMethods, PyFunction},
-    Bound, FromPyObject, PyAny, PyResult,
 };
 use std::ops::Deref;
 
@@ -104,24 +103,30 @@ impl PyEdgeOperand {
         self.0.target_node().into()
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
-                    .call1((PyEdgeOperand::from(operand.clone()),))
+                    .call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
             |operand| {
-                or.call1((PyEdgeOperand::from(operand.clone()),))
+                or.call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
-                .call1((PyEdgeOperand::from(operand.clone()),))
+                .call1((Self::from(operand.clone()),))
                 .expect("Call must succeed");
         });
     }
@@ -130,7 +135,7 @@ impl PyEdgeOperand {
         self.0.group_by(discriminator.into()).into()
     }
 
-    pub fn deep_clone(&self) -> PyEdgeOperand {
+    pub fn deep_clone(&self) -> Self {
         self.0.deep_clone().into()
     }
 }
@@ -184,6 +189,9 @@ impl PyEdgeGroupOperand {
         self.0.target_node().into()
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
@@ -198,6 +206,9 @@ impl PyEdgeGroupOperand {
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
@@ -228,17 +239,17 @@ impl From<PyEdgeIndexComparisonOperand> for EdgeIndexComparisonOperand {
 
 impl FromPyObject<'_> for PyEdgeIndexComparisonOperand {
     fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(index) = ob.extract::<EdgeIndex>() {
-            Ok(EdgeIndexComparisonOperand::Index(index).into())
-        } else if let Ok(operand) = ob.extract::<PyEdgeIndexOperand>() {
-            Ok(PyEdgeIndexComparisonOperand(operand.0.into()))
-        } else {
-            Err(
-                PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                    "Failed to convert {ob} into EdgeIndex or EdgeIndexOperand",
-                )))
-                .into(),
-            )
+        match ob.extract::<EdgeIndex>() {
+            Ok(index) => Ok(EdgeIndexComparisonOperand::Index(index).into()),
+            _ => match ob.extract::<PyEdgeIndexOperand>() {
+                Ok(operand) => Ok(Self(operand.0.into())),
+                _ => Err(
+                    PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
+                        "Failed to convert {ob} into EdgeIndex or EdgeIndexOperand",
+                    )))
+                    .into(),
+                ),
+            },
         }
     }
 }
@@ -260,17 +271,17 @@ impl From<PyEdgeIndicesComparisonOperand> for EdgeIndicesComparisonOperand {
 
 impl FromPyObject<'_> for PyEdgeIndicesComparisonOperand {
     fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(indices) = ob.extract::<Vec<EdgeIndex>>() {
-            Ok(EdgeIndicesComparisonOperand::from(indices).into())
-        } else if let Ok(operand) = ob.extract::<PyEdgeIndicesOperand>() {
-            Ok(PyEdgeIndicesComparisonOperand(operand.0.into()))
-        } else {
-            Err(
-                PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                    "Failed to convert {ob} into List[EdgeIndex] or EdgeIndicesOperand",
-                )))
-                .into(),
-            )
+        match ob.extract::<Vec<EdgeIndex>>() {
+            Ok(indices) => Ok(EdgeIndicesComparisonOperand::from(indices).into()),
+            _ => match ob.extract::<PyEdgeIndicesOperand>() {
+                Ok(operand) => Ok(Self(operand.0.into())),
+                _ => Err(
+                    PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
+                        "Failed to convert {ob} into List[EdgeIndex] or EdgeIndicesOperand",
+                    )))
+                    .into(),
+                ),
+            },
         }
     }
 }
@@ -387,36 +398,42 @@ impl PyEdgeIndicesOperand {
     }
 
     pub fn is_max(&mut self) {
-        self.0.is_max()
+        self.0.is_max();
     }
 
     pub fn is_min(&mut self) {
-        self.0.is_min()
+        self.0.is_min();
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
-                    .call1((PyEdgeIndicesOperand::from(operand.clone()),))
+                    .call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
             |operand| {
-                or.call1((PyEdgeIndicesOperand::from(operand.clone()),))
+                or.call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
-                .call1((PyEdgeIndicesOperand::from(operand.clone()),))
+                .call1((Self::from(operand.clone()),))
                 .expect("Call must succeed");
         });
     }
 
-    pub fn deep_clone(&self) -> PyEdgeIndicesOperand {
+    pub fn deep_clone(&self) -> Self {
         self.0.deep_clone().into()
     }
 }
@@ -533,13 +550,16 @@ impl PyEdgeIndicesGroupOperand {
     }
 
     pub fn is_max(&mut self) {
-        self.0.is_max()
+        self.0.is_max();
     }
 
     pub fn is_min(&mut self) {
-        self.0.is_min()
+        self.0.is_min();
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
@@ -554,6 +574,9 @@ impl PyEdgeIndicesGroupOperand {
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
@@ -662,29 +685,35 @@ impl PyEdgeIndexOperand {
         self.0.r#mod(index);
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
-                    .call1((PyEdgeIndexOperand::from(operand.clone()),))
+                    .call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
             |operand| {
-                or.call1((PyEdgeIndexOperand::from(operand.clone()),))
+                or.call1((Self::from(operand.clone()),))
                     .expect("Call must succeed");
             },
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
-                .call1((PyEdgeIndexOperand::from(operand.clone()),))
+                .call1((Self::from(operand.clone()),))
                 .expect("Call must succeed");
         });
     }
 
-    pub fn deep_clone(&self) -> PyEdgeIndexOperand {
+    pub fn deep_clone(&self) -> Self {
         self.0.deep_clone().into()
     }
 }
@@ -780,6 +809,9 @@ impl PyEdgeIndexGroupOperand {
         self.0.r#mod(index);
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
@@ -794,6 +826,9 @@ impl PyEdgeIndexGroupOperand {
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the python typing was not followed.
     pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query

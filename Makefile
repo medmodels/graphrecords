@@ -82,7 +82,7 @@ format: install-dev
 	$(UV_LOC) run ruff check --select I --fix
 	$(UV_LOC) run ruff format
 	cargo fmt
-	cargo clippy --all-features --fix --allow-staged
+	cargo clippy --all-targets --all-features --fix --allow-staged
 
 clean: docs-clean
 ifeq ($(OS),Windows_NT)

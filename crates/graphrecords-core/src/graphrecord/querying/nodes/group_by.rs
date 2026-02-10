@@ -1,15 +1,15 @@
 use super::NodeOperand;
 use crate::{
+    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::querying::{
+        DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
         edges::EdgeOperand,
         group_by::{GroupBy, GroupOperand, GroupedOperand, PartitionGroups, Ungroup},
         nodes::{NodeIndexOperand, NodeIndicesOperand, NodeIndicesOperandContext},
         wrapper::Wrapper,
-        DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
     },
     prelude::GraphRecordAttribute,
-    GraphRecord,
 };
 
 #[derive(Debug, Clone)]
@@ -80,8 +80,7 @@ impl<'a> EvaluateForward<'a> for GroupOperand<NodeOperand> {
                 self.operand
                     .evaluate_forward_grouped(graphrecord, Box::new(partitions))
             }
-            NodeOperandContext::Nodes(_) => unreachable!(),
-            NodeOperandContext::Edges(_) => unreachable!(),
+            _ => unreachable!(),
         }
     }
 }

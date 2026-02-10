@@ -1,7 +1,7 @@
 use crate::graphrecord::querying::{
+    DeepClone,
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
-    DeepClone,
 };
 use graphrecords_utils::traits::ReadWriteOrPanic;
 
@@ -32,7 +32,7 @@ impl<O: GroupedOperand + EitherOr> EitherOr for GroupOperand<O> {
         EQ: FnOnce(&mut Wrapper<Self::QueryOperand>),
         OQ: FnOnce(&mut Wrapper<Self::QueryOperand>),
     {
-        self.operand.either_or(either_query, or_query)
+        self.operand.either_or(either_query, or_query);
     }
 }
 
@@ -60,7 +60,7 @@ impl<O: GroupedOperand + Exclude> Exclude for GroupOperand<O> {
     where
         Q: FnOnce(&mut Wrapper<Self::QueryOperand>),
     {
-        self.operand.exclude(query)
+        self.operand.exclude(query);
     }
 }
 
@@ -71,6 +71,7 @@ pub trait Random {
 }
 
 impl<O: Random> Wrapper<O> {
+    #[must_use]
     pub fn random(&self) -> Wrapper<O::ReturnOperand> {
         self.0.write_or_panic().random()
     }
@@ -103,7 +104,7 @@ impl<O: IsMax> Wrapper<O> {
 
 impl<O: GroupedOperand + IsMax> IsMax for GroupOperand<O> {
     fn is_max(&mut self) {
-        self.operand.is_max()
+        self.operand.is_max();
     }
 }
 
@@ -119,6 +120,6 @@ impl<O: IsMin> Wrapper<O> {
 
 impl<O: GroupedOperand + IsMin> IsMin for GroupOperand<O> {
     fn is_min(&mut self) {
-        self.operand.is_min()
+        self.operand.is_min();
     }
 }

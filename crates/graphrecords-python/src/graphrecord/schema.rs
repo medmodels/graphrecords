@@ -1,22 +1,22 @@
 use super::{
+    PyAttributes, PyGraphRecord, PyGroup, PyNodeIndex,
     attribute::PyGraphRecordAttribute,
     datatype::PyDataType,
     errors::PyGraphRecordError,
     traits::{DeepFrom, DeepInto},
-    PyAttributes, PyGraphRecord, PyGroup, PyNodeIndex,
 };
 use graphrecords::core::{
     errors::GraphError,
     graphrecord::{
-        schema::{AttributeDataType, AttributeType, GroupSchema, Schema, SchemaType},
         EdgeIndex, Group,
+        schema::{AttributeDataType, AttributeType, GroupSchema, Schema, SchemaType},
     },
 };
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
 #[pyclass(eq, eq_int)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PyAttributeType {
     Categorical = 0,
     Continuous = 1,
@@ -88,7 +88,7 @@ impl DeepFrom<AttributeDataType> for PyAttributeDataType {
 impl PyAttributeDataType {
     #[new]
     #[pyo3(signature = (data_type, attribute_type))]
-    pub fn new(data_type: PyDataType, attribute_type: PyAttributeType) -> Self {
+    pub const fn new(data_type: PyDataType, attribute_type: PyAttributeType) -> Self {
         Self {
             data_type,
             attribute_type,
@@ -184,7 +184,7 @@ impl PyGroupSchema {
 }
 
 #[pyclass(eq, eq_int)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PySchemaType {
     Provided = 0,
     Inferred = 1,
@@ -291,7 +291,7 @@ impl PySchema {
             .validate_node(
                 &index.into(),
                 &attributes.deep_into(),
-                group.map(|g| g.into()).as_ref(),
+                group.map(std::convert::Into::into).as_ref(),
             )
             .map_err(PyGraphRecordError::from)?)
     }
@@ -308,7 +308,7 @@ impl PySchema {
             .validate_edge(
                 &index,
                 &attributes.deep_into(),
-                group.map(|g| g.into()).as_ref(),
+                group.map(std::convert::Into::into).as_ref(),
             )
             .map_err(PyGraphRecordError::from)?)
     }
@@ -327,7 +327,7 @@ impl PySchema {
                 &attribute.into(),
                 data_type.into(),
                 attribute_type.into(),
-                group.map(|g| g.into()).as_ref(),
+                group.map(std::convert::Into::into).as_ref(),
             )
             .map_err(PyGraphRecordError::from)?)
     }
@@ -346,7 +346,7 @@ impl PySchema {
                 &attribute.into(),
                 data_type.into(),
                 attribute_type.into(),
-                group.map(|g| g.into()).as_ref(),
+                group.map(std::convert::Into::into).as_ref(),
             )
             .map_err(PyGraphRecordError::from)?)
     }
@@ -365,7 +365,7 @@ impl PySchema {
                 &attribute.into(),
                 data_type.into(),
                 attribute_type.into(),
-                group.map(|g| g.into()).as_ref(),
+                group.map(std::convert::Into::into).as_ref(),
             )
             .map_err(PyGraphRecordError::from)?)
     }
@@ -384,7 +384,7 @@ impl PySchema {
                 &attribute.into(),
                 data_type.into(),
                 attribute_type.into(),
-                group.map(|g| g.into()).as_ref(),
+                group.map(std::convert::Into::into).as_ref(),
             )
             .map_err(PyGraphRecordError::from)?)
     }
@@ -395,8 +395,10 @@ impl PySchema {
         attribute: PyGraphRecordAttribute,
         group: Option<PyGroup>,
     ) {
-        self.0
-            .remove_node_attribute(&attribute.into(), group.map(|g| g.into()).as_ref());
+        self.0.remove_node_attribute(
+            &attribute.into(),
+            group.map(std::convert::Into::into).as_ref(),
+        );
     }
 
     #[pyo3(signature = (attribute, group=None))]
@@ -405,8 +407,10 @@ impl PySchema {
         attribute: PyGraphRecordAttribute,
         group: Option<PyGroup>,
     ) {
-        self.0
-            .remove_edge_attribute(&attribute.into(), group.map(|g| g.into()).as_ref());
+        self.0.remove_edge_attribute(
+            &attribute.into(),
+            group.map(std::convert::Into::into).as_ref(),
+        );
     }
 
     pub fn add_group(&mut self, group: PyGroup, schema: PyGroupSchema) -> PyResult<()> {
@@ -420,11 +424,11 @@ impl PySchema {
         self.0.remove_group(&group.into());
     }
 
-    pub fn freeze(&mut self) {
+    pub const fn freeze(&mut self) {
         self.0.freeze();
     }
 
-    pub fn unfreeze(&mut self) {
+    pub const fn unfreeze(&mut self) {
         self.0.unfreeze();
     }
 }

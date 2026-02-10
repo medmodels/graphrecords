@@ -18,21 +18,21 @@ pub enum DataType {
     Null,
     #[default]
     Any,
-    Union((Box<DataType>, Box<DataType>)),
-    Option(Box<DataType>),
+    Union((Box<Self>, Box<Self>)),
+    Option(Box<Self>),
 }
 
 // TODO: Add tests for Duration
 impl From<GraphRecordValue> for DataType {
     fn from(value: GraphRecordValue) -> Self {
         match value {
-            GraphRecordValue::String(_) => DataType::String,
-            GraphRecordValue::Int(_) => DataType::Int,
-            GraphRecordValue::Float(_) => DataType::Float,
-            GraphRecordValue::Bool(_) => DataType::Bool,
-            GraphRecordValue::DateTime(_) => DataType::DateTime,
-            GraphRecordValue::Duration(_) => DataType::Duration,
-            GraphRecordValue::Null => DataType::Null,
+            GraphRecordValue::String(_) => Self::String,
+            GraphRecordValue::Int(_) => Self::Int,
+            GraphRecordValue::Float(_) => Self::Float,
+            GraphRecordValue::Bool(_) => Self::Bool,
+            GraphRecordValue::DateTime(_) => Self::DateTime,
+            GraphRecordValue::Duration(_) => Self::Duration,
+            GraphRecordValue::Null => Self::Null,
         }
     }
 }
@@ -41,13 +41,13 @@ impl From<GraphRecordValue> for DataType {
 impl From<&GraphRecordValue> for DataType {
     fn from(value: &GraphRecordValue) -> Self {
         match value {
-            GraphRecordValue::String(_) => DataType::String,
-            GraphRecordValue::Int(_) => DataType::Int,
-            GraphRecordValue::Float(_) => DataType::Float,
-            GraphRecordValue::Bool(_) => DataType::Bool,
-            GraphRecordValue::DateTime(_) => DataType::DateTime,
-            GraphRecordValue::Duration(_) => DataType::Duration,
-            GraphRecordValue::Null => DataType::Null,
+            GraphRecordValue::String(_) => Self::String,
+            GraphRecordValue::Int(_) => Self::Int,
+            GraphRecordValue::Float(_) => Self::Float,
+            GraphRecordValue::Bool(_) => Self::Bool,
+            GraphRecordValue::DateTime(_) => Self::DateTime,
+            GraphRecordValue::Duration(_) => Self::Duration,
+            GraphRecordValue::Null => Self::Null,
         }
     }
 }
@@ -55,8 +55,8 @@ impl From<&GraphRecordValue> for DataType {
 impl From<GraphRecordAttribute> for DataType {
     fn from(value: GraphRecordAttribute) -> Self {
         match value {
-            GraphRecordAttribute::String(_) => DataType::String,
-            GraphRecordAttribute::Int(_) => DataType::Int,
+            GraphRecordAttribute::String(_) => Self::String,
+            GraphRecordAttribute::Int(_) => Self::Int,
         }
     }
 }
@@ -64,8 +64,8 @@ impl From<GraphRecordAttribute> for DataType {
 impl From<&GraphRecordAttribute> for DataType {
     fn from(value: &GraphRecordAttribute) -> Self {
         match value {
-            GraphRecordAttribute::String(_) => DataType::String,
-            GraphRecordAttribute::Int(_) => DataType::Int,
+            GraphRecordAttribute::String(_) => Self::String,
+            GraphRecordAttribute::Int(_) => Self::Int,
         }
     }
 }
@@ -73,22 +73,22 @@ impl From<&GraphRecordAttribute> for DataType {
 impl PartialEq for DataType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (DataType::Union(first_union), DataType::Union(second_union)) => {
+            (Self::Union(first_union), Self::Union(second_union)) => {
                 (first_union.0 == second_union.0 && first_union.1 == second_union.1)
                     || (first_union.1 == second_union.0 && first_union.0 == second_union.1)
             }
-            (DataType::Option(first_datatype), DataType::Option(second_datatype)) => {
+            (Self::Option(first_datatype), Self::Option(second_datatype)) => {
                 first_datatype == second_datatype
             }
             _ => matches!(
                 (self, other),
-                (DataType::String, DataType::String)
-                    | (DataType::Int, DataType::Int)
-                    | (DataType::Float, DataType::Float)
-                    | (DataType::Bool, DataType::Bool)
-                    | (DataType::DateTime, DataType::DateTime)
-                    | (DataType::Null, DataType::Null)
-                    | (DataType::Any, DataType::Any)
+                (Self::String, Self::String)
+                    | (Self::Int, Self::Int)
+                    | (Self::Float, Self::Float)
+                    | (Self::Bool, Self::Bool)
+                    | (Self::DateTime, Self::DateTime)
+                    | (Self::Null, Self::Null)
+                    | (Self::Any, Self::Any)
             ),
         }
     }
@@ -98,22 +98,22 @@ impl PartialEq for DataType {
 impl Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DataType::String => write!(f, "String"),
-            DataType::Int => write!(f, "Int"),
-            DataType::Float => write!(f, "Float"),
-            DataType::Bool => write!(f, "Bool"),
-            DataType::DateTime => write!(f, "DateTime"),
-            DataType::Duration => write!(f, "Duration"),
-            DataType::Null => write!(f, "Null"),
-            DataType::Any => write!(f, "Any"),
-            DataType::Union((first_datatype, second_datatype)) => {
+            Self::String => write!(f, "String"),
+            Self::Int => write!(f, "Int"),
+            Self::Float => write!(f, "Float"),
+            Self::Bool => write!(f, "Bool"),
+            Self::DateTime => write!(f, "DateTime"),
+            Self::Duration => write!(f, "Duration"),
+            Self::Null => write!(f, "Null"),
+            Self::Any => write!(f, "Any"),
+            Self::Union((first_datatype, second_datatype)) => {
                 write!(f, "Union[")?;
                 first_datatype.fmt(f)?;
                 write!(f, ", ")?;
                 second_datatype.fmt(f)?;
                 write!(f, "]")
             }
-            DataType::Option(data_type) => {
+            Self::Option(data_type) => {
                 write!(f, "Option[")?;
                 data_type.fmt(f)?;
                 write!(f, "]")
@@ -126,24 +126,22 @@ impl Display for DataType {
 impl DataType {
     pub(crate) fn evaluate(&self, other: &Self) -> bool {
         match (self, other) {
-            (DataType::Union(_), DataType::Union(_)) => self == other,
-            (DataType::Union((first_datatype, second_datatype)), _) => {
+            (Self::Union(_), Self::Union(_)) | (Self::Option(_), Self::Option(_)) => self == other,
+            (Self::Union((first_datatype, second_datatype)), _) => {
                 first_datatype.evaluate(other) || second_datatype.evaluate(other)
             }
-            (DataType::Option(_), DataType::Option(_)) => self == other,
-            (DataType::Option(_), DataType::Null) => true,
-            (DataType::Option(datatype), _) => datatype.evaluate(other),
-            (DataType::Any, _) => true,
+            (Self::Option(_), Self::Null) | (Self::Any, _) => true,
+            (Self::Option(datatype), _) => datatype.evaluate(other),
             _ => matches!(
                 (self, other),
-                (DataType::String, DataType::String)
-                    | (DataType::Int, DataType::Int)
-                    | (DataType::Float, DataType::Float)
-                    | (DataType::Bool, DataType::Bool)
-                    | (DataType::DateTime, DataType::DateTime)
-                    | (DataType::Duration, DataType::Duration)
-                    | (DataType::Null, DataType::Null)
-                    | (DataType::Any, DataType::Any)
+                (Self::String, Self::String)
+                    | (Self::Int, Self::Int)
+                    | (Self::Float, Self::Float)
+                    | (Self::Bool, Self::Bool)
+                    | (Self::DateTime, Self::DateTime)
+                    | (Self::Duration, Self::Duration)
+                    | (Self::Null, Self::Null)
+                    | (Self::Any, Self::Any)
             ),
         }
     }
@@ -198,46 +196,57 @@ impl Mod for EdgeIndex {
 }
 
 pub trait Round {
+    #[must_use]
     fn round(self) -> Self;
 }
 
 pub trait Ceil {
+    #[must_use]
     fn ceil(self) -> Self;
 }
 
 pub trait Floor {
+    #[must_use]
     fn floor(self) -> Self;
 }
 
 pub trait Abs {
+    #[must_use]
     fn abs(self) -> Self;
 }
 
 pub trait Sqrt {
+    #[must_use]
     fn sqrt(self) -> Self;
 }
 
 pub trait Trim {
+    #[must_use]
     fn trim(self) -> Self;
 }
 
 pub trait TrimStart {
+    #[must_use]
     fn trim_start(self) -> Self;
 }
 
 pub trait TrimEnd {
+    #[must_use]
     fn trim_end(self) -> Self;
 }
 
 pub trait Lowercase {
+    #[must_use]
     fn lowercase(self) -> Self;
 }
 
 pub trait Uppercase {
+    #[must_use]
     fn uppercase(self) -> Self;
 }
 
 pub trait Slice {
+    #[must_use]
     fn slice(self, range: Range<usize>) -> Self;
 }
 
@@ -255,7 +264,7 @@ mod test {
     fn test_from_graphrecordvalue() {
         assert_eq!(
             DataType::String,
-            DataType::from(GraphRecordValue::String("".to_string()))
+            DataType::from(GraphRecordValue::String(String::new()))
         );
         assert_eq!(DataType::Int, DataType::from(GraphRecordValue::Int(0)));
         assert_eq!(
@@ -277,7 +286,7 @@ mod test {
     fn test_from_graphrecordvalue_reference() {
         assert_eq!(
             DataType::String,
-            DataType::from(&GraphRecordValue::String("".to_string()))
+            DataType::from(&GraphRecordValue::String(String::new()))
         );
         assert_eq!(DataType::Int, DataType::from(&GraphRecordValue::Int(0)));
         assert_eq!(
@@ -432,8 +441,10 @@ mod test {
                 .evaluate(&DataType::Int)
         );
 
-        assert!(DataType::Option(Box::new(DataType::String))
-            .evaluate(&DataType::Option(Box::new(DataType::String))));
+        assert!(
+            DataType::Option(Box::new(DataType::String))
+                .evaluate(&DataType::Option(Box::new(DataType::String)))
+        );
         assert!(DataType::Option(Box::new(DataType::String)).evaluate(&DataType::Null));
         assert!(DataType::Option(Box::new(DataType::String)).evaluate(&DataType::String));
 
@@ -487,7 +498,9 @@ mod test {
             )
         );
 
-        assert!(!DataType::Option(Box::new(DataType::String))
-            .evaluate(&DataType::Option(Box::new(DataType::Int))));
+        assert!(
+            !DataType::Option(Box::new(DataType::String))
+                .evaluate(&DataType::Option(Box::new(DataType::Int)))
+        );
     }
 }

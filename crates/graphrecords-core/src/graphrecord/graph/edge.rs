@@ -9,7 +9,7 @@ pub struct Edge {
 }
 
 impl Edge {
-    pub fn new(
+    pub const fn new(
         attributes: Attributes,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,

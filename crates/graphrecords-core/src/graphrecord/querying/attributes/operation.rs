@@ -1,31 +1,31 @@
 use super::{
+    AttributesTreeOperand, BinaryArithmeticKind, GetAttributes, MultipleComparisonKind,
+    SingleComparisonKind, SingleKindWithIndex, UnaryArithmeticKind,
     operand::{
         MultipleAttributesComparisonOperand, MultipleAttributesWithIndexOperand,
         SingleAttributeComparisonOperand, SingleAttributeWithIndexOperand,
     },
-    AttributesTreeOperand, BinaryArithmeticKind, GetAttributes, MultipleComparisonKind,
-    SingleComparisonKind, SingleKindWithIndex, UnaryArithmeticKind,
 };
 use crate::{
+    GraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
+        GraphRecordAttribute, GraphRecordValue, Wrapper,
         datatypes::{
             Abs, Contains, DataType, EndsWith, Lowercase, Mod, Pow, Slice, StartsWith, Trim,
             TrimEnd, TrimStart, Uppercase,
         },
         querying::{
+            BoxedIterator, DeepClone, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
+            RootOperand,
             attributes::{
-                operand::SingleAttributeWithoutIndexOperand, MultipleAttributesWithIndexContext,
-                MultipleAttributesWithoutIndexOperand, MultipleKind, SingleKindWithoutIndex,
+                MultipleAttributesWithIndexContext, MultipleAttributesWithoutIndexOperand,
+                MultipleKind, SingleKindWithoutIndex, operand::SingleAttributeWithoutIndexOperand,
             },
             tee_grouped_iterator,
             values::MultipleValuesWithIndexOperand,
-            BoxedIterator, DeepClone, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
-            RootOperand,
         },
-        GraphRecordAttribute, GraphRecordValue, Wrapper,
     },
-    GraphRecord,
 };
 use graphrecords_utils::{
     aliases::{MrHashMap, MrHashSet},
@@ -185,7 +185,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         Ok(attributes.map(|(index, attributes)| {
             let mut attributes = attributes.into_iter();
 
-            let first_attribute = attributes.next().ok_or(GraphRecordError::QueryError(
+            let first_attribute = attributes.next().ok_or_else(|| GraphRecordError::QueryError(
                 "No attributes to compare".to_string(),
             ))?;
 
@@ -218,7 +218,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         Ok(attributes.map(|(index, attributes)| {
             let mut attributes = attributes.into_iter();
 
-            let first_attribute = attributes.next().ok_or(GraphRecordError::QueryError(
+            let first_attribute = attributes.next().ok_or_else(|| GraphRecordError::QueryError(
                 "No attributes to compare".to_string(),
             ))?;
 
@@ -244,12 +244,12 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     #[inline]
     pub(crate) fn get_count<'a>(
         attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>>
+    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>
     where
         O: 'a,
     {
-        Ok(attributes
-            .map(|(index, attribute)| (index, GraphRecordAttribute::Int(attribute.len() as i64))))
+        attributes
+            .map(|(index, attribute)| (index, GraphRecordAttribute::Int(attribute.len() as i64)))
     }
 
     #[inline]
@@ -262,7 +262,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         Ok(attributes.map(|(index, attributes)| {
             let mut attributes = attributes.into_iter();
 
-            let first_attribute = attributes.next().ok_or(GraphRecordError::QueryError(
+            let first_attribute = attributes.next().ok_or_else(||GraphRecordError::QueryError(
                 "No attributes to compare".to_string(),
             ))?;
 
@@ -290,9 +290,10 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     {
         Ok(attributes
             .map(|(index, attributes)| {
-                let first_attribute = attributes.into_iter().choose(&mut rng()).ok_or(
-                    GraphRecordError::QueryError("No attributes to compare".to_string()),
-                )?;
+                let first_attribute =
+                    attributes.into_iter().choose(&mut rng()).ok_or_else(|| {
+                        GraphRecordError::QueryError("No attributes to compare".to_string())
+                    })?;
 
                 Ok((index, first_attribute))
             })
@@ -301,13 +302,16 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     }
 
     #[inline]
-    fn evaluate_attributes_operation<'a>(
+    fn evaluate_attributes_operation<'a, T>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a,
+        attributes: T,
         operand: &Wrapper<MultipleAttributesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a>
+    ) -> GraphRecordResult<
+        impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a + use<'a, O, T>,
+    >
     where
         O: 'a,
+        T: Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a,
     {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
@@ -320,13 +324,11 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         };
 
         let multiple_operand_attributes: BoxedIterator<_> = match kind {
-            MultipleKind::Max => Box::new(AttributesTreeOperation::<O>::get_max(attributes_1)?),
-            MultipleKind::Min => Box::new(AttributesTreeOperation::<O>::get_min(attributes_1)?),
-            MultipleKind::Count => Box::new(AttributesTreeOperation::<O>::get_count(attributes_1)?),
-            MultipleKind::Sum => Box::new(AttributesTreeOperation::<O>::get_sum(attributes_1)?),
-            MultipleKind::Random => {
-                Box::new(AttributesTreeOperation::<O>::get_random(attributes_1)?)
-            }
+            MultipleKind::Max => Box::new(Self::get_max(attributes_1)?),
+            MultipleKind::Min => Box::new(Self::get_min(attributes_1)?),
+            MultipleKind::Count => Box::new(Self::get_count(attributes_1)),
+            MultipleKind::Sum => Box::new(Self::get_sum(attributes_1)?),
+            MultipleKind::Random => Box::new(Self::get_random(attributes_1)?),
         };
 
         let result = operand.evaluate_forward(graphrecord, multiple_operand_attributes)?;
@@ -344,9 +346,9 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         comparison_operand: &SingleAttributeComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>> {
-        let comparison_attribute = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No attribute to compare".to_string()),
-        )?;
+        let comparison_attribute = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         match kind {
             SingleComparisonKind::GreaterThan => {
@@ -493,12 +495,9 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         operand: &SingleAttributeComparisonOperand,
         kind: &BinaryArithmeticKind,
     ) -> GraphRecordResult<BoxedIterator<'a, (I, Vec<GraphRecordAttribute>)>> {
-        let arithmetic_attribute =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No attribute to compare".to_string(),
-                ))?;
+        let arithmetic_attribute = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         let attributes: Box<
             dyn Iterator<Item = GraphRecordResult<(I, Vec<GraphRecordAttribute>)>>,
@@ -759,7 +758,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     {
         Ok(match self {
             Self::AttributesOperation { operand } => {
-                Self::evaluate_attributes_operation_grouped(self, graphrecord, attributes, operand)?
+                Self::evaluate_attributes_operation_grouped(graphrecord, attributes, operand)?
             }
             Self::SingleAttributeComparisonOperation { operand, kind } => Box::new(
                 attributes
@@ -897,7 +896,6 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[allow(clippy::type_complexity)]
     pub(crate) fn evaluate_attributes_operation_grouped<'a>(
-        &self,
         graphrecord: &'a GraphRecord,
         attributes: GroupedIterator<
             'a,
@@ -924,21 +922,11 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         let attributes_1: Vec<_> = attributes_1
             .map(|(key, attributes)| {
                 let attributes: BoxedIterator<_> = match kind {
-                    MultipleKind::Max => {
-                        Box::new(AttributesTreeOperation::<O>::get_max(attributes)?)
-                    }
-                    MultipleKind::Min => {
-                        Box::new(AttributesTreeOperation::<O>::get_min(attributes)?)
-                    }
-                    MultipleKind::Count => {
-                        Box::new(AttributesTreeOperation::<O>::get_count(attributes)?)
-                    }
-                    MultipleKind::Sum => {
-                        Box::new(AttributesTreeOperation::<O>::get_sum(attributes)?)
-                    }
-                    MultipleKind::Random => {
-                        Box::new(AttributesTreeOperation::<O>::get_random(attributes)?)
-                    }
+                    MultipleKind::Max => Box::new(Self::get_max(attributes)?),
+                    MultipleKind::Min => Box::new(Self::get_min(attributes)?),
+                    MultipleKind::Count => Box::new(Self::get_count(attributes)),
+                    MultipleKind::Sum => Box::new(Self::get_sum(attributes)?),
+                    MultipleKind::Random => Box::new(Self::get_random(attributes)?),
                 };
 
                 Ok((key, attributes))
@@ -1302,15 +1290,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
         let kind = &operand.0.read_or_panic().kind;
 
         let attribute = match kind {
-            SingleKindWithIndex::Max => {
-                MultipleAttributesWithIndexOperation::<O>::get_max(attributes_1)?
-            }
-            SingleKindWithIndex::Min => {
-                MultipleAttributesWithIndexOperation::<O>::get_min(attributes_1)?
-            }
-            SingleKindWithIndex::Random => {
-                MultipleAttributesWithIndexOperation::<O>::get_random(attributes_1)
-            }
+            SingleKindWithIndex::Max => Self::get_max(attributes_1)?,
+            SingleKindWithIndex::Min => Self::get_min(attributes_1)?,
+            SingleKindWithIndex::Random => Self::get_random(attributes_1),
         };
 
         Ok(match operand.evaluate_forward(graphrecord, attribute)? {
@@ -1364,9 +1346,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
         comparison_operand: &SingleAttributeComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>> {
-        let comparison_attribute = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No attribute to compare".to_string()),
-        )?;
+        let comparison_attribute = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         match kind {
             SingleComparisonKind::GreaterThan => {
@@ -1441,21 +1423,19 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_binary_arithmetic_operation<'a>(
+    fn evaluate_binary_arithmetic_operation<'a, T>(
         graphrecord: &GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
+        attributes: T,
         operand: &SingleAttributeComparisonOperand,
         kind: &BinaryArithmeticKind,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>>
+    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + use<'a, O, T>>
     where
         O: 'a,
+        T: Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
     {
-        let arithmetic_attribute =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No attribute to compare".to_string(),
-                ))?;
+        let arithmetic_attribute = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         let attributes = attributes
             .map(move |(t, attribute)| {
@@ -1463,13 +1443,13 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
                     BinaryArithmeticKind::Add => attribute.add(arithmetic_attribute.clone()),
                     BinaryArithmeticKind::Sub => attribute.sub(arithmetic_attribute.clone()),
                     BinaryArithmeticKind::Mul => {
-                        attribute.clone().mul(arithmetic_attribute.clone())
+                        attribute.mul(arithmetic_attribute.clone())
                     }
                     BinaryArithmeticKind::Pow => {
-                        attribute.clone().pow(arithmetic_attribute.clone())
+                        attribute.pow(arithmetic_attribute.clone())
                     }
                     BinaryArithmeticKind::Mod => {
-                        attribute.clone().r#mod(arithmetic_attribute.clone())
+                        attribute.r#mod(arithmetic_attribute.clone())
                     }
                 }
                 .map_err(|_| {
@@ -1514,11 +1494,14 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     {
         Ok(attributes
             .map(|(index, attribute)| {
-                let value = index.get_attributes(graphrecord)?.get(&attribute).ok_or(
-                    GraphRecordError::QueryError(format!(
-                        "Cannot find attribute {attribute} for index {index}"
-                    )),
-                )?;
+                let value = index
+                    .get_attributes(graphrecord)?
+                    .get(&attribute)
+                    .ok_or_else(|| {
+                        GraphRecordError::QueryError(format!(
+                            "Cannot find attribute {attribute} for index {index}"
+                        ))
+                    })?;
 
                 Ok((index, value.clone()))
             })
@@ -1527,13 +1510,16 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_to_values<'a>(
+    fn evaluate_to_values<'a, T>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
+        attributes: T,
         operand: &Wrapper<MultipleValuesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a>
+    ) -> GraphRecordResult<
+        impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a + use<'a, O, T>,
+    >
     where
         O: 'a,
+        T: Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
     {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
@@ -1852,15 +1838,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
         let attributes_1: Vec<_> = attributes_1
             .map(|(key, attributes)| {
                 let attribute = match kind {
-                    SingleKindWithIndex::Max => {
-                        MultipleAttributesWithIndexOperation::<O>::get_max(attributes)?
-                    }
-                    SingleKindWithIndex::Min => {
-                        MultipleAttributesWithIndexOperation::<O>::get_min(attributes)?
-                    }
-                    SingleKindWithIndex::Random => {
-                        MultipleAttributesWithIndexOperation::<O>::get_random(attributes)
-                    }
+                    SingleKindWithIndex::Max => Self::get_max(attributes)?,
+                    SingleKindWithIndex::Min => Self::get_min(attributes)?,
+                    SingleKindWithIndex::Random => Self::get_random(attributes),
                 };
 
                 Ok((key, attribute))
@@ -2347,9 +2327,9 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
         comparison_operand: &SingleAttributeComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<BoxedIterator<'a, GraphRecordAttribute>> {
-        let comparison_attribute = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No attribute to compare".to_string()),
-        )?;
+        let comparison_attribute = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         match kind {
             SingleComparisonKind::GreaterThan => {
@@ -2424,21 +2404,19 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_binary_arithmetic_operation<'a>(
+    fn evaluate_binary_arithmetic_operation<'a, T>(
         graphrecord: &GraphRecord,
-        attributes: impl Iterator<Item = GraphRecordAttribute>,
+        attributes: T,
         operand: &SingleAttributeComparisonOperand,
         kind: &BinaryArithmeticKind,
-    ) -> GraphRecordResult<impl Iterator<Item = GraphRecordAttribute>>
+    ) -> GraphRecordResult<impl Iterator<Item = GraphRecordAttribute> + use<O, T>>
     where
         O: 'a,
+        T: Iterator<Item = GraphRecordAttribute>,
     {
-        let arithmetic_attribute =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No attribute to compare".to_string(),
-                ))?;
+        let arithmetic_attribute = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         let attributes = attributes
             .map(move |attribute| {
@@ -2446,13 +2424,13 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
                     BinaryArithmeticKind::Add => attribute.add(arithmetic_attribute.clone()),
                     BinaryArithmeticKind::Sub => attribute.sub(arithmetic_attribute.clone()),
                     BinaryArithmeticKind::Mul => {
-                        attribute.clone().mul(arithmetic_attribute.clone())
+                        attribute.mul(arithmetic_attribute.clone())
                     }
                     BinaryArithmeticKind::Pow => {
-                        attribute.clone().pow(arithmetic_attribute.clone())
+                        attribute.pow(arithmetic_attribute.clone())
                     }
                     BinaryArithmeticKind::Mod => {
-                        attribute.clone().r#mod(arithmetic_attribute.clone())
+                        attribute.r#mod(arithmetic_attribute.clone())
                     }
                 }
                 .map_err(|_| {
@@ -2468,12 +2446,13 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_unary_arithmetic_operation<'a>(
-        attributes: impl Iterator<Item = GraphRecordAttribute>,
+    fn evaluate_unary_arithmetic_operation<'a, T>(
+        attributes: T,
         kind: UnaryArithmeticKind,
-    ) -> impl Iterator<Item = GraphRecordAttribute>
+    ) -> impl Iterator<Item = GraphRecordAttribute> + use<O, T>
     where
         O: 'a,
+        T: Iterator<Item = GraphRecordAttribute>,
     {
         attributes.map(move |attribute| match kind {
             UnaryArithmeticKind::Abs => attribute.abs(),
@@ -2511,7 +2490,7 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
         Ok(Box::new(
             either_attributes
                 .chain(or_attributes)
-                .unique_by(|attribute| attribute.clone()),
+                .unique_by(std::clone::Clone::clone),
         ))
     }
 
@@ -2667,9 +2646,9 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
         comparison_operand: &SingleAttributeComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordAttribute)>> {
-        let comparison_attribute = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No attribute to compare".to_string()),
-        )?;
+        let comparison_attribute = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         let comparison_result = match kind {
             SingleComparisonKind::GreaterThan => attribute.1 > comparison_attribute,
@@ -2718,12 +2697,9 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
         operand: &SingleAttributeComparisonOperand,
         kind: &BinaryArithmeticKind,
     ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordAttribute)>> {
-        let arithmetic_attribute =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No attribute to compare".to_string(),
-                ))?;
+        let arithmetic_attribute = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         Ok(Some(match kind {
             BinaryArithmeticKind::Add => (attribute.0, attribute.1.add(arithmetic_attribute)?),
@@ -2763,7 +2739,7 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     ) -> Option<(&O::Index, GraphRecordAttribute)> {
         match attribute.1 {
             GraphRecordAttribute::String(_) => Some(attribute),
-            _ => None,
+            GraphRecordAttribute::Int(_) => None,
         }
     }
 
@@ -2773,7 +2749,7 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     ) -> Option<(&O::Index, GraphRecordAttribute)> {
         match attribute.1 {
             GraphRecordAttribute::Int(_) => Some(attribute),
-            _ => None,
+            GraphRecordAttribute::String(_) => None,
         }
     }
 
@@ -3141,9 +3117,9 @@ impl<O: RootOperand> SingleAttributeWithoutIndexOperation<O> {
         comparison_operand: &SingleAttributeComparisonOperand,
         kind: &SingleComparisonKind,
     ) -> GraphRecordResult<Option<GraphRecordAttribute>> {
-        let comparison_attribute = comparison_operand.evaluate_backward(graphrecord)?.ok_or(
-            GraphRecordError::QueryError("No attribute to compare".to_string()),
-        )?;
+        let comparison_attribute = comparison_operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         let comparison_result = match kind {
             SingleComparisonKind::GreaterThan => attribute > comparison_attribute,
@@ -3192,12 +3168,9 @@ impl<O: RootOperand> SingleAttributeWithoutIndexOperation<O> {
         operand: &SingleAttributeComparisonOperand,
         kind: &BinaryArithmeticKind,
     ) -> GraphRecordResult<Option<GraphRecordAttribute>> {
-        let arithmetic_attribute =
-            operand
-                .evaluate_backward(graphrecord)?
-                .ok_or(GraphRecordError::QueryError(
-                    "No attribute to compare".to_string(),
-                ))?;
+        let arithmetic_attribute = operand
+            .evaluate_backward(graphrecord)?
+            .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         Ok(Some(match kind {
             BinaryArithmeticKind::Add => attribute.add(arithmetic_attribute)?,
@@ -3235,7 +3208,7 @@ impl<O: RootOperand> SingleAttributeWithoutIndexOperation<O> {
     fn evaluate_is_string(attribute: GraphRecordAttribute) -> Option<GraphRecordAttribute> {
         match attribute {
             GraphRecordAttribute::String(_) => Some(attribute),
-            _ => None,
+            GraphRecordAttribute::Int(_) => None,
         }
     }
 
@@ -3243,7 +3216,7 @@ impl<O: RootOperand> SingleAttributeWithoutIndexOperation<O> {
     fn evaluate_is_int(attribute: GraphRecordAttribute) -> Option<GraphRecordAttribute> {
         match attribute {
             GraphRecordAttribute::Int(_) => Some(attribute),
-            _ => None,
+            GraphRecordAttribute::String(_) => None,
         }
     }
 

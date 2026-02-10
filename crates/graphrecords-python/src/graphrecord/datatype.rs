@@ -1,16 +1,16 @@
 #![allow(clippy::new_without_default)]
 
-use super::{traits::DeepFrom, Lut};
+use super::{Lut, traits::DeepFrom};
 use crate::{gil_hash_map::GILHashMap, graphrecord::errors::PyGraphRecordError};
 use graphrecords::core::{errors::GraphRecordError, graphrecord::datatypes::DataType};
-use pyo3::{prelude::*, IntoPyObjectExt};
+use pyo3::{IntoPyObjectExt, prelude::*};
 
 macro_rules! implement_pymethods {
     ($struct:ty) => {
         #[pymethods]
         impl $struct {
             #[new]
-            pub fn new() -> Self {
+            pub const fn new() -> Self {
                 Self {}
             }
         }
@@ -47,36 +47,37 @@ impl DeepFrom<DataType> for PyDataType {
 
 static DATATYPE_CONVERSION_LUT: Lut<DataType> = GILHashMap::new();
 
+#[allow(clippy::unnecessary_wraps)]
 pub(crate) fn convert_pyobject_to_datatype(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
-    fn convert_string(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_string(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::String)
     }
 
-    fn convert_int(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_int(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Int)
     }
 
-    fn convert_float(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_float(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Float)
     }
 
-    fn convert_bool(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_bool(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Bool)
     }
 
-    fn convert_datetime(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_datetime(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::DateTime)
     }
 
-    fn convert_duration(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_duration(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Duration)
     }
 
-    fn convert_null(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_null(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Null)
     }
 
-    fn convert_any(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_any(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Any)
     }
 
@@ -212,18 +213,18 @@ pub struct PyUnion((PyDataType, PyDataType));
 #[pymethods]
 impl PyUnion {
     #[new]
-    fn new(dtype1: PyDataType, dtype2: PyDataType) -> Self {
+    const fn new(dtype1: PyDataType, dtype2: PyDataType) -> Self {
         Self((dtype1, dtype2))
     }
 
     #[getter]
     fn dtype1(&self) -> PyDataType {
-        self.0 .0.clone()
+        self.0.0.clone()
     }
 
     #[getter]
     fn dtype2(&self) -> PyDataType {
-        self.0 .1.clone()
+        self.0.1.clone()
     }
 }
 
@@ -233,7 +234,7 @@ pub struct PyOption(PyDataType);
 #[pymethods]
 impl PyOption {
     #[new]
-    fn new(dtype: PyDataType) -> Self {
+    const fn new(dtype: PyDataType) -> Self {
         Self(dtype)
     }
 

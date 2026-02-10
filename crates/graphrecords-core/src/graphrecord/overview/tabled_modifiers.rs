@@ -15,7 +15,7 @@ pub struct MergeDuplicatesVerticalByColumn {
 }
 
 impl MergeDuplicatesVerticalByColumn {
-    pub fn new(columns: Vec<usize>) -> Self {
+    pub const fn new(columns: Vec<usize>) -> Self {
         Self { columns }
     }
 }
@@ -57,7 +57,9 @@ where
                     }
 
                     repeat_length = 1;
-                    repeat_value = records.get_text((row, column).into()).to_owned();
+                    records
+                        .get_text((row, column).into())
+                        .clone_into(&mut repeat_value);
                     repeat_is_set = true;
                     continue;
                 }
@@ -86,7 +88,9 @@ where
                 }
 
                 repeat_length = 1;
-                repeat_value = records.get_text((row, column).into()).to_owned();
+                records
+                    .get_text((row, column).into())
+                    .clone_into(&mut repeat_value);
             }
 
             if repeat_length > 1 {
