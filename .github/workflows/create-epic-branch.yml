@@ -2,12 +2,17 @@ name: Link Epic Branch
 
 on:
   issues:
-    types: [opened]
+    types: [opened, labeled]
 
 jobs:
   link-epic-branch:
     runs-on: ubuntu-latest
-    if: contains(github.event.issue.labels.*.name, 'epic')
+    permissions:
+      contents: write
+      issues: write
+    if: >-
+      github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'epic')
+      || github.event.action == 'labeled' && github.event.label.name == 'epic'
 
     steps:
       - name: Checkout repository
@@ -26,8 +31,10 @@ jobs:
           # Construct branch name
           BRANCH_NAME="epic/${ISSUE_NUMBER}-${KEBAB_TITLE}"
 
-          # Link the branch to the issue
-          gh issue develop $ISSUE_NUMBER --name "$BRANCH_NAME"
+          if gh api "repos/${{ github.repository }}/git/ref/heads/${BRANCH_NAME}" > /dev/null 2>&1; then
+            echo "Branch $BRANCH_NAME already exists"
+            exit 0
+          fi
 
-          # Add comment to the issue with the branch information
+          gh issue develop $ISSUE_NUMBER --name "$BRANCH_NAME"
           gh issue comment $ISSUE_NUMBER --body "Linked development branch for this epic: \`$BRANCH_NAME\`"

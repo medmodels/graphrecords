@@ -163,7 +163,7 @@ from graphrecords.schema import Schema, GroupSchema
 from graphrecords.datatype import Int, String
 
 schema = Schema(
-    groups={"users": GroupSchema(nodes={"age": Int, "name": String})}
+    groups={"users": GroupSchema(nodes={"age": Int(), "name": String()})}
 )
 
 record = gr.GraphRecord.builder().with_schema(schema).build()
