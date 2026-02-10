@@ -1,21 +1,25 @@
-name: Add to Project Board
+name: Project Board Automation
 
 on:
   issues:
     types: [labeled]
+  create:
 
 jobs:
   add-to-project:
-    if: github.event.label.name == 'accepted'
+    if: >-
+      github.event_name == 'issues'
+      && github.event.label.name == 'accepted'
+      && !contains(github.event.issue.labels.*.name, 'epic-task')
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
-
     steps:
-      - name: Get project metadata
-        id: project
-        run: |
-          gh api graphql -f query='
+      - name: Add to project and set status
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            const { organization } = await github.graphql(
+              `
             query($org: String!, $number: Int!) {
               organization(login: $org) {
                 projectV2(number: $number) {
@@ -29,41 +33,31 @@ jobs:
                 }
               }
             }
-          ' -F org="medmodels" -F number=1 > project.json
+            `,
+              { org: "medmodels", number: 1 },
+            );
 
-          echo "project_id=$(jq -r '.data.organization.projectV2.id' project.json)" >> $GITHUB_OUTPUT
-          echo "field_id=$(jq -r '.data.organization.projectV2.field.id' project.json)" >> $GITHUB_OUTPUT
-          echo "backlog_id=$(jq -r '.data.organization.projectV2.field.options[] | select(.name == "Backlog") | .id' project.json)" >> $GITHUB_OUTPUT
-          echo "ready_id=$(jq -r '.data.organization.projectV2.field.options[] | select(.name == "Ready") | .id' project.json)" >> $GITHUB_OUTPUT
+            const project = organization.projectV2;
+            const field = project.field;
 
-      - name: Add issue to project
-        id: add
-        run: |
-          ITEM_ID=$(gh api graphql -f query='
+            const { addProjectV2ItemById } = await github.graphql(
+              `
             mutation($project: ID!, $issue: ID!) {
               addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
                 item { id }
               }
             }
-          ' -f project="${{ steps.project.outputs.project_id }}" \
-            -f issue="${{ github.event.issue.node_id }}" \
-            --jq '.data.addProjectV2ItemById.item.id')
+            `,
+              { project: project.id, issue: "${{ github.event.issue.node_id }}" },
+            );
 
-          echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
+            const labels = ${{ toJson(github.event.issue.labels.*.name) }};
+            const hasPriority = labels.some((l) => l.startsWith("p-"));
+            const statusName = hasPriority ? "Ready" : "Backlog";
+            const statusId = field.options.find((o) => o.name === statusName).id;
 
-      - name: Set status
-        run: |
-          LABELS='${{ toJson(github.event.issue.labels.*.name) }}'
-          STATUS_ID="${{ steps.project.outputs.backlog_id }}"
-
-          for label in p-low p-medium p-high p-critical; do
-            if echo "$LABELS" | jq -e "index(\"$label\")" > /dev/null 2>&1; then
-              STATUS_ID="${{ steps.project.outputs.ready_id }}"
-              break
-            fi
-          done
-
-          gh api graphql -f query='
+            await github.graphql(
+              `
             mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
               updateProjectV2ItemFieldValue(input: {
                 projectId: $project
@@ -74,7 +68,196 @@ jobs:
                 projectV2Item { id }
               }
             }
-          ' -f project="${{ steps.project.outputs.project_id }}" \
-            -f item="${{ steps.add.outputs.item_id }}" \
-            -f field="${{ steps.project.outputs.field_id }}" \
-            -f value="$STATUS_ID"
+            `,
+              {
+                project: project.id,
+                item: addProjectV2ItemById.item.id,
+                field: field.id,
+                value: statusId,
+              },
+            );
+
+  promote-to-ready:
+    if: contains(fromJson('["p-low","p-medium","p-high","p-critical"]'), github.event.label.name)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Move to Ready
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            const { node } = await github.graphql(
+              `
+              query($issueId: ID!) {
+                node(id: $issueId) {
+                  ... on Issue {
+                    projectItems(first: 10) {
+                      nodes {
+                        id
+                        project { number }
+                        fieldValueByName(name: "Status") {
+                          ... on ProjectV2ItemFieldSingleSelectValue {
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              `,
+              { issueId: "${{ github.event.issue.node_id }}" },
+            );
+
+            const item = node.projectItems.nodes.find(
+              (n) => n.project.number === 1 && n.fieldValueByName?.name === "Backlog",
+            );
+            if (!item) return;
+
+            const { organization } = await github.graphql(
+              `
+              query($org: String!, $number: Int!) {
+                organization(login: $org) {
+                  projectV2(number: $number) {
+                    id
+                    field(name: "Status") {
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        options { id name }
+                      }
+                    }
+                  }
+                }
+              }
+              `,
+              { org: "medmodels", number: 1 },
+            );
+
+            const project = organization.projectV2;
+            const field = project.field;
+            const readyId = field.options.find((o) => o.name === "Ready").id;
+
+            await github.graphql(
+              `
+              mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $project
+                  itemId: $item
+                  fieldId: $field
+                  value: {singleSelectOptionId: $value}
+                }) {
+                  projectV2Item { id }
+                }
+              }
+              `,
+              {
+                project: project.id,
+                item: item.id,
+                field: field.id,
+                value: readyId,
+              },
+            );
+
+  move-to-in-progress:
+    if: github.event_name == 'create' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve issue from branch name
+        uses: actions/github-script@v7
+        id: issue
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const ref = context.payload.ref;
+            const suffix = ref.includes("/") ? ref.split("/").pop() : ref;
+            const match = suffix.match(/^(\d+)/);
+            if (!match) return;
+
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt(match[1]),
+            });
+
+            const labels = issue.labels.map((l) => l.name);
+            if (labels.includes("epic") || labels.includes("epic-task")) return;
+
+            core.setOutput("node_id", issue.node_id);
+
+      - name: Move to In Progress
+        if: steps.issue.outputs.node_id
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            const { node } = await github.graphql(
+              `
+              query($issueId: ID!) {
+                node(id: $issueId) {
+                  ... on Issue {
+                    projectItems(first: 10) {
+                      nodes {
+                        id
+                        project { number }
+                        fieldValueByName(name: "Status") {
+                          ... on ProjectV2ItemFieldSingleSelectValue {
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              `,
+              { issueId: "${{ steps.issue.outputs.node_id }}" },
+            );
+
+            const item = node.projectItems.nodes.find(
+              (n) =>
+                n.project.number === 1 &&
+                (n.fieldValueByName?.name === "Backlog" ||
+                  n.fieldValueByName?.name === "Ready"),
+            );
+            if (!item) return;
+
+            const { organization } = await github.graphql(
+              `
+              query($org: String!, $number: Int!) {
+                organization(login: $org) {
+                  projectV2(number: $number) {
+                    id
+                    field(name: "Status") {
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        options { id name }
+                      }
+                    }
+                  }
+                }
+              }
+              `,
+              { org: "medmodels", number: 1 },
+            );
+
+            const project = organization.projectV2;
+            const field = project.field;
+            const inProgressId = field.options.find((o) => o.name === "In Progress").id;
+
+            await github.graphql(
+              `
+              mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $project
+                  itemId: $item
+                  fieldId: $field
+                  value: {singleSelectOptionId: $value}
+                }) {
+                  projectV2Item { id }
+                }
+              }
+              `,
+              { project: project.id, item: item.id, field: field.id, value: inProgressId },
+            );
