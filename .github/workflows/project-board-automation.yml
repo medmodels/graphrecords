@@ -1,0 +1,80 @@
+name: Add to Project Board
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  add-to-project:
+    if: github.event.label.name == 'accepted'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+
+    steps:
+      - name: Get project metadata
+        id: project
+        run: |
+          gh api graphql -f query='
+            query($org: String!, $number: Int!) {
+              organization(login: $org) {
+                projectV2(number: $number) {
+                  id
+                  field(name: "Status") {
+                    ... on ProjectV2SingleSelectField {
+                      id
+                      options { id name }
+                    }
+                  }
+                }
+              }
+            }
+          ' -F org="medmodels" -F number=1 > project.json
+
+          echo "project_id=$(jq -r '.data.organization.projectV2.id' project.json)" >> $GITHUB_OUTPUT
+          echo "field_id=$(jq -r '.data.organization.projectV2.field.id' project.json)" >> $GITHUB_OUTPUT
+          echo "backlog_id=$(jq -r '.data.organization.projectV2.field.options[] | select(.name == "Backlog") | .id' project.json)" >> $GITHUB_OUTPUT
+          echo "ready_id=$(jq -r '.data.organization.projectV2.field.options[] | select(.name == "Ready") | .id' project.json)" >> $GITHUB_OUTPUT
+
+      - name: Add issue to project
+        id: add
+        run: |
+          ITEM_ID=$(gh api graphql -f query='
+            mutation($project: ID!, $issue: ID!) {
+              addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
+                item { id }
+              }
+            }
+          ' -f project="${{ steps.project.outputs.project_id }}" \
+            -f issue="${{ github.event.issue.node_id }}" \
+            --jq '.data.addProjectV2ItemById.item.id')
+
+          echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
+
+      - name: Set status
+        run: |
+          LABELS='${{ toJson(github.event.issue.labels.*.name) }}'
+          STATUS_ID="${{ steps.project.outputs.backlog_id }}"
+
+          for label in p-low p-medium p-high p-critical; do
+            if echo "$LABELS" | jq -e "index(\"$label\")" > /dev/null 2>&1; then
+              STATUS_ID="${{ steps.project.outputs.ready_id }}"
+              break
+            fi
+          done
+
+          gh api graphql -f query='
+            mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $project
+                itemId: $item
+                fieldId: $field
+                value: {singleSelectOptionId: $value}
+              }) {
+                projectV2Item { id }
+              }
+            }
+          ' -f project="${{ steps.project.outputs.project_id }}" \
+            -f item="${{ steps.add.outputs.item_id }}" \
+            -f field="${{ steps.project.outputs.field_id }}" \
+            -f value="$STATUS_ID"
