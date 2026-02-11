@@ -1,4 +1,4 @@
-use graphrecords::utils::aliases::MrHashMap;
+use graphrecords_utils::aliases::MrHashMap;
 use std::{
     collections::HashMap,
     hash::{BuildHasher, Hash},

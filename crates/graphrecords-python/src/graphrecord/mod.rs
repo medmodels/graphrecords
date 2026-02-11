@@ -15,7 +15,7 @@ use crate::{
 };
 use attribute::PyGraphRecordAttribute;
 use errors::PyGraphRecordError;
-use graphrecords::core::{
+use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{Attributes, EdgeIndex, GraphRecord, GraphRecordAttribute, GraphRecordValue},
 };

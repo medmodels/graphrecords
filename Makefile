@@ -54,7 +54,7 @@ build-dev: install-dev
 
 test: install-tests
 	$(UV_LOC) run pytest -vv -W error
-	cargo test
+	cargo test --all-targets --all-features
 
 test-python-coverage: install-tests
 	$(UV_LOC) run tests/coverage_report.py table
