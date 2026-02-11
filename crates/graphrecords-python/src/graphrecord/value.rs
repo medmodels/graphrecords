@@ -1,7 +1,7 @@
 use super::{Lut, traits::DeepFrom};
 use crate::{gil_hash_map::GILHashMap, graphrecord::errors::PyGraphRecordError};
 use chrono::{NaiveDateTime, TimeDelta};
-use graphrecords::core::{errors::GraphRecordError, graphrecord::GraphRecordValue};
+use graphrecords_core::{errors::GraphRecordError, graphrecord::GraphRecordValue};
 use pyo3::{
     Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
     types::{PyAnyMethods, PyBool, PyDateTime, PyDelta, PyFloat, PyInt, PyString},

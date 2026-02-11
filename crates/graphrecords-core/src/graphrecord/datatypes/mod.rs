@@ -4,10 +4,12 @@ mod value;
 pub use self::{attribute::GraphRecordAttribute, value::GraphRecordValue};
 use super::EdgeIndex;
 use crate::errors::GraphRecordError;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, ops::Range};
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DataType {
     String,
     Int,

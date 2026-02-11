@@ -1,5 +1,5 @@
 use crate::graphrecord::{errors::PyGraphRecordError, value::PyGraphRecordValue};
-use graphrecords::core::{
+use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{
         GraphRecordValue,

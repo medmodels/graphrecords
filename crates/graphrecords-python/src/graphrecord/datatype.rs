@@ -2,7 +2,7 @@
 
 use super::{Lut, traits::DeepFrom};
 use crate::{gil_hash_map::GILHashMap, graphrecord::errors::PyGraphRecordError};
-use graphrecords::core::{errors::GraphRecordError, graphrecord::datatypes::DataType};
+use graphrecords_core::{errors::GraphRecordError, graphrecord::datatypes::DataType};
 use pyo3::{IntoPyObjectExt, prelude::*};
 
 macro_rules! implement_pymethods {

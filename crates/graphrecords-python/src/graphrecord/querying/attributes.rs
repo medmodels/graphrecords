@@ -8,7 +8,7 @@ use crate::graphrecord::{
         PyNodeMultipleValuesWithIndexGroupOperand, PyNodeMultipleValuesWithIndexOperand,
     },
 };
-use graphrecords::core::{
+use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{
         GraphRecordAttribute,

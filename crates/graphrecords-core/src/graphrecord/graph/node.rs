@@ -1,8 +1,10 @@
 use super::{Attributes, EdgeIndex};
 use graphrecords_utils::aliases::MrHashSet;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Node {
     pub(crate) attributes: Attributes,
     pub(crate) outgoing_edge_indices: MrHashSet<EdgeIndex>,

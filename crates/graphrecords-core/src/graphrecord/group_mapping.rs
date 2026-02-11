@@ -1,11 +1,13 @@
 use super::{EdgeIndex, GraphRecordAttribute, NodeIndex};
 use crate::errors::GraphRecordError;
 use graphrecords_utils::aliases::{MrHashMap, MrHashMapEntry, MrHashSet};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 pub type Group = GraphRecordAttribute;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Default, Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(super) struct GroupMapping {
     pub(super) nodes_in_group: MrHashMap<Group, MrHashSet<NodeIndex>>,
     pub(super) edges_in_group: MrHashMap<Group, MrHashSet<EdgeIndex>>,
@@ -14,15 +16,6 @@ pub(super) struct GroupMapping {
 }
 
 impl GroupMapping {
-    pub fn new() -> Self {
-        Self {
-            nodes_in_group: MrHashMap::new(),
-            edges_in_group: MrHashMap::new(),
-            groups_of_node: MrHashMap::new(),
-            groups_of_edge: MrHashMap::new(),
-        }
-    }
-
     #[allow(clippy::needless_pass_by_value)]
     pub fn add_group(
         &mut self,
@@ -318,7 +311,7 @@ mod test {
 
     #[test]
     fn test_add_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         assert_eq!(0, group_mapping.group_count());
 
@@ -347,7 +340,7 @@ mod test {
 
     #[test]
     fn test_invalid_add_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping.add_group("0".into(), None, None).unwrap();
 
@@ -361,7 +354,7 @@ mod test {
 
     #[test]
     fn test_add_node_to_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping.add_group("0".into(), None, None).unwrap();
 
@@ -382,7 +375,7 @@ mod test {
 
     #[test]
     fn test_invalid_add_node_to_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), Some(vec!["0".into()]), None)
@@ -398,7 +391,7 @@ mod test {
 
     #[test]
     fn test_add_edge_to_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping.add_group("0".into(), None, None).unwrap();
 
@@ -417,7 +410,7 @@ mod test {
 
     #[test]
     fn test_invalid_add_edge_to_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), None, Some(vec![0]))
@@ -433,7 +426,7 @@ mod test {
 
     #[test]
     fn test_remove_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping.add_group("0".into(), None, None).unwrap();
 
@@ -446,7 +439,7 @@ mod test {
 
     #[test]
     fn test_invalid_remove_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         // Removing a non-existing group should fail
         assert!(
@@ -458,7 +451,7 @@ mod test {
 
     #[test]
     fn test_remove_node() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), Some(vec!["0".into()]), None)
@@ -479,7 +472,7 @@ mod test {
 
     #[test]
     fn test_remove_edge() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), None, Some(vec![0]))
@@ -500,7 +493,7 @@ mod test {
 
     #[test]
     fn test_remove_node_from_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), Some(vec!["0".into(), "1".into()]), None)
@@ -523,7 +516,7 @@ mod test {
 
     #[test]
     fn test_invalid_remove_node_from_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), Some(vec!["0".into()]), None)
@@ -546,7 +539,7 @@ mod test {
 
     #[test]
     fn test_remove_edge_from_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), None, Some(vec![0, 1]))
@@ -569,7 +562,7 @@ mod test {
 
     #[test]
     fn test_invalid_remove_edge_from_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), None, Some(vec![0]))
@@ -592,7 +585,7 @@ mod test {
 
     #[test]
     fn test_groups() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping.add_group("0".into(), None, None).unwrap();
 
@@ -601,7 +594,7 @@ mod test {
 
     #[test]
     fn test_nodes_in_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), Some(vec!["0".into(), "1".into()]), None)
@@ -615,7 +608,7 @@ mod test {
 
     #[test]
     fn test_invalid_nodes_in_group() {
-        let group_mapping = GroupMapping::new();
+        let group_mapping = GroupMapping::default();
 
         // Querying the nodes in a non-existing group should fail
         assert!(
@@ -627,7 +620,7 @@ mod test {
 
     #[test]
     fn test_edges_in_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), None, Some(vec![0, 1]))
@@ -641,7 +634,7 @@ mod test {
 
     #[test]
     fn test_invalid_edges_in_group() {
-        let group_mapping = GroupMapping::new();
+        let group_mapping = GroupMapping::default();
 
         // Querying the edges in a non-existing group should fail
         assert!(
@@ -653,7 +646,7 @@ mod test {
 
     #[test]
     fn test_groups_of_node() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), Some(vec!["0".into()]), None)
@@ -664,7 +657,7 @@ mod test {
 
     #[test]
     fn test_groups_of_edge() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping
             .add_group("0".into(), None, Some(vec![0]))
@@ -675,7 +668,7 @@ mod test {
 
     #[test]
     fn test_group_count() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         assert_eq!(0, group_mapping.group_count());
 
@@ -686,7 +679,7 @@ mod test {
 
     #[test]
     fn test_contains_group() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         assert!(!group_mapping.contains_group(&"0".into()));
 
@@ -697,7 +690,7 @@ mod test {
 
     #[test]
     fn test_clear() {
-        let mut group_mapping = GroupMapping::new();
+        let mut group_mapping = GroupMapping::default();
 
         group_mapping.add_group("0".into(), None, None).unwrap();
 

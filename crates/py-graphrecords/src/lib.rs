@@ -1,7 +1,7 @@
 #![recursion_limit = "256"]
 
 use graphrecords::core::graphrecord::overview::DEFAULT_TRUNCATE_DETAILS;
-use graphrecords_python::prelude::*;
+use graphrecords::python::prelude::*;
 use pyo3::prelude::*;
 
 #[pymodule]
@@ -15,7 +15,7 @@ fn _graphrecords(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDateTime>()?;
     m.add_class::<PyDuration>()?;
     m.add_class::<PyNull>()?;
-    m.add_class::<graphrecords_python::prelude::PyAny>()?;
+    m.add_class::<graphrecords::python::prelude::PyAny>()?;
     m.add_class::<PyUnion>()?;
     m.add_class::<PyOption>()?;
 
