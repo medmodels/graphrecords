@@ -1,38 +1,60 @@
 use crate::{
     GraphRecord,
-    prelude::{Attributes, EdgeIndex, NodeIndex},
+    prelude::{Attributes, EdgeIndex, Group, NodeIndex, Schema},
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-#[derive(Default, Debug, Clone)]
-pub struct PluginResponse<'a> {
-    pub added_nodes: Option<Vec<(NodeIndex, Attributes)>>,
-    pub added_edges: Option<Vec<(NodeIndex, NodeIndex, Attributes)>>,
-    pub removed_nodes: Option<Vec<&'a NodeIndex>>,
-    pub removed_edges: Option<Vec<&'a EdgeIndex>>,
+pub enum MutatingPluginResultPayload {
+    AddNode(NodeIndex, Attributes),
+    AddEdge(NodeIndex, NodeIndex, Attributes),
+    AddGroup(Group),
+    AddNodeToGroup(NodeIndex, Group),
+    AddEdgeToGroup(EdgeIndex, Group),
+    RemoveNode(NodeIndex),
+    RemoveEdge(EdgeIndex),
+    RemoveGroup(Group),
+    RemoveNodeFromGroup(NodeIndex, Group),
+    RemoveEdgeFromGroup(EdgeIndex, Group),
+    SetSchema(Schema),
 }
 
-pub trait PluginRoot {}
+pub type MutatingPluginResult = Vec<MutatingPluginResultPayload>;
 
-impl<T: Plugin> PluginRoot for T {}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DefaultPlugin;
-
-impl PluginRoot for DefaultPlugin {}
-
+#[cfg_attr(feature = "serde", typetag::serde(tag = "type"))]
 #[allow(unused)]
 pub trait Plugin: Send + Sync + Debug {
     fn clone_box(&self) -> Box<dyn Plugin>;
+
+    fn to_dataframes(&self, graphrecord: &GraphRecord) {}
+
+    fn set_schema(
+        &self,
+        schema: Schema,
+        graphrecord: &GraphRecord,
+    ) -> Option<MutatingPluginResult> {
+        None
+    }
+
+    fn set_schema_unchecked(
+        &self,
+        schema: Schema,
+        graphrecord: &GraphRecord,
+    ) -> Option<MutatingPluginResult> {
+        None
+    }
+
+    fn get_schema(&self, schema: &Schema, graphrecord: &GraphRecord) -> Option<Schema> {
+        None
+    }
 
     fn add_node<'a>(
         &self,
         node_index: NodeIndex,
         attributes: Attributes,
-        graphrecord: &'a GraphRecord,
-    ) -> Option<PluginResponse<'a>> {
+        graphrecord: &GraphRecord,
+    ) -> Option<MutatingPluginResult> {
         None
     }
 }
@@ -42,3 +64,6 @@ impl Clone for Box<dyn Plugin> {
         self.clone_box()
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DefaultPlugin;

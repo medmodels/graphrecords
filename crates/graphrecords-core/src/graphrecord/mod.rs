@@ -19,6 +19,7 @@ use crate::{
     graphrecord::{
         attributes::{EdgeAttributesMut, NodeAttributesMut},
         overview::{DEFAULT_TRUNCATE_DETAILS, GroupOverview, Overview},
+        plugin::Plugin,
         polars::DataFramesExport,
     },
 };
@@ -136,6 +137,7 @@ pub struct GraphRecord {
     graph: Graph,
     group_mapping: GroupMapping,
     schema: Schema,
+    plugins: Vec<Box<dyn Plugin>>,
 }
 
 impl Display for GraphRecord {
@@ -167,6 +169,22 @@ impl GraphRecord {
         Self {
             graph: Graph::with_capacity(nodes, edges),
             schema: schema.unwrap_or_default(),
+            ..Default::default()
+        }
+    }
+
+    #[must_use]
+    pub fn with_plugins(plugins: Vec<Box<dyn Plugin>>) -> Self {
+        Self {
+            plugins,
+            ..Default::default()
+        }
+    }
+
+    #[must_use]
+    pub fn with_plugin<T: Plugin + 'static>(plugin: T) -> Self {
+        Self {
+            plugins: vec![Box::new(plugin)],
             ..Default::default()
         }
     }
