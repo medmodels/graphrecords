@@ -1,4 +1,4 @@
-use graphrecords::core::errors::{GraphError, GraphRecordError};
+use graphrecords_core::errors::{GraphError, GraphRecordError};
 use pyo3::{
     PyErr,
     exceptions::{PyAssertionError, PyIndexError, PyKeyError, PyRuntimeError, PyValueError},

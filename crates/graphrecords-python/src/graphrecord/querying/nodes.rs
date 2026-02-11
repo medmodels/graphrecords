@@ -12,7 +12,7 @@ use crate::graphrecord::{
         values::{PyNodeMultipleValuesWithIndexGroupOperand, PyNodeMultipleValuesWithIndexOperand},
     },
 };
-use graphrecords::core::{
+use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{
         NodeIndex,

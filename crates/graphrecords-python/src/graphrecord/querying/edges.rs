@@ -11,7 +11,7 @@ use crate::graphrecord::{
         values::{PyEdgeMultipleValuesWithIndexGroupOperand, PyEdgeMultipleValuesWithIndexOperand},
     },
 };
-use graphrecords::core::{
+use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{
         EdgeIndex,

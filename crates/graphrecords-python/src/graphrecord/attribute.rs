@@ -1,6 +1,6 @@
 use super::{traits::DeepFrom, value::convert_pyobject_to_graphrecordvalue};
 use crate::graphrecord::errors::PyGraphRecordError;
-use graphrecords::core::graphrecord::GraphRecordAttribute;
+use graphrecords_core::graphrecord::GraphRecordAttribute;
 use pyo3::{Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python};
 use std::{hash::Hash, ops::Deref};
 

@@ -7,7 +7,7 @@ use crate::graphrecord::{
     traits::{DeepFrom, DeepInto},
     value::PyGraphRecordValue,
 };
-use graphrecords::core::graphrecord::overview::{
+use graphrecords_core::graphrecord::overview::{
     AttributeOverview, AttributeOverviewData, EdgeGroupOverview, GroupOverview, NodeGroupOverview,
     Overview,
 };

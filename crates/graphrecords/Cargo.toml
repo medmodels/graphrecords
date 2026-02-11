@@ -10,6 +10,11 @@ readme = "../../README.md"
 [dependencies]
 graphrecords-core = { workspace = true }
 graphrecords-utils = { workspace = true }
+graphrecords-python = { workspace = true, optional = true }
+
+[features]
+python = ["dep:graphrecords-python"]
+serde = ["graphrecords-core/serde"]
 
 [lints]
 workspace = true

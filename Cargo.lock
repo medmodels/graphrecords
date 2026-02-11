@@ -714,6 +714,7 @@ name = "graphrecords"
 version = "0.1.0"
 dependencies = [
  "graphrecords-core",
+ "graphrecords-python",
  "graphrecords-utils",
 ]
 
@@ -749,7 +750,8 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "chrono",
- "graphrecords",
+ "graphrecords-core",
+ "graphrecords-utils",
  "numpy",
  "polars",
  "pyo3",
@@ -2119,7 +2121,6 @@ name = "py-graphrecords"
 version = "0.1.0"
 dependencies = [
  "graphrecords",
- "graphrecords-python",
  "pyo3",
 ]
 
