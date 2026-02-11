@@ -21,11 +21,9 @@ itertools = "0.13.0"
 tabled = "0.20.0"
 
 serde = { workspace = true, optional = true }
-typetag = { workspace = true, optional = true }
 
 [features]
-serde = ["dep:serde", "dep:typetag"]
-plugins = []
+serde = ["dep:serde"]
 
 [lints]
 workspace = true

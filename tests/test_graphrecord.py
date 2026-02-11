@@ -2397,6 +2397,110 @@ class TestGraphRecord(unittest.TestCase):
         assert sorted(node_indices) == ["0"]
 
 
+class TestGraphRecordPlugins(unittest.TestCase):
+    def test_with_plugins_single(self) -> None:
+        from graphrecords.plugins import Plugin
+
+        gr = GraphRecord.with_plugins(Plugin())
+        gr.add_nodes([("a", {})])
+        assert "a" in gr.nodes
+
+    def test_with_plugins_list(self) -> None:
+        from graphrecords.plugins import Plugin
+
+        gr = GraphRecord.with_plugins([Plugin()])
+        gr.add_nodes([("a", {})])
+        assert "a" in gr.nodes
+
+    def test_run_with_plugins_calls_pre_and_post(self) -> None:
+        from graphrecords.plugins import AddNodesContext, Plugin
+
+        calls: List[str] = []
+
+        class TrackingPlugin(Plugin):
+            def pre_add_nodes(
+                self, graphrecord: GraphRecord, context: AddNodesContext
+            ) -> AddNodesContext:
+                calls.append("pre")
+                return context
+
+            def post_add_nodes(
+                self, graphrecord: GraphRecord, context: AddNodesContext
+            ) -> None:
+                calls.append("post")
+
+        gr = GraphRecord.with_plugins(TrackingPlugin())
+        gr.add_nodes([("a", {})])
+
+        assert calls == ["pre", "post"]
+        assert "a" in gr.nodes
+
+    def test_run_with_plugins_simple_calls_pre_and_post(self) -> None:
+        from graphrecords.plugins import Plugin
+
+        calls: List[str] = []
+
+        class TrackingPlugin(Plugin):
+            def pre_clear(self, graphrecord: GraphRecord) -> None:
+                calls.append("pre_clear")
+
+            def post_clear(self, graphrecord: GraphRecord) -> None:
+                calls.append("post_clear")
+
+        gr = GraphRecord.with_plugins(TrackingPlugin())
+        gr.add_nodes([("a", {})])
+        gr.clear()
+
+        assert calls == ["pre_clear", "post_clear"]
+        assert gr.nodes == []
+
+    def test_run_with_plugins_restores_flag_on_error(self) -> None:
+        from graphrecords.plugins import AddNodesContext, Plugin
+
+        class FailOncePlugin(Plugin):
+            def __init__(self) -> None:
+                self.failed = False
+
+            def pre_add_nodes(
+                self, graphrecord: GraphRecord, context: AddNodesContext
+            ) -> AddNodesContext:
+                if not self.failed:
+                    self.failed = True
+                    msg = "boom"
+                    raise RuntimeError(msg)
+                return context
+
+        gr = GraphRecord.with_plugins(FailOncePlugin())
+
+        with pytest.raises(RuntimeError, match="boom"):
+            gr.add_nodes([("a", {})])
+
+        gr.add_nodes([("b", {})])
+        assert "b" in gr.nodes
+
+    def test_run_with_plugins_simple_restores_flag_on_error(self) -> None:
+        from graphrecords.plugins import Plugin
+
+        class FailOncePlugin(Plugin):
+            def __init__(self) -> None:
+                self.failed = False
+
+            def pre_clear(self, graphrecord: GraphRecord) -> None:
+                if not self.failed:
+                    self.failed = True
+                    msg = "boom"
+                    raise RuntimeError(msg)
+
+        gr = GraphRecord.with_plugins(FailOncePlugin())
+
+        with pytest.raises(RuntimeError, match="boom"):
+            gr.clear()
+
+        gr.clear()
+
+
 if __name__ == "__main__":
-    run_test = unittest.TestLoader().loadTestsFromTestCase(TestGraphRecord)
-    unittest.TextTestRunner(verbosity=2).run(run_test)
+    suite = unittest.TestSuite()
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGraphRecord))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGraphRecordPlugins))
+    unittest.TextTestRunner(verbosity=2).run(suite)
