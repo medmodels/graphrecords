@@ -2,7 +2,6 @@ use crate::graphrecord::querying::{
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 pub trait Add {
     type ComparisonOperand;
@@ -12,7 +11,7 @@ pub trait Add {
 
 impl<O: Add> Wrapper<O> {
     pub fn add<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().add(value);
+        self.0.write().add(value);
     }
 }
 
@@ -32,7 +31,7 @@ pub trait Sub {
 
 impl<O: Sub> Wrapper<O> {
     pub fn sub<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().sub(value);
+        self.0.write().sub(value);
     }
 }
 
@@ -52,7 +51,7 @@ pub trait Mul {
 
 impl<O: Mul> Wrapper<O> {
     pub fn mul<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().mul(value);
+        self.0.write().mul(value);
     }
 }
 
@@ -72,7 +71,7 @@ pub trait Div {
 
 impl<O: Div> Wrapper<O> {
     pub fn div<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().div(value);
+        self.0.write().div(value);
     }
 }
 
@@ -92,7 +91,7 @@ pub trait Pow {
 
 impl<O: Pow> Wrapper<O> {
     pub fn pow<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().pow(value);
+        self.0.write().pow(value);
     }
 }
 
@@ -112,7 +111,7 @@ pub trait Mod {
 
 impl<O: Mod> Wrapper<O> {
     pub fn r#mod<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().r#mod(value);
+        self.0.write().r#mod(value);
     }
 }
 
@@ -130,7 +129,7 @@ pub trait Abs {
 
 impl<O: Abs> Wrapper<O> {
     pub fn abs(&self) {
-        self.0.write_or_panic().abs();
+        self.0.write().abs();
     }
 }
 

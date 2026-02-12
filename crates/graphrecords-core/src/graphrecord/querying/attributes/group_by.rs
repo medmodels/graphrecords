@@ -16,7 +16,6 @@ use crate::{
         wrapper::Wrapper,
     },
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 impl<O: RootOperand> GroupedOperand for AttributesTreeOperand<O> {
     type Context = GroupOperand<O>;
@@ -81,7 +80,7 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a>
         let MultipleAttributesWithIndexContext::AttributesTree {
             operand: _,
             ref kind,
-        } = self.operand.0.read_or_panic().context
+        } = self.operand.0.read().context
         else {
             unreachable!()
         };
@@ -151,7 +150,7 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a>
 
         let attributes: Vec<_> = partitiions
             .map(|(key, partition)| {
-                let reduced_partition = match self.operand.0.read_or_panic().kind {
+                let reduced_partition = match self.operand.0.read().kind {
                     SingleKindWithIndex::Max => {
                         MultipleAttributesWithIndexOperation::<O>::get_max(partition)?
                     }
@@ -210,7 +209,7 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a>
             .map(|(key, partition)| {
                 let partition = partition.map(|(_, attribute)| attribute);
 
-                let reduced_partition = match self.operand.0.read_or_panic().kind {
+                let reduced_partition = match self.operand.0.read().kind {
                     SingleKindWithoutIndex::Max => {
                         MultipleAttributesWithoutIndexOperation::<O>::get_max(partition)?
                     }

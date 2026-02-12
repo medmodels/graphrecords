@@ -2,7 +2,6 @@ use crate::graphrecord::querying::{
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 pub trait IsIn {
     type ComparisonOperand;
@@ -12,7 +11,7 @@ pub trait IsIn {
 
 impl<O: IsIn> Wrapper<O> {
     pub fn is_in<V: Into<O::ComparisonOperand>>(&self, values: V) {
-        self.0.write_or_panic().is_in(values);
+        self.0.write().is_in(values);
     }
 }
 
@@ -32,7 +31,7 @@ pub trait IsNotIn {
 
 impl<O: IsNotIn> Wrapper<O> {
     pub fn is_not_in<V: Into<O::ComparisonOperand>>(&self, values: V) {
-        self.0.write_or_panic().is_not_in(values);
+        self.0.write().is_not_in(values);
     }
 }
 

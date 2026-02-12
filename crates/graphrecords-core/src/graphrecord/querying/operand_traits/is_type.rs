@@ -2,7 +2,6 @@ use crate::graphrecord::querying::{
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 pub trait IsFloat {
     fn is_float(&mut self);
@@ -10,7 +9,7 @@ pub trait IsFloat {
 
 impl<O: IsFloat> Wrapper<O> {
     pub fn is_float(&self) {
-        self.0.write_or_panic().is_float();
+        self.0.write().is_float();
     }
 }
 
@@ -26,7 +25,7 @@ pub trait IsBool {
 
 impl<O: IsBool> Wrapper<O> {
     pub fn is_bool(&self) {
-        self.0.write_or_panic().is_bool();
+        self.0.write().is_bool();
     }
 }
 
@@ -42,7 +41,7 @@ pub trait IsDateTime {
 
 impl<O: IsDateTime> Wrapper<O> {
     pub fn is_datetime(&self) {
-        self.0.write_or_panic().is_datetime();
+        self.0.write().is_datetime();
     }
 }
 
@@ -58,7 +57,7 @@ pub trait IsDuration {
 
 impl<O: IsDuration> Wrapper<O> {
     pub fn is_duration(&self) {
-        self.0.write_or_panic().is_duration();
+        self.0.write().is_duration();
     }
 }
 
@@ -74,7 +73,7 @@ pub trait IsNull {
 
 impl<O: IsNull> Wrapper<O> {
     pub fn is_null(&self) {
-        self.0.write_or_panic().is_null();
+        self.0.write().is_null();
     }
 }
 
@@ -90,7 +89,7 @@ pub trait IsString {
 
 impl<O: IsString> Wrapper<O> {
     pub fn is_string(&self) {
-        self.0.write_or_panic().is_string();
+        self.0.write().is_string();
     }
 }
 
@@ -106,7 +105,7 @@ pub trait IsInt {
 
 impl<O: IsInt> Wrapper<O> {
     pub fn is_int(&self) {
-        self.0.write_or_panic().is_int();
+        self.0.write().is_int();
     }
 }
 

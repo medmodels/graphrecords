@@ -32,7 +32,7 @@ use crate::{
         },
     },
 };
-use graphrecords_utils::{aliases::MrHashSet, traits::ReadWriteOrPanic};
+use graphrecords_utils::aliases::GrHashSet;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
@@ -66,49 +66,49 @@ impl DeepClone for SingleAttributeComparisonOperand {
 
 impl From<Wrapper<NodeSingleAttributeWithIndexOperand>> for SingleAttributeComparisonOperand {
     fn from(value: Wrapper<NodeSingleAttributeWithIndexOperand>) -> Self {
-        Self::NodeSingleAttributeWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeSingleAttributeWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<NodeSingleAttributeWithIndexOperand>> for SingleAttributeComparisonOperand {
     fn from(value: &Wrapper<NodeSingleAttributeWithIndexOperand>) -> Self {
-        Self::NodeSingleAttributeWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeSingleAttributeWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<Wrapper<NodeSingleAttributeWithoutIndexOperand>> for SingleAttributeComparisonOperand {
     fn from(value: Wrapper<NodeSingleAttributeWithoutIndexOperand>) -> Self {
-        Self::NodeSingleAttributeWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeSingleAttributeWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<NodeSingleAttributeWithoutIndexOperand>> for SingleAttributeComparisonOperand {
     fn from(value: &Wrapper<NodeSingleAttributeWithoutIndexOperand>) -> Self {
-        Self::NodeSingleAttributeWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeSingleAttributeWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<Wrapper<EdgeSingleAttributeWithIndexOperand>> for SingleAttributeComparisonOperand {
     fn from(value: Wrapper<EdgeSingleAttributeWithIndexOperand>) -> Self {
-        Self::EdgeSingleAttributeWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeSingleAttributeWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<EdgeSingleAttributeWithIndexOperand>> for SingleAttributeComparisonOperand {
     fn from(value: &Wrapper<EdgeSingleAttributeWithIndexOperand>) -> Self {
-        Self::EdgeSingleAttributeWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeSingleAttributeWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<Wrapper<EdgeSingleAttributeWithoutIndexOperand>> for SingleAttributeComparisonOperand {
     fn from(value: Wrapper<EdgeSingleAttributeWithoutIndexOperand>) -> Self {
-        Self::EdgeSingleAttributeWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeSingleAttributeWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<EdgeSingleAttributeWithoutIndexOperand>> for SingleAttributeComparisonOperand {
     fn from(value: &Wrapper<EdgeSingleAttributeWithoutIndexOperand>) -> Self {
-        Self::EdgeSingleAttributeWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeSingleAttributeWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
@@ -147,7 +147,7 @@ pub enum MultipleAttributesComparisonOperand {
     NodeMultipleAttributesWithoutIndexOperand(NodeMultipleAttributesWithoutIndexOperand),
     EdgeMultipleAttributesWithIndexOperand(EdgeMultipleAttributesWithIndexOperand),
     EdgeMultipleAttributesWithoutIndexOperand(EdgeMultipleAttributesWithoutIndexOperand),
-    Attributes(MrHashSet<GraphRecordAttribute>),
+    Attributes(GrHashSet<GraphRecordAttribute>),
 }
 
 impl DeepClone for MultipleAttributesComparisonOperand {
@@ -172,7 +172,7 @@ impl DeepClone for MultipleAttributesComparisonOperand {
 
 impl From<Wrapper<NodeMultipleAttributesWithIndexOperand>> for MultipleAttributesComparisonOperand {
     fn from(value: Wrapper<NodeMultipleAttributesWithIndexOperand>) -> Self {
-        Self::NodeMultipleAttributesWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeMultipleAttributesWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
@@ -180,14 +180,14 @@ impl From<&Wrapper<NodeMultipleAttributesWithIndexOperand>>
     for MultipleAttributesComparisonOperand
 {
     fn from(value: &Wrapper<NodeMultipleAttributesWithIndexOperand>) -> Self {
-        Self::NodeMultipleAttributesWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeMultipleAttributesWithIndexOperand(value.0.read().deep_clone())
     }
 }
 impl From<Wrapper<NodeMultipleAttributesWithoutIndexOperand>>
     for MultipleAttributesComparisonOperand
 {
     fn from(value: Wrapper<NodeMultipleAttributesWithoutIndexOperand>) -> Self {
-        Self::NodeMultipleAttributesWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeMultipleAttributesWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
@@ -195,13 +195,13 @@ impl From<&Wrapper<NodeMultipleAttributesWithoutIndexOperand>>
     for MultipleAttributesComparisonOperand
 {
     fn from(value: &Wrapper<NodeMultipleAttributesWithoutIndexOperand>) -> Self {
-        Self::NodeMultipleAttributesWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeMultipleAttributesWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<Wrapper<EdgeMultipleAttributesWithIndexOperand>> for MultipleAttributesComparisonOperand {
     fn from(value: Wrapper<EdgeMultipleAttributesWithIndexOperand>) -> Self {
-        Self::EdgeMultipleAttributesWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeMultipleAttributesWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
@@ -209,7 +209,7 @@ impl From<&Wrapper<EdgeMultipleAttributesWithIndexOperand>>
     for MultipleAttributesComparisonOperand
 {
     fn from(value: &Wrapper<EdgeMultipleAttributesWithIndexOperand>) -> Self {
-        Self::EdgeMultipleAttributesWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeMultipleAttributesWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
@@ -217,7 +217,7 @@ impl From<Wrapper<EdgeMultipleAttributesWithoutIndexOperand>>
     for MultipleAttributesComparisonOperand
 {
     fn from(value: Wrapper<EdgeMultipleAttributesWithoutIndexOperand>) -> Self {
-        Self::EdgeMultipleAttributesWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeMultipleAttributesWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
@@ -225,7 +225,7 @@ impl From<&Wrapper<EdgeMultipleAttributesWithoutIndexOperand>>
     for MultipleAttributesComparisonOperand
 {
     fn from(value: &Wrapper<EdgeMultipleAttributesWithoutIndexOperand>) -> Self {
-        Self::EdgeMultipleAttributesWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeMultipleAttributesWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
@@ -241,8 +241,8 @@ impl<V: Into<GraphRecordAttribute>> From<HashSet<V>> for MultipleAttributesCompa
     }
 }
 
-impl<V: Into<GraphRecordAttribute>> From<MrHashSet<V>> for MultipleAttributesComparisonOperand {
-    fn from(value: MrHashSet<V>) -> Self {
+impl<V: Into<GraphRecordAttribute>> From<GrHashSet<V>> for MultipleAttributesComparisonOperand {
+    fn from(value: GrHashSet<V>) -> Self {
         Self::Attributes(value.into_iter().map(Into::into).collect())
     }
 }
@@ -259,7 +259,7 @@ impl MultipleAttributesComparisonOperand {
     pub(crate) fn evaluate_backward(
         &self,
         graphrecord: &GraphRecord,
-    ) -> GraphRecordResult<MrHashSet<GraphRecordAttribute>> {
+    ) -> GraphRecordResult<GrHashSet<GraphRecordAttribute>> {
         Ok(match self {
             Self::NodeMultipleAttributesWithIndexOperand(operand) => operand
                 .evaluate_backward(graphrecord)?
@@ -789,7 +789,7 @@ impl<O: RootOperand> Wrapper<AttributesTreeOperand<O>> {
     }
 
     pub(crate) fn push_merge_operation(&self, operand: Self) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }
 
@@ -1328,7 +1328,7 @@ impl<O: RootOperand> Wrapper<MultipleAttributesWithIndexOperand<O>> {
     }
 
     pub(crate) fn push_merge_operation(&self, operand: Self) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }
 
@@ -2296,7 +2296,7 @@ impl<O: RootOperand> Wrapper<SingleAttributeWithIndexOperand<O>> {
         &self,
         operand: Wrapper<MultipleAttributesWithIndexOperand<O>>,
     ) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }
 
@@ -2745,6 +2745,6 @@ impl<O: RootOperand> Wrapper<SingleAttributeWithoutIndexOperand<O>> {
         &self,
         operand: Wrapper<MultipleAttributesWithoutIndexOperand<O>>,
     ) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }

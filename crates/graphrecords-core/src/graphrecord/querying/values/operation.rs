@@ -25,7 +25,7 @@ use crate::{
         },
     },
 };
-use graphrecords_utils::{aliases::MrHashSet, traits::ReadWriteOrPanic};
+use graphrecords_utils::aliases::GrHashSet;
 use itertools::Itertools;
 use rand::{rng, seq::IteratorRandom};
 use std::{
@@ -287,7 +287,7 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     {
         let (values_1, values_2) = Itertools::tee(values);
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let value = match kind {
             SingleKindWithIndex::Max => Self::get_max(values_1)?,
@@ -313,7 +313,7 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
         let (values_1, values_2) = Itertools::tee(values);
         let values_1 = values_1.map(|(_, value)| value);
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let value = match kind {
             SingleKindWithoutIndex::Max => {
@@ -647,7 +647,7 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     {
         let (values_1, values_2) = Itertools::tee(values);
 
-        let result: MrHashSet<_> = operand
+        let result: GrHashSet<_> = operand
             .evaluate_forward(graphrecord, Box::new(values_1))?
             .map(|(t, _)| t)
             .collect();
@@ -847,7 +847,7 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
         let (values_1, values_2) = tee_grouped_iterator(values);
         let mut values_2 = values_2.collect::<Vec<_>>();
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let values_1: Vec<_> = values_1
             .map(|(key, values)| {
@@ -890,7 +890,7 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
         let (values_1, values_2) = tee_grouped_iterator(values);
         let mut values_2: Vec<_> = values_2.collect();
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let values_1: Vec<_> = values_1
             .map(|(key, values)| {
@@ -1468,7 +1468,7 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
     ) -> GraphRecordResult<BoxedIterator<'a, GraphRecordValue>> {
         let (values_1, values_2) = Itertools::tee(values);
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let value = match kind {
             SingleKindWithoutIndex::Max => Self::get_max(values_1)?,

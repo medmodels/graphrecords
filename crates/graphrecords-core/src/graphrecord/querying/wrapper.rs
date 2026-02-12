@@ -1,6 +1,6 @@
 use super::DeepClone;
-use graphrecords_utils::traits::ReadWriteOrPanic;
-use std::sync::{Arc, RwLock};
+use parking_lot::RwLock;
+use std::sync::Arc;
 
 #[repr(transparent)]
 #[derive(Debug, Clone)]
@@ -17,7 +17,7 @@ where
     T: DeepClone,
 {
     fn deep_clone(&self) -> Self {
-        self.0.read_or_panic().deep_clone().into()
+        self.0.read().deep_clone().into()
     }
 }
 

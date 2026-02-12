@@ -3,7 +3,6 @@ use crate::graphrecord::querying::{
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 pub trait Index {
     type ReturnOperand;
@@ -14,7 +13,7 @@ pub trait Index {
 impl<O: Index> Wrapper<O> {
     #[must_use]
     pub fn index(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().index()
+        self.0.write().index()
     }
 }
 

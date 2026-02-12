@@ -25,7 +25,7 @@ use crate::{
         },
     },
 };
-use graphrecords_utils::{aliases::MrHashSet, traits::ReadWriteOrPanic};
+use graphrecords_utils::aliases::GrHashSet;
 use itertools::Itertools;
 use rand::{rng, seq::IteratorRandom};
 use roaring::RoaringBitmap;
@@ -188,7 +188,7 @@ impl NodeOperation {
             Self::Exclude { operand } => {
                 let (node_indices_1, node_indices_2) = node_indices.tee();
 
-                let result: MrHashSet<_> = operand
+                let result: GrHashSet<_> = operand
                     .evaluate_forward(graphrecord, Box::new(node_indices_1))?
                     .collect();
 
@@ -227,8 +227,7 @@ impl NodeOperation {
     where
         T: Iterator<Item = &'a NodeIndex> + 'a,
     {
-        let MultipleValuesWithIndexContext::Operand((_, ref attribute)) =
-            operand.0.read_or_panic().context
+        let MultipleValuesWithIndexContext::Operand((_, ref attribute)) = operand.0.read().context
         else {
             unreachable!()
         };
@@ -283,7 +282,7 @@ impl NodeOperation {
     {
         let (node_indices_1, node_indices_2) = Itertools::tee(node_indices);
 
-        let result: MrHashSet<_> = operand
+        let result: GrHashSet<_> = operand
             .evaluate_forward(graphrecord, Box::new(node_indices_1.cloned()))?
             .collect();
 
@@ -303,7 +302,7 @@ impl NodeOperation {
                 .groups_of_node(node_index)
                 .expect("Node must exist");
 
-            let groups_of_node: MrHashSet<_> = groups_of_node.collect();
+            let groups_of_node: GrHashSet<_> = groups_of_node.collect();
 
             match &group {
                 CardinalityWrapper::Single(group) => groups_of_node.contains(&group),
@@ -333,7 +332,7 @@ impl NodeOperation {
                 .expect("Node must exist")
                 .keys();
 
-            let attributes_of_node: MrHashSet<_> = attributes_of_node.collect();
+            let attributes_of_node: GrHashSet<_> = attributes_of_node.collect();
 
             match &attribute {
                 CardinalityWrapper::Single(attribute) => attributes_of_node.contains(&attribute),
@@ -449,7 +448,7 @@ impl NodeOperation {
             })),
         };
 
-        let result: MrHashSet<_> = operand
+        let result: GrHashSet<_> = operand
             .evaluate_forward(graphrecord, neighbor_indices)?
             .collect();
 
@@ -559,8 +558,7 @@ impl NodeOperation {
         node_indices: GroupedIterator<'a, BoxedIterator<'a, &'a NodeIndex>>,
         operand: &Wrapper<MultipleValuesWithIndexOperand<NodeOperand>>,
     ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a NodeIndex>>> {
-        let MultipleValuesWithIndexContext::Operand((_, ref attribute)) =
-            operand.0.read_or_panic().context
+        let MultipleValuesWithIndexContext::Operand((_, ref attribute)) = operand.0.read().context
         else {
             unreachable!()
         };
@@ -636,7 +634,7 @@ impl NodeOperation {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let node_indices_1: MrHashSet<_> =
+            let node_indices_1: GrHashSet<_> =
                 node_indices_1.remove(*node_indices_position).1.collect();
 
             let filtered_indices: Vec<_> = node_indices
@@ -777,7 +775,7 @@ impl NodeOperation {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let neighbor_indices: MrHashSet<_> = neighbor_indices
+            let neighbor_indices: GrHashSet<_> = neighbor_indices
                 .remove(*neighbor_indices_position)
                 .1
                 .collect();
@@ -866,7 +864,7 @@ impl NodeOperation {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let excluded_indices: MrHashSet<_> = result.remove(indices_position).1.collect();
+            let excluded_indices: GrHashSet<_> = result.remove(indices_position).1.collect();
 
             let node_indices: BoxedIterator<_> =
                 Box::new(values.filter(move |node_index| !excluded_indices.contains(node_index)));
@@ -1103,7 +1101,7 @@ impl NodeIndicesOperation {
     ) -> GraphRecordResult<BoxedIterator<'a, NodeIndex>> {
         let (indices_1, indices_2) = Itertools::tee(indices);
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let index = match kind {
             SingleKind::Max => Self::get_max(indices_1)?,
@@ -1309,7 +1307,7 @@ impl NodeIndicesOperation {
     ) -> GraphRecordResult<BoxedIterator<'a, NodeIndex>> {
         let (indices_1, indices_2) = Itertools::tee(indices);
 
-        let result: MrHashSet<_> = operand
+        let result: GrHashSet<_> = operand
             .evaluate_forward(graphrecord, Box::new(indices_1))?
             .collect();
 
@@ -1448,7 +1446,7 @@ impl NodeIndicesOperation {
 
                 let node_indices_1 = node_indices_1.flat_map(|(_, value)| value);
 
-                let node_indinces_1: MrHashSet<_> = operand
+                let node_indinces_1: GrHashSet<_> = operand
                     .evaluate_forward(graphrecord, Box::new(node_indices_1))?
                     .collect();
 
@@ -1474,7 +1472,7 @@ impl NodeIndicesOperation {
         let (node_indices_1, node_indices_2) = tee_grouped_iterator(node_indices);
         let mut node_indices_2: Vec<_> = node_indices_2.collect();
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let node_indices_1: Vec<_> = node_indices_1
             .map(move |(key, node_indices)| {
@@ -1561,7 +1559,7 @@ impl NodeIndicesOperation {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let excluded_indices: MrHashSet<_> = result.remove(indices_position).1.collect();
+            let excluded_indices: GrHashSet<_> = result.remove(indices_position).1.collect();
 
             let node_indices: BoxedIterator<_> =
                 Box::new(values.filter(move |node_index| !excluded_indices.contains(node_index)));
@@ -1932,7 +1930,7 @@ impl NodeIndexOperation {
 
                 let node_indices_1 = node_indices_1.filter_map(|(_, node_index)| node_index);
 
-                let node_indices_1: MrHashSet<_> = operand
+                let node_indices_1: GrHashSet<_> = operand
                     .evaluate_forward(graphrecord, Box::new(node_indices_1))?
                     .collect();
 

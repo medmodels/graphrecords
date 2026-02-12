@@ -25,7 +25,6 @@ use attributes::{
     NodeSingleAttributeWithIndexOperand,
 };
 use edges::{EdgeIndexOperand, EdgeIndicesOperand, EdgeOperand};
-use graphrecords_utils::traits::ReadWriteOrPanic;
 use group_by::{GroupOperand, GroupedOperand};
 use itertools::Itertools;
 use nodes::{NodeIndexOperand, NodeIndicesOperand, NodeOperand};
@@ -267,7 +266,7 @@ impl<'a, O: EvaluateForward<'a>> EvaluateForward<'a> for Wrapper<O> {
         graphrecord: &'a GraphRecord,
         values: Self::InputValue,
     ) -> GraphRecordResult<Self::ReturnValue> {
-        self.0.read_or_panic().evaluate_forward(graphrecord, values)
+        self.0.read().evaluate_forward(graphrecord, values)
     }
 }
 
@@ -285,9 +284,7 @@ impl<'a, O: EvaluateForwardGrouped<'a>> EvaluateForwardGrouped<'a> for Wrapper<O
         graphrecord: &'a GraphRecord,
         values: GroupedIterator<'a, Self::InputValue>,
     ) -> GraphRecordResult<GroupedIterator<'a, Self::ReturnValue>> {
-        self.0
-            .read_or_panic()
-            .evaluate_forward_grouped(graphrecord, values)
+        self.0.read().evaluate_forward_grouped(graphrecord, values)
     }
 }
 
@@ -307,7 +304,7 @@ impl<'a, O: EvaluateBackward<'a>> EvaluateBackward<'a> for Wrapper<O> {
         &self,
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<Self::ReturnValue> {
-        self.0.read_or_panic().evaluate_backward(graphrecord)
+        self.0.read().evaluate_backward(graphrecord)
     }
 }
 
@@ -328,7 +325,7 @@ impl<'a, O> Wrapper<O> {
     where
         O: ReduceInput<'a>,
     {
-        self.0.read_or_panic().reduce_input(values)
+        self.0.read().reduce_input(values)
     }
 }
 

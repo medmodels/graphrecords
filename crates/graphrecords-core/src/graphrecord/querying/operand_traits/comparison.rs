@@ -2,7 +2,6 @@ use crate::graphrecord::querying::{
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 pub trait GreaterThan {
     type ComparisonOperand;
@@ -12,7 +11,7 @@ pub trait GreaterThan {
 
 impl<O: GreaterThan> Wrapper<O> {
     pub fn greater_than<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().greater_than(value);
+        self.0.write().greater_than(value);
     }
 }
 
@@ -32,7 +31,7 @@ pub trait GreaterThanOrEqualTo {
 
 impl<O: GreaterThanOrEqualTo> Wrapper<O> {
     pub fn greater_than_or_equal_to<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().greater_than_or_equal_to(value);
+        self.0.write().greater_than_or_equal_to(value);
     }
 }
 
@@ -52,7 +51,7 @@ pub trait LessThan {
 
 impl<O: LessThan> Wrapper<O> {
     pub fn less_than<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().less_than(value);
+        self.0.write().less_than(value);
     }
 }
 
@@ -72,7 +71,7 @@ pub trait LessThanOrEqualTo {
 
 impl<O: LessThanOrEqualTo> Wrapper<O> {
     pub fn less_than_or_equal_to<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().less_than_or_equal_to(value);
+        self.0.write().less_than_or_equal_to(value);
     }
 }
 
@@ -92,7 +91,7 @@ pub trait EqualTo {
 
 impl<O: EqualTo> Wrapper<O> {
     pub fn equal_to<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().equal_to(value);
+        self.0.write().equal_to(value);
     }
 }
 
@@ -112,7 +111,7 @@ pub trait NotEqualTo {
 
 impl<O: NotEqualTo> Wrapper<O> {
     pub fn not_equal_to<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().not_equal_to(value);
+        self.0.write().not_equal_to(value);
     }
 }
 
