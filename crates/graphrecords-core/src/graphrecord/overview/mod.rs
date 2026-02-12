@@ -10,7 +10,7 @@ use crate::{
         AttributeType, DataType, GraphRecordAttribute, GraphRecordValue, Group, GroupSchema,
     },
 };
-use graphrecords_utils::aliases::MrHashMap;
+use graphrecords_utils::aliases::GrHashMap;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{
@@ -87,7 +87,7 @@ pub struct AttributeOverview {
 #[derive(Debug, Clone)]
 pub struct NodeGroupOverview {
     pub count: usize,
-    pub attributes: MrHashMap<GraphRecordAttribute, AttributeOverview>,
+    pub attributes: GrHashMap<GraphRecordAttribute, AttributeOverview>,
 
     truncate_details: Option<usize>,
 }
@@ -148,7 +148,7 @@ impl NodeGroupOverview {
         };
         let count = nodes_in_group.len();
 
-        let attributes: MrHashMap<_, _> = group_schema
+        let attributes: GrHashMap<_, _> = group_schema
             .nodes()
             .par_iter()
             .map(|(key, attribute_data_type)| {
@@ -260,7 +260,7 @@ impl NodeGroupOverview {
 #[derive(Debug, Clone)]
 pub struct EdgeGroupOverview {
     pub count: usize,
-    pub attributes: MrHashMap<GraphRecordAttribute, AttributeOverview>,
+    pub attributes: GrHashMap<GraphRecordAttribute, AttributeOverview>,
 
     truncate_details: Option<usize>,
 }
@@ -317,7 +317,7 @@ impl EdgeGroupOverview {
         };
         let count = edges_in_group.len();
 
-        let attributes: MrHashMap<_, _> = group_schema
+        let attributes: GrHashMap<_, _> = group_schema
             .edges()
             .par_iter()
             .map(|(key, attribute_data_type)| {
@@ -470,7 +470,7 @@ impl Display for GroupOverview {
 #[derive(Debug, Clone)]
 pub struct Overview {
     pub ungrouped_overview: GroupOverview,
-    pub grouped_overviews: MrHashMap<Group, GroupOverview>,
+    pub grouped_overviews: GrHashMap<Group, GroupOverview>,
 
     truncate_details: Option<usize>,
 }

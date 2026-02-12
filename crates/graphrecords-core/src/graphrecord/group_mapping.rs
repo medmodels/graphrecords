@@ -1,6 +1,6 @@
 use super::{EdgeIndex, GraphRecordAttribute, NodeIndex};
 use crate::errors::GraphRecordError;
-use graphrecords_utils::aliases::{MrHashMap, MrHashMapEntry, MrHashSet};
+use graphrecords_utils::aliases::{GrHashMap, GrHashMapEntry, GrHashSet};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -9,10 +9,10 @@ pub type Group = GraphRecordAttribute;
 #[derive(Default, Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(super) struct GroupMapping {
-    pub(super) nodes_in_group: MrHashMap<Group, MrHashSet<NodeIndex>>,
-    pub(super) edges_in_group: MrHashMap<Group, MrHashSet<EdgeIndex>>,
-    pub(super) groups_of_node: MrHashMap<NodeIndex, MrHashSet<Group>>,
-    pub(super) groups_of_edge: MrHashMap<EdgeIndex, MrHashSet<Group>>,
+    pub(super) nodes_in_group: GrHashMap<Group, GrHashSet<NodeIndex>>,
+    pub(super) edges_in_group: GrHashMap<Group, GrHashSet<EdgeIndex>>,
+    pub(super) groups_of_node: GrHashMap<NodeIndex, GrHashSet<Group>>,
+    pub(super) groups_of_edge: GrHashMap<EdgeIndex, GrHashSet<Group>>,
 }
 
 impl GroupMapping {
@@ -23,73 +23,32 @@ impl GroupMapping {
         node_indices: Option<Vec<NodeIndex>>,
         edge_indices: Option<Vec<EdgeIndex>>,
     ) -> Result<(), GraphRecordError> {
-        match self.nodes_in_group.entry(group.clone()) {
-            MrHashMapEntry::Occupied(o) => Err(GraphRecordError::AssertionError(format!(
-                "Group {} already exists",
-                o.key()
-            ))),
-            MrHashMapEntry::Vacant(v) => {
-                v.insert(
-                    node_indices
-                        .clone()
-                        .unwrap_or_default()
-                        .into_iter()
-                        .collect(),
-                );
-                Ok(())
-            }
-        }?;
+        if self.nodes_in_group.contains_key(&group) {
+            return Err(GraphRecordError::AssertionError(format!(
+                "Group {group} already exists"
+            )));
+        }
 
-        match self.edges_in_group.entry(group.clone()) {
-            MrHashMapEntry::Occupied(o) => Err(GraphRecordError::AssertionError(format!(
-                "Group {} already exists",
-                o.key()
-            ))),
-            MrHashMapEntry::Vacant(v) => {
-                v.insert(
-                    edge_indices
-                        .clone()
-                        .unwrap_or_default()
-                        .into_iter()
-                        .collect(),
-                );
-                Ok(())
-            }
-        }?;
+        let node_indices = node_indices.unwrap_or_default();
+        let edge_indices = edge_indices.unwrap_or_default();
 
-        match (node_indices, edge_indices) {
-            (None, None) => (),
-            (None, Some(edge_indices)) => {
-                for edge_index in edge_indices {
-                    self.groups_of_edge
-                        .entry(edge_index)
-                        .or_default()
-                        .insert(group.clone());
-                }
-            }
-            (Some(node_indices), None) => {
-                for node_index in node_indices {
-                    self.groups_of_node
-                        .entry(node_index)
-                        .or_default()
-                        .insert(group.clone());
-                }
-            }
-            (Some(node_indices), Some(edge_indices)) => {
-                for node_index in node_indices {
-                    self.groups_of_node
-                        .entry(node_index)
-                        .or_default()
-                        .insert(group.clone());
-                }
+        self.nodes_in_group
+            .insert(group.clone(), node_indices.iter().cloned().collect());
+        self.edges_in_group
+            .insert(group.clone(), edge_indices.iter().copied().collect());
 
-                for edge_index in edge_indices {
-                    self.groups_of_edge
-                        .entry(edge_index)
-                        .or_default()
-                        .insert(group.clone());
-                }
-            }
+        for node_index in node_indices {
+            self.groups_of_node
+                .entry(node_index)
+                .or_default()
+                .insert(group.clone());
+        }
+
+        for edge_index in edge_indices {
+            self.groups_of_edge
+                .entry(edge_index)
+                .or_default()
+                .insert(group.clone());
         }
 
         Ok(())
@@ -103,9 +62,9 @@ impl GroupMapping {
         // TODO: This was changed. Add a test for adding to a non-existing group
         let nodes_in_group = self.nodes_in_group.entry(group.clone());
 
-        if let MrHashMapEntry::Vacant(_) = nodes_in_group {
+        if let GrHashMapEntry::Vacant(_) = nodes_in_group {
             self.edges_in_group
-                .insert(group.clone(), MrHashSet::default());
+                .insert(group.clone(), GrHashSet::default());
         }
 
         let nodes_in_group = nodes_in_group.or_default();
@@ -132,9 +91,9 @@ impl GroupMapping {
         // TODO: This was changed. Add a test for adding to a non-existing group
         let edges_in_group = self.edges_in_group.entry(group.clone());
 
-        if let MrHashMapEntry::Vacant(_) = edges_in_group {
+        if let GrHashMapEntry::Vacant(_) = edges_in_group {
             self.nodes_in_group
-                .insert(group.clone(), MrHashSet::default());
+                .insert(group.clone(), GrHashSet::default());
         }
 
         let edges_in_group = edges_in_group.or_default();

@@ -19,6 +19,7 @@ ron = "0.8.1"
 roaring = "0.10.6"
 itertools = "0.13.0"
 tabled = "0.20.0"
+parking_lot = "0.12.5"
 
 serde = { workspace = true, optional = true }
 

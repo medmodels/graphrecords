@@ -22,7 +22,7 @@ use crate::{
 };
 use ::polars::frame::DataFrame;
 use graph::Graph;
-use graphrecords_utils::aliases::MrHashSet;
+use graphrecords_utils::aliases::GrHashSet;
 use group_mapping::GroupMapping;
 use polars::{dataframe_to_edges, dataframe_to_nodes};
 use querying::{
@@ -304,7 +304,7 @@ impl GraphRecord {
                                     self.group_mapping
                                         .nodes_in_group
                                         .get(group)
-                                        .map_or(0, MrHashSet::len),
+                                        .map_or(0, GrHashSet::len),
                                 );
 
                                 schema.update_node(&node.attributes, Some(group), true);
@@ -360,7 +360,7 @@ impl GraphRecord {
                                     self.group_mapping
                                         .edges_in_group
                                         .get(group)
-                                        .map_or(0, MrHashSet::len),
+                                        .map_or(0, GrHashSet::len),
                                 );
 
                                 schema.update_edge(&edge.attributes, Some(group), true);
@@ -386,6 +386,7 @@ impl GraphRecord {
         mem::swap(&mut self.schema, schema);
     }
 
+    #[must_use]
     pub const fn get_schema(&self) -> &Schema {
         &self.schema
     }
@@ -515,7 +516,7 @@ impl GraphRecord {
                     .group_mapping
                     .nodes_in_group
                     .get(&group)
-                    .map_or(0, MrHashSet::len);
+                    .map_or(0, GrHashSet::len);
 
                 self.schema
                     .update_node(&attributes, Some(&group), nodes_in_group == 0);
@@ -676,7 +677,7 @@ impl GraphRecord {
                     .group_mapping
                     .edges_in_group
                     .get(&group)
-                    .map_or(0, MrHashSet::len);
+                    .map_or(0, GrHashSet::len);
 
                 self.schema
                     .update_edge(&attributes, Some(&group), edges_in_group == 0);
@@ -913,7 +914,7 @@ impl GraphRecord {
                     .group_mapping
                     .nodes_in_group
                     .get(&group)
-                    .map_or(0, MrHashSet::len);
+                    .map_or(0, GrHashSet::len);
 
                 self.schema
                     .update_node(node_attributes, Some(&group), nodes_in_group == 0);
@@ -940,7 +941,7 @@ impl GraphRecord {
                     .group_mapping
                     .edges_in_group
                     .get(&group)
-                    .map_or(0, MrHashSet::len);
+                    .map_or(0, GrHashSet::len);
 
                 self.schema
                     .update_edge(edge_attributes, Some(&group), edges_in_group == 0);
@@ -994,7 +995,7 @@ impl GraphRecord {
     }
 
     pub fn ungrouped_nodes(&self) -> impl Iterator<Item = &NodeIndex> {
-        let nodes_in_groups: MrHashSet<_> = self
+        let nodes_in_groups: GrHashSet<_> = self
             .groups()
             .flat_map(|group| {
                 #[expect(clippy::missing_panics_doc, reason = "infallible")]
@@ -1015,7 +1016,7 @@ impl GraphRecord {
     }
 
     pub fn ungrouped_edges(&self) -> impl Iterator<Item = &EdgeIndex> {
-        let edges_in_groups: MrHashSet<_> = self
+        let edges_in_groups: GrHashSet<_> = self
             .groups()
             .flat_map(|group| {
                 #[expect(clippy::missing_panics_doc, reason = "infallible")]
@@ -1054,26 +1055,32 @@ impl GraphRecord {
         Ok(self.group_mapping.groups_of_edge(edge_index))
     }
 
+    #[must_use]
     pub fn node_count(&self) -> usize {
         self.graph.node_count()
     }
 
+    #[must_use]
     pub fn edge_count(&self) -> usize {
         self.graph.edge_count()
     }
 
+    #[must_use]
     pub fn group_count(&self) -> usize {
         self.group_mapping.group_count()
     }
 
+    #[must_use]
     pub fn contains_node(&self, node_index: &NodeIndex) -> bool {
         self.graph.contains_node(node_index)
     }
 
+    #[must_use]
     pub fn contains_edge(&self, edge_index: &EdgeIndex) -> bool {
         self.graph.contains_edge(edge_index)
     }
 
+    #[must_use]
     pub fn contains_group(&self, group: &Group) -> bool {
         self.group_mapping.contains_group(group)
     }

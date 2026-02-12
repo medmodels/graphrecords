@@ -23,7 +23,7 @@ use crate::{
         },
     },
 };
-use graphrecords_utils::{aliases::MrHashSet, traits::ReadWriteOrPanic};
+use graphrecords_utils::aliases::GrHashSet;
 use itertools::Itertools;
 use rand::{rng, seq::IteratorRandom};
 use std::ops::{Add, Mul, Sub};
@@ -147,10 +147,10 @@ impl EdgeOperation {
                 let (edge_indices_1, rest) = edge_indices.tee();
                 let (edge_indices_2, edge_indices_3) = rest.tee();
 
-                let either_set: MrHashSet<_> = either
+                let either_set: GrHashSet<_> = either
                     .evaluate_forward(graphrecord, Box::new(edge_indices_1))?
                     .collect();
-                let or_set: MrHashSet<_> = or
+                let or_set: GrHashSet<_> = or
                     .evaluate_forward(graphrecord, Box::new(edge_indices_2))?
                     .collect();
 
@@ -162,7 +162,7 @@ impl EdgeOperation {
             Self::Exclude { operand } => {
                 let (edge_indices_1, edge_indices_2) = edge_indices.tee();
 
-                let result: MrHashSet<_> = operand
+                let result: GrHashSet<_> = operand
                     .evaluate_forward(graphrecord, Box::new(edge_indices_1))?
                     .collect();
 
@@ -201,8 +201,7 @@ impl EdgeOperation {
     where
         T: Iterator<Item = &'a EdgeIndex> + 'a,
     {
-        let MultipleValuesWithIndexContext::Operand((_, ref attribute)) =
-            operand.0.read_or_panic().context
+        let MultipleValuesWithIndexContext::Operand((_, ref attribute)) = operand.0.read().context
         else {
             unreachable!()
         };
@@ -257,7 +256,7 @@ impl EdgeOperation {
     {
         let (edge_indices_1, edge_indices_2) = Itertools::tee(edge_indices);
 
-        let result: MrHashSet<_> = operand
+        let result: GrHashSet<_> = operand
             .evaluate_forward(graphrecord, Box::new(edge_indices_1.copied()))?
             .collect();
 
@@ -277,7 +276,7 @@ impl EdgeOperation {
                 .groups_of_edge(edge_index)
                 .expect("Node must exist");
 
-            let groups_of_edge: MrHashSet<_> = groups_of_edge.collect();
+            let groups_of_edge: GrHashSet<_> = groups_of_edge.collect();
 
             match &group {
                 CardinalityWrapper::Single(group) => groups_of_edge.contains(&group),
@@ -307,7 +306,7 @@ impl EdgeOperation {
                 .expect("Node must exist")
                 .keys();
 
-            let attributes_of_edge: MrHashSet<_> = attributes_of_edge.collect();
+            let attributes_of_edge: GrHashSet<_> = attributes_of_edge.collect();
 
             match &attribute {
                 CardinalityWrapper::Single(attribute) => attributes_of_edge.contains(&attribute),
@@ -348,7 +347,7 @@ impl EdgeOperation {
             edge_endpoints.0
         });
 
-        let node_indices: MrHashSet<_> = operand
+        let node_indices: GrHashSet<_> = operand
             .evaluate_forward(graphrecord, Box::new(node_indices))?
             .collect();
 
@@ -380,7 +379,7 @@ impl EdgeOperation {
             edge_endpoints.1
         });
 
-        let node_indices: MrHashSet<_> = operand
+        let node_indices: GrHashSet<_> = operand
             .evaluate_forward(graphrecord, Box::new(node_indices))?
             .collect();
 
@@ -488,8 +487,7 @@ impl EdgeOperation {
         edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>,
         operand: &Wrapper<MultipleValuesWithIndexOperand<EdgeOperand>>,
     ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>> {
-        let MultipleValuesWithIndexContext::Operand((_, ref attribute)) =
-            operand.0.read_or_panic().context
+        let MultipleValuesWithIndexContext::Operand((_, ref attribute)) = operand.0.read().context
         else {
             unreachable!()
         };
@@ -565,7 +563,7 @@ impl EdgeOperation {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let edge_indices_1: MrHashSet<_> =
+            let edge_indices_1: GrHashSet<_> =
                 edge_indices_1.remove(*edge_indices_position).1.collect();
 
             let filtered_indices: Vec<_> = edge_indices
@@ -609,7 +607,7 @@ impl EdgeOperation {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let node_indices: MrHashSet<_> =
+            let node_indices: GrHashSet<_> =
                 node_indices.remove(*node_indices_position).1.collect();
 
             let filtered_indices: Vec<_> = edge_indices
@@ -659,7 +657,7 @@ impl EdgeOperation {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let node_indices: MrHashSet<_> =
+            let node_indices: GrHashSet<_> =
                 node_indices.remove(*node_indices_position).1.collect();
 
             let filtered_indices: Vec<_> = edge_indices
@@ -731,7 +729,7 @@ impl EdgeOperation {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let excluded_indices: MrHashSet<_> = result.remove(indices_position).1.collect();
+            let excluded_indices: GrHashSet<_> = result.remove(indices_position).1.collect();
 
             let edge_indices: BoxedIterator<_> =
                 Box::new(values.filter(move |edge_index| !excluded_indices.contains(edge_index)));
@@ -881,7 +879,7 @@ impl EdgeIndicesOperation {
     ) -> GraphRecordResult<BoxedIterator<'a, EdgeIndex>> {
         let (indices_1, indices_2) = Itertools::tee(indices);
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let index = match kind {
             SingleKind::Max => Self::get_max(indices_1),
@@ -1037,7 +1035,7 @@ impl EdgeIndicesOperation {
     ) -> GraphRecordResult<BoxedIterator<'a, EdgeIndex>> {
         let (indices_1, indices_2) = Itertools::tee(indices);
 
-        let result: MrHashSet<_> = operand
+        let result: GrHashSet<_> = operand
             .evaluate_forward(graphrecord, Box::new(indices_1))?
             .collect();
 
@@ -1129,7 +1127,7 @@ impl EdgeIndicesOperation {
 
                 let edge_indices_1 = edge_indices_1.flat_map(|(_, value)| value);
 
-                let edge_indinces_1: MrHashSet<_> = operand
+                let edge_indinces_1: GrHashSet<_> = operand
                     .evaluate_forward(graphrecord, Box::new(edge_indices_1))?
                     .collect();
 
@@ -1155,7 +1153,7 @@ impl EdgeIndicesOperation {
         let (edge_indices_1, edge_indices_2) = tee_grouped_iterator(edge_indices);
         let mut edge_indices_2: Vec<_> = edge_indices_2.collect();
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let edge_indices_1: Vec<_> = edge_indices_1
             .map(move |(key, edge_indices)| {
@@ -1242,7 +1240,7 @@ impl EdgeIndicesOperation {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let excluded_indices: MrHashSet<_> = result.remove(indices_position).1.collect();
+            let excluded_indices: GrHashSet<_> = result.remove(indices_position).1.collect();
 
             let edge_indices: BoxedIterator<_> =
                 Box::new(values.filter(move |edge_index| !excluded_indices.contains(edge_index)));
@@ -1508,7 +1506,7 @@ impl EdgeIndexOperation {
 
                 let edge_indices_1 = edge_indices_1.filter_map(|(_, indices)| indices);
 
-                let edge_indices_1: MrHashSet<_> = operand
+                let edge_indices_1: GrHashSet<_> = operand
                     .evaluate_forward(graphrecord, Box::new(edge_indices_1))?
                     .collect();
 
