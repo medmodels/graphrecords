@@ -4,55 +4,39 @@ mod node;
 use super::{GraphRecordAttribute, GraphRecordValue, group_mapping::GroupMapping};
 use crate::errors::GraphError;
 use edge::Edge;
-use graphrecords_utils::aliases::MrHashMap;
+use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use node::Node;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::atomic::AtomicU32,
-};
+use std::collections::HashMap;
 
 pub type NodeIndex = GraphRecordAttribute;
 pub type EdgeIndex = u32;
 pub type Attributes = HashMap<GraphRecordAttribute, GraphRecordValue>;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(super) struct Graph {
-    pub(crate) nodes: MrHashMap<NodeIndex, Node>,
-    pub(crate) edges: MrHashMap<EdgeIndex, Edge>,
-    edge_index_counter: AtomicU32,
-}
-
-impl Clone for Graph {
-    fn clone(&self) -> Self {
-        Self {
-            nodes: self.nodes.clone(),
-            edges: self.edges.clone(),
-            edge_index_counter: AtomicU32::new(
-                self.edge_index_counter
-                    .load(std::sync::atomic::Ordering::Relaxed),
-            ),
-        }
-    }
+    pub(crate) nodes: GrHashMap<NodeIndex, Node>,
+    pub(crate) edges: GrHashMap<EdgeIndex, Edge>,
+    edge_index_counter: u32,
 }
 
 #[allow(dead_code)]
 impl Graph {
     pub fn new() -> Self {
         Self {
-            nodes: MrHashMap::new(),
-            edges: MrHashMap::new(),
-            edge_index_counter: AtomicU32::new(0),
+            nodes: GrHashMap::new(),
+            edges: GrHashMap::new(),
+            edge_index_counter: 0,
         }
     }
 
     pub fn with_capacity(node_capacity: usize, edge_capacity: usize) -> Self {
         Self {
-            nodes: MrHashMap::with_capacity(node_capacity),
-            edges: MrHashMap::with_capacity(edge_capacity),
-            edge_index_counter: AtomicU32::new(0),
+            nodes: GrHashMap::with_capacity(node_capacity),
+            edges: GrHashMap::with_capacity(edge_capacity),
+            edge_index_counter: 0,
         }
     }
 
@@ -60,13 +44,13 @@ impl Graph {
         self.nodes.clear();
         self.edges.clear();
 
-        self.edge_index_counter = AtomicU32::new(0);
+        self.edge_index_counter = 0;
     }
 
     pub fn clear_edges(&mut self) {
         self.edges.clear();
 
-        self.edge_index_counter = AtomicU32::new(0);
+        self.edge_index_counter = 0;
     }
 
     pub fn node_count(&self) -> usize {
@@ -145,11 +129,6 @@ impl Graph {
         self.nodes.contains_key(node_index)
     }
 
-    fn get_edge_index(&self) -> EdgeIndex {
-        self.edge_index_counter
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    }
-
     pub fn add_edge(
         &mut self,
         source_node_index: NodeIndex,
@@ -162,7 +141,8 @@ impl Graph {
             )));
         }
 
-        let edge_index = self.get_edge_index();
+        let edge_index = self.edge_index_counter;
+        self.edge_index_counter += 1;
 
         let outgoing_node = self.nodes.get_mut(&source_node_index).ok_or_else(|| {
             GraphError::IndexError(format!("Cannot find node with index {source_node_index}"))
@@ -317,34 +297,93 @@ impl Graph {
         self.edges.keys()
     }
 
-    pub fn edges_connecting<'a>(
+    pub fn edges_connecting<'a, SN, TN>(
         &'a self,
-        source_node_indices: Vec<&'a NodeIndex>,
-        target_node_indices: Vec<&'a NodeIndex>,
-    ) -> impl Iterator<Item = &'a EdgeIndex> {
-        self.edges
-            .iter()
-            .filter(move |(_, edge)| {
-                source_node_indices.contains(&&edge.source_node_index)
-                    && target_node_indices.contains(&&edge.target_node_index)
-            })
-            .map(|(edge_index, _)| edge_index)
+        source_node_indices: SN,
+        target_node_indices: TN,
+    ) -> impl Iterator<Item = &'a EdgeIndex>
+    where
+        SN: IntoIterator<Item = &'a NodeIndex>,
+        TN: IntoIterator<Item = &'a NodeIndex>,
+    {
+        let target_set: GrHashSet<&NodeIndex> = target_node_indices.into_iter().collect();
+
+        let mut result = Vec::new();
+
+        for source_index in source_node_indices {
+            let Some(node) = self.nodes.get(source_index) else {
+                continue;
+            };
+
+            for edge_index in &node.outgoing_edge_indices {
+                let edge = self.edges.get(edge_index).expect("Edge must exist");
+
+                if target_set.contains(&edge.target_node_index) {
+                    result.push(edge_index);
+                }
+            }
+        }
+
+        result.into_iter()
     }
 
-    pub fn edges_connecting_undirected<'a>(
+    pub fn edges_connecting_undirected<'a, SN, TN>(
         &'a self,
-        first_node_indices: Vec<&'a NodeIndex>,
-        second_node_indices: Vec<&'a NodeIndex>,
-    ) -> impl Iterator<Item = &'a EdgeIndex> {
-        self.edges
-            .iter()
-            .filter(move |(_, edge)| {
-                (first_node_indices.contains(&&edge.source_node_index)
-                    && second_node_indices.contains(&&edge.target_node_index))
-                    || (first_node_indices.contains(&&edge.target_node_index)
-                        && second_node_indices.contains(&&edge.source_node_index))
-            })
-            .map(|(edge_index, _)| edge_index)
+        first_node_indices: SN,
+        second_node_indices: TN,
+    ) -> impl Iterator<Item = &'a EdgeIndex>
+    where
+        SN: IntoIterator<Item = &'a NodeIndex>,
+        TN: IntoIterator<Item = &'a NodeIndex>,
+    {
+        let first_set: GrHashSet<&NodeIndex> = first_node_indices.into_iter().collect();
+        let second_set: GrHashSet<&NodeIndex> = second_node_indices.into_iter().collect();
+
+        let mut result = GrHashSet::new();
+
+        for source_index in &first_set {
+            let Some(node) = self.nodes.get(*source_index) else {
+                continue;
+            };
+
+            for edge_index in &node.outgoing_edge_indices {
+                let edge = self.edges.get(edge_index).expect("Edge must exist");
+
+                if second_set.contains(&edge.target_node_index) {
+                    result.insert(edge_index);
+                }
+            }
+            for edge_index in &node.incoming_edge_indices {
+                let edge = self.edges.get(edge_index).expect("Edge must exist");
+
+                if second_set.contains(&edge.source_node_index) {
+                    result.insert(edge_index);
+                }
+            }
+        }
+
+        for source_index in &second_set {
+            let Some(node) = self.nodes.get(*source_index) else {
+                continue;
+            };
+
+            for edge_index in &node.outgoing_edge_indices {
+                let edge = self.edges.get(edge_index).expect("Edge must exist");
+
+                if first_set.contains(&edge.target_node_index) {
+                    result.insert(edge_index);
+                }
+            }
+            for edge_index in &node.incoming_edge_indices {
+                let edge = self.edges.get(edge_index).expect("Edge must exist");
+
+                if first_set.contains(&edge.source_node_index) {
+                    result.insert(edge_index);
+                }
+            }
+        }
+
+        result.into_iter()
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -420,7 +459,7 @@ impl Graph {
                     .expect("Edge must exist")
                     .source_node_index
             }))
-            .collect::<HashSet<_>>()
+            .collect::<GrHashSet<_>>()
             .into_iter())
     }
 }

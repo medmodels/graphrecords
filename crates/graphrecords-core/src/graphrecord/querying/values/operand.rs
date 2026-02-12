@@ -28,7 +28,6 @@ use crate::{
         },
     },
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 #[derive(Debug, Clone)]
 pub enum SingleValueComparisonOperand {
@@ -61,49 +60,49 @@ impl DeepClone for SingleValueComparisonOperand {
 
 impl From<Wrapper<NodeSingleValueWithIndexOperand>> for SingleValueComparisonOperand {
     fn from(value: Wrapper<NodeSingleValueWithIndexOperand>) -> Self {
-        Self::NodeSingleValueWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeSingleValueWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<NodeSingleValueWithIndexOperand>> for SingleValueComparisonOperand {
     fn from(value: &Wrapper<NodeSingleValueWithIndexOperand>) -> Self {
-        Self::NodeSingleValueWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeSingleValueWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<Wrapper<NodeSingleValueWithoutIndexOperand>> for SingleValueComparisonOperand {
     fn from(value: Wrapper<NodeSingleValueWithoutIndexOperand>) -> Self {
-        Self::NodeSingleValueWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeSingleValueWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<NodeSingleValueWithoutIndexOperand>> for SingleValueComparisonOperand {
     fn from(value: &Wrapper<NodeSingleValueWithoutIndexOperand>) -> Self {
-        Self::NodeSingleValueWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeSingleValueWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<Wrapper<EdgeSingleValueWithIndexOperand>> for SingleValueComparisonOperand {
     fn from(value: Wrapper<EdgeSingleValueWithIndexOperand>) -> Self {
-        Self::EdgeSingleValueWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeSingleValueWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<EdgeSingleValueWithIndexOperand>> for SingleValueComparisonOperand {
     fn from(value: &Wrapper<EdgeSingleValueWithIndexOperand>) -> Self {
-        Self::EdgeSingleValueWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeSingleValueWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<Wrapper<EdgeSingleValueWithoutIndexOperand>> for SingleValueComparisonOperand {
     fn from(value: Wrapper<EdgeSingleValueWithoutIndexOperand>) -> Self {
-        Self::EdgeSingleValueWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeSingleValueWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<EdgeSingleValueWithoutIndexOperand>> for SingleValueComparisonOperand {
     fn from(value: &Wrapper<EdgeSingleValueWithoutIndexOperand>) -> Self {
-        Self::EdgeSingleValueWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeSingleValueWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
@@ -167,49 +166,49 @@ impl DeepClone for MultipleValuesComparisonOperand {
 
 impl From<Wrapper<NodeMultipleValuesWithIndexOperand>> for MultipleValuesComparisonOperand {
     fn from(value: Wrapper<NodeMultipleValuesWithIndexOperand>) -> Self {
-        Self::NodeMultipleValuesWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeMultipleValuesWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<NodeMultipleValuesWithIndexOperand>> for MultipleValuesComparisonOperand {
     fn from(value: &Wrapper<NodeMultipleValuesWithIndexOperand>) -> Self {
-        Self::NodeMultipleValuesWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeMultipleValuesWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<Wrapper<NodeMultipleValuesWithoutIndexOperand>> for MultipleValuesComparisonOperand {
     fn from(value: Wrapper<NodeMultipleValuesWithoutIndexOperand>) -> Self {
-        Self::NodeMultipleValuesWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeMultipleValuesWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<NodeMultipleValuesWithoutIndexOperand>> for MultipleValuesComparisonOperand {
     fn from(value: &Wrapper<NodeMultipleValuesWithoutIndexOperand>) -> Self {
-        Self::NodeMultipleValuesWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::NodeMultipleValuesWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<Wrapper<EdgeMultipleValuesWithIndexOperand>> for MultipleValuesComparisonOperand {
     fn from(value: Wrapper<EdgeMultipleValuesWithIndexOperand>) -> Self {
-        Self::EdgeMultipleValuesWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeMultipleValuesWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<EdgeMultipleValuesWithIndexOperand>> for MultipleValuesComparisonOperand {
     fn from(value: &Wrapper<EdgeMultipleValuesWithIndexOperand>) -> Self {
-        Self::EdgeMultipleValuesWithIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeMultipleValuesWithIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<Wrapper<EdgeMultipleValuesWithoutIndexOperand>> for MultipleValuesComparisonOperand {
     fn from(value: Wrapper<EdgeMultipleValuesWithoutIndexOperand>) -> Self {
-        Self::EdgeMultipleValuesWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeMultipleValuesWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<EdgeMultipleValuesWithoutIndexOperand>> for MultipleValuesComparisonOperand {
     fn from(value: &Wrapper<EdgeMultipleValuesWithoutIndexOperand>) -> Self {
-        Self::EdgeMultipleValuesWithoutIndexOperand(value.0.read_or_panic().deep_clone())
+        Self::EdgeMultipleValuesWithoutIndexOperand(value.0.read().deep_clone())
     }
 }
 
@@ -936,7 +935,7 @@ impl<O: RootOperand> Wrapper<MultipleValuesWithIndexOperand<O>> {
     }
 
     pub(crate) fn push_merge_operation(&self, operand: Self) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }
 
@@ -2121,7 +2120,7 @@ impl<O: RootOperand> Wrapper<SingleValueWithIndexOperand<O>> {
     }
 
     pub(crate) fn push_merge_operation(&self, operand: Wrapper<MultipleValuesWithIndexOperand<O>>) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }
 
@@ -2658,6 +2657,6 @@ impl<O: RootOperand> Wrapper<SingleValueWithoutIndexOperand<O>> {
         &self,
         operand: Wrapper<MultipleValuesWithoutIndexOperand<O>>,
     ) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }

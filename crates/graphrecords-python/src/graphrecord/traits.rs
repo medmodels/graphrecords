@@ -1,4 +1,4 @@
-use graphrecords_utils::aliases::MrHashMap;
+use graphrecords_utils::aliases::GrHashMap;
 use std::{
     collections::HashMap,
     hash::{BuildHasher, Hash},
@@ -35,13 +35,30 @@ where
     }
 }
 
-impl<K, KF, V, VF, H> DeepFrom<MrHashMap<K, V>> for HashMap<KF, VF, H>
+impl<K, KF, V, VF, H, H2> DeepFrom<&HashMap<K, V, H2>> for HashMap<KF, VF, H>
+where
+    K: Clone,
+    V: Clone,
+    KF: Hash + Eq + DeepFrom<K>,
+    VF: DeepFrom<V>,
+    H: BuildHasher + Default,
+    H2: BuildHasher,
+{
+    fn deep_from(value: &HashMap<K, V, H2>) -> Self {
+        value
+            .iter()
+            .map(|(key, value)| (key.clone().deep_into(), value.clone().deep_into()))
+            .collect()
+    }
+}
+
+impl<K, KF, V, VF, H> DeepFrom<GrHashMap<K, V>> for HashMap<KF, VF, H>
 where
     KF: Hash + Eq + DeepFrom<K>,
     VF: DeepFrom<V>,
     H: BuildHasher + Default,
 {
-    fn deep_from(value: MrHashMap<K, V>) -> Self {
+    fn deep_from(value: GrHashMap<K, V>) -> Self {
         value
             .into_iter()
             .map(|(key, value)| (key.deep_into(), value.deep_into()))

@@ -1,5 +1,5 @@
 use super::{Attributes, EdgeIndex};
-use graphrecords_utils::aliases::MrHashSet;
+use graphrecords_utils::aliases::GrHashSet;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -7,16 +7,16 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Node {
     pub(crate) attributes: Attributes,
-    pub(crate) outgoing_edge_indices: MrHashSet<EdgeIndex>,
-    pub(crate) incoming_edge_indices: MrHashSet<EdgeIndex>,
+    pub(crate) outgoing_edge_indices: GrHashSet<EdgeIndex>,
+    pub(crate) incoming_edge_indices: GrHashSet<EdgeIndex>,
 }
 
 impl Node {
     pub fn new(attributes: Attributes) -> Self {
         Self {
             attributes,
-            outgoing_edge_indices: MrHashSet::new(),
-            incoming_edge_indices: MrHashSet::new(),
+            outgoing_edge_indices: GrHashSet::new(),
+            incoming_edge_indices: GrHashSet::new(),
         }
     }
 }

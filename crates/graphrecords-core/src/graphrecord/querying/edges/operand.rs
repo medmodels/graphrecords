@@ -27,7 +27,7 @@ use crate::{
     },
     prelude::GraphRecordValue,
 };
-use graphrecords_utils::{aliases::MrHashSet, traits::ReadWriteOrPanic};
+use graphrecords_utils::aliases::GrHashSet;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
@@ -140,7 +140,7 @@ impl RootOperand for EdgeOperand {
                 let Some(EdgeOperandContext::Edges {
                     operand: _,
                     ref kind,
-                }) = group_operand.operand.0.read_or_panic().context
+                }) = group_operand.operand.0.read().context
                 else {
                     unreachable!()
                 };
@@ -474,13 +474,13 @@ impl DeepClone for EdgeIndexComparisonOperand {
 
 impl From<Wrapper<EdgeIndexOperand>> for EdgeIndexComparisonOperand {
     fn from(index: Wrapper<EdgeIndexOperand>) -> Self {
-        Self::Operand(index.0.read_or_panic().deep_clone())
+        Self::Operand(index.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<EdgeIndexOperand>> for EdgeIndexComparisonOperand {
     fn from(index: &Wrapper<EdgeIndexOperand>) -> Self {
-        Self::Operand(index.0.read_or_panic().deep_clone())
+        Self::Operand(index.0.read().deep_clone())
     }
 }
 
@@ -505,7 +505,7 @@ impl EdgeIndexComparisonOperand {
 #[derive(Debug, Clone)]
 pub enum EdgeIndicesComparisonOperand {
     Operand(EdgeIndicesOperand),
-    Indices(MrHashSet<EdgeIndex>),
+    Indices(GrHashSet<EdgeIndex>),
 }
 
 impl DeepClone for EdgeIndicesComparisonOperand {
@@ -519,13 +519,13 @@ impl DeepClone for EdgeIndicesComparisonOperand {
 
 impl From<Wrapper<EdgeIndicesOperand>> for EdgeIndicesComparisonOperand {
     fn from(indices: Wrapper<EdgeIndicesOperand>) -> Self {
-        Self::Operand(indices.0.read_or_panic().deep_clone())
+        Self::Operand(indices.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<EdgeIndicesOperand>> for EdgeIndicesComparisonOperand {
     fn from(indices: &Wrapper<EdgeIndicesOperand>) -> Self {
-        Self::Operand(indices.0.read_or_panic().deep_clone())
+        Self::Operand(indices.0.read().deep_clone())
     }
 }
 
@@ -541,8 +541,8 @@ impl<V: Into<EdgeIndex>> From<HashSet<V>> for EdgeIndicesComparisonOperand {
     }
 }
 
-impl<V: Into<EdgeIndex>> From<MrHashSet<V>> for EdgeIndicesComparisonOperand {
-    fn from(indices: MrHashSet<V>) -> Self {
+impl<V: Into<EdgeIndex>> From<GrHashSet<V>> for EdgeIndicesComparisonOperand {
+    fn from(indices: GrHashSet<V>) -> Self {
         Self::Indices(indices.into_iter().map(Into::into).collect())
     }
 }
@@ -557,7 +557,7 @@ impl EdgeIndicesComparisonOperand {
     pub(crate) fn evaluate_backward(
         &self,
         graphrecord: &GraphRecord,
-    ) -> GraphRecordResult<MrHashSet<EdgeIndex>> {
+    ) -> GraphRecordResult<GrHashSet<EdgeIndex>> {
         Ok(match self {
             Self::Operand(operand) => operand.evaluate_backward(graphrecord)?.collect(),
             Self::Indices(indices) => indices.clone(),
@@ -962,7 +962,7 @@ impl Wrapper<EdgeIndicesOperand> {
     }
 
     pub(crate) fn push_merge_operation(&self, operand: Self) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }
 
@@ -1296,6 +1296,6 @@ impl Wrapper<EdgeIndexOperand> {
     }
 
     pub(crate) fn push_merge_operation(&self, operand: Wrapper<EdgeIndicesOperand>) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }

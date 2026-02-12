@@ -5,7 +5,7 @@ use crate::{
     prelude::{EdgeIndex, Group},
 };
 use chrono::{DateTime, TimeDelta};
-use graphrecords_utils::aliases::MrHashMap;
+use graphrecords_utils::aliases::GrHashMap;
 use polars::{datatypes::AnyValue, frame::DataFrame, prelude::Column};
 use std::collections::HashMap;
 
@@ -271,7 +271,7 @@ impl DataFramesGroupExport {
 
         let node_attributes: Vec<_> = group_schema.nodes().keys().collect();
 
-        let mut node_columns: MrHashMap<GraphRecordAttribute, Vec<AnyValue>> = node_attributes
+        let mut node_columns: GrHashMap<GraphRecordAttribute, Vec<AnyValue>> = node_attributes
             .iter()
             .map(|attribute_name| ((*attribute_name).clone(), Vec::new()))
             .collect();
@@ -337,7 +337,7 @@ impl DataFramesGroupExport {
 
         let edge_attributes: Vec<_> = group_schema.edges().keys().collect();
 
-        let mut edge_columns: MrHashMap<GraphRecordAttribute, Vec<AnyValue>> = edge_attributes
+        let mut edge_columns: GrHashMap<GraphRecordAttribute, Vec<AnyValue>> = edge_attributes
             .iter()
             .map(|attribute_name| ((*attribute_name).clone(), Vec::new()))
             .collect();

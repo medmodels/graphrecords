@@ -31,7 +31,6 @@ use crate::{
     },
     prelude::GraphRecordValue,
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 use std::{collections::HashSet, fmt::Debug};
 
 #[derive(Debug, Clone)]
@@ -148,7 +147,7 @@ impl RootOperand for NodeOperand {
                 let Some(NodeOperandContext::Neighbors {
                     operand: _,
                     direction,
-                }) = &group_operand.operand.0.read_or_panic().context
+                }) = &group_operand.operand.0.read().context
                 else {
                     unreachable!();
                 };
@@ -192,7 +191,7 @@ impl RootOperand for NodeOperand {
             group_by::NodeOperandContext::Edges(operand) => {
                 let partitions = operand.evaluate_backward(graphrecord)?;
 
-                match &group_operand.operand.0.read_or_panic().context {
+                match &group_operand.operand.0.read().context {
                     Some(NodeOperandContext::SourceNode { operand: _ }) => {
                         let indices: Vec<_> = partitions
                             .map(|(key, partition)| {
@@ -459,13 +458,13 @@ impl DeepClone for NodeIndexComparisonOperand {
 
 impl From<Wrapper<NodeIndexOperand>> for NodeIndexComparisonOperand {
     fn from(index: Wrapper<NodeIndexOperand>) -> Self {
-        Self::Operand(index.0.read_or_panic().deep_clone())
+        Self::Operand(index.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<NodeIndexOperand>> for NodeIndexComparisonOperand {
     fn from(index: &Wrapper<NodeIndexOperand>) -> Self {
-        Self::Operand(index.0.read_or_panic().deep_clone())
+        Self::Operand(index.0.read().deep_clone())
     }
 }
 
@@ -504,13 +503,13 @@ impl DeepClone for NodeIndicesComparisonOperand {
 
 impl From<Wrapper<NodeIndicesOperand>> for NodeIndicesComparisonOperand {
     fn from(indices: Wrapper<NodeIndicesOperand>) -> Self {
-        Self::Operand(indices.0.read_or_panic().deep_clone())
+        Self::Operand(indices.0.read().deep_clone())
     }
 }
 
 impl From<&Wrapper<NodeIndicesOperand>> for NodeIndicesComparisonOperand {
     fn from(indices: &Wrapper<NodeIndicesOperand>) -> Self {
-        Self::Operand(indices.0.read_or_panic().deep_clone())
+        Self::Operand(indices.0.read().deep_clone())
     }
 }
 
@@ -1026,7 +1025,7 @@ impl Wrapper<NodeIndicesOperand> {
     }
 
     pub(crate) fn push_merge_operation(&self, operand: Self) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }
 
@@ -1435,6 +1434,6 @@ impl Wrapper<NodeIndexOperand> {
     }
 
     pub(crate) fn push_merge_operation(&self, operand: Wrapper<NodeIndicesOperand>) {
-        self.0.write_or_panic().push_merge_operation(operand);
+        self.0.write().push_merge_operation(operand);
     }
 }

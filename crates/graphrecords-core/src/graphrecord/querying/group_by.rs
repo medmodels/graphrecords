@@ -4,7 +4,6 @@ use crate::{
     graphrecord::querying::GroupedIterator,
     prelude::{GraphRecordValue, NodeIndex},
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 use std::fmt::Debug;
 
 pub trait GroupedOperand {
@@ -21,7 +20,7 @@ pub trait GroupBy: GroupedOperand {
 
 impl<O: GroupBy> Wrapper<O> {
     pub fn group_by(&self, discriminator: O::Discriminator) -> Wrapper<GroupOperand<O>> {
-        self.0.write_or_panic().group_by(discriminator)
+        self.0.write().group_by(discriminator)
     }
 }
 
@@ -54,7 +53,7 @@ pub trait Ungroup {
 impl<O: Ungroup> Wrapper<O> {
     #[must_use]
     pub fn ungroup(&self) -> Wrapper<O::OutputOperand> {
-        self.0.read_or_panic().ungroup()
+        self.0.read().ungroup()
     }
 }
 
