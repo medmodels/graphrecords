@@ -6,7 +6,6 @@ use crate::{
     },
     prelude::{EdgeDirection, GraphRecordAttribute, Group},
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 pub trait Attribute {
     type ReturnOperand;
@@ -19,7 +18,7 @@ impl<O: Attribute> Wrapper<O> {
         &self,
         attribute: impl Into<GraphRecordAttribute>,
     ) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().attribute(attribute.into())
+        self.0.write().attribute(attribute.into())
     }
 }
 
@@ -47,7 +46,7 @@ pub trait Attributes {
 impl<O: Attributes> Wrapper<O> {
     #[must_use]
     pub fn attributes(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().attributes()
+        self.0.write().attributes()
     }
 }
 
@@ -72,7 +71,7 @@ pub trait HasAttribute {
 
 impl<O: HasAttribute> Wrapper<O> {
     pub fn has_attribute<A: Into<CardinalityWrapper<GraphRecordAttribute>>>(&self, attribute: A) {
-        self.0.write_or_panic().has_attribute(attribute);
+        self.0.write().has_attribute(attribute);
     }
 }
 
@@ -88,7 +87,7 @@ pub trait InGroup {
 
 impl<O: InGroup> Wrapper<O> {
     pub fn in_group<G: Into<CardinalityWrapper<Group>>>(&self, group: G) {
-        self.0.write_or_panic().in_group(group);
+        self.0.write().in_group(group);
     }
 }
 
@@ -107,7 +106,7 @@ pub trait Edges {
 impl<O: Edges> Wrapper<O> {
     #[must_use]
     pub fn edges(&self, edge_direction: EdgeDirection) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().edges(edge_direction)
+        self.0.write().edges(edge_direction)
     }
 }
 
@@ -135,7 +134,7 @@ pub trait Neighbors {
 impl<O: Neighbors> Wrapper<O> {
     #[must_use]
     pub fn neighbors(&self, edge_direction: EdgeDirection) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().neighbors(edge_direction)
+        self.0.write().neighbors(edge_direction)
     }
 }
 
@@ -163,7 +162,7 @@ pub trait SourceNode {
 impl<O: SourceNode> Wrapper<O> {
     #[must_use]
     pub fn source_node(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().source_node()
+        self.0.write().source_node()
     }
 }
 
@@ -191,7 +190,7 @@ pub trait TargetNode {
 impl<O: TargetNode> Wrapper<O> {
     #[must_use]
     pub fn target_node(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().target_node()
+        self.0.write().target_node()
     }
 }
 
@@ -219,7 +218,7 @@ pub trait ToValues {
 impl<O: ToValues> Wrapper<O> {
     #[must_use]
     pub fn to_values(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().to_values()
+        self.0.write().to_values()
     }
 }
 

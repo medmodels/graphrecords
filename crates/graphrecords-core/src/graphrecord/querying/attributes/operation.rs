@@ -27,10 +27,7 @@ use crate::{
         },
     },
 };
-use graphrecords_utils::{
-    aliases::{MrHashMap, MrHashSet},
-    traits::ReadWriteOrPanic,
-};
+use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use itertools::Itertools;
 use rand::{rng, seq::IteratorRandom};
 use std::{
@@ -318,7 +315,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         let MultipleAttributesWithIndexContext::AttributesTree {
             operand: _,
             ref kind,
-        } = operand.0.read_or_panic().context
+        } = operand.0.read().context
         else {
             unreachable!()
         };
@@ -333,7 +330,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
         let result = operand.evaluate_forward(graphrecord, multiple_operand_attributes)?;
 
-        let mut attributes: MrHashMap<_, _> = attributes_2.into_iter().collect();
+        let mut attributes: GrHashMap<_, _> = attributes_2.into_iter().collect();
 
         Ok(result
             .map(move |(index, _)| (index, attributes.remove(&index).expect("Index must exist"))))
@@ -646,7 +643,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
-        let max_attributes: MrHashMap<_, _> = Self::get_max(attributes_1)?.collect();
+        let max_attributes: GrHashMap<_, _> = Self::get_max(attributes_1)?.collect();
 
         Ok(Box::new(attributes_2.map(move |(index, attributes)| {
             let max_attribute = max_attributes.get(&index).expect("Index must exist");
@@ -670,7 +667,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
-        let min_attributes: MrHashMap<_, _> = Self::get_min(attributes_1)?.collect();
+        let min_attributes: GrHashMap<_, _> = Self::get_min(attributes_1)?.collect();
 
         Ok(Box::new(attributes_2.map(move |(index, attributes)| {
             let min_attribute = min_attributes.get(&index).expect("Index must exist");
@@ -723,7 +720,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
-        let mut result: MrHashMap<_, _> = operand
+        let mut result: GrHashMap<_, _> = operand
             .evaluate_forward(graphrecord, Box::new(attributes_1))?
             .collect();
 
@@ -877,7 +874,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
                 let attributes_1 = attributes_1.flat_map(|(_, attribute)| attribute);
 
-                let attributes_1: MrHashSet<_> = operand
+                let attributes_1: GrHashSet<_> = operand
                     .evaluate_forward(graphrecord, Box::new(attributes_1))?
                     .collect();
 
@@ -914,7 +911,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         let MultipleAttributesWithIndexContext::AttributesTree {
             operand: _,
             ref kind,
-        } = operand.0.read_or_panic().context
+        } = operand.0.read().context
         else {
             unreachable!()
         };
@@ -1035,7 +1032,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let mut excluded_attributes: MrHashMap<_, _> =
+            let mut excluded_attributes: GrHashMap<_, _> =
                 result.remove(attributes_position).1.collect();
 
             let attributes: BoxedIterator<_> =
@@ -1287,7 +1284,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let attribute = match kind {
             SingleKindWithIndex::Max => Self::get_max(attributes_1)?,
@@ -1313,7 +1310,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
         let attributes_1 = attributes_1.map(|(_, attribute)| attribute);
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let attribute = match kind {
             SingleKindWithoutIndex::Max => {
@@ -1641,7 +1638,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
-        let result: MrHashSet<_> = operand
+        let result: GrHashSet<_> = operand
             .evaluate_forward(graphrecord, Box::new(attributes_1))?
             .map(|(index, _)| index)
             .collect();
@@ -1801,7 +1798,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
 
                 let attributes_1 = attributes_1.flat_map(|(_, attribute)| attribute);
 
-                let attributes_1: MrHashSet<_> = operand
+                let attributes_1: GrHashSet<_> = operand
                     .evaluate_forward(graphrecord, Box::new(attributes_1))?
                     .collect();
 
@@ -1833,7 +1830,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
         let (attributes_1, attributes_2) = tee_grouped_iterator(attributes);
         let mut attributes_2 = attributes_2.collect::<Vec<_>>();
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let attributes_1: Vec<_> = attributes_1
             .map(|(key, attributes)| {
@@ -1880,7 +1877,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
         let (attributes_1, attributes_2) = tee_grouped_iterator(attributes);
         let mut attributes_2: Vec<_> = attributes_2.collect();
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let attributes_1: Vec<_> = attributes_1
             .map(|(key, attributes)| {
@@ -2039,7 +2036,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
                 .position(|(k, _)| k == &key)
                 .expect("Entry must exist");
 
-            let excluded_attributes: MrHashSet<_> = result.remove(attributes_position).1.collect();
+            let excluded_attributes: GrHashSet<_> = result.remove(attributes_position).1.collect();
 
             let attributes: BoxedIterator<_> = Box::new(
                 attributes.filter(move |attributes| !excluded_attributes.contains(attributes)),
@@ -2304,7 +2301,7 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
     ) -> GraphRecordResult<BoxedIterator<'a, GraphRecordAttribute>> {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
-        let kind = &operand.0.read_or_panic().kind;
+        let kind = &operand.0.read().kind;
 
         let attribute = match kind {
             SingleKindWithoutIndex::Max => Self::get_max(attributes_1)?,
@@ -2502,7 +2499,7 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
     ) -> GraphRecordResult<BoxedIterator<'a, GraphRecordAttribute>> {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
-        let result: MrHashSet<_> = operand
+        let result: GrHashSet<_> = operand
             .evaluate_forward(graphrecord, Box::new(attributes_1))?
             .collect();
 
@@ -2895,7 +2892,7 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
 
                 let attributes_1 = attributes_1.filter_map(|(_, value)| value);
 
-                let attributes_1: MrHashSet<_> = operand
+                let attributes_1: GrHashSet<_> = operand
                     .evaluate_forward(graphrecord, Box::new(attributes_1))?
                     .collect();
 
@@ -3362,7 +3359,7 @@ impl<O: RootOperand> SingleAttributeWithoutIndexOperation<O> {
 
                 let attributes_1 = attributes_1.filter_map(|(_, attribute)| attribute);
 
-                let attributes_1: MrHashSet<_> = operand
+                let attributes_1: GrHashSet<_> = operand
                     .evaluate_forward(graphrecord, Box::new(attributes_1))?
                     .collect();
 

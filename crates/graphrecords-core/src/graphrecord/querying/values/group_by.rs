@@ -16,7 +16,6 @@ use crate::{
         wrapper::Wrapper,
     },
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
@@ -74,7 +73,7 @@ where
                 let values: Vec<_> = partitions
                     .map(|(key, partition)| {
                         let MultipleValuesWithIndexContext::Operand((_, attribute)) =
-                            &self.operand.0.read_or_panic().context
+                            &self.operand.0.read().context
                         else {
                             unreachable!()
                         };
@@ -193,7 +192,7 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a>
             .map(|(key, partition)| {
                 let partition = partition.map(|(_, value)| value);
 
-                let reduced_partition = match self.operand.0.read_or_panic().kind {
+                let reduced_partition = match self.operand.0.read().kind {
                     SingleKindWithoutIndex::Max => {
                         MultipleValuesWithoutIndexOperation::<O>::get_max(partition)?
                     }

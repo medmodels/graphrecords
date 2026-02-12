@@ -227,7 +227,7 @@ impl PyGraphRecord {
                     .node_attributes(&node_index)
                     .map_err(PyGraphRecordError::from)?;
 
-                Ok((node_index, node_attributes.clone().deep_into()))
+                Ok((node_index, node_attributes.deep_into()))
             })
             .collect()
     }
@@ -246,7 +246,7 @@ impl PyGraphRecord {
                     .edge_attributes(&edge_index)
                     .map_err(PyGraphRecordError::from)?;
 
-                Ok((edge_index, edge_attributes.clone().deep_into()))
+                Ok((edge_index, edge_attributes.deep_into()))
             })
             .collect()
     }

@@ -3,7 +3,6 @@ use crate::graphrecord::querying::{
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 pub trait EitherOr {
     type QueryOperand;
@@ -20,7 +19,7 @@ impl<O: EitherOr> Wrapper<O> {
         EQ: FnOnce(&mut Wrapper<O::QueryOperand>),
         OQ: FnOnce(&mut Wrapper<O::QueryOperand>),
     {
-        self.0.write_or_panic().either_or(either_query, or_query);
+        self.0.write().either_or(either_query, or_query);
     }
 }
 
@@ -49,7 +48,7 @@ impl<O: Exclude> Wrapper<O> {
     where
         Q: FnOnce(&mut Wrapper<O::QueryOperand>),
     {
-        self.0.write_or_panic().exclude(query);
+        self.0.write().exclude(query);
     }
 }
 
@@ -73,7 +72,7 @@ pub trait Random {
 impl<O: Random> Wrapper<O> {
     #[must_use]
     pub fn random(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().random()
+        self.0.write().random()
     }
 }
 
@@ -98,7 +97,7 @@ pub trait IsMax {
 
 impl<O: IsMax> Wrapper<O> {
     pub fn is_max(&self) {
-        self.0.write_or_panic().is_max();
+        self.0.write().is_max();
     }
 }
 
@@ -114,7 +113,7 @@ pub trait IsMin {
 
 impl<O: IsMin> Wrapper<O> {
     pub fn is_min(&self) {
-        self.0.write_or_panic().is_min();
+        self.0.write().is_min();
     }
 }
 

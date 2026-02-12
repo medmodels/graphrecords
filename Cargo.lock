@@ -725,6 +725,7 @@ dependencies = [
  "chrono",
  "graphrecords-utils",
  "itertools 0.13.0",
+ "parking_lot",
  "polars",
  "rand 0.9.2",
  "rayon",

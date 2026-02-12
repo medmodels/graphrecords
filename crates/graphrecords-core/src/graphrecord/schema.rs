@@ -3,7 +3,7 @@ use crate::{
     errors::GraphError,
     graphrecord::{GraphRecordAttribute, datatypes::DataType},
 };
-use graphrecords_utils::aliases::MrHashMap;
+use graphrecords_utils::aliases::GrHashMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
@@ -240,33 +240,40 @@ impl AttributeSchema {
         attributes: &Attributes,
         kind: &AttributeSchemaKind,
     ) -> Result<(), GraphError> {
-        for (key, schema) in &self.0 {
-            let value = match (attributes.get(key), &schema.data_type) {
-                (Some(value), _) => value,
-                (None, DataType::Option(_)) => continue,
-                (None, _) => {
+        let mut matched_count = 0;
+        let mut attributes_not_in_schema = Vec::new();
+
+        for (key, value) in attributes {
+            match self.0.get(key) {
+                Some(schema) => {
+                    let data_type = DataType::from(value);
+
+                    if !schema.data_type.evaluate(&data_type) {
+                        return Err(GraphError::SchemaError(kind.error_message_expected(
+                            key,
+                            &data_type,
+                            &schema.data_type,
+                        )));
+                    }
+
+                    matched_count += 1;
+                }
+                None => {
+                    attributes_not_in_schema.push(key.to_string());
+                }
+            }
+        }
+
+        if matched_count < self.0.len() {
+            for (key, schema) in &self.0 {
+                if !attributes.contains_key(key) && !matches!(schema.data_type, DataType::Option(_))
+                {
                     return Err(GraphError::SchemaError(
                         kind.error_message(key, &schema.data_type),
                     ));
                 }
-            };
-
-            let data_type = DataType::from(value);
-
-            if !schema.data_type.evaluate(&data_type) {
-                return Err(GraphError::SchemaError(kind.error_message_expected(
-                    key,
-                    &data_type,
-                    &schema.data_type,
-                )));
             }
         }
-
-        let attributes_not_in_schema: Vec<_> = attributes
-            .keys()
-            .filter(|attribute| !self.0.contains_key(*attribute))
-            .map(std::string::ToString::to_string)
-            .collect();
 
         if !attributes_not_in_schema.is_empty() {
             return Err(GraphError::SchemaError(
@@ -416,8 +423,9 @@ impl Schema {
         }
     }
 
+    #[must_use]
     pub fn infer(graphrecord: &GraphRecord) -> Self {
-        let mut group_mapping: MrHashMap<_, _> = graphrecord
+        let mut group_mapping: GrHashMap<_, _> = graphrecord
             .groups()
             .map(|group| (group, (Vec::new(), Vec::new())))
             .collect();

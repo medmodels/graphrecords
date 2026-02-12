@@ -2,7 +2,6 @@ use crate::graphrecord::querying::{
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 pub trait Trim {
     fn trim(&mut self);
@@ -10,7 +9,7 @@ pub trait Trim {
 
 impl<O: Trim> Wrapper<O> {
     pub fn trim(&self) {
-        self.0.write_or_panic().trim();
+        self.0.write().trim();
     }
 }
 
@@ -26,7 +25,7 @@ pub trait TrimStart {
 
 impl<O: TrimStart> Wrapper<O> {
     pub fn trim_start(&self) {
-        self.0.write_or_panic().trim_start();
+        self.0.write().trim_start();
     }
 }
 
@@ -42,7 +41,7 @@ pub trait TrimEnd {
 
 impl<O: TrimEnd> Wrapper<O> {
     pub fn trim_end(&self) {
-        self.0.write_or_panic().trim_end();
+        self.0.write().trim_end();
     }
 }
 
@@ -58,7 +57,7 @@ pub trait Lowercase {
 
 impl<O: Lowercase> Wrapper<O> {
     pub fn lowercase(&self) {
-        self.0.write_or_panic().lowercase();
+        self.0.write().lowercase();
     }
 }
 
@@ -74,7 +73,7 @@ pub trait Uppercase {
 
 impl<O: Uppercase> Wrapper<O> {
     pub fn uppercase(&self) {
-        self.0.write_or_panic().uppercase();
+        self.0.write().uppercase();
     }
 }
 
@@ -90,7 +89,7 @@ pub trait Slice {
 
 impl<O: Slice> Wrapper<O> {
     pub fn slice(&self, start: usize, end: usize) {
-        self.0.write_or_panic().slice(start, end);
+        self.0.write().slice(start, end);
     }
 }
 
@@ -108,7 +107,7 @@ pub trait StartsWith {
 
 impl<O: StartsWith> Wrapper<O> {
     pub fn starts_with<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().starts_with(value);
+        self.0.write().starts_with(value);
     }
 }
 
@@ -128,7 +127,7 @@ pub trait EndsWith {
 
 impl<O: EndsWith> Wrapper<O> {
     pub fn ends_with<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().ends_with(value);
+        self.0.write().ends_with(value);
     }
 }
 
@@ -148,7 +147,7 @@ pub trait Contains {
 
 impl<O: Contains> Wrapper<O> {
     pub fn contains<V: Into<O::ComparisonOperand>>(&self, value: V) {
-        self.0.write_or_panic().contains(value);
+        self.0.write().contains(value);
     }
 }
 

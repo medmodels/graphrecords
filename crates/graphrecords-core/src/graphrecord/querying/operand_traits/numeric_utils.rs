@@ -2,7 +2,6 @@ use crate::graphrecord::querying::{
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 pub trait Round {
     fn round(&mut self);
@@ -10,7 +9,7 @@ pub trait Round {
 
 impl<O: Round> Wrapper<O> {
     pub fn round(&self) {
-        self.0.write_or_panic().round();
+        self.0.write().round();
     }
 }
 
@@ -26,7 +25,7 @@ pub trait Ceil {
 
 impl<O: Ceil> Wrapper<O> {
     pub fn ceil(&self) {
-        self.0.write_or_panic().ceil();
+        self.0.write().ceil();
     }
 }
 
@@ -42,7 +41,7 @@ pub trait Floor {
 
 impl<O: Floor> Wrapper<O> {
     pub fn floor(&self) {
-        self.0.write_or_panic().floor();
+        self.0.write().floor();
     }
 }
 
@@ -58,7 +57,7 @@ pub trait Sqrt {
 
 impl<O: Sqrt> Wrapper<O> {
     pub fn sqrt(&self) {
-        self.0.write_or_panic().sqrt();
+        self.0.write().sqrt();
     }
 }
 

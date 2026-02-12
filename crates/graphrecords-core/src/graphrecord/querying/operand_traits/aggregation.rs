@@ -3,7 +3,6 @@ use crate::graphrecord::querying::{
     group_by::{GroupOperand, GroupedOperand},
     wrapper::Wrapper,
 };
-use graphrecords_utils::traits::ReadWriteOrPanic;
 
 pub trait Max {
     type ReturnOperand;
@@ -14,7 +13,7 @@ pub trait Max {
 impl<O: Max> Wrapper<O> {
     #[must_use]
     pub fn max(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().max()
+        self.0.write().max()
     }
 }
 
@@ -42,7 +41,7 @@ pub trait Min {
 impl<O: Min> Wrapper<O> {
     #[must_use]
     pub fn min(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().min()
+        self.0.write().min()
     }
 }
 
@@ -70,7 +69,7 @@ pub trait Count {
 impl<O: Count> Wrapper<O> {
     #[must_use]
     pub fn count(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().count()
+        self.0.write().count()
     }
 }
 
@@ -98,7 +97,7 @@ pub trait Sum {
 impl<O: Sum> Wrapper<O> {
     #[must_use]
     pub fn sum(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().sum()
+        self.0.write().sum()
     }
 }
 
@@ -126,7 +125,7 @@ pub trait Mean {
 impl<O: Mean> Wrapper<O> {
     #[must_use]
     pub fn mean(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().mean()
+        self.0.write().mean()
     }
 }
 
@@ -154,7 +153,7 @@ pub trait Median {
 impl<O: Median> Wrapper<O> {
     #[must_use]
     pub fn median(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().median()
+        self.0.write().median()
     }
 }
 
@@ -182,7 +181,7 @@ pub trait Mode {
 impl<O: Mode> Wrapper<O> {
     #[must_use]
     pub fn mode(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().mode()
+        self.0.write().mode()
     }
 }
 
@@ -210,7 +209,7 @@ pub trait Std {
 impl<O: Std> Wrapper<O> {
     #[must_use]
     pub fn std(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().std()
+        self.0.write().std()
     }
 }
 
@@ -238,7 +237,7 @@ pub trait Var {
 impl<O: Var> Wrapper<O> {
     #[must_use]
     pub fn var(&self) -> Wrapper<O::ReturnOperand> {
-        self.0.write_or_panic().var()
+        self.0.write().var()
     }
 }
 

@@ -1,10 +1,10 @@
-use graphrecords_utils::aliases::MrHashMap;
+use graphrecords_utils::aliases::GrHashMap;
 use pyo3::Python;
 use std::cell::UnsafeCell;
 
 // Similar implementation to PyO3 and Polars GILOnceCell
 
-pub(crate) struct GILHashMap<K, V>(UnsafeCell<Option<MrHashMap<K, V>>>);
+pub(crate) struct GILHashMap<K, V>(UnsafeCell<Option<GrHashMap<K, V>>>);
 
 unsafe impl<K: Send + Sync, V: Send + Sync> Sync for GILHashMap<K, V> {}
 unsafe impl<K: Send, V: Send> Send for GILHashMap<K, V> {}
@@ -16,13 +16,13 @@ impl<K, V> GILHashMap<K, V> {
 
     pub fn map<F, O>(&self, _py: Python<'_>, mut operation: F) -> O
     where
-        F: FnMut(&mut MrHashMap<K, V>) -> O,
+        F: FnMut(&mut GrHashMap<K, V>) -> O,
     {
         // SAFETY: the GIL is being held, so no other thread has access.
         let inner = unsafe { &mut *self.0.get() };
 
         if inner.is_none() {
-            *inner = Some(MrHashMap::new());
+            *inner = Some(GrHashMap::new());
         }
 
         // Technically the operation could temporarily release the GIL, but this is deemed
