@@ -3,6 +3,8 @@ pub mod datatypes;
 mod graph;
 mod group_mapping;
 pub mod overview;
+#[cfg(feature = "plugins")]
+pub mod plugins;
 mod polars;
 pub mod querying;
 pub mod schema;
@@ -17,6 +19,7 @@ use crate::{
     graphrecord::{
         attributes::{EdgeAttributesMut, NodeAttributesMut},
         overview::{DEFAULT_TRUNCATE_DETAILS, GroupOverview, Overview},
+        plugins::PreSetSchemaContext,
         polars::DataFramesExport,
     },
 };
@@ -24,6 +27,8 @@ use ::polars::frame::DataFrame;
 use graph::Graph;
 use graphrecords_utils::aliases::GrHashSet;
 use group_mapping::GroupMapping;
+#[cfg(feature = "plugins")]
+use plugins::Plugin;
 use polars::{dataframe_to_edges, dataframe_to_nodes};
 use querying::{
     ReturnOperand, Selection, edges::EdgeOperand, nodes::NodeOperand, wrapper::Wrapper,
@@ -31,6 +36,8 @@ use querying::{
 use schema::{GroupSchema, Schema, SchemaType};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "plugins")]
+use std::sync::Arc;
 use std::{
     collections::{HashMap, hash_map::Entry},
     fmt::{Display, Formatter},
@@ -134,6 +141,8 @@ pub struct GraphRecord {
     graph: Graph,
     group_mapping: GroupMapping,
     schema: Schema,
+    #[cfg(feature = "plugins")]
+    plugins: Arc<Vec<Box<dyn Plugin>>>,
 }
 
 impl Display for GraphRecord {
@@ -167,6 +176,23 @@ impl GraphRecord {
             schema: schema.unwrap_or_default(),
             ..Default::default()
         }
+    }
+
+    #[cfg(feature = "plugins")]
+    #[must_use] 
+    pub fn with_plugins(plugins: Vec<Box<dyn Plugin>>) -> Self {
+        let mut graphrecord = Self {
+            plugins: Arc::new(plugins),
+            ..Default::default()
+        };
+
+        let plugins = graphrecord.plugins.clone();
+
+        plugins
+            .iter()
+            .for_each(|plugin| plugin.initialize(&mut graphrecord));
+
+        graphrecord
     }
 
     pub fn from_tuples(
@@ -256,7 +282,10 @@ impl GraphRecord {
     }
 
     #[allow(clippy::too_many_lines)]
-    pub fn set_schema(&mut self, mut schema: Schema) -> Result<(), GraphRecordError> {
+    pub fn set_schema_bypass_plugins(
+        &mut self,
+        mut schema: Schema,
+    ) -> Result<(), GraphRecordError> {
         let mut nodes_group_cache = HashMap::<&Group, usize>::new();
         let mut nodes_ungrouped_visited = false;
         let mut edges_group_cache = HashMap::<&Group, usize>::new();
@@ -379,9 +408,27 @@ impl GraphRecord {
         Ok(())
     }
 
+    pub fn set_schema(&mut self, schema: Schema) -> Result<(), GraphRecordError> {
+        let context = PreSetSchemaContext { schema };
+        let plugins = self.plugins.clone();
+        let context = plugins.iter().fold(context, |context, plugin| {
+            plugin.pre_set_schema(context, self)
+        });
+
+        self.set_schema_bypass_plugins(context.schema)?;
+
+        plugins
+            .iter()
+            .for_each(|plugin| plugin.post_set_schema(self));
+
+        Ok(())
+    }
+
     /// # Safety
     ///
     /// This function should only be used if the data has been validated against the schema.
+    /// Using this function with invalid data may lead to undefined behavior.
+    /// This function does not run any plugin hooks.
     pub const unsafe fn set_schema_unchecked(&mut self, schema: &mut Schema) {
         mem::swap(&mut self.schema, schema);
     }

@@ -245,10 +245,10 @@ impl PySchema {
     }
 
     #[staticmethod]
-    pub fn infer(graphrecord: Bound<'_, PyGraphRecord>) -> Self {
-        let graphrecord_borrowed = graphrecord.borrow();
+    pub fn infer(graphrecord: Bound<'_, PyGraphRecord>) -> PyResult<Self> {
+        let graphrecord = graphrecord.get();
 
-        Self(Schema::infer(graphrecord_borrowed.as_ref()))
+        Ok(Self(Schema::infer(&*graphrecord.inner()?)))
     }
 
     #[getter]

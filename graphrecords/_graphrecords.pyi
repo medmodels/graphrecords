@@ -174,6 +174,8 @@ class PyGraphRecord:
     @staticmethod
     def with_schema(schema: PySchema) -> PyGraphRecord: ...
     @staticmethod
+    def with_plugins(plugins: List[object]) -> PyGraphRecord: ...
+    @staticmethod
     def from_tuples(
         nodes: Sequence[NodeTuple],
         edges: Optional[Sequence[EdgeTuple]],

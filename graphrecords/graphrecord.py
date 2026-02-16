@@ -34,22 +34,6 @@ from graphrecords.overview import (
     GroupOverview,
     Overview,
 )
-from graphrecords.plugins import (
-    AddEdgesContext,
-    AddEdgesPolarsContext,
-    AddEdgesToGroupContext,
-    AddGroupContext,
-    AddNodesContext,
-    AddNodesPolarsContext,
-    AddNodesToGroupContext,
-    Plugin,
-    RemoveEdgesContext,
-    RemoveEdgesFromGroupContext,
-    RemoveGroupsContext,
-    RemoveNodesContext,
-    RemoveNodesFromGroupContext,
-    SetSchemaContext,
-)
 from graphrecords.querying import (
     EdgeAttributesTreeGroupOperand,
     EdgeAttributesTreeGroupQueryResult,
@@ -294,14 +278,10 @@ class GraphRecord:
     """
 
     _graphrecord: PyGraphRecord
-    _plugins: List[Plugin]
-    _handle_plugins: bool
 
     def __init__(self) -> None:
         """Initializes a GraphRecord instance."""
         self._graphrecord = PyGraphRecord()
-        self._plugins = []
-        self._handle_plugins = False
 
     @classmethod
     def _from_py_graphrecord(cls, graphrecord: PyGraphRecord) -> GraphRecord:
@@ -315,8 +295,6 @@ class GraphRecord:
         """
         new_graphrecord = cls.__new__(cls)
         new_graphrecord._graphrecord = graphrecord
-        new_graphrecord._plugins = []
-        new_graphrecord._handle_plugins = False
         return new_graphrecord
 
     @staticmethod
@@ -340,28 +318,17 @@ class GraphRecord:
         """
         graphrecord = cls.__new__(cls)
         graphrecord._graphrecord = PyGraphRecord.with_schema(schema._schema)
-        graphrecord._plugins = []
-        graphrecord._handle_plugins = False
         return graphrecord
 
     @classmethod
-    def with_plugins(cls, plugins: Union[Plugin, List[Plugin]]) -> GraphRecord:
-        """Creates a GraphRecord instance with the specified plugins.
-
-        Args:
-            plugins (Union[Plugin, List[Plugin]]): One or more plugins to attach to the
-                GraphRecord.
-
-        Returns:
-            GraphRecord: A new instance with the provided plugins.
-        """
-        if not isinstance(plugins, list):
-            plugins = [plugins]
-
+    def with_plugins(cls, plugins: List[object]) -> GraphRecord:  # noqa: D102
         graphrecord = cls.__new__(cls)
-        graphrecord._graphrecord = PyGraphRecord()
-        graphrecord._plugins = plugins
-        graphrecord._handle_plugins = True
+
+        graphrecord._graphrecord = PyGraphRecord.with_plugins(plugins)
+
+        for plugin in plugins:
+            plugin.__setattr__("_graphrecord", graphrecord._graphrecord)
+
         return graphrecord
 
     _C = TypeVar("_C")
@@ -1024,18 +991,10 @@ class GraphRecord:
         if is_node_tuple(nodes):
             nodes = [nodes]
 
-        def operation(context: AddNodesContext) -> None:
-            if context.group is None:
-                self._graphrecord.add_nodes(context.nodes)
-            else:
-                self._graphrecord.add_nodes_with_group(context.nodes, context.group)
-
-        self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_add_nodes(gr, context),
-            operation,
-            lambda plugin, gr, context, _: plugin.post_add_nodes(gr, context),
-            AddNodesContext(nodes, group),
-        )
+        if group is None:
+            self._graphrecord.add_nodes(nodes)
+        else:
+            self._graphrecord.add_nodes_with_group(nodes, group)
 
         return None
 

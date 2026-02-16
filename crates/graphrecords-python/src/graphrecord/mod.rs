@@ -1,9 +1,11 @@
-#![allow(clippy::new_without_default)]
+#![allow(clippy::new_without_default, clippy::significant_drop_tightening)]
 
 pub mod attribute;
+mod borrowed;
 pub mod datatype;
 pub mod errors;
 pub mod overview;
+mod plugins;
 pub mod querying;
 pub mod schema;
 pub mod traits;
@@ -11,22 +13,34 @@ pub mod value;
 
 use crate::{
     gil_hash_map::GILHashMap,
-    graphrecord::overview::{PyGroupOverview, PyOverview},
+    graphrecord::{
+        overview::{PyGroupOverview, PyOverview},
+        plugins::PyPlugin,
+    },
 };
 use attribute::PyGraphRecordAttribute;
+use borrowed::BorrowedGraphRecord;
 use errors::PyGraphRecordError;
 use graphrecords_core::{
     errors::GraphRecordError,
-    graphrecord::{Attributes, EdgeIndex, GraphRecord, GraphRecordAttribute, GraphRecordValue},
+    graphrecord::{
+        Attributes, EdgeIndex, GraphRecord, GraphRecordAttribute, GraphRecordValue, plugins::Plugin,
+    },
 };
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use pyo3::{
+    exceptions::PyRuntimeError,
     prelude::*,
     types::{PyBytes, PyDict, PyFunction},
 };
 use pyo3_polars::PyDataFrame;
-use querying::{PyReturnOperand, PyReturnValue, edges::PyEdgeOperand, nodes::PyNodeOperand};
+use querying::{PyReturnOperand, edges::PyEdgeOperand, nodes::PyNodeOperand};
 use schema::PySchema;
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    ptr::NonNull,
+};
 use traits::DeepInto;
 use value::PyGraphRecordValue;
 
@@ -36,26 +50,146 @@ pub type PyNodeIndex = PyGraphRecordAttribute;
 pub type PyEdgeIndex = EdgeIndex;
 type Lut<T> = GILHashMap<usize, fn(&Bound<'_, PyAny>) -> PyResult<T>>;
 
-#[pyclass]
-#[repr(transparent)]
-#[derive(Debug, Clone)]
-pub struct PyGraphRecord(GraphRecord);
+#[pyclass(frozen)]
+#[derive(Debug)]
+pub struct PyGraphRecord {
+    inner: PyGraphRecordInner,
+}
+
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+enum PyGraphRecordInner {
+    Owned(RwLock<GraphRecord>),
+    Borrowed(BorrowedGraphRecord),
+}
+
+pub(crate) enum InnerRef<'a> {
+    Owned(RwLockReadGuard<'a, GraphRecord>),
+    Borrowed(RwLockReadGuard<'a, Option<NonNull<GraphRecord>>>),
+}
+
+impl Deref for InnerRef<'_> {
+    type Target = GraphRecord;
+
+    fn deref(&self) -> &GraphRecord {
+        match self {
+            InnerRef::Owned(guard) => guard,
+            // SAFETY: The guard is only constructed after checking `is_some()` in `inner()`.
+            // The pointer is valid for the duration of the `scope()` call because the scope's
+            // Drop guard needs a write lock to clear it, and this read guard prevents that.
+            InnerRef::Borrowed(guard) => unsafe {
+                guard
+                    .expect("Borrowed pointer must be Some when InnerRef is alive")
+                    .as_ref()
+            },
+        }
+    }
+}
+
+pub(crate) enum InnerRefMut<'a> {
+    Owned(RwLockWriteGuard<'a, GraphRecord>),
+    Borrowed(RwLockWriteGuard<'a, Option<NonNull<GraphRecord>>>),
+}
+
+impl Deref for InnerRefMut<'_> {
+    type Target = GraphRecord;
+
+    fn deref(&self) -> &GraphRecord {
+        match self {
+            InnerRefMut::Owned(guard) => guard,
+            // SAFETY: Same as `InnerRef::Borrowed`. Pointer was checked `is_some()` in
+            // `inner_mut()`, and the write guard keeps the scope's Drop from clearing it.
+            InnerRefMut::Borrowed(guard) => unsafe {
+                guard
+                    .expect("Borrowed pointer must be Some when InnerRefMut is alive")
+                    .as_ref()
+            },
+        }
+    }
+}
+
+impl DerefMut for InnerRefMut<'_> {
+    fn deref_mut(&mut self) -> &mut GraphRecord {
+        match self {
+            InnerRefMut::Owned(guard) => &mut *guard,
+            // SAFETY: Same as above, plus: the write guard ensures exclusive access to the
+            // pointer, so creating `&mut GraphRecord` is sound. The original `scope()` call
+            // holds `&mut GraphRecord`, guaranteeing no other references to the pointee exist
+            // outside this lock.
+            InnerRefMut::Borrowed(guard) => unsafe {
+                guard
+                    .expect("Borrowed pointer must be Some when InnerRefMut is alive")
+                    .as_mut()
+            },
+        }
+    }
+}
+
+impl Clone for PyGraphRecord {
+    fn clone(&self) -> Self {
+        match &self.inner {
+            PyGraphRecordInner::Owned(lock) => Self {
+                inner: PyGraphRecordInner::Owned(RwLock::new(lock.read().clone())),
+            },
+            PyGraphRecordInner::Borrowed(_) => Self {
+                inner: PyGraphRecordInner::Borrowed(BorrowedGraphRecord::dead()),
+            },
+        }
+    }
+}
+
+impl PyGraphRecord {
+    pub(crate) fn inner(&self) -> PyResult<InnerRef<'_>> {
+        match &self.inner {
+            PyGraphRecordInner::Owned(lock) => Ok(InnerRef::Owned(lock.read())),
+            PyGraphRecordInner::Borrowed(borrowed) => {
+                let guard = borrowed.read();
+                if guard.is_some() {
+                    Ok(InnerRef::Borrowed(guard))
+                } else {
+                    Err(PyRuntimeError::new_err(
+                        "GraphRecord reference is no longer valid (used outside plugin callback scope)",
+                    ))
+                }
+            }
+        }
+    }
+
+    pub(crate) fn inner_mut(&self) -> PyResult<InnerRefMut<'_>> {
+        match &self.inner {
+            PyGraphRecordInner::Owned(lock) => Ok(InnerRefMut::Owned(lock.write())),
+            PyGraphRecordInner::Borrowed(borrowed) => {
+                let guard = borrowed.write();
+                if guard.is_some() {
+                    Ok(InnerRefMut::Borrowed(guard))
+                } else {
+                    Err(PyRuntimeError::new_err(
+                        "GraphRecord reference is no longer valid (used outside plugin callback scope)",
+                    ))
+                }
+            }
+        }
+    }
+}
 
 impl From<GraphRecord> for PyGraphRecord {
     fn from(value: GraphRecord) -> Self {
-        Self(value)
+        Self {
+            inner: PyGraphRecordInner::Owned(RwLock::new(value)),
+        }
     }
 }
 
-impl From<PyGraphRecord> for GraphRecord {
-    fn from(value: PyGraphRecord) -> Self {
-        value.0
-    }
-}
+impl TryFrom<PyGraphRecord> for GraphRecord {
+    type Error = PyErr;
 
-impl AsRef<GraphRecord> for PyGraphRecord {
-    fn as_ref(&self) -> &GraphRecord {
-        &self.0
+    fn try_from(value: PyGraphRecord) -> PyResult<Self> {
+        match value.inner {
+            PyGraphRecordInner::Owned(lock) => Ok(lock.into_inner()),
+            PyGraphRecordInner::Borrowed(_) => Err(PyRuntimeError::new_err(
+                "Cannot convert a borrowed PyGraphRecord into an owned GraphRecord",
+            )),
+        }
     }
 }
 
@@ -63,11 +197,11 @@ impl AsRef<GraphRecord> for PyGraphRecord {
 impl PyGraphRecord {
     #[new]
     pub fn new() -> Self {
-        Self(GraphRecord::new())
+        GraphRecord::new().into()
     }
 
     pub fn _to_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-        let bytes = bincode::serialize(&self.0)
+        let bytes = bincode::serialize(&*self.inner()?)
             .map_err(|_| {
                 GraphRecordError::ConversionError("Could not serialize GraphRecord".into())
             })
@@ -78,18 +212,28 @@ impl PyGraphRecord {
 
     #[staticmethod]
     pub fn _from_bytes(data: &Bound<'_, PyBytes>) -> PyResult<Self> {
-        let graphrecord = bincode::deserialize(data.as_bytes())
+        let graphrecord: GraphRecord = bincode::deserialize(data.as_bytes())
             .map_err(|_| {
                 GraphRecordError::ConversionError("Could not deserialize GraphRecord".into())
             })
             .map_err(PyGraphRecordError::from)?;
 
-        Ok(Self(graphrecord))
+        Ok(graphrecord.into())
     }
 
     #[staticmethod]
     pub fn with_schema(schema: PySchema) -> Self {
-        Self(GraphRecord::with_schema(schema.into()))
+        GraphRecord::with_schema(schema.into()).into()
+    }
+
+    #[staticmethod]
+    pub fn with_plugins(plugins: Vec<Py<PyAny>>) -> Self {
+        let plugins = plugins
+            .into_iter()
+            .map(|plugin| Box::new(PyPlugin::new(plugin)) as Box<dyn Plugin>)
+            .collect();
+
+        GraphRecord::with_plugins(plugins).into()
     }
 
     #[staticmethod]
@@ -98,10 +242,11 @@ impl PyGraphRecord {
         nodes: Vec<(PyNodeIndex, PyAttributes)>,
         edges: Option<Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)>>,
     ) -> PyResult<Self> {
-        Ok(Self(
+        Ok(
             GraphRecord::from_tuples(nodes.deep_into(), edges.deep_into(), None)
-                .map_err(PyGraphRecordError::from)?,
-        ))
+                .map_err(PyGraphRecordError::from)?
+                .into(),
+        )
     }
 
     #[staticmethod]
@@ -109,33 +254,40 @@ impl PyGraphRecord {
         nodes_dataframes: Vec<(PyDataFrame, String)>,
         edges_dataframes: Vec<(PyDataFrame, String, String)>,
     ) -> PyResult<Self> {
-        Ok(Self(
+        Ok(
             GraphRecord::from_dataframes(nodes_dataframes, edges_dataframes, None)
-                .map_err(PyGraphRecordError::from)?,
-        ))
+                .map_err(PyGraphRecordError::from)?
+                .into(),
+        )
     }
 
     #[staticmethod]
     pub fn from_nodes_dataframes(nodes_dataframes: Vec<(PyDataFrame, String)>) -> PyResult<Self> {
-        Ok(Self(
-            GraphRecord::from_nodes_dataframes(nodes_dataframes, None)
-                .map_err(PyGraphRecordError::from)?,
-        ))
+        Ok(GraphRecord::from_nodes_dataframes(nodes_dataframes, None)
+            .map_err(PyGraphRecordError::from)?
+            .into())
     }
 
     #[staticmethod]
     pub fn from_ron(path: &str) -> PyResult<Self> {
-        Ok(Self(
-            GraphRecord::from_ron(path).map_err(PyGraphRecordError::from)?,
-        ))
+        Ok(GraphRecord::from_ron(path)
+            .map_err(PyGraphRecordError::from)?
+            .into())
     }
 
     pub fn to_ron(&self, path: &str) -> PyResult<()> {
-        Ok(self.0.to_ron(path).map_err(PyGraphRecordError::from)?)
+        Ok(self
+            .inner()?
+            .to_ron(path)
+            .map_err(PyGraphRecordError::from)?)
     }
 
+    #[allow(clippy::missing_panics_doc, reason = "infallible")]
     pub fn to_dataframes(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let export = self.0.to_dataframes().map_err(PyGraphRecordError::from)?;
+        let export = self
+            .inner()?
+            .to_dataframes()
+            .map_err(PyGraphRecordError::from)?;
 
         let outer_dict = PyDict::new(py);
         let inner_dict = PyDict::new(py);
@@ -144,24 +296,20 @@ impl PyGraphRecord {
             let group_dict = PyDict::new(py);
 
             let nodes_df = PyDataFrame(group_export.nodes);
-            #[expect(clippy::missing_panics_doc, reason = "infallible")]
             group_dict
                 .set_item("nodes", nodes_df)
                 .expect("Setting item must succeed");
 
             let edges_df = PyDataFrame(group_export.edges);
-            #[expect(clippy::missing_panics_doc, reason = "infallible")]
             group_dict
                 .set_item("edges", edges_df)
                 .expect("Setting item must succeed");
 
-            #[expect(clippy::missing_panics_doc, reason = "infallible")]
             inner_dict
                 .set_item(PyGraphRecordAttribute::from(group), group_dict)
                 .expect("Setting item must succeed");
         }
 
-        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         outer_dict
             .set_item("groups", inner_dict)
             .expect("Setting item must succeed");
@@ -169,18 +317,15 @@ impl PyGraphRecord {
         let ungrouped_dict = PyDict::new(py);
 
         let nodes_df = PyDataFrame(export.ungrouped.nodes);
-        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         ungrouped_dict
             .set_item("nodes", nodes_df)
             .expect("Setting item must succeed");
 
         let edges_df = PyDataFrame(export.ungrouped.edges);
-        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         ungrouped_dict
             .set_item("edges", edges_df)
             .expect("Setting item must succeed");
 
-        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         outer_dict
             .set_item("ungrouped", ungrouped_dict)
             .expect("Setting item must succeed");
@@ -188,42 +333,46 @@ impl PyGraphRecord {
         Ok(outer_dict.into())
     }
 
-    pub fn get_schema(&self) -> PySchema {
-        self.0.get_schema().clone().into()
+    pub fn get_schema(&self) -> PyResult<PySchema> {
+        Ok(self.inner()?.get_schema().clone().into())
     }
 
-    pub fn set_schema(&mut self, schema: PySchema) -> PyResult<()> {
+    pub fn set_schema(&self, schema: PySchema) -> PyResult<()> {
         Ok(self
-            .0
+            .inner_mut()?
             .set_schema(schema.into())
             .map_err(PyGraphRecordError::from)?)
     }
 
-    pub const fn freeze_schema(&mut self) {
-        self.0.freeze_schema();
+    pub fn freeze_schema(&self) -> PyResult<()> {
+        let _: () = self.inner_mut()?.freeze_schema();
+        Ok(())
     }
 
-    pub const fn unfreeze_schema(&mut self) {
-        self.0.unfreeze_schema();
+    pub fn unfreeze_schema(&self) -> PyResult<()> {
+        let _: () = self.inner_mut()?.unfreeze_schema();
+        Ok(())
     }
 
     #[getter]
-    pub fn nodes(&self) -> Vec<PyNodeIndex> {
-        self.0
+    pub fn nodes(&self) -> PyResult<Vec<PyNodeIndex>> {
+        Ok(self
+            .inner()?
             .node_indices()
             .map(|node_index| node_index.clone().into())
-            .collect()
+            .collect())
     }
 
     pub fn node(
         &self,
         node_index: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, PyAttributes>> {
+        let graphrecord = self.inner()?;
+
         node_index
             .into_iter()
             .map(|node_index| {
-                let node_attributes = self
-                    .0
+                let node_attributes = graphrecord
                     .node_attributes(&node_index)
                     .map_err(PyGraphRecordError::from)?;
 
@@ -233,16 +382,17 @@ impl PyGraphRecord {
     }
 
     #[getter]
-    pub fn edges(&self) -> Vec<EdgeIndex> {
-        self.0.edge_indices().copied().collect()
+    pub fn edges(&self) -> PyResult<Vec<EdgeIndex>> {
+        Ok(self.inner()?.edge_indices().copied().collect())
     }
 
     pub fn edge(&self, edge_index: Vec<EdgeIndex>) -> PyResult<HashMap<EdgeIndex, PyAttributes>> {
+        let graphrecord = self.inner()?;
+
         edge_index
             .into_iter()
             .map(|edge_index| {
-                let edge_attributes = self
-                    .0
+                let edge_attributes = graphrecord
                     .edge_attributes(&edge_index)
                     .map_err(PyGraphRecordError::from)?;
 
@@ -252,19 +402,24 @@ impl PyGraphRecord {
     }
 
     #[getter]
-    pub fn groups(&self) -> Vec<PyGroup> {
-        self.0.groups().map(|group| group.clone().into()).collect()
+    pub fn groups(&self) -> PyResult<Vec<PyGroup>> {
+        Ok(self
+            .inner()?
+            .groups()
+            .map(|group| group.clone().into())
+            .collect())
     }
 
     pub fn outgoing_edges(
         &self,
         node_index: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, Vec<EdgeIndex>>> {
+        let graphrecord = self.inner()?;
+
         node_index
             .into_iter()
             .map(|node_index| {
-                let edges = self
-                    .0
+                let edges = graphrecord
                     .outgoing_edges(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .copied()
@@ -279,11 +434,12 @@ impl PyGraphRecord {
         &self,
         node_index: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, Vec<EdgeIndex>>> {
+        let graphrecord = self.inner()?;
+
         node_index
             .into_iter()
             .map(|node_index| {
-                let edges = self
-                    .0
+                let edges = graphrecord
                     .incoming_edges(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .copied()
@@ -298,11 +454,12 @@ impl PyGraphRecord {
         &self,
         edge_index: Vec<EdgeIndex>,
     ) -> PyResult<HashMap<EdgeIndex, (PyNodeIndex, PyNodeIndex)>> {
+        let graphrecord = self.inner()?;
+
         edge_index
             .into_iter()
             .map(|edge_index| {
-                let edge_endpoints = self
-                    .0
+                let edge_endpoints = graphrecord
                     .edge_endpoints(&edge_index)
                     .map_err(PyGraphRecordError::from)?;
 
@@ -321,45 +478,48 @@ impl PyGraphRecord {
         &self,
         source_node_indices: Vec<PyNodeIndex>,
         target_node_indices: Vec<PyNodeIndex>,
-    ) -> Vec<EdgeIndex> {
+    ) -> PyResult<Vec<EdgeIndex>> {
         let source_node_indices: Vec<GraphRecordAttribute> = source_node_indices.deep_into();
         let target_node_indices: Vec<GraphRecordAttribute> = target_node_indices.deep_into();
 
-        self.0
+        Ok(self
+            .inner()?
             .edges_connecting(
                 source_node_indices.iter().collect(),
                 target_node_indices.iter().collect(),
             )
             .copied()
-            .collect()
+            .collect())
     }
 
     pub fn edges_connecting_undirected(
         &self,
         first_node_indices: Vec<PyNodeIndex>,
         second_node_indices: Vec<PyNodeIndex>,
-    ) -> Vec<EdgeIndex> {
+    ) -> PyResult<Vec<EdgeIndex>> {
         let first_node_indices: Vec<GraphRecordAttribute> = first_node_indices.deep_into();
         let second_node_indices: Vec<GraphRecordAttribute> = second_node_indices.deep_into();
 
-        self.0
+        Ok(self
+            .inner()?
             .edges_connecting_undirected(
                 first_node_indices.iter().collect(),
                 second_node_indices.iter().collect(),
             )
             .copied()
-            .collect()
+            .collect())
     }
 
     pub fn remove_nodes(
-        &mut self,
+        &self,
         node_indices: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, PyAttributes>> {
+        let mut graphrecord = self.inner_mut()?;
+
         node_indices
             .into_iter()
             .map(|node_index| {
-                let attributes = self
-                    .0
+                let attributes = graphrecord
                     .remove_node(&node_index)
                     .map_err(PyGraphRecordError::from)?;
 
@@ -369,15 +529,16 @@ impl PyGraphRecord {
     }
 
     pub fn replace_node_attributes(
-        &mut self,
+        &self,
         node_indices: Vec<PyNodeIndex>,
         attributes: PyAttributes,
     ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         let attributes: Attributes = attributes.deep_into();
 
         for node_index in node_indices {
-            let mut current_attributes = self
-                .0
+            let mut current_attributes = graphrecord
                 .node_attributes_mut(&node_index)
                 .map_err(PyGraphRecordError::from)?;
 
@@ -390,17 +551,18 @@ impl PyGraphRecord {
     }
 
     pub fn update_node_attribute(
-        &mut self,
+        &self,
         node_indices: Vec<PyNodeIndex>,
         attribute: PyGraphRecordAttribute,
         value: PyGraphRecordValue,
     ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         let attribute: GraphRecordAttribute = attribute.into();
         let value: GraphRecordValue = value.into();
 
         for node_index in node_indices {
-            let mut node_attributes = self
-                .0
+            let mut node_attributes = graphrecord
                 .node_attributes_mut(&node_index)
                 .map_err(PyGraphRecordError::from)?;
 
@@ -413,15 +575,16 @@ impl PyGraphRecord {
     }
 
     pub fn remove_node_attribute(
-        &mut self,
+        &self,
         node_indices: Vec<PyNodeIndex>,
         attribute: PyGraphRecordAttribute,
     ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         let attribute: GraphRecordAttribute = attribute.into();
 
         for node_index in node_indices {
-            let mut node_attributes = self
-                .0
+            let mut node_attributes = graphrecord
                 .node_attributes_mut(&node_index)
                 .map_err(PyGraphRecordError::from)?;
 
@@ -433,54 +596,55 @@ impl PyGraphRecord {
         Ok(())
     }
 
-    pub fn add_nodes(&mut self, nodes: Vec<(PyNodeIndex, PyAttributes)>) -> PyResult<()> {
+    pub fn add_nodes(&self, nodes: Vec<(PyNodeIndex, PyAttributes)>) -> PyResult<()> {
         Ok(self
-            .0
+            .inner_mut()?
             .add_nodes(nodes.deep_into())
             .map_err(PyGraphRecordError::from)?)
     }
 
     pub fn add_nodes_with_group(
-        &mut self,
+        &self,
         nodes: Vec<(PyNodeIndex, PyAttributes)>,
         group: PyGroup,
     ) -> PyResult<()> {
         Ok(self
-            .0
+            .inner_mut()?
             .add_nodes_with_group(nodes.deep_into(), group.into())
             .map_err(PyGraphRecordError::from)?)
     }
 
     pub fn add_nodes_dataframes(
-        &mut self,
+        &self,
         nodes_dataframes: Vec<(PyDataFrame, String)>,
     ) -> PyResult<()> {
         Ok(self
-            .0
+            .inner_mut()?
             .add_nodes_dataframes(nodes_dataframes)
             .map_err(PyGraphRecordError::from)?)
     }
 
     pub fn add_nodes_dataframes_with_group(
-        &mut self,
+        &self,
         nodes_dataframes: Vec<(PyDataFrame, String)>,
         group: PyGroup,
     ) -> PyResult<()> {
         Ok(self
-            .0
+            .inner_mut()?
             .add_nodes_dataframes_with_group(nodes_dataframes, group.into())
             .map_err(PyGraphRecordError::from)?)
     }
 
     pub fn remove_edges(
-        &mut self,
+        &self,
         edge_indices: Vec<EdgeIndex>,
     ) -> PyResult<HashMap<EdgeIndex, PyAttributes>> {
+        let mut graphrecord = self.inner_mut()?;
+
         edge_indices
             .into_iter()
             .map(|edge_index| {
-                let attributes = self
-                    .0
+                let attributes = graphrecord
                     .remove_edge(&edge_index)
                     .map_err(PyGraphRecordError::from)?;
 
@@ -490,15 +654,16 @@ impl PyGraphRecord {
     }
 
     pub fn replace_edge_attributes(
-        &mut self,
+        &self,
         edge_indices: Vec<EdgeIndex>,
         attributes: PyAttributes,
     ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         let attributes: Attributes = attributes.deep_into();
 
         for edge_index in edge_indices {
-            let mut current_attributes = self
-                .0
+            let mut current_attributes = graphrecord
                 .edge_attributes_mut(&edge_index)
                 .map_err(PyGraphRecordError::from)?;
 
@@ -511,17 +676,18 @@ impl PyGraphRecord {
     }
 
     pub fn update_edge_attribute(
-        &mut self,
+        &self,
         edge_indices: Vec<EdgeIndex>,
         attribute: PyGraphRecordAttribute,
         value: PyGraphRecordValue,
     ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         let attribute: GraphRecordAttribute = attribute.into();
         let value: GraphRecordValue = value.into();
 
         for edge_index in edge_indices {
-            let mut edge_attributes = self
-                .0
+            let mut edge_attributes = graphrecord
                 .edge_attributes_mut(&edge_index)
                 .map_err(PyGraphRecordError::from)?;
 
@@ -534,15 +700,16 @@ impl PyGraphRecord {
     }
 
     pub fn remove_edge_attribute(
-        &mut self,
+        &self,
         edge_indices: Vec<EdgeIndex>,
         attribute: PyGraphRecordAttribute,
     ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         let attribute: GraphRecordAttribute = attribute.into();
 
         for edge_index in edge_indices {
-            let mut edge_attributes = self
-                .0
+            let mut edge_attributes = graphrecord
                 .edge_attributes_mut(&edge_index)
                 .map_err(PyGraphRecordError::from)?;
 
@@ -555,56 +722,56 @@ impl PyGraphRecord {
     }
 
     pub fn add_edges(
-        &mut self,
+        &self,
         relations: Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)>,
     ) -> PyResult<Vec<EdgeIndex>> {
         Ok(self
-            .0
+            .inner_mut()?
             .add_edges(relations.deep_into())
             .map_err(PyGraphRecordError::from)?)
     }
 
     pub fn add_edges_with_group(
-        &mut self,
+        &self,
         relations: Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)>,
         group: PyGroup,
     ) -> PyResult<Vec<EdgeIndex>> {
         Ok(self
-            .0
+            .inner_mut()?
             .add_edges_with_group(relations.deep_into(), &group)
             .map_err(PyGraphRecordError::from)?)
     }
 
     pub fn add_edges_dataframes(
-        &mut self,
+        &self,
         edges_dataframes: Vec<(PyDataFrame, String, String)>,
     ) -> PyResult<Vec<EdgeIndex>> {
         Ok(self
-            .0
+            .inner_mut()?
             .add_edges_dataframes(edges_dataframes)
             .map_err(PyGraphRecordError::from)?)
     }
 
     pub fn add_edges_dataframes_with_group(
-        &mut self,
+        &self,
         edges_dataframes: Vec<(PyDataFrame, String, String)>,
         group: PyGroup,
     ) -> PyResult<Vec<EdgeIndex>> {
         Ok(self
-            .0
+            .inner_mut()?
             .add_edges_dataframes_with_group(edges_dataframes, &group)
             .map_err(PyGraphRecordError::from)?)
     }
 
     #[pyo3(signature = (group, node_indices_to_add=None, edge_indices_to_add=None))]
     pub fn add_group(
-        &mut self,
+        &self,
         group: PyGroup,
         node_indices_to_add: Option<Vec<PyNodeIndex>>,
         edge_indices_to_add: Option<Vec<EdgeIndex>>,
     ) -> PyResult<()> {
         Ok(self
-            .0
+            .inner_mut()?
             .add_group(
                 group.into(),
                 node_indices_to_add.deep_into(),
@@ -613,9 +780,11 @@ impl PyGraphRecord {
             .map_err(PyGraphRecordError::from)?)
     }
 
-    pub fn remove_groups(&mut self, group: Vec<PyGroup>) -> PyResult<()> {
+    pub fn remove_groups(&self, group: Vec<PyGroup>) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         group.into_iter().try_for_each(|group| {
-            self.0
+            graphrecord
                 .remove_group(&group)
                 .map_err(PyGraphRecordError::from)?;
 
@@ -623,53 +792,49 @@ impl PyGraphRecord {
         })
     }
 
-    pub fn add_nodes_to_group(
-        &mut self,
-        group: PyGroup,
-        node_index: Vec<PyNodeIndex>,
-    ) -> PyResult<()> {
+    pub fn add_nodes_to_group(&self, group: PyGroup, node_index: Vec<PyNodeIndex>) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         node_index.into_iter().try_for_each(|node_index| {
-            Ok(self
-                .0
+            Ok(graphrecord
                 .add_node_to_group(group.clone().into(), node_index.into())
                 .map_err(PyGraphRecordError::from)?)
         })
     }
 
-    pub fn add_edges_to_group(
-        &mut self,
-        group: PyGroup,
-        edge_index: Vec<EdgeIndex>,
-    ) -> PyResult<()> {
+    pub fn add_edges_to_group(&self, group: PyGroup, edge_index: Vec<EdgeIndex>) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         edge_index.into_iter().try_for_each(|edge_index| {
-            Ok(self
-                .0
+            Ok(graphrecord
                 .add_edge_to_group(group.clone().into(), edge_index)
                 .map_err(PyGraphRecordError::from)?)
         })
     }
 
     pub fn remove_nodes_from_group(
-        &mut self,
+        &self,
         group: PyGroup,
         node_index: Vec<PyNodeIndex>,
     ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         node_index.into_iter().try_for_each(|node_index| {
-            Ok(self
-                .0
+            Ok(graphrecord
                 .remove_node_from_group(&group, &node_index)
                 .map_err(PyGraphRecordError::from)?)
         })
     }
 
     pub fn remove_edges_from_group(
-        &mut self,
+        &self,
         group: PyGroup,
         edge_index: Vec<EdgeIndex>,
     ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
         edge_index.into_iter().try_for_each(|edge_index| {
-            Ok(self
-                .0
+            Ok(graphrecord
                 .remove_edge_from_group(&group, &edge_index)
                 .map_err(PyGraphRecordError::from)?)
         })
@@ -679,11 +844,12 @@ impl PyGraphRecord {
         &self,
         group: Vec<PyGroup>,
     ) -> PyResult<HashMap<PyGroup, Vec<PyNodeIndex>>> {
+        let graphrecord = self.inner()?;
+
         group
             .into_iter()
             .map(|group| {
-                let nodes_attributes = self
-                    .0
+                let nodes_attributes = graphrecord
                     .nodes_in_group(&group)
                     .map_err(PyGraphRecordError::from)?
                     .map(|node_index| node_index.clone().into())
@@ -694,22 +860,24 @@ impl PyGraphRecord {
             .collect()
     }
 
-    pub fn ungrouped_nodes(&self) -> Vec<PyNodeIndex> {
-        self.0
+    pub fn ungrouped_nodes(&self) -> PyResult<Vec<PyNodeIndex>> {
+        Ok(self
+            .inner()?
             .ungrouped_nodes()
             .map(|node_index| node_index.clone().into())
-            .collect()
+            .collect())
     }
 
     pub fn edges_in_group(
         &self,
         group: Vec<PyGroup>,
     ) -> PyResult<HashMap<PyGroup, Vec<EdgeIndex>>> {
+        let graphrecord = self.inner()?;
+
         group
             .into_iter()
             .map(|group| {
-                let edges = self
-                    .0
+                let edges = graphrecord
                     .edges_in_group(&group)
                     .map_err(PyGraphRecordError::from)?
                     .copied()
@@ -720,19 +888,20 @@ impl PyGraphRecord {
             .collect()
     }
 
-    pub fn ungrouped_edges(&self) -> Vec<EdgeIndex> {
-        self.0.ungrouped_edges().copied().collect()
+    pub fn ungrouped_edges(&self) -> PyResult<Vec<EdgeIndex>> {
+        Ok(self.inner()?.ungrouped_edges().copied().collect())
     }
 
     pub fn groups_of_node(
         &self,
         node_index: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, Vec<PyGroup>>> {
+        let graphrecord = self.inner()?;
+
         node_index
             .into_iter()
             .map(|node_index| {
-                let groups = self
-                    .0
+                let groups = graphrecord
                     .groups_of_node(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|node_index| node_index.clone().into())
@@ -747,11 +916,12 @@ impl PyGraphRecord {
         &self,
         edge_index: Vec<EdgeIndex>,
     ) -> PyResult<HashMap<EdgeIndex, Vec<PyGroup>>> {
+        let graphrecord = self.inner()?;
+
         edge_index
             .into_iter()
             .map(|edge_index| {
-                let groups = self
-                    .0
+                let groups = graphrecord
                     .groups_of_edge(&edge_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|group| group.clone().into())
@@ -762,39 +932,40 @@ impl PyGraphRecord {
             .collect()
     }
 
-    pub fn node_count(&self) -> usize {
-        self.0.node_count()
+    pub fn node_count(&self) -> PyResult<usize> {
+        Ok(self.inner()?.node_count())
     }
 
-    pub fn edge_count(&self) -> usize {
-        self.0.edge_count()
+    pub fn edge_count(&self) -> PyResult<usize> {
+        Ok(self.inner()?.edge_count())
     }
 
-    pub fn group_count(&self) -> usize {
-        self.0.group_count()
+    pub fn group_count(&self) -> PyResult<usize> {
+        Ok(self.inner()?.group_count())
     }
 
-    pub fn contains_node(&self, node_index: PyNodeIndex) -> bool {
-        self.0.contains_node(&node_index.into())
+    pub fn contains_node(&self, node_index: PyNodeIndex) -> PyResult<bool> {
+        Ok(self.inner()?.contains_node(&node_index.into()))
     }
 
-    pub fn contains_edge(&self, edge_index: EdgeIndex) -> bool {
-        self.0.contains_edge(&edge_index)
+    pub fn contains_edge(&self, edge_index: EdgeIndex) -> PyResult<bool> {
+        Ok(self.inner()?.contains_edge(&edge_index))
     }
 
-    pub fn contains_group(&self, group: PyGroup) -> bool {
-        self.0.contains_group(&group.into())
+    pub fn contains_group(&self, group: PyGroup) -> PyResult<bool> {
+        Ok(self.inner()?.contains_group(&group.into()))
     }
 
     pub fn neighbors(
         &self,
         node_indices: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, Vec<PyNodeIndex>>> {
+        let graphrecord = self.inner()?;
+
         node_indices
             .into_iter()
             .map(|node_index| {
-                let neighbors = self
-                    .0
+                let neighbors = graphrecord
                     .neighbors_outgoing(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|neighbor| neighbor.clone().into())
@@ -809,11 +980,12 @@ impl PyGraphRecord {
         &self,
         node_indices: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, Vec<PyNodeIndex>>> {
+        let graphrecord = self.inner()?;
+
         node_indices
             .into_iter()
             .map(|node_index| {
-                let neighbors = self
-                    .0
+                let neighbors = graphrecord
                     .neighbors_undirected(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|neighbor| neighbor.clone().into())
@@ -824,16 +996,18 @@ impl PyGraphRecord {
             .collect()
     }
 
-    pub fn clear(&mut self) {
-        self.0.clear();
+    pub fn clear(&self) -> PyResult<()> {
+        let _: () = self.inner_mut()?.clear();
+        Ok(())
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn query_nodes(&self, query: &Bound<'_, PyFunction>) -> PyResult<PyReturnValue<'_>> {
-        Ok(self
-            .0
+    pub fn query_nodes(&self, py: Python<'_>, query: &Bound<'_, PyFunction>) -> PyResult<PyObject> {
+        let graphrecord = self.inner()?;
+
+        let result = graphrecord
             .query_nodes(|nodes| {
                 let result = query
                     .call1((PyNodeOperand::from(nodes.clone()),))
@@ -844,15 +1018,18 @@ impl PyGraphRecord {
                     .expect("Extraction must succeed")
             })
             .evaluate()
-            .map_err(PyGraphRecordError::from)?)
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(result.into_pyobject(py)?.unbind())
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn query_edges(&self, query: &Bound<'_, PyFunction>) -> PyResult<PyReturnValue<'_>> {
-        Ok(self
-            .0
+    pub fn query_edges(&self, py: Python<'_>, query: &Bound<'_, PyFunction>) -> PyResult<PyObject> {
+        let graphrecord = self.inner()?;
+
+        let result = graphrecord
             .query_edges(|edges| {
                 let result = query
                     .call1((PyEdgeOperand::from(edges.clone()),))
@@ -863,17 +1040,19 @@ impl PyGraphRecord {
                     .expect("Extraction must succeed")
             })
             .evaluate()
-            .map_err(PyGraphRecordError::from)?)
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(result.into_pyobject(py)?.unbind())
     }
 
     #[allow(clippy::should_implement_trait)]
     pub fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Clone::clone(self)
     }
 
     pub fn overview(&self, truncate_details: Option<usize>) -> PyResult<PyOverview> {
         Ok(self
-            .0
+            .inner()?
             .overview(truncate_details)
             .map_err(PyGraphRecordError::from)?
             .into())
@@ -885,7 +1064,7 @@ impl PyGraphRecord {
         truncate_details: Option<usize>,
     ) -> PyResult<PyGroupOverview> {
         Ok(self
-            .0
+            .inner()?
             .group_overview(&group.into(), truncate_details)
             .map_err(PyGraphRecordError::from)?
             .into())
