@@ -1,6 +1,6 @@
 use std::{
     error::Error,
-    fmt::{Display, Formatter, Result},
+    fmt::{Display, Formatter, Result as FmtResult},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -27,7 +27,7 @@ impl Error for GraphRecordError {
 }
 
 impl Display for GraphRecordError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::IndexError(message) => write!(f, "IndexError: {message}"),
             Self::KeyError(message) => write!(f, "KeyError: {message}"),

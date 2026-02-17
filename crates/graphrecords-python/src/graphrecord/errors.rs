@@ -6,6 +6,7 @@ use pyo3::{
 
 #[repr(transparent)]
 pub struct PyGraphRecordError(GraphRecordError);
+pub type PyGraphRecordResult<T> = Result<T, PyGraphRecordError>;
 
 impl From<GraphRecordError> for PyGraphRecordError {
     fn from(error: GraphRecordError) -> Self {

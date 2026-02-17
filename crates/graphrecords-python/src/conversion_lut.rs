@@ -1,6 +1,7 @@
 use graphrecords_utils::aliases::GrHashMap;
 use parking_lot::Mutex;
 use rustc_hash::FxBuildHasher;
+use std::hash::Hash;
 
 type FxGrHashMap<K, V> = GrHashMap<K, V, FxBuildHasher>;
 
@@ -11,11 +12,13 @@ impl<K, V> ConversionLut<K, V> {
         Self(Mutex::new(FxGrHashMap::with_hasher(FxBuildHasher)))
     }
 
-    pub fn map<F, O>(&self, operation: F) -> O
+    pub fn get_or_insert<F>(&self, key: K, insert_fn: F) -> V
     where
-        F: FnOnce(&mut FxGrHashMap<K, V>) -> O,
+        K: Eq + Hash,
+        V: Copy,
+        F: FnOnce() -> V,
     {
         let mut inner = self.0.lock();
-        operation(&mut inner)
+        *inner.entry(key).or_insert_with(insert_fn)
     }
 }

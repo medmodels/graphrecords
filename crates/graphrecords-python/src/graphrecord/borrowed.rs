@@ -1,7 +1,10 @@
 use super::{PyGraphRecord, PyGraphRecordInner};
-use graphrecords_core::graphrecord::GraphRecord;
+use graphrecords_core::{
+    errors::{GraphRecordError, GraphRecordResult},
+    graphrecord::GraphRecord,
+};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use pyo3::{Py, PyResult, Python};
+use pyo3::{Py, Python};
 use std::{
     fmt::{Debug, Formatter, Result},
     ptr::NonNull,
@@ -62,8 +65,8 @@ impl PyGraphRecord {
     pub fn scope<R>(
         py: Python<'_>,
         graphrecord: &mut GraphRecord,
-        function: impl FnOnce(Python<'_>, &Py<Self>) -> PyResult<R>,
-    ) -> PyResult<R> {
+        function: impl FnOnce(Python<'_>, &Py<Self>) -> GraphRecordResult<R>,
+    ) -> GraphRecordResult<R> {
         struct PanicOnDrop(bool);
         impl Drop for PanicOnDrop {
             fn drop(&mut self) {
@@ -104,7 +107,12 @@ impl PyGraphRecord {
                         pointer,
                     )))),
                 },
-            )?,
+            )
+            .map_err(|error| {
+                GraphRecordError::ConversionError(format!(
+                    "Failed to create PyGraphRecord: {error}"
+                ))
+            })?,
             pointer,
         );
         function(py, &guard.1)

@@ -19,7 +19,6 @@ from typing import (
     List,
     Optional,
     Sequence,
-    TypeVar,
     Union,
     overload,
 )
@@ -34,6 +33,7 @@ from graphrecords.overview import (
     GroupOverview,
     Overview,
 )
+from graphrecords.plugins import Plugin, _PluginBridge
 from graphrecords.querying import (
     EdgeAttributesTreeGroupOperand,
     EdgeAttributesTreeGroupQueryResult,
@@ -321,63 +321,14 @@ class GraphRecord:
         return graphrecord
 
     @classmethod
-    def with_plugins(cls, plugins: List[object]) -> GraphRecord:  # noqa: D102
+    def with_plugins(cls, plugins: List[Plugin]) -> GraphRecord:  # noqa: D102
         graphrecord = cls.__new__(cls)
 
-        graphrecord._graphrecord = PyGraphRecord.with_plugins(plugins)
-
-        for plugin in plugins:
-            plugin.__setattr__("_graphrecord", graphrecord._graphrecord)
+        graphrecord._graphrecord = PyGraphRecord.with_plugins(
+            [_PluginBridge(plugin) for plugin in plugins]
+        )
 
         return graphrecord
-
-    _C = TypeVar("_C")
-    _R = TypeVar("_R")
-
-    def _run_with_plugins(
-        self,
-        pre_hook: Callable[[Plugin, GraphRecord, _C], _C],
-        operation: Callable[[_C], _R],
-        post_hook: Callable[[Plugin, GraphRecord, _C, _R], None],
-        context: _C,
-    ) -> _R:
-        local_handle_plugins = self._handle_plugins
-
-        if local_handle_plugins:
-            self._handle_plugins = False
-            try:
-                for plugin in self._plugins:
-                    context = pre_hook(plugin, self, context)
-
-                result = operation(context)
-
-                for plugin in self._plugins:
-                    post_hook(plugin, self, context, result)
-            finally:
-                self._handle_plugins = True
-        else:
-            result = operation(context)
-
-        return result
-
-    def _run_with_plugins_simple(
-        self,
-        pre_hook: Callable[[Plugin, GraphRecord], None],
-        operation: Callable[[], None],
-        post_hook: Callable[[Plugin, GraphRecord], None],
-    ) -> None:
-        if self._handle_plugins:
-            self._handle_plugins = False
-            try:
-                for plugin in self._plugins:
-                    pre_hook(plugin, self)
-                operation()
-                for plugin in self._plugins:
-                    post_hook(plugin, self)
-            finally:
-                self._handle_plugins = True
-        else:
-            operation()
 
     @classmethod
     def from_tuples(
@@ -400,8 +351,6 @@ class GraphRecord:
         """
         graphrecord = cls.__new__(cls)
         graphrecord._graphrecord = PyGraphRecord.from_tuples(nodes, edges)
-        graphrecord._plugins = []
-        graphrecord._handle_plugins = False
         return graphrecord
 
     @classmethod
@@ -434,8 +383,6 @@ class GraphRecord:
                 if isinstance(nodes, list)
                 else [process_nodes_dataframe(nodes)]
             )
-            graphrecord._plugins = []
-            graphrecord._handle_plugins = False
             return graphrecord
 
         graphrecord = cls.__new__(cls)
@@ -451,8 +398,6 @@ class GraphRecord:
                 else [process_edges_dataframe(edges)]
             ),
         )
-        graphrecord._plugins = []
-        graphrecord._handle_plugins = False
         return graphrecord
 
     @classmethod
@@ -483,8 +428,6 @@ class GraphRecord:
             graphrecord._graphrecord = PyGraphRecord.from_nodes_dataframes(
                 nodes if isinstance(nodes, list) else [nodes]
             )
-            graphrecord._plugins = []
-            graphrecord._handle_plugins = False
             return graphrecord
 
         graphrecord = cls.__new__(cls)
@@ -492,8 +435,6 @@ class GraphRecord:
             nodes if isinstance(nodes, list) else [nodes],
             edges if isinstance(edges, list) else [edges],
         )
-        graphrecord._plugins = []
-        graphrecord._handle_plugins = False
         return graphrecord
 
     @classmethod
@@ -511,8 +452,6 @@ class GraphRecord:
         """
         graphrecord = cls.__new__(cls)
         graphrecord._graphrecord = PyGraphRecord.from_ron(path)
-        graphrecord._plugins = []
-        graphrecord._handle_plugins = False
         return graphrecord
 
     def to_ron(self, path: str) -> None:
@@ -573,32 +512,15 @@ class GraphRecord:
         Args:
             schema (Schema): The new schema to apply.
         """
-
-        def operation(context: SetSchemaContext) -> None:
-            self._graphrecord.set_schema(context.schema._schema)
-
-        self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_set_schema(gr, context),
-            operation,
-            lambda plugin, gr, context, _: plugin.post_set_schema(gr, context),
-            SetSchemaContext(schema),
-        )
+        self._graphrecord.set_schema(schema._schema)
 
     def freeze_schema(self) -> None:
         """Freezes the schema. No changes are automatically inferred."""
-        self._run_with_plugins_simple(
-            lambda plugin, gr: plugin.pre_freeze_schema(gr),
-            self._graphrecord.freeze_schema,
-            lambda plugin, gr: plugin.post_freeze_schema(gr),
-        )
+        self._graphrecord.freeze_schema()
 
     def unfreeze_schema(self) -> None:
         """Unfreezes the schema. Changes are automatically inferred."""
-        self._run_with_plugins_simple(
-            lambda plugin, gr: plugin.pre_unfreeze_schema(gr),
-            self._graphrecord.unfreeze_schema,
-            lambda plugin, gr: plugin.post_unfreeze_schema(gr),
-        )
+        self._graphrecord.unfreeze_schema()
 
     @property
     def nodes(self) -> List[NodeIndex]:
@@ -934,31 +856,20 @@ class GraphRecord:
             query_result = self.query_nodes(nodes)
 
             if isinstance(query_result, list):
-                return self._remove_nodes(query_result)
+                return self._graphrecord.remove_nodes(query_result)
             if query_result is not None:
-                return self._remove_nodes([query_result])[query_result]
+                return self._graphrecord.remove_nodes([query_result])[query_result]
 
             return {}
 
-        if isinstance(nodes, list):
-            return self._remove_nodes(nodes)
-
-        return self._remove_nodes([nodes])[nodes]
-
-    def _remove_nodes(self, nodes: NodeIndexInputList) -> Dict[NodeIndex, Attributes]:
-        def operation(
-            context: RemoveNodesContext,
-        ) -> Dict[NodeIndex, Attributes]:
-            return self._graphrecord.remove_nodes(context.nodes)
-
-        return self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_remove_nodes(gr, context),
-            operation,
-            lambda plugin, gr, context, result: plugin.post_remove_nodes(
-                gr, context, result
-            ),
-            RemoveNodesContext(list(nodes)),
+        attributes = self._graphrecord.remove_nodes(
+            nodes if isinstance(nodes, list) else [nodes]
         )
+
+        if isinstance(nodes, list):
+            return attributes
+
+        return attributes[nodes]
 
     def add_nodes(
         self,
@@ -1042,20 +953,10 @@ class GraphRecord:
         if not isinstance(nodes, list):
             nodes = [nodes]
 
-        def operation(context: AddNodesPolarsContext) -> None:
-            if context.group is None:
-                self._graphrecord.add_nodes_dataframes(context.nodes)
-            else:
-                self._graphrecord.add_nodes_dataframes_with_group(
-                    context.nodes, context.group
-                )
-
-        self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_add_nodes_polars(gr, context),
-            operation,
-            lambda plugin, gr, context, _: plugin.post_add_nodes_polars(gr, context),
-            AddNodesPolarsContext(nodes, group),
-        )
+        if group is None:
+            self._graphrecord.add_nodes_dataframes(nodes)
+        else:
+            self._graphrecord.add_nodes_dataframes_with_group(nodes, group)
 
     @overload
     def remove_edges(self, edges: Union[EdgeIndex, EdgeIndexQuery]) -> Attributes: ...
@@ -1087,31 +988,20 @@ class GraphRecord:
             query_result = self.query_edges(edges)
 
             if isinstance(query_result, list):
-                return self._remove_edges(query_result)
+                return self._graphrecord.remove_edges(query_result)
             if query_result is not None:
-                return self._remove_edges([query_result])[query_result]
+                return self._graphrecord.remove_edges([query_result])[query_result]
 
             return {}
 
-        if isinstance(edges, list):
-            return self._remove_edges(edges)
-
-        return self._remove_edges([edges])[edges]
-
-    def _remove_edges(self, edges: EdgeIndexInputList) -> Dict[EdgeIndex, Attributes]:
-        def operation(
-            context: RemoveEdgesContext,
-        ) -> Dict[EdgeIndex, Attributes]:
-            return self._graphrecord.remove_edges(context.edges)
-
-        return self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_remove_edges(gr, context),
-            operation,
-            lambda plugin, gr, context, result: plugin.post_remove_edges(
-                gr, context, result
-            ),
-            RemoveEdgesContext(list(edges)),
+        attributes = self._graphrecord.remove_edges(
+            edges if isinstance(edges, list) else [edges]
         )
+
+        if isinstance(edges, list):
+            return attributes
+
+        return attributes[edges]
 
     def add_edges(
         self,
@@ -1146,19 +1036,10 @@ class GraphRecord:
         if is_edge_tuple(edges):
             edges = [edges]
 
-        def operation(context: AddEdgesContext) -> List[EdgeIndex]:
-            if context.group is None:
-                return self._graphrecord.add_edges(context.edges)
-            return self._graphrecord.add_edges_with_group(context.edges, context.group)
+        if group is None:
+            return self._graphrecord.add_edges(edges)
 
-        return self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_add_edges(gr, context),
-            operation,
-            lambda plugin, gr, context, result: plugin.post_add_edges(
-                gr, context, result
-            ),
-            AddEdgesContext(edges, group),
-        )
+        return self._graphrecord.add_edges_with_group(edges, group)
 
     def add_edges_pandas(
         self,
@@ -1212,21 +1093,9 @@ class GraphRecord:
         if not isinstance(edges, list):
             edges = [edges]
 
-        def operation(context: AddEdgesPolarsContext) -> List[EdgeIndex]:
-            if context.group is None:
-                return self._graphrecord.add_edges_dataframes(context.edges)
-            return self._graphrecord.add_edges_dataframes_with_group(
-                context.edges, context.group
-            )
-
-        return self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_add_edges_polars(gr, context),
-            operation,
-            lambda plugin, gr, context, result: plugin.post_add_edges_polars(
-                gr, context, result
-            ),
-            AddEdgesPolarsContext(edges, group),
-        )
+        if group is None:
+            return self._graphrecord.add_edges_dataframes(edges)
+        return self._graphrecord.add_edges_dataframes_with_group(edges, group)
 
     def add_group(
         self,
@@ -1264,19 +1133,7 @@ class GraphRecord:
         if edges is not None and not isinstance(edges, list):
             edges = [edges]
 
-        def operation(context: AddGroupContext) -> None:
-            self._graphrecord.add_group(context.group, context.nodes, context.edges)
-
-        self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_add_group(gr, context),
-            operation,
-            lambda plugin, gr, context, _: plugin.post_add_group(gr, context),
-            AddGroupContext(
-                group,
-                list(nodes) if nodes is not None else None,
-                list(edges) if edges is not None else None,
-            ),
-        )
+        self._graphrecord.add_group(group, nodes, edges)
 
     def remove_groups(self, groups: Union[Group, GroupInputList]) -> None:
         """Removes one or more groups from the GraphRecord instance.
@@ -1287,15 +1144,7 @@ class GraphRecord:
         if not isinstance(groups, list):
             groups = [groups]
 
-        def operation(context: RemoveGroupsContext) -> None:
-            self._graphrecord.remove_groups(context.groups)
-
-        self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_remove_groups(gr, context),
-            operation,
-            lambda plugin, gr, context, _: plugin.post_remove_groups(gr, context),
-            RemoveGroupsContext(list(groups)),
-        )
+        self._graphrecord.remove_groups(groups)
 
     def add_nodes_to_group(
         self,
@@ -1319,15 +1168,7 @@ class GraphRecord:
         elif not isinstance(nodes, list):
             nodes = [nodes]
 
-        def operation(context: AddNodesToGroupContext) -> None:
-            self._graphrecord.add_nodes_to_group(context.group, context.nodes)
-
-        self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_add_nodes_to_group(gr, context),
-            operation,
-            lambda plugin, gr, context, _: plugin.post_add_nodes_to_group(gr, context),
-            AddNodesToGroupContext(group, list(nodes)),
-        )
+        self._graphrecord.add_nodes_to_group(group, nodes)
 
     def add_edges_to_group(
         self,
@@ -1351,15 +1192,7 @@ class GraphRecord:
         elif not isinstance(edges, list):
             edges = [edges]
 
-        def operation(context: AddEdgesToGroupContext) -> None:
-            self._graphrecord.add_edges_to_group(context.group, context.edges)
-
-        self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_add_edges_to_group(gr, context),
-            operation,
-            lambda plugin, gr, context, _: plugin.post_add_edges_to_group(gr, context),
-            AddEdgesToGroupContext(group, list(edges)),
-        )
+        self._graphrecord.add_edges_to_group(group, edges)
 
     def remove_nodes_from_group(
         self,
@@ -1383,17 +1216,7 @@ class GraphRecord:
         elif not isinstance(nodes, list):
             nodes = [nodes]
 
-        def operation(context: RemoveNodesFromGroupContext) -> None:
-            self._graphrecord.remove_nodes_from_group(context.group, context.nodes)
-
-        self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_remove_nodes_from_group(gr, context),
-            operation,
-            lambda plugin, gr, context, _: plugin.post_remove_nodes_from_group(
-                gr, context
-            ),
-            RemoveNodesFromGroupContext(group, list(nodes)),
-        )
+        self._graphrecord.remove_nodes_from_group(group, nodes)
 
     def remove_edges_from_group(
         self,
@@ -1417,17 +1240,7 @@ class GraphRecord:
         elif not isinstance(edges, list):
             edges = [edges]
 
-        def operation(context: RemoveEdgesFromGroupContext) -> None:
-            self._graphrecord.remove_edges_from_group(context.group, context.edges)
-
-        self._run_with_plugins(
-            lambda plugin, gr, context: plugin.pre_remove_edges_from_group(gr, context),
-            operation,
-            lambda plugin, gr, context, _: plugin.post_remove_edges_from_group(
-                gr, context
-            ),
-            RemoveEdgesFromGroupContext(group, list(edges)),
-        )
+        self._graphrecord.remove_edges_from_group(group, edges)
 
     @overload
     def nodes_in_group(self, group: Group) -> List[NodeIndex]: ...
@@ -1715,11 +1528,7 @@ class GraphRecord:
 
         Removes all nodes, edges, and groups, effectively resetting the instance.
         """
-        self._run_with_plugins_simple(
-            lambda plugin, gr: plugin.pre_clear(gr),
-            self._graphrecord.clear,
-            lambda plugin, gr: plugin.post_clear(gr),
-        )
+        self._graphrecord.clear()
 
     @overload
     def query_nodes(
@@ -2107,8 +1916,6 @@ class GraphRecord:
         """
         graphrecord = GraphRecord.__new__(GraphRecord)
         graphrecord._graphrecord = self._graphrecord.clone()
-        graphrecord._plugins = list(self._plugins)
-        graphrecord._handle_plugins = self._handle_plugins
 
         return graphrecord
 

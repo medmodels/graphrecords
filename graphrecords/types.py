@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from typing import (
     TYPE_CHECKING,
@@ -22,7 +23,11 @@ import polars as pl
 if TYPE_CHECKING:
     from typing_extensions import TypeIs
 
-    from graphrecords._graphrecords import PyAttributeType
+    from graphrecords._graphrecords import (
+        PyAttributeType,
+        PyGraphRecord,
+        PyPreSetSchemaContext,
+    )
     from graphrecords.schema import AttributeType
 
 
@@ -213,6 +218,17 @@ class PandasDataFramesExport(TypedDict):
 
     ungrouped: PandasDataFramesGroupExport
     groups: Dict[Group, PandasDataFramesGroupExport]
+
+
+class PyPlugin(ABC):  # noqa: D101
+    @abstractmethod
+    def initialize(self, graphrecord: PyGraphRecord) -> None: ...  # noqa: D102
+    @abstractmethod
+    def pre_set_schema(  # noqa: D102
+        self, graphrecord: PyGraphRecord, context: PyPreSetSchemaContext
+    ) -> PyPreSetSchemaContext: ...
+    @abstractmethod
+    def post_set_schema(self, graphrecord: PyGraphRecord) -> None: ...  # noqa: D102
 
 
 def is_graphrecord_attribute(value: object) -> TypeIs[GraphRecordAttribute]:

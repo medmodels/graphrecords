@@ -8,11 +8,7 @@ license = { workspace = true }
 readme = "README.md"
 
 [dependencies]
-graphrecords-core = { workspace = true, features = [
-    "serde",
-    "plugins",
-    "plugins_serde",
-] }
+graphrecords-core = { workspace = true, features = ["serde"] }
 graphrecords-utils = { workspace = true }
 
 polars = { workspace = true }

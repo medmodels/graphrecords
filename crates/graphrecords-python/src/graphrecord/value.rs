@@ -102,29 +102,27 @@ pub(crate) fn convert_pyobject_to_graphrecordvalue(
 
     let type_pointer = ob.get_type_ptr() as usize;
 
-    GRAPHRECORDVALUE_CONVERSION_LUT.map(|lut| {
-        let conversion_function = lut.entry(type_pointer).or_insert_with(|| {
-            if ob.is_instance_of::<PyString>() {
-                convert_string
-            } else if ob.is_instance_of::<PyBool>() {
-                convert_bool
-            } else if ob.is_instance_of::<PyInt>() {
-                convert_int
-            } else if ob.is_instance_of::<PyFloat>() {
-                convert_float
-            } else if ob.is_instance_of::<PyDateTime>() {
-                convert_datetime
-            } else if ob.is_instance_of::<PyDelta>() {
-                convert_duration
-            } else if ob.is_none() {
-                convert_null
-            } else {
-                throw_error
-            }
-        });
+    let conversion_function = GRAPHRECORDVALUE_CONVERSION_LUT.get_or_insert(type_pointer, || {
+        if ob.is_instance_of::<PyString>() {
+            convert_string
+        } else if ob.is_instance_of::<PyBool>() {
+            convert_bool
+        } else if ob.is_instance_of::<PyInt>() {
+            convert_int
+        } else if ob.is_instance_of::<PyFloat>() {
+            convert_float
+        } else if ob.is_instance_of::<PyDateTime>() {
+            convert_datetime
+        } else if ob.is_instance_of::<PyDelta>() {
+            convert_duration
+        } else if ob.is_none() {
+            convert_null
+        } else {
+            throw_error
+        }
+    });
 
-        conversion_function(ob)
-    })
+    conversion_function(ob)
 }
 
 impl FromPyObject<'_, '_> for PyGraphRecordValue {

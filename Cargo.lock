@@ -807,7 +807,6 @@ name = "graphrecords"
 version = "0.1.0"
 dependencies = [
  "graphrecords-core",
- "graphrecords-python",
  "graphrecords-utils",
 ]
 
@@ -2220,7 +2219,8 @@ dependencies = [
 name = "py-graphrecords"
 version = "0.1.0"
 dependencies = [
- "graphrecords",
+ "graphrecords-core",
+ "graphrecords-python",
  "pyo3",
 ]
 

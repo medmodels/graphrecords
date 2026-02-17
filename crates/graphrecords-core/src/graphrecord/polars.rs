@@ -1,6 +1,6 @@
 use crate::{
     GraphRecord,
-    errors::GraphRecordError,
+    errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{Attributes, GraphRecordAttribute, GraphRecordValue, NodeIndex},
     prelude::{EdgeIndex, Group},
 };
@@ -127,7 +127,7 @@ impl From<GraphRecordAttribute> for AnyValue<'_> {
 pub fn dataframe_to_nodes(
     mut nodes: DataFrame,
     index_column_name: &str,
-) -> Result<Vec<(NodeIndex, Attributes)>, GraphRecordError> {
+) -> GraphRecordResult<Vec<(NodeIndex, Attributes)>> {
     if nodes.max_n_chunks() > 1 {
         nodes.rechunk_mut();
     }
@@ -153,10 +153,7 @@ pub fn dataframe_to_nodes(
         .columns()
         .iter()
         .filter(|column| attribute_column_names.contains(column.name()))
-        .map(|s| s.as_materialized_series().iter())
-        .collect::<Vec<_>>()
-        .into_iter()
-        .zip(attribute_column_names)
+        .map(|s| (s.as_materialized_series().iter(), s.name().clone()))
         .collect();
 
     index
@@ -167,11 +164,11 @@ pub fn dataframe_to_nodes(
                     .iter_mut()
                     .map(|(column, column_name)| {
                         Ok((
-                            (***column_name).into(),
+                            column_name.as_str().into(),
                             column.next().expect("msg").try_into()?,
                         ))
                     })
-                    .collect::<Result<_, GraphRecordError>>()?,
+                    .collect::<GraphRecordResult<_>>()?,
             ))
         })
         .collect()
@@ -181,7 +178,7 @@ pub fn dataframe_to_edges(
     mut edges: DataFrame,
     source_index_column_name: &str,
     target_index_column_name: &str,
-) -> Result<Vec<(NodeIndex, NodeIndex, Attributes)>, GraphRecordError> {
+) -> GraphRecordResult<Vec<(NodeIndex, NodeIndex, Attributes)>> {
     if edges.max_n_chunks() > 1 {
         edges.rechunk_mut();
     }
@@ -216,10 +213,7 @@ pub fn dataframe_to_edges(
         .columns()
         .iter()
         .filter(|column| attribute_column_names.contains(column.name()))
-        .map(|s| s.as_materialized_series().iter())
-        .collect::<Vec<_>>()
-        .into_iter()
-        .zip(attribute_column_names)
+        .map(|s| (s.as_materialized_series().iter(), s.name().clone()))
         .collect();
 
     source_index
@@ -232,14 +226,14 @@ pub fn dataframe_to_edges(
                     .iter_mut()
                     .map(|(column, column_name)| {
                         Ok((
-                            (***column_name).into(),
+                            column_name.as_str().into(),
                             column
                                 .next()
                                 .expect("Should have as many iterations as rows")
                                 .try_into()?,
                         ))
                     })
-                    .collect::<Result<_, GraphRecordError>>()?,
+                    .collect::<GraphRecordResult<_>>()?,
             ))
         })
         .collect()
@@ -251,7 +245,7 @@ pub struct DataFramesGroupExport {
 }
 
 impl DataFramesGroupExport {
-    fn new(graphrecord: &GraphRecord, group: Option<&Group>) -> Result<Self, GraphRecordError> {
+    fn new(graphrecord: &GraphRecord, group: Option<&Group>) -> GraphRecordResult<Self> {
         let group_schema = match group {
             Some(group) => graphrecord.get_schema().group(group)?,
             None => graphrecord.get_schema().ungrouped(),
@@ -423,7 +417,7 @@ pub struct DataFramesExport {
 }
 
 impl DataFramesExport {
-    pub fn new(graphrecord: &GraphRecord) -> Result<Self, GraphRecordError> {
+    pub fn new(graphrecord: &GraphRecord) -> GraphRecordResult<Self> {
         let ungrouped = DataFramesGroupExport::new(graphrecord, None)?;
 
         let groups = graphrecord

@@ -3,7 +3,7 @@ mod value;
 
 pub use self::{attribute::GraphRecordAttribute, value::GraphRecordValue};
 use super::EdgeIndex;
-use crate::errors::GraphRecordError;
+use crate::errors::GraphRecordResult;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, ops::Range};
@@ -183,16 +183,16 @@ impl Contains for EdgeIndex {
 }
 
 pub trait Pow: Sized {
-    fn pow(self, exp: Self) -> Result<Self, GraphRecordError>;
+    fn pow(self, exp: Self) -> GraphRecordResult<Self>;
 }
 
 pub trait Mod: Sized {
-    fn r#mod(self, other: Self) -> Result<Self, GraphRecordError>;
+    fn r#mod(self, other: Self) -> GraphRecordResult<Self>;
 }
 
 // TODO: Add tests
 impl Mod for EdgeIndex {
-    fn r#mod(self, other: Self) -> Result<Self, GraphRecordError> {
+    fn r#mod(self, other: Self) -> GraphRecordResult<Self> {
         Ok(self % other)
     }
 }

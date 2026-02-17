@@ -44,34 +44,25 @@ impl FromPyObject<'_, '_> for PySingleValueComparisonOperand {
     fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<PyGraphRecordValue>() {
             Ok(value) => Ok(SingleValueComparisonOperand::Value(value.into()).into()),
-            _ => {
-                match ob.extract::<PyNodeSingleValueWithIndexOperand>() {
+            _ => match ob.extract::<PyNodeSingleValueWithIndexOperand>() {
+                Ok(operand) => Ok(Self(operand.0.into())),
+                _ => match ob.extract::<PyNodeSingleValueWithoutIndexOperand>() {
                     Ok(operand) => Ok(Self(operand.0.into())),
-                    _ => {
-                        match ob.extract::<PyNodeSingleValueWithoutIndexOperand>() {
+                    _ => match ob.extract::<PyEdgeSingleValueWithIndexOperand>() {
+                        Ok(operand) => Ok(Self(operand.0.into())),
+                        _ => match ob.extract::<PyEdgeSingleValueWithoutIndexOperand>() {
                             Ok(operand) => Ok(Self(operand.0.into())),
-                            _ => {
-                                match ob.extract::<PyEdgeSingleValueWithIndexOperand>() {
-                                    Ok(operand) => Ok(Self(operand.0.into())),
-                                    _ => {
-                                        match ob.extract::<PyEdgeSingleValueWithoutIndexOperand>() { Ok(operand) => {
-            Ok(Self(operand.0.into()))
-        } _ => {
-            Err(
-                PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
+                            _ => Err(PyGraphRecordError::from(GraphRecordError::ConversionError(
+                                format!(
                     "Failed to convert {} into GraphRecordValue or SingleValueOperand",
                     ob.to_owned()
-                )))
-                .into(),
-            )
-        }}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+                ),
+                            ))
+                            .into()),
+                        },
+                    },
+                },
+            },
         }
     }
 }
@@ -100,34 +91,25 @@ impl FromPyObject<'_, '_> for PyMultipleValuesComparisonOperand {
                 values.into_iter().map(GraphRecordValue::from).collect(),
             )
             .into()),
-            _ => {
-                match ob.extract::<PyNodeMultipleValuesWithIndexOperand>() {
+            _ => match ob.extract::<PyNodeMultipleValuesWithIndexOperand>() {
+                Ok(operand) => Ok(Self(operand.0.into())),
+                _ => match ob.extract::<PyNodeMultipleValuesWithoutIndexOperand>() {
                     Ok(operand) => Ok(Self(operand.0.into())),
-                    _ => {
-                        match ob.extract::<PyNodeMultipleValuesWithoutIndexOperand>() {
+                    _ => match ob.extract::<PyEdgeMultipleValuesWithIndexOperand>() {
+                        Ok(operand) => Ok(Self(operand.0.into())),
+                        _ => match ob.extract::<PyEdgeMultipleValuesWithoutIndexOperand>() {
                             Ok(operand) => Ok(Self(operand.0.into())),
-                            _ => {
-                                match ob.extract::<PyEdgeMultipleValuesWithIndexOperand>() {
-                                    Ok(operand) => Ok(Self(operand.0.into())),
-                                    _ => {
-                                        match ob.extract::<PyEdgeMultipleValuesWithoutIndexOperand>() { Ok(operand) => {
-            Ok(Self(operand.0.into()))
-        } _ => {
-            Err(
-                PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
+                            _ => Err(PyGraphRecordError::from(GraphRecordError::ConversionError(
+                                format!(
                     "Failed to convert {} into List[GraphRecordValue] or MultipleValuesOperand",
                     ob.to_owned()
-                )))
-                .into(),
-            )
-        }}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+                ),
+                            ))
+                            .into()),
+                        },
+                    },
+                },
+            },
         }
     }
 }

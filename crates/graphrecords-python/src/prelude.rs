@@ -8,6 +8,24 @@ pub use crate::graphrecord::{
     overview::{
         PyAttributeOverview, PyEdgeGroupOverview, PyGroupOverview, PyNodeGroupOverview, PyOverview,
     },
+    plugins::{
+        PyPostAddEdgeContext, PyPostAddEdgeToGroupContext, PyPostAddEdgeWithGroupContext,
+        PyPostAddEdgesContext, PyPostAddEdgesDataframesContext,
+        PyPostAddEdgesDataframesWithGroupContext, PyPostAddEdgesWithGroupContext,
+        PyPostAddGroupContext, PyPostAddNodeContext, PyPostAddNodeToGroupContext,
+        PyPostAddNodeWithGroupContext, PyPostAddNodesContext, PyPostAddNodesDataframesContext,
+        PyPostAddNodesDataframesWithGroupContext, PyPostAddNodesWithGroupContext,
+        PyPostRemoveEdgeContext, PyPostRemoveEdgeFromGroupContext, PyPostRemoveGroupContext,
+        PyPostRemoveNodeContext, PyPostRemoveNodeFromGroupContext, PyPreAddEdgeContext,
+        PyPreAddEdgeToGroupContext, PyPreAddEdgeWithGroupContext, PyPreAddEdgesContext,
+        PyPreAddEdgesDataframesContext, PyPreAddEdgesDataframesWithGroupContext,
+        PyPreAddEdgesWithGroupContext, PyPreAddGroupContext, PyPreAddNodeContext,
+        PyPreAddNodeToGroupContext, PyPreAddNodeWithGroupContext, PyPreAddNodesContext,
+        PyPreAddNodesDataframesContext, PyPreAddNodesDataframesWithGroupContext,
+        PyPreAddNodesWithGroupContext, PyPreRemoveEdgeContext, PyPreRemoveEdgeFromGroupContext,
+        PyPreRemoveGroupContext, PyPreRemoveNodeContext, PyPreRemoveNodeFromGroupContext,
+        PyPreSetSchemaContext,
+    },
     querying::{
         PyMatchMode,
         attributes::{

@@ -63,32 +63,25 @@ impl FromPyObject<'_, '_> for PySingleAttributeComparisonOperand {
             Ok(attribute) => {
                 Ok(SingleAttributeComparisonOperand::Attribute(attribute.into()).into())
             }
-            _ => {
-                match ob.extract::<PyNodeSingleAttributeWithIndexOperand>() {
+            _ => match ob.extract::<PyNodeSingleAttributeWithIndexOperand>() {
+                Ok(operand) => Ok(Self(operand.0.into())),
+                _ => match ob.extract::<PyNodeSingleAttributeWithoutIndexOperand>() {
                     Ok(operand) => Ok(Self(operand.0.into())),
-                    _ => {
-                        match ob.extract::<PyNodeSingleAttributeWithoutIndexOperand>() {
+                    _ => match ob.extract::<PyEdgeSingleAttributeWithIndexOperand>() {
+                        Ok(operand) => Ok(Self(operand.0.into())),
+                        _ => match ob.extract::<PyEdgeSingleAttributeWithoutIndexOperand>() {
                             Ok(operand) => Ok(Self(operand.0.into())),
-                            _ => match ob.extract::<PyEdgeSingleAttributeWithIndexOperand>() {
-                                Ok(operand) => Ok(Self(operand.0.into())),
-                                _ => {
-                                    match ob.extract::<PyEdgeSingleAttributeWithoutIndexOperand>() { Ok(operand) => {
-            Ok(Self(operand.0.into()))
-        } _ => {
-            Err(
-                PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
+                            _ => Err(PyGraphRecordError::from(GraphRecordError::ConversionError(
+                                format!(
                     "Failed to convert {} into GraphRecordValue or SingleValueOperand",
                     ob.to_owned()
-                )))
-                .into(),
-            )
-        }}
-                                }
-                            },
-                        }
-                    }
-                }
-            }
+                ),
+                            ))
+                            .into()),
+                        },
+                    },
+                },
+            },
         }
     }
 }

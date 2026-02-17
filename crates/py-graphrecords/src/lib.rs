@@ -1,7 +1,7 @@
 #![recursion_limit = "256"]
 
-use graphrecords::core::graphrecord::overview::DEFAULT_TRUNCATE_DETAILS;
-use graphrecords::python::prelude::*;
+use graphrecords_core::graphrecord::overview::DEFAULT_TRUNCATE_DETAILS;
+use graphrecords_python::prelude::*;
 use pyo3::prelude::*;
 
 #[pymodule(gil_used = false)]
@@ -15,7 +15,7 @@ fn _graphrecords(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDateTime>()?;
     m.add_class::<PyDuration>()?;
     m.add_class::<PyNull>()?;
-    m.add_class::<graphrecords::python::prelude::PyAny>()?;
+    m.add_class::<graphrecords_python::prelude::PyAny>()?;
     m.add_class::<PyUnion>()?;
     m.add_class::<PyOption>()?;
 
@@ -85,6 +85,48 @@ fn _graphrecords(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyEdgeGroupOverview>()?;
     m.add_class::<PyGroupOverview>()?;
     m.add_class::<PyOverview>()?;
+
+    m.add_class::<PyPreSetSchemaContext>()?;
+    m.add_class::<PyPreAddNodeContext>()?;
+    m.add_class::<PyPostAddNodeContext>()?;
+    m.add_class::<PyPreAddNodeWithGroupContext>()?;
+    m.add_class::<PyPostAddNodeWithGroupContext>()?;
+    m.add_class::<PyPreRemoveNodeContext>()?;
+    m.add_class::<PyPostRemoveNodeContext>()?;
+    m.add_class::<PyPreAddNodesContext>()?;
+    m.add_class::<PyPostAddNodesContext>()?;
+    m.add_class::<PyPreAddNodesWithGroupContext>()?;
+    m.add_class::<PyPostAddNodesWithGroupContext>()?;
+    m.add_class::<PyPreAddNodesDataframesContext>()?;
+    m.add_class::<PyPostAddNodesDataframesContext>()?;
+    m.add_class::<PyPreAddNodesDataframesWithGroupContext>()?;
+    m.add_class::<PyPostAddNodesDataframesWithGroupContext>()?;
+    m.add_class::<PyPreAddEdgeContext>()?;
+    m.add_class::<PyPostAddEdgeContext>()?;
+    m.add_class::<PyPreAddEdgeWithGroupContext>()?;
+    m.add_class::<PyPostAddEdgeWithGroupContext>()?;
+    m.add_class::<PyPreRemoveEdgeContext>()?;
+    m.add_class::<PyPostRemoveEdgeContext>()?;
+    m.add_class::<PyPreAddEdgesContext>()?;
+    m.add_class::<PyPostAddEdgesContext>()?;
+    m.add_class::<PyPreAddEdgesWithGroupContext>()?;
+    m.add_class::<PyPostAddEdgesWithGroupContext>()?;
+    m.add_class::<PyPreAddEdgesDataframesContext>()?;
+    m.add_class::<PyPostAddEdgesDataframesContext>()?;
+    m.add_class::<PyPreAddEdgesDataframesWithGroupContext>()?;
+    m.add_class::<PyPostAddEdgesDataframesWithGroupContext>()?;
+    m.add_class::<PyPreAddGroupContext>()?;
+    m.add_class::<PyPostAddGroupContext>()?;
+    m.add_class::<PyPreRemoveGroupContext>()?;
+    m.add_class::<PyPostRemoveGroupContext>()?;
+    m.add_class::<PyPreAddNodeToGroupContext>()?;
+    m.add_class::<PyPostAddNodeToGroupContext>()?;
+    m.add_class::<PyPreAddEdgeToGroupContext>()?;
+    m.add_class::<PyPostAddEdgeToGroupContext>()?;
+    m.add_class::<PyPreRemoveNodeFromGroupContext>()?;
+    m.add_class::<PyPostRemoveNodeFromGroupContext>()?;
+    m.add_class::<PyPreRemoveEdgeFromGroupContext>()?;
+    m.add_class::<PyPostRemoveEdgeFromGroupContext>()?;
 
     Ok(())
 }

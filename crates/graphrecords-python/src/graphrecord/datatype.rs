@@ -113,35 +113,33 @@ pub(crate) fn convert_pyobject_to_datatype(ob: &Bound<'_, pyo3::PyAny>) -> PyRes
 
     let type_pointer = ob.get_type_ptr() as usize;
 
-    DATATYPE_CONVERSION_LUT.map(|lut| {
-        let conversion_function = lut.entry(type_pointer).or_insert_with(|| {
-            if ob.is_instance_of::<PyString>() {
-                convert_string
-            } else if ob.is_instance_of::<PyInt>() {
-                convert_int
-            } else if ob.is_instance_of::<PyFloat>() {
-                convert_float
-            } else if ob.is_instance_of::<PyBool>() {
-                convert_bool
-            } else if ob.is_instance_of::<PyDateTime>() {
-                convert_datetime
-            } else if ob.is_instance_of::<PyDuration>() {
-                convert_duration
-            } else if ob.is_instance_of::<PyNull>() {
-                convert_null
-            } else if ob.is_instance_of::<PyAny>() {
-                convert_any
-            } else if ob.is_instance_of::<PyUnion>() {
-                convert_union
-            } else if ob.is_instance_of::<PyOption>() {
-                convert_option
-            } else {
-                throw_error
-            }
-        });
+    let conversion_function = DATATYPE_CONVERSION_LUT.get_or_insert(type_pointer, || {
+        if ob.is_instance_of::<PyString>() {
+            convert_string
+        } else if ob.is_instance_of::<PyInt>() {
+            convert_int
+        } else if ob.is_instance_of::<PyFloat>() {
+            convert_float
+        } else if ob.is_instance_of::<PyBool>() {
+            convert_bool
+        } else if ob.is_instance_of::<PyDateTime>() {
+            convert_datetime
+        } else if ob.is_instance_of::<PyDuration>() {
+            convert_duration
+        } else if ob.is_instance_of::<PyNull>() {
+            convert_null
+        } else if ob.is_instance_of::<PyAny>() {
+            convert_any
+        } else if ob.is_instance_of::<PyUnion>() {
+            convert_union
+        } else if ob.is_instance_of::<PyOption>() {
+            convert_option
+        } else {
+            throw_error
+        }
+    });
 
-        conversion_function(ob)
-    })
+    conversion_function(ob)
 }
 
 impl FromPyObject<'_, '_> for PyDataType {
