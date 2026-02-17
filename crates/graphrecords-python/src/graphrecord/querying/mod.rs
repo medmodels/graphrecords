@@ -8,7 +8,7 @@ use super::{
     traits::DeepFrom, value::PyGraphRecordValue,
 };
 use crate::{
-    gil_hash_map::GILHashMap,
+    conversion_lut::ConversionLut,
     graphrecord::querying::{
         attributes::{
             PyEdgeSingleAttributeWithoutIndexGroupOperand,
@@ -61,7 +61,8 @@ use graphrecords_core::{
 };
 use nodes::{PyNodeIndexOperand, PyNodeIndicesOperand};
 use pyo3::{
-    Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python, pyclass,
+    Borrowed, Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
+    pyclass,
     types::{PyAnyMethods, PyList},
 };
 use std::collections::HashMap;
@@ -74,7 +75,7 @@ use values::{
     PyNodeSingleValueWithIndexOperand, PyNodeSingleValueWithoutIndexOperand,
 };
 
-#[pyclass]
+#[pyclass(frozen)]
 #[derive(Debug, Clone, Copy)]
 pub enum PyMatchMode {
     Any,
@@ -316,7 +317,7 @@ impl<'a> ReturnOperand<'a> for PyReturnOperand {
     }
 }
 
-static RETURNOPERAND_CONVERSION_LUT: Lut<PyReturnOperand> = GILHashMap::new();
+static RETURNOPERAND_CONVERSION_LUT: Lut<PyReturnOperand> = ConversionLut::new();
 
 #[allow(clippy::unnecessary_wraps, clippy::too_many_lines)]
 pub(crate) fn convert_pyobject_to_pyreturnoperand(
@@ -678,9 +679,7 @@ pub(crate) fn convert_pyobject_to_pyreturnoperand(
 
     let type_pointer = ob.get_type_ptr() as usize;
 
-    let py = ob.py();
-
-    RETURNOPERAND_CONVERSION_LUT.map(py, |lut| {
+    RETURNOPERAND_CONVERSION_LUT.map(|lut| {
         let conversion_function = lut.entry(type_pointer).or_insert_with(|| {
             if ob.is_instance_of::<PyNodeAttributesTreeOperand>() {
                 convert_py_node_attributes_tree_operand
@@ -773,9 +772,11 @@ pub(crate) fn convert_pyobject_to_pyreturnoperand(
     })
 }
 
-impl FromPyObject<'_> for PyReturnOperand {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_pyreturnoperand(ob)
+impl FromPyObject<'_, '_> for PyReturnOperand {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
+        convert_pyobject_to_pyreturnoperand(&ob)
     }
 }
 
@@ -1175,8 +1176,10 @@ impl From<PyGraphRecordAttributeCardinalityWrapper> for CardinalityWrapper<Graph
     }
 }
 
-impl FromPyObject<'_> for PyGraphRecordAttributeCardinalityWrapper {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for PyGraphRecordAttributeCardinalityWrapper {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<PyGraphRecordAttribute>() { Ok(attribute) => {
             Ok(CardinalityWrapper::Single(GraphRecordAttribute::from(attribute)).into())
         } _ => { match ob.extract::<Vec<PyGraphRecordAttribute>>() { Ok(attributes) => {
@@ -1200,7 +1203,8 @@ impl FromPyObject<'_> for PyGraphRecordAttributeCardinalityWrapper {
         } _ => {
             Err(
                 PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                    "Failed to convert {ob} into GraphRecordAttribute, List[GraphRecordAttribute] or (List[GraphRecordAttribute], MatchMode)",
+                    "Failed to convert {} into GraphRecordAttribute, List[GraphRecordAttribute] or (List[GraphRecordAttribute], MatchMode)",
+                    ob.to_owned()
                 )))
                 .into(),
             )

@@ -8,7 +8,7 @@ pub struct PyPlugin(Py<PyAny>);
 
 impl Serialize for PyPlugin {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let cloudpickle = py
                 .import("cloudpickle")
                 .map_err(serde::ser::Error::custom)?;
@@ -28,7 +28,7 @@ impl<'de> Deserialize<'de> for PyPlugin {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let bytes: Vec<u8> = Deserialize::deserialize(deserializer)?;
 
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let cloudpickle = py.import("cloudpickle").map_err(serde::de::Error::custom)?;
 
             let obj: Py<PyAny> = cloudpickle
@@ -50,7 +50,7 @@ impl PyPlugin {
 #[typetag::serde]
 impl Plugin for PyPlugin {
     fn initialize(&self, graphrecord: &mut GraphRecord) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
                 self.0.call_method1(py, "initialize", (graphrecord,))?;
                 Ok(())
@@ -60,6 +60,6 @@ impl Plugin for PyPlugin {
     }
 
     fn clone_box(&self) -> Box<dyn Plugin> {
-        Python::with_gil(|py| Box::new(Self(self.0.clone_ref(py))))
+        Python::attach(|py| Box::new(Self(self.0.clone_ref(py))))
     }
 }

@@ -18,7 +18,7 @@ use graphrecords_core::{
     },
 };
 use pyo3::{
-    Bound, FromPyObject, PyAny, PyResult, pyclass, pymethods,
+    Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, pyclass, pymethods,
     types::{PyAnyMethods, PyFunction},
 };
 use std::ops::Deref;
@@ -38,8 +38,10 @@ impl From<PySingleValueComparisonOperand> for SingleValueComparisonOperand {
     }
 }
 
-impl FromPyObject<'_> for PySingleValueComparisonOperand {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for PySingleValueComparisonOperand {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<PyGraphRecordValue>() {
             Ok(value) => Ok(SingleValueComparisonOperand::Value(value.into()).into()),
             _ => {
@@ -57,7 +59,8 @@ impl FromPyObject<'_> for PySingleValueComparisonOperand {
         } _ => {
             Err(
                 PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                    "Failed to convert {ob} into GraphRecordValue or SingleValueOperand",
+                    "Failed to convert {} into GraphRecordValue or SingleValueOperand",
+                    ob.to_owned()
                 )))
                 .into(),
             )
@@ -88,8 +91,10 @@ impl From<PyMultipleValuesComparisonOperand> for MultipleValuesComparisonOperand
     }
 }
 
-impl FromPyObject<'_> for PyMultipleValuesComparisonOperand {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for PyMultipleValuesComparisonOperand {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<Vec<PyGraphRecordValue>>() {
             Ok(values) => Ok(MultipleValuesComparisonOperand::Values(
                 values.into_iter().map(GraphRecordValue::from).collect(),
@@ -110,7 +115,8 @@ impl FromPyObject<'_> for PyMultipleValuesComparisonOperand {
         } _ => {
             Err(
                 PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                    "Failed to convert {ob} into List[GraphRecordValue] or MultipleValuesOperand",
+                    "Failed to convert {} into List[GraphRecordValue] or MultipleValuesOperand",
+                    ob.to_owned()
                 )))
                 .into(),
             )
@@ -128,7 +134,7 @@ impl FromPyObject<'_> for PyMultipleValuesComparisonOperand {
 
 macro_rules! implement_multiple_values_operand {
     ($name:ident, $kind:ident, $generic:ty, $py_single_value_with_index_operand:ty, $py_single_value_without_index_operand:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<$kind<$generic>>);
@@ -343,11 +349,7 @@ macro_rules! implement_multiple_values_operand {
                 self.0.is_min();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -361,7 +363,7 @@ macro_rules! implement_multiple_values_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($name::from(operand.clone()),))
@@ -407,7 +409,7 @@ implement_multiple_values_operand!(
 
 macro_rules! implement_multiple_values_grouped_operand {
     ($name:ident, $ungrouped_name:ident, $kind:ident, $generic:ty, $py_single_value_with_index_operand:ty, $py_single_value_without_index_operand:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<GroupOperand<$kind<$generic>>>);
@@ -622,11 +624,7 @@ macro_rules! implement_multiple_values_grouped_operand {
                 self.0.is_min();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -640,7 +638,7 @@ macro_rules! implement_multiple_values_grouped_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($ungrouped_name::from(operand.clone()),))
@@ -648,7 +646,7 @@ macro_rules! implement_multiple_values_grouped_operand {
                 });
             }
 
-            pub fn ungroup(&mut self) -> $ungrouped_name {
+            pub fn ungroup(&self) -> $ungrouped_name {
                 self.0.ungroup().into()
             }
 
@@ -678,7 +676,7 @@ implement_multiple_values_grouped_operand!(
 
 macro_rules! implement_single_value_operand {
     ($name:ident, $kind:ident, $generic:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<$kind<$generic>>);
@@ -845,11 +843,7 @@ macro_rules! implement_single_value_operand {
                 self.0.is_null();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -863,7 +857,7 @@ macro_rules! implement_single_value_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($name::from(operand.clone()),))
@@ -901,7 +895,7 @@ implement_single_value_operand!(
 
 macro_rules! implement_single_value_group_operand {
     ($name:ident, $ungrouped_name:ident, $ungrouped_operand_name:ident, $kind:ident, $generic:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<GroupOperand<$kind<$generic>>>);
@@ -1068,11 +1062,7 @@ macro_rules! implement_single_value_group_operand {
                 self.0.is_null();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -1086,7 +1076,7 @@ macro_rules! implement_single_value_group_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($ungrouped_name::from(operand.clone()),))
@@ -1094,7 +1084,7 @@ macro_rules! implement_single_value_group_operand {
                 });
             }
 
-            pub fn ungroup(&mut self) -> $ungrouped_operand_name {
+            pub fn ungroup(&self) -> $ungrouped_operand_name {
                 self.0.ungroup().into()
             }
 

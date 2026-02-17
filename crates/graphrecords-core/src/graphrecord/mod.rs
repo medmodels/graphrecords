@@ -179,7 +179,7 @@ impl GraphRecord {
     }
 
     #[cfg(feature = "plugins")]
-    #[must_use] 
+    #[must_use]
     pub fn with_plugins(plugins: Vec<Box<dyn Plugin>>) -> Self {
         let mut graphrecord = Self {
             plugins: Arc::new(plugins),
@@ -1258,14 +1258,14 @@ mod test {
     fn create_nodes_dataframe() -> Result<DataFrame, PolarsError> {
         let s0 = Series::new("index".into(), &["0", "1"]);
         let s1 = Series::new("attribute".into(), &[1, 2]);
-        DataFrame::new(vec![s0.into(), s1.into()])
+        DataFrame::new(2, vec![s0.into(), s1.into()])
     }
 
     fn create_edges_dataframe() -> Result<DataFrame, PolarsError> {
         let s0 = Series::new("from".into(), &["0", "1"]);
         let s1 = Series::new("to".into(), &["1", "0"]);
         let s2 = Series::new("attribute".into(), &[1, 2]);
-        DataFrame::new(vec![s0.into(), s1.into(), s2.into()])
+        DataFrame::new(2, vec![s0.into(), s1.into(), s2.into()])
     }
 
     fn create_graphrecord() -> GraphRecord {

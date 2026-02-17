@@ -1,9 +1,9 @@
 use super::{Lut, traits::DeepFrom};
-use crate::{gil_hash_map::GILHashMap, graphrecord::errors::PyGraphRecordError};
+use crate::{conversion_lut::ConversionLut, graphrecord::errors::PyGraphRecordError};
 use chrono::{NaiveDateTime, TimeDelta};
 use graphrecords_core::{errors::GraphRecordError, graphrecord::GraphRecordValue};
 use pyo3::{
-    Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
+    Borrowed, Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
     types::{PyAnyMethods, PyBool, PyDateTime, PyDelta, PyFloat, PyInt, PyString},
 };
 use std::ops::Deref;
@@ -44,7 +44,7 @@ impl Deref for PyGraphRecordValue {
     }
 }
 
-static GRAPHRECORDVALUE_CONVERSION_LUT: Lut<GraphRecordValue> = GILHashMap::new();
+static GRAPHRECORDVALUE_CONVERSION_LUT: Lut<GraphRecordValue> = ConversionLut::new();
 
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) fn convert_pyobject_to_graphrecordvalue(
@@ -102,9 +102,7 @@ pub(crate) fn convert_pyobject_to_graphrecordvalue(
 
     let type_pointer = ob.get_type_ptr() as usize;
 
-    let py = ob.py();
-
-    GRAPHRECORDVALUE_CONVERSION_LUT.map(py, |lut| {
+    GRAPHRECORDVALUE_CONVERSION_LUT.map(|lut| {
         let conversion_function = lut.entry(type_pointer).or_insert_with(|| {
             if ob.is_instance_of::<PyString>() {
                 convert_string
@@ -129,9 +127,11 @@ pub(crate) fn convert_pyobject_to_graphrecordvalue(
     })
 }
 
-impl FromPyObject<'_> for PyGraphRecordValue {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_graphrecordvalue(ob).map(Self::from)
+impl FromPyObject<'_, '_> for PyGraphRecordValue {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
+        convert_pyobject_to_graphrecordvalue(&ob).map(Self::from)
     }
 }
 

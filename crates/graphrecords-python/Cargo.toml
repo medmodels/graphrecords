@@ -24,7 +24,8 @@ bincode = { workspace = true }
 parking_lot = { workspace = true }
 typetag = { workspace = true }
 
-pyo3-polars = "0.21.0"
+pyo3-polars = "0.26.0"
+rustc-hash = "2.1.1"
 
 [lints]
 workspace = true

@@ -4,7 +4,7 @@ use graphrecords::core::graphrecord::overview::DEFAULT_TRUNCATE_DETAILS;
 use graphrecords::python::prelude::*;
 use pyo3::prelude::*;
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn _graphrecords(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGraphRecord>()?;
 

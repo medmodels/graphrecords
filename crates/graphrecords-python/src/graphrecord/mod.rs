@@ -12,7 +12,7 @@ pub mod traits;
 pub mod value;
 
 use crate::{
-    gil_hash_map::GILHashMap,
+    conversion_lut::ConversionLut,
     graphrecord::{
         overview::{PyGroupOverview, PyOverview},
         plugins::PyPlugin,
@@ -48,7 +48,7 @@ pub type PyAttributes = HashMap<PyGraphRecordAttribute, PyGraphRecordValue>;
 pub type PyGroup = PyGraphRecordAttribute;
 pub type PyNodeIndex = PyGraphRecordAttribute;
 pub type PyEdgeIndex = EdgeIndex;
-type Lut<T> = GILHashMap<usize, fn(&Bound<'_, PyAny>) -> PyResult<T>>;
+type Lut<T> = ConversionLut<usize, fn(&Bound<'_, PyAny>) -> PyResult<T>>;
 
 #[pyclass(frozen)]
 #[derive(Debug)]
@@ -283,7 +283,7 @@ impl PyGraphRecord {
     }
 
     #[allow(clippy::missing_panics_doc, reason = "infallible")]
-    pub fn to_dataframes(&self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn to_dataframes(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let export = self
             .inner()?
             .to_dataframes()
@@ -1004,7 +1004,11 @@ impl PyGraphRecord {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn query_nodes(&self, py: Python<'_>, query: &Bound<'_, PyFunction>) -> PyResult<PyObject> {
+    pub fn query_nodes(
+        &self,
+        py: Python<'_>,
+        query: &Bound<'_, PyFunction>,
+    ) -> PyResult<Py<PyAny>> {
         let graphrecord = self.inner()?;
 
         let result = graphrecord
@@ -1026,7 +1030,11 @@ impl PyGraphRecord {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn query_edges(&self, py: Python<'_>, query: &Bound<'_, PyFunction>) -> PyResult<PyObject> {
+    pub fn query_edges(
+        &self,
+        py: Python<'_>,
+        query: &Bound<'_, PyFunction>,
+    ) -> PyResult<Py<PyAny>> {
         let graphrecord = self.inner()?;
 
         let result = graphrecord

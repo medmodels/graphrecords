@@ -5,7 +5,7 @@ use crate::{
     prelude::{EdgeIndex, Group},
 };
 use chrono::{DateTime, TimeDelta};
-use graphrecords_utils::aliases::GrHashMap;
+use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use polars::{datatypes::AnyValue, frame::DataFrame, prelude::Column};
 use std::collections::HashMap;
 
@@ -132,7 +132,7 @@ pub fn dataframe_to_nodes(
         nodes.rechunk_mut();
     }
 
-    let attribute_column_names: Vec<_> = nodes
+    let attribute_column_names: GrHashSet<_> = nodes
         .get_column_names()
         .into_iter()
         .filter(|name| *name != index_column_name)
@@ -148,11 +148,14 @@ pub fn dataframe_to_nodes(
         .as_materialized_series()
         .iter();
 
+    // This can probably be improved.
     let mut columns: Vec<_> = nodes
-        .columns(&attribute_column_names)
-        .expect("Attribute columns must exist")
+        .columns()
         .iter()
+        .filter(|column| attribute_column_names.contains(column.name()))
         .map(|s| s.as_materialized_series().iter())
+        .collect::<Vec<_>>()
+        .into_iter()
         .zip(attribute_column_names)
         .collect();
 
@@ -183,7 +186,7 @@ pub fn dataframe_to_edges(
         edges.rechunk_mut();
     }
 
-    let attribute_column_names: Vec<_> = edges
+    let attribute_column_names: GrHashSet<_> = edges
         .get_column_names()
         .into_iter()
         .filter(|name| *name != source_index_column_name && *name != target_index_column_name)
@@ -208,11 +211,14 @@ pub fn dataframe_to_edges(
         .as_materialized_series()
         .iter();
 
+    // This can probably be improved.
     let mut columns: Vec<_> = edges
-        .columns(&attribute_column_names)
-        .expect("Attribute columns must exist")
+        .columns()
         .iter()
+        .filter(|column| attribute_column_names.contains(column.name()))
         .map(|s| s.as_materialized_series().iter())
+        .collect::<Vec<_>>()
+        .into_iter()
         .zip(attribute_column_names)
         .collect();
 
@@ -310,7 +316,7 @@ impl DataFramesGroupExport {
             .map(|(attribute_name, values)| Column::new(attribute_name.to_string().into(), values))
             .collect();
 
-        let node_dataframe = DataFrame::new(node_columns).map_err(|_| {
+        let node_dataframe = DataFrame::new_infer_height(node_columns).map_err(|_| {
             GraphRecordError::ConversionError(format!(
                 "Failed to create node DataFrame for group {group_string}"
             ))
@@ -398,7 +404,7 @@ impl DataFramesGroupExport {
             .map(|(attribute_name, values)| Column::new(attribute_name.to_string().into(), values))
             .collect();
 
-        let edge_dataframe = DataFrame::new(edge_columns).map_err(|_| {
+        let edge_dataframe = DataFrame::new_infer_height(edge_columns).map_err(|_| {
             GraphRecordError::ConversionError(format!(
                 "Failed to create edge DataFrame for group {group_string}"
             ))
@@ -563,7 +569,7 @@ mod test {
     fn test_dataframe_to_nodes() {
         let s0 = Series::new("index".into(), &["0", "1"]);
         let s1 = Series::new("attribute".into(), &[1, 2]);
-        let nodes_dataframe = DataFrame::new(vec![s0.into(), s1.into()]).unwrap();
+        let nodes_dataframe = DataFrame::new(2, vec![s0.into(), s1.into()]).unwrap();
 
         let nodes = dataframe_to_nodes(nodes_dataframe, "index").unwrap();
 
@@ -580,7 +586,7 @@ mod test {
     fn test_invalid_dataframe_to_nodes() {
         let s0 = Series::new("index".into(), &["0", "1"]);
         let s1 = Series::new("attribute".into(), &[1, 2]);
-        let nodes_dataframe = DataFrame::new(vec![s0.into(), s1.into()]).unwrap();
+        let nodes_dataframe = DataFrame::new(2, vec![s0.into(), s1.into()]).unwrap();
 
         // Providing the wrong index column name should fail
         assert!(
@@ -594,7 +600,7 @@ mod test {
         let s0 = Series::new("source".into(), &["0", "1"]);
         let s1 = Series::new("target".into(), &["1", "0"]);
         let s2 = Series::new("attribute".into(), &[1, 2]);
-        let edges_dataframe = DataFrame::new(vec![s0.into(), s1.into(), s2.into()]).unwrap();
+        let edges_dataframe = DataFrame::new(2, vec![s0.into(), s1.into(), s2.into()]).unwrap();
 
         let edges = dataframe_to_edges(edges_dataframe, "source", "target").unwrap();
 
@@ -620,7 +626,7 @@ mod test {
         let s0 = Series::new("source".into(), &["0", "1"]);
         let s1 = Series::new("target".into(), &["1", "0"]);
         let s2 = Series::new("attribute".into(), &[1, 2]);
-        let edges_dataframe = DataFrame::new(vec![s0.into(), s1.into(), s2.into()]).unwrap();
+        let edges_dataframe = DataFrame::new(2, vec![s0.into(), s1.into(), s2.into()]).unwrap();
 
         // Providing the wrong source index column name should fail
         assert!(

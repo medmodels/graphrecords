@@ -12,10 +12,11 @@ use graphrecords_core::{
         schema::{AttributeDataType, AttributeType, GroupSchema, Schema, SchemaType},
     },
 };
+use parking_lot::RwLock;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
-#[pyclass(eq, eq_int)]
+#[pyclass(frozen, eq, eq_int)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PyAttributeType {
     Categorical = 0,
@@ -54,7 +55,7 @@ impl PyAttributeType {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[derive(Debug, Clone)]
 pub struct PyAttributeDataType {
     data_type: PyDataType,
@@ -106,7 +107,7 @@ impl PyAttributeDataType {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyGroupSchema(GroupSchema);
@@ -183,7 +184,7 @@ impl PyGroupSchema {
     }
 }
 
-#[pyclass(eq, eq_int)]
+#[pyclass(frozen, eq, eq_int)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PySchemaType {
     Provided = 0,
@@ -208,20 +209,26 @@ impl From<PySchemaType> for SchemaType {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
-#[derive(Debug, Clone)]
-pub struct PySchema(Schema);
+#[derive(Debug)]
+pub struct PySchema(RwLock<Schema>);
 
 impl From<Schema> for PySchema {
     fn from(value: Schema) -> Self {
-        Self(value)
+        Self(RwLock::new(value))
     }
 }
 
 impl From<PySchema> for Schema {
     fn from(value: PySchema) -> Self {
-        value.0
+        value.0.into_inner()
+    }
+}
+
+impl Clone for PySchema {
+    fn clone(&self) -> Self {
+        Self(RwLock::new(self.0.read().clone()))
     }
 }
 
@@ -234,26 +241,27 @@ impl PySchema {
         ungrouped: PyGroupSchema,
         schema_type: PySchemaType,
     ) -> Self {
-        Self(match schema_type {
+        match schema_type {
             PySchemaType::Provided => {
-                Schema::new_provided(groups.deep_into(), ungrouped.deep_into())
+                Schema::new_provided(groups.deep_into(), ungrouped.deep_into()).into()
             }
             PySchemaType::Inferred => {
-                Schema::new_inferred(groups.deep_into(), ungrouped.deep_into())
+                Schema::new_inferred(groups.deep_into(), ungrouped.deep_into()).into()
             }
-        })
+        }
     }
 
     #[staticmethod]
     pub fn infer(graphrecord: Bound<'_, PyGraphRecord>) -> PyResult<Self> {
         let graphrecord = graphrecord.get();
 
-        Ok(Self(Schema::infer(&*graphrecord.inner()?)))
+        Ok(Schema::infer(&*graphrecord.inner()?).into())
     }
 
     #[getter]
     pub fn groups(&self) -> Vec<PyGroup> {
         self.0
+            .read()
             .groups()
             .keys()
             .cloned()
@@ -264,6 +272,7 @@ impl PySchema {
     pub fn group(&self, group: PyGroup) -> PyResult<PyGroupSchema> {
         Ok(self
             .0
+            .read()
             .group(&group.into())
             .map(|g| g.clone().into())
             .map_err(PyGraphRecordError::from)?)
@@ -271,12 +280,12 @@ impl PySchema {
 
     #[getter]
     pub fn ungrouped(&self) -> PyGroupSchema {
-        self.0.ungrouped().clone().into()
+        self.0.read().ungrouped().clone().into()
     }
 
     #[getter]
     pub fn schema_type(&self) -> PySchemaType {
-        self.0.schema_type().clone().into()
+        self.0.read().schema_type().clone().into()
     }
 
     #[pyo3(signature = (index, attributes, group=None))]
@@ -288,6 +297,7 @@ impl PySchema {
     ) -> PyResult<()> {
         Ok(self
             .0
+            .read()
             .validate_node(
                 &index.into(),
                 &attributes.deep_into(),
@@ -305,6 +315,7 @@ impl PySchema {
     ) -> PyResult<()> {
         Ok(self
             .0
+            .read()
             .validate_edge(
                 &index,
                 &attributes.deep_into(),
@@ -315,7 +326,7 @@ impl PySchema {
 
     #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
     pub fn set_node_attribute(
-        &mut self,
+        &self,
         attribute: PyGraphRecordAttribute,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
@@ -323,6 +334,7 @@ impl PySchema {
     ) -> PyResult<()> {
         Ok(self
             .0
+            .write()
             .set_node_attribute(
                 &attribute.into(),
                 data_type.into(),
@@ -334,7 +346,7 @@ impl PySchema {
 
     #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
     pub fn set_edge_attribute(
-        &mut self,
+        &self,
         attribute: PyGraphRecordAttribute,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
@@ -342,6 +354,7 @@ impl PySchema {
     ) -> PyResult<()> {
         Ok(self
             .0
+            .write()
             .set_edge_attribute(
                 &attribute.into(),
                 data_type.into(),
@@ -353,7 +366,7 @@ impl PySchema {
 
     #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
     pub fn update_node_attribute(
-        &mut self,
+        &self,
         attribute: PyGraphRecordAttribute,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
@@ -361,6 +374,7 @@ impl PySchema {
     ) -> PyResult<()> {
         Ok(self
             .0
+            .write()
             .update_node_attribute(
                 &attribute.into(),
                 data_type.into(),
@@ -372,7 +386,7 @@ impl PySchema {
 
     #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
     pub fn update_edge_attribute(
-        &mut self,
+        &self,
         attribute: PyGraphRecordAttribute,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
@@ -380,6 +394,7 @@ impl PySchema {
     ) -> PyResult<()> {
         Ok(self
             .0
+            .write()
             .update_edge_attribute(
                 &attribute.into(),
                 data_type.into(),
@@ -390,45 +405,38 @@ impl PySchema {
     }
 
     #[pyo3(signature = (attribute, group=None))]
-    pub fn remove_node_attribute(
-        &mut self,
-        attribute: PyGraphRecordAttribute,
-        group: Option<PyGroup>,
-    ) {
-        self.0.remove_node_attribute(
+    pub fn remove_node_attribute(&self, attribute: PyGraphRecordAttribute, group: Option<PyGroup>) {
+        self.0.write().remove_node_attribute(
             &attribute.into(),
             group.map(std::convert::Into::into).as_ref(),
         );
     }
 
     #[pyo3(signature = (attribute, group=None))]
-    pub fn remove_edge_attribute(
-        &mut self,
-        attribute: PyGraphRecordAttribute,
-        group: Option<PyGroup>,
-    ) {
-        self.0.remove_edge_attribute(
+    pub fn remove_edge_attribute(&self, attribute: PyGraphRecordAttribute, group: Option<PyGroup>) {
+        self.0.write().remove_edge_attribute(
             &attribute.into(),
             group.map(std::convert::Into::into).as_ref(),
         );
     }
 
-    pub fn add_group(&mut self, group: PyGroup, schema: PyGroupSchema) -> PyResult<()> {
+    pub fn add_group(&self, group: PyGroup, schema: PyGroupSchema) -> PyResult<()> {
         Ok(self
             .0
+            .write()
             .add_group(group.into(), schema.into())
             .map_err(PyGraphRecordError::from)?)
     }
 
-    pub fn remove_group(&mut self, group: PyGroup) {
-        self.0.remove_group(&group.into());
+    pub fn remove_group(&self, group: PyGroup) {
+        self.0.write().remove_group(&group.into());
     }
 
-    pub const fn freeze(&mut self) {
-        self.0.freeze();
+    pub fn freeze(&self) {
+        self.0.write().freeze();
     }
 
-    pub const fn unfreeze(&mut self) {
-        self.0.unfreeze();
+    pub fn unfreeze(&self) {
+        self.0.write().unfreeze();
     }
 }
