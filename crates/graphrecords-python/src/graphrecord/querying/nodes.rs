@@ -28,12 +28,12 @@ use graphrecords_core::{
     },
 };
 use pyo3::{
-    Bound, FromPyObject, PyAny, PyResult, pyclass, pymethods,
+    Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, pyclass, pymethods,
     types::{PyAnyMethods, PyFunction},
 };
 use std::ops::Deref;
 
-#[pyclass(eq, eq_int)]
+#[pyclass(frozen, eq, eq_int)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum PyEdgeDirection {
     Incoming = 0,
@@ -61,7 +61,7 @@ impl From<PyEdgeDirection> for EdgeDirection {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[derive(Clone)]
 pub enum NodeOperandGroupDiscriminator {
     Attribute(PyGraphRecordAttribute),
@@ -77,7 +77,7 @@ impl From<NodeOperandGroupDiscriminator> for nodes::NodeOperandGroupDiscriminato
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 pub struct PyNodeOperand(Wrapper<NodeOperand>);
 
@@ -96,40 +96,40 @@ impl From<PyNodeOperand> for Wrapper<NodeOperand> {
 #[pymethods]
 impl PyNodeOperand {
     pub fn attribute(
-        &mut self,
+        &self,
         attribute: PyGraphRecordAttribute,
     ) -> PyNodeMultipleValuesWithIndexOperand {
         self.0.attribute(attribute).into()
     }
 
-    pub fn attributes(&mut self) -> PyNodeAttributesTreeOperand {
+    pub fn attributes(&self) -> PyNodeAttributesTreeOperand {
         self.0.attributes().into()
     }
 
-    pub fn index(&mut self) -> PyNodeIndicesOperand {
+    pub fn index(&self) -> PyNodeIndicesOperand {
         self.0.index().into()
     }
 
-    pub fn in_group(&mut self, group: PyGroupCardinalityWrapper) {
+    pub fn in_group(&self, group: PyGroupCardinalityWrapper) {
         self.0.in_group(group);
     }
 
-    pub fn has_attribute(&mut self, attribute: PyGraphRecordAttributeCardinalityWrapper) {
+    pub fn has_attribute(&self, attribute: PyGraphRecordAttributeCardinalityWrapper) {
         self.0.has_attribute(attribute);
     }
 
-    pub fn edges(&mut self, direction: PyEdgeDirection) -> PyEdgeOperand {
+    pub fn edges(&self, direction: PyEdgeDirection) -> PyEdgeOperand {
         self.0.edges(direction.into()).into()
     }
 
-    pub fn neighbors(&mut self, direction: PyEdgeDirection) -> Self {
+    pub fn neighbors(&self, direction: PyEdgeDirection) -> Self {
         self.0.neighbors(direction.into()).into()
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -146,7 +146,7 @@ impl PyNodeOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((Self::from(operand.clone()),))
@@ -154,7 +154,7 @@ impl PyNodeOperand {
         });
     }
 
-    pub fn group_by(&mut self, discriminator: NodeOperandGroupDiscriminator) -> PyNodeGroupOperand {
+    pub fn group_by(&self, discriminator: NodeOperandGroupDiscriminator) -> PyNodeGroupOperand {
         self.0.group_by(discriminator.into()).into()
     }
 
@@ -163,7 +163,7 @@ impl PyNodeOperand {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 pub struct PyNodeGroupOperand(Wrapper<GroupOperand<NodeOperand>>);
 
@@ -182,39 +182,39 @@ impl From<PyNodeGroupOperand> for Wrapper<GroupOperand<NodeOperand>> {
 #[pymethods]
 impl PyNodeGroupOperand {
     pub fn attribute(
-        &mut self,
+        &self,
         attribute: PyGraphRecordAttribute,
     ) -> PyNodeMultipleValuesWithIndexGroupOperand {
         self.0.attribute(attribute).into()
     }
 
-    pub fn attributes(&mut self) -> PyNodeAttributesTreeGroupOperand {
+    pub fn attributes(&self) -> PyNodeAttributesTreeGroupOperand {
         self.0.attributes().into()
     }
 
-    pub fn index(&mut self) -> PyNodeIndicesGroupOperand {
+    pub fn index(&self) -> PyNodeIndicesGroupOperand {
         self.0.index().into()
     }
 
-    pub fn in_group(&mut self, group: PyGroupCardinalityWrapper) {
+    pub fn in_group(&self, group: PyGroupCardinalityWrapper) {
         self.0.in_group(group);
     }
 
-    pub fn has_attribute(&mut self, attribute: PyGraphRecordAttributeCardinalityWrapper) {
+    pub fn has_attribute(&self, attribute: PyGraphRecordAttributeCardinalityWrapper) {
         self.0.has_attribute(attribute);
     }
 
-    pub fn edges(&mut self, direction: PyEdgeDirection) -> PyEdgeGroupOperand {
+    pub fn edges(&self, direction: PyEdgeDirection) -> PyEdgeGroupOperand {
         self.0.edges(direction.into()).into()
     }
 
-    pub fn neighbors(&mut self, direction: PyEdgeDirection) -> Self {
+    pub fn neighbors(&self, direction: PyEdgeDirection) -> Self {
         self.0.neighbors(direction.into()).into()
     }
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -231,7 +231,7 @@ impl PyNodeGroupOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((PyNodeOperand::from(operand.clone()),))
@@ -259,15 +259,18 @@ impl From<PyNodeIndexComparisonOperand> for NodeIndexComparisonOperand {
     }
 }
 
-impl FromPyObject<'_> for PyNodeIndexComparisonOperand {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for PyNodeIndexComparisonOperand {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<PyNodeIndex>() {
             Ok(index) => Ok(NodeIndexComparisonOperand::Index(NodeIndex::from(index)).into()),
             _ => match ob.extract::<PyNodeIndexOperand>() {
                 Ok(operand) => Ok(Self(operand.0.into())),
                 _ => Err(
                     PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                        "Failed to convert {ob} into NodeIndex or NodeIndexOperand",
+                        "Failed to convert {} into NodeIndex or NodeIndexOperand",
+                        ob.to_owned()
                     )))
                     .into(),
                 ),
@@ -291,8 +294,10 @@ impl From<PyNodeIndicesComparisonOperand> for NodeIndicesComparisonOperand {
     }
 }
 
-impl FromPyObject<'_> for PyNodeIndicesComparisonOperand {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for PyNodeIndicesComparisonOperand {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<Vec<PyNodeIndex>>() {
             Ok(indices) => Ok(NodeIndicesComparisonOperand::Indices(
                 indices.into_iter().map(NodeIndex::from).collect(),
@@ -302,7 +307,8 @@ impl FromPyObject<'_> for PyNodeIndicesComparisonOperand {
                 Ok(operand) => Ok(Self(operand.0.into())),
                 _ => Err(
                     PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                        "Failed to convert {ob} into List[NodeIndex] or NodeIndicesOperand",
+                        "Failed to convert {} into List[NodeIndex] or NodeIndicesOperand",
+                        ob.to_owned()
                     )))
                     .into(),
                 ),
@@ -311,7 +317,7 @@ impl FromPyObject<'_> for PyNodeIndicesComparisonOperand {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyNodeIndicesOperand(Wrapper<NodeIndicesOperand>);
@@ -338,138 +344,138 @@ impl Deref for PyNodeIndicesOperand {
 
 #[pymethods]
 impl PyNodeIndicesOperand {
-    pub fn max(&mut self) -> PyNodeIndexOperand {
+    pub fn max(&self) -> PyNodeIndexOperand {
         self.0.max().into()
     }
 
-    pub fn min(&mut self) -> PyNodeIndexOperand {
+    pub fn min(&self) -> PyNodeIndexOperand {
         self.0.min().into()
     }
 
-    pub fn count(&mut self) -> PyNodeIndexOperand {
+    pub fn count(&self) -> PyNodeIndexOperand {
         self.0.count().into()
     }
 
-    pub fn sum(&mut self) -> PyNodeIndexOperand {
+    pub fn sum(&self) -> PyNodeIndexOperand {
         self.0.sum().into()
     }
 
-    pub fn random(&mut self) -> PyNodeIndexOperand {
+    pub fn random(&self) -> PyNodeIndexOperand {
         self.0.random().into()
     }
 
-    pub fn greater_than(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn greater_than(&self, index: PyNodeIndexComparisonOperand) {
         self.0.greater_than(index);
     }
 
-    pub fn greater_than_or_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn greater_than_or_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.greater_than_or_equal_to(index);
     }
 
-    pub fn less_than(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn less_than(&self, index: PyNodeIndexComparisonOperand) {
         self.0.less_than(index);
     }
 
-    pub fn less_than_or_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn less_than_or_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.less_than_or_equal_to(index);
     }
 
-    pub fn equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.equal_to(index);
     }
 
-    pub fn not_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn not_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.not_equal_to(index);
     }
 
-    pub fn starts_with(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn starts_with(&self, index: PyNodeIndexComparisonOperand) {
         self.0.starts_with(index);
     }
 
-    pub fn ends_with(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn ends_with(&self, index: PyNodeIndexComparisonOperand) {
         self.0.ends_with(index);
     }
 
-    pub fn contains(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn contains(&self, index: PyNodeIndexComparisonOperand) {
         self.0.contains(index);
     }
 
-    pub fn is_in(&mut self, indices: PyNodeIndicesComparisonOperand) {
+    pub fn is_in(&self, indices: PyNodeIndicesComparisonOperand) {
         self.0.is_in(indices);
     }
 
-    pub fn is_not_in(&mut self, indices: PyNodeIndicesComparisonOperand) {
+    pub fn is_not_in(&self, indices: PyNodeIndicesComparisonOperand) {
         self.0.is_not_in(indices);
     }
 
-    pub fn add(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn add(&self, index: PyNodeIndexComparisonOperand) {
         self.0.add(index);
     }
 
-    pub fn sub(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn sub(&self, index: PyNodeIndexComparisonOperand) {
         self.0.sub(index);
     }
 
-    pub fn mul(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn mul(&self, index: PyNodeIndexComparisonOperand) {
         self.0.mul(index);
     }
 
-    pub fn pow(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn pow(&self, index: PyNodeIndexComparisonOperand) {
         self.0.pow(index);
     }
 
-    pub fn r#mod(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn r#mod(&self, index: PyNodeIndexComparisonOperand) {
         self.0.r#mod(index);
     }
 
-    pub fn abs(&mut self) {
+    pub fn abs(&self) {
         self.0.abs();
     }
 
-    pub fn trim(&mut self) {
+    pub fn trim(&self) {
         self.0.trim();
     }
 
-    pub fn trim_start(&mut self) {
+    pub fn trim_start(&self) {
         self.0.trim_start();
     }
 
-    pub fn trim_end(&mut self) {
+    pub fn trim_end(&self) {
         self.0.trim_end();
     }
 
-    pub fn lowercase(&mut self) {
+    pub fn lowercase(&self) {
         self.0.lowercase();
     }
 
-    pub fn uppercase(&mut self) {
+    pub fn uppercase(&self) {
         self.0.uppercase();
     }
 
-    pub fn slice(&mut self, start: usize, end: usize) {
+    pub fn slice(&self, start: usize, end: usize) {
         self.0.slice(start, end);
     }
 
-    pub fn is_string(&mut self) {
+    pub fn is_string(&self) {
         self.0.is_string();
     }
 
-    pub fn is_int(&mut self) {
+    pub fn is_int(&self) {
         self.0.is_int();
     }
 
-    pub fn is_max(&mut self) {
+    pub fn is_max(&self) {
         self.0.is_max();
     }
 
-    pub fn is_min(&mut self) {
+    pub fn is_min(&self) {
         self.0.is_min();
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -486,7 +492,7 @@ impl PyNodeIndicesOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((Self::from(operand.clone()),))
@@ -499,7 +505,7 @@ impl PyNodeIndicesOperand {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyNodeIndicesGroupOperand(Wrapper<GroupOperand<NodeIndicesOperand>>);
@@ -526,138 +532,138 @@ impl Deref for PyNodeIndicesGroupOperand {
 
 #[pymethods]
 impl PyNodeIndicesGroupOperand {
-    pub fn max(&mut self) -> PyNodeIndexGroupOperand {
+    pub fn max(&self) -> PyNodeIndexGroupOperand {
         self.0.max().into()
     }
 
-    pub fn min(&mut self) -> PyNodeIndexGroupOperand {
+    pub fn min(&self) -> PyNodeIndexGroupOperand {
         self.0.min().into()
     }
 
-    pub fn count(&mut self) -> PyNodeIndexGroupOperand {
+    pub fn count(&self) -> PyNodeIndexGroupOperand {
         self.0.count().into()
     }
 
-    pub fn sum(&mut self) -> PyNodeIndexGroupOperand {
+    pub fn sum(&self) -> PyNodeIndexGroupOperand {
         self.0.sum().into()
     }
 
-    pub fn random(&mut self) -> PyNodeIndexGroupOperand {
+    pub fn random(&self) -> PyNodeIndexGroupOperand {
         self.0.random().into()
     }
 
-    pub fn greater_than(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn greater_than(&self, index: PyNodeIndexComparisonOperand) {
         self.0.greater_than(index);
     }
 
-    pub fn greater_than_or_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn greater_than_or_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.greater_than_or_equal_to(index);
     }
 
-    pub fn less_than(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn less_than(&self, index: PyNodeIndexComparisonOperand) {
         self.0.less_than(index);
     }
 
-    pub fn less_than_or_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn less_than_or_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.less_than_or_equal_to(index);
     }
 
-    pub fn equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.equal_to(index);
     }
 
-    pub fn not_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn not_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.not_equal_to(index);
     }
 
-    pub fn starts_with(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn starts_with(&self, index: PyNodeIndexComparisonOperand) {
         self.0.starts_with(index);
     }
 
-    pub fn ends_with(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn ends_with(&self, index: PyNodeIndexComparisonOperand) {
         self.0.ends_with(index);
     }
 
-    pub fn contains(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn contains(&self, index: PyNodeIndexComparisonOperand) {
         self.0.contains(index);
     }
 
-    pub fn is_in(&mut self, indices: PyNodeIndicesComparisonOperand) {
+    pub fn is_in(&self, indices: PyNodeIndicesComparisonOperand) {
         self.0.is_in(indices);
     }
 
-    pub fn is_not_in(&mut self, indices: PyNodeIndicesComparisonOperand) {
+    pub fn is_not_in(&self, indices: PyNodeIndicesComparisonOperand) {
         self.0.is_not_in(indices);
     }
 
-    pub fn add(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn add(&self, index: PyNodeIndexComparisonOperand) {
         self.0.add(index);
     }
 
-    pub fn sub(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn sub(&self, index: PyNodeIndexComparisonOperand) {
         self.0.sub(index);
     }
 
-    pub fn mul(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn mul(&self, index: PyNodeIndexComparisonOperand) {
         self.0.mul(index);
     }
 
-    pub fn pow(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn pow(&self, index: PyNodeIndexComparisonOperand) {
         self.0.pow(index);
     }
 
-    pub fn r#mod(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn r#mod(&self, index: PyNodeIndexComparisonOperand) {
         self.0.r#mod(index);
     }
 
-    pub fn abs(&mut self) {
+    pub fn abs(&self) {
         self.0.abs();
     }
 
-    pub fn trim(&mut self) {
+    pub fn trim(&self) {
         self.0.trim();
     }
 
-    pub fn trim_start(&mut self) {
+    pub fn trim_start(&self) {
         self.0.trim_start();
     }
 
-    pub fn trim_end(&mut self) {
+    pub fn trim_end(&self) {
         self.0.trim_end();
     }
 
-    pub fn lowercase(&mut self) {
+    pub fn lowercase(&self) {
         self.0.lowercase();
     }
 
-    pub fn uppercase(&mut self) {
+    pub fn uppercase(&self) {
         self.0.uppercase();
     }
 
-    pub fn slice(&mut self, start: usize, end: usize) {
+    pub fn slice(&self, start: usize, end: usize) {
         self.0.slice(start, end);
     }
 
-    pub fn is_string(&mut self) {
+    pub fn is_string(&self) {
         self.0.is_string();
     }
 
-    pub fn is_int(&mut self) {
+    pub fn is_int(&self) {
         self.0.is_int();
     }
 
-    pub fn is_max(&mut self) {
+    pub fn is_max(&self) {
         self.0.is_max();
     }
 
-    pub fn is_min(&mut self) {
+    pub fn is_min(&self) {
         self.0.is_min();
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -674,7 +680,7 @@ impl PyNodeIndicesGroupOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((PyNodeIndicesOperand::from(operand.clone()),))
@@ -682,7 +688,7 @@ impl PyNodeIndicesGroupOperand {
         });
     }
 
-    pub fn ungroup(&mut self) -> PyNodeIndicesOperand {
+    pub fn ungroup(&self) -> PyNodeIndicesOperand {
         self.0.ungroup().into()
     }
 
@@ -691,7 +697,7 @@ impl PyNodeIndicesGroupOperand {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyNodeIndexOperand(Wrapper<NodeIndexOperand>);
@@ -718,110 +724,110 @@ impl Deref for PyNodeIndexOperand {
 
 #[pymethods]
 impl PyNodeIndexOperand {
-    pub fn greater_than(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn greater_than(&self, index: PyNodeIndexComparisonOperand) {
         self.0.greater_than(index);
     }
 
-    pub fn greater_than_or_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn greater_than_or_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.greater_than_or_equal_to(index);
     }
 
-    pub fn less_than(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn less_than(&self, index: PyNodeIndexComparisonOperand) {
         self.0.less_than(index);
     }
 
-    pub fn less_than_or_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn less_than_or_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.less_than_or_equal_to(index);
     }
 
-    pub fn equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.equal_to(index);
     }
 
-    pub fn not_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn not_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.not_equal_to(index);
     }
 
-    pub fn starts_with(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn starts_with(&self, index: PyNodeIndexComparisonOperand) {
         self.0.starts_with(index);
     }
 
-    pub fn ends_with(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn ends_with(&self, index: PyNodeIndexComparisonOperand) {
         self.0.ends_with(index);
     }
 
-    pub fn contains(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn contains(&self, index: PyNodeIndexComparisonOperand) {
         self.0.contains(index);
     }
 
-    pub fn is_in(&mut self, indices: PyNodeIndicesComparisonOperand) {
+    pub fn is_in(&self, indices: PyNodeIndicesComparisonOperand) {
         self.0.is_in(indices);
     }
 
-    pub fn is_not_in(&mut self, indices: PyNodeIndicesComparisonOperand) {
+    pub fn is_not_in(&self, indices: PyNodeIndicesComparisonOperand) {
         self.0.is_not_in(indices);
     }
 
-    pub fn add(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn add(&self, index: PyNodeIndexComparisonOperand) {
         self.0.add(index);
     }
 
-    pub fn sub(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn sub(&self, index: PyNodeIndexComparisonOperand) {
         self.0.sub(index);
     }
 
-    pub fn mul(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn mul(&self, index: PyNodeIndexComparisonOperand) {
         self.0.mul(index);
     }
 
-    pub fn pow(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn pow(&self, index: PyNodeIndexComparisonOperand) {
         self.0.pow(index);
     }
 
-    pub fn r#mod(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn r#mod(&self, index: PyNodeIndexComparisonOperand) {
         self.0.r#mod(index);
     }
 
-    pub fn abs(&mut self) {
+    pub fn abs(&self) {
         self.0.abs();
     }
 
-    pub fn trim(&mut self) {
+    pub fn trim(&self) {
         self.0.trim();
     }
 
-    pub fn trim_start(&mut self) {
+    pub fn trim_start(&self) {
         self.0.trim_start();
     }
 
-    pub fn trim_end(&mut self) {
+    pub fn trim_end(&self) {
         self.0.trim_end();
     }
 
-    pub fn lowercase(&mut self) {
+    pub fn lowercase(&self) {
         self.0.lowercase();
     }
 
-    pub fn uppercase(&mut self) {
+    pub fn uppercase(&self) {
         self.0.uppercase();
     }
 
-    pub fn slice(&mut self, start: usize, end: usize) {
+    pub fn slice(&self, start: usize, end: usize) {
         self.0.slice(start, end);
     }
 
-    pub fn is_string(&mut self) {
+    pub fn is_string(&self) {
         self.0.is_string();
     }
 
-    pub fn is_int(&mut self) {
+    pub fn is_int(&self) {
         self.0.is_int();
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -838,7 +844,7 @@ impl PyNodeIndexOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((Self::from(operand.clone()),))
@@ -851,7 +857,7 @@ impl PyNodeIndexOperand {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyNodeIndexGroupOperand(Wrapper<GroupOperand<NodeIndexOperand>>);
@@ -878,110 +884,110 @@ impl Deref for PyNodeIndexGroupOperand {
 
 #[pymethods]
 impl PyNodeIndexGroupOperand {
-    pub fn greater_than(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn greater_than(&self, index: PyNodeIndexComparisonOperand) {
         self.0.greater_than(index);
     }
 
-    pub fn greater_than_or_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn greater_than_or_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.greater_than_or_equal_to(index);
     }
 
-    pub fn less_than(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn less_than(&self, index: PyNodeIndexComparisonOperand) {
         self.0.less_than(index);
     }
 
-    pub fn less_than_or_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn less_than_or_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.less_than_or_equal_to(index);
     }
 
-    pub fn equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.equal_to(index);
     }
 
-    pub fn not_equal_to(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn not_equal_to(&self, index: PyNodeIndexComparisonOperand) {
         self.0.not_equal_to(index);
     }
 
-    pub fn starts_with(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn starts_with(&self, index: PyNodeIndexComparisonOperand) {
         self.0.starts_with(index);
     }
 
-    pub fn ends_with(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn ends_with(&self, index: PyNodeIndexComparisonOperand) {
         self.0.ends_with(index);
     }
 
-    pub fn contains(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn contains(&self, index: PyNodeIndexComparisonOperand) {
         self.0.contains(index);
     }
 
-    pub fn is_in(&mut self, indices: PyNodeIndicesComparisonOperand) {
+    pub fn is_in(&self, indices: PyNodeIndicesComparisonOperand) {
         self.0.is_in(indices);
     }
 
-    pub fn is_not_in(&mut self, indices: PyNodeIndicesComparisonOperand) {
+    pub fn is_not_in(&self, indices: PyNodeIndicesComparisonOperand) {
         self.0.is_not_in(indices);
     }
 
-    pub fn add(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn add(&self, index: PyNodeIndexComparisonOperand) {
         self.0.add(index);
     }
 
-    pub fn sub(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn sub(&self, index: PyNodeIndexComparisonOperand) {
         self.0.sub(index);
     }
 
-    pub fn mul(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn mul(&self, index: PyNodeIndexComparisonOperand) {
         self.0.mul(index);
     }
 
-    pub fn pow(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn pow(&self, index: PyNodeIndexComparisonOperand) {
         self.0.pow(index);
     }
 
-    pub fn r#mod(&mut self, index: PyNodeIndexComparisonOperand) {
+    pub fn r#mod(&self, index: PyNodeIndexComparisonOperand) {
         self.0.r#mod(index);
     }
 
-    pub fn abs(&mut self) {
+    pub fn abs(&self) {
         self.0.abs();
     }
 
-    pub fn trim(&mut self) {
+    pub fn trim(&self) {
         self.0.trim();
     }
 
-    pub fn trim_start(&mut self) {
+    pub fn trim_start(&self) {
         self.0.trim_start();
     }
 
-    pub fn trim_end(&mut self) {
+    pub fn trim_end(&self) {
         self.0.trim_end();
     }
 
-    pub fn lowercase(&mut self) {
+    pub fn lowercase(&self) {
         self.0.lowercase();
     }
 
-    pub fn uppercase(&mut self) {
+    pub fn uppercase(&self) {
         self.0.uppercase();
     }
 
-    pub fn slice(&mut self, start: usize, end: usize) {
+    pub fn slice(&self, start: usize, end: usize) {
         self.0.slice(start, end);
     }
 
-    pub fn is_string(&mut self) {
+    pub fn is_string(&self) {
         self.0.is_string();
     }
 
-    pub fn is_int(&mut self) {
+    pub fn is_int(&self) {
         self.0.is_int();
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -998,7 +1004,7 @@ impl PyNodeIndexGroupOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((PyNodeIndexOperand::from(operand.clone()),))
@@ -1006,7 +1012,7 @@ impl PyNodeIndexGroupOperand {
         });
     }
 
-    pub fn ungroup(&mut self) -> PyNodeIndicesOperand {
+    pub fn ungroup(&self) -> PyNodeIndicesOperand {
         self.0.ungroup().into()
     }
 

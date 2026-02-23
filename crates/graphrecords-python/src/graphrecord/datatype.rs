@@ -1,7 +1,7 @@
 #![allow(clippy::new_without_default)]
 
 use super::{Lut, traits::DeepFrom};
-use crate::{gil_hash_map::GILHashMap, graphrecord::errors::PyGraphRecordError};
+use crate::{conversion_lut::ConversionLut, graphrecord::errors::PyGraphRecordError};
 use graphrecords_core::{errors::GraphRecordError, graphrecord::datatypes::DataType};
 use pyo3::{IntoPyObjectExt, prelude::*};
 
@@ -45,7 +45,7 @@ impl DeepFrom<DataType> for PyDataType {
     }
 }
 
-static DATATYPE_CONVERSION_LUT: Lut<DataType> = GILHashMap::new();
+static DATATYPE_CONVERSION_LUT: Lut<DataType> = ConversionLut::new();
 
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) fn convert_pyobject_to_datatype(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
@@ -113,42 +113,40 @@ pub(crate) fn convert_pyobject_to_datatype(ob: &Bound<'_, pyo3::PyAny>) -> PyRes
 
     let type_pointer = ob.get_type_ptr() as usize;
 
-    let py = ob.py();
+    let conversion_function = DATATYPE_CONVERSION_LUT.get_or_insert(type_pointer, || {
+        if ob.is_instance_of::<PyString>() {
+            convert_string
+        } else if ob.is_instance_of::<PyInt>() {
+            convert_int
+        } else if ob.is_instance_of::<PyFloat>() {
+            convert_float
+        } else if ob.is_instance_of::<PyBool>() {
+            convert_bool
+        } else if ob.is_instance_of::<PyDateTime>() {
+            convert_datetime
+        } else if ob.is_instance_of::<PyDuration>() {
+            convert_duration
+        } else if ob.is_instance_of::<PyNull>() {
+            convert_null
+        } else if ob.is_instance_of::<PyAny>() {
+            convert_any
+        } else if ob.is_instance_of::<PyUnion>() {
+            convert_union
+        } else if ob.is_instance_of::<PyOption>() {
+            convert_option
+        } else {
+            throw_error
+        }
+    });
 
-    DATATYPE_CONVERSION_LUT.map(py, |lut| {
-        let conversion_function = lut.entry(type_pointer).or_insert_with(|| {
-            if ob.is_instance_of::<PyString>() {
-                convert_string
-            } else if ob.is_instance_of::<PyInt>() {
-                convert_int
-            } else if ob.is_instance_of::<PyFloat>() {
-                convert_float
-            } else if ob.is_instance_of::<PyBool>() {
-                convert_bool
-            } else if ob.is_instance_of::<PyDateTime>() {
-                convert_datetime
-            } else if ob.is_instance_of::<PyDuration>() {
-                convert_duration
-            } else if ob.is_instance_of::<PyNull>() {
-                convert_null
-            } else if ob.is_instance_of::<PyAny>() {
-                convert_any
-            } else if ob.is_instance_of::<PyUnion>() {
-                convert_union
-            } else if ob.is_instance_of::<PyOption>() {
-                convert_option
-            } else {
-                throw_error
-            }
-        });
-
-        conversion_function(ob)
-    })
+    conversion_function(ob)
 }
 
-impl FromPyObject<'_> for PyDataType {
-    fn extract_bound(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_datatype(ob).map(Self)
+impl FromPyObject<'_, '_> for PyDataType {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, pyo3::PyAny>) -> PyResult<Self> {
+        convert_pyobject_to_datatype(&ob).map(Self)
     }
 }
 
@@ -175,39 +173,39 @@ impl<'py> IntoPyObject<'py> for PyDataType {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct PyString;
 implement_pymethods!(PyString);
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct PyInt;
 implement_pymethods!(PyInt);
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct PyFloat;
 implement_pymethods!(PyFloat);
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct PyBool;
 implement_pymethods!(PyBool);
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct PyDateTime;
 implement_pymethods!(PyDateTime);
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct PyDuration;
 implement_pymethods!(PyDuration);
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct PyNull;
 implement_pymethods!(PyNull);
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct PyAny;
 implement_pymethods!(PyAny);
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct PyUnion((PyDataType, PyDataType));
 
 #[pymethods]
@@ -228,7 +226,7 @@ impl PyUnion {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct PyOption(PyDataType);
 
 #[pymethods]

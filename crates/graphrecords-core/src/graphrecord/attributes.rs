@@ -1,6 +1,6 @@
 use crate::{
     GraphRecord,
-    errors::GraphRecordError,
+    errors::{GraphRecordError, GraphRecordResult},
     prelude::{
         Attributes, EdgeIndex, GraphRecordAttribute, GraphRecordValue, Group, NodeIndex, SchemaType,
     },
@@ -28,7 +28,7 @@ macro_rules! impl_attributes_mut {
             pub(crate) fn new(
                 $index_field: &'a $index_type,
                 graphrecord: &'a mut GraphRecord,
-            ) -> Result<Self, GraphRecordError> {
+            ) -> GraphRecordResult<Self> {
                 if !graphrecord.$contains_fn($index_field) {
                     return Err(GraphRecordError::IndexError(format!(
                         concat!("Cannot find ", $entity, " with index {}"),
@@ -54,7 +54,7 @@ macro_rules! impl_attributes_mut {
                 &mut self,
                 attributes: &Attributes,
                 groups: &[Group],
-            ) -> Result<(), GraphRecordError> {
+            ) -> GraphRecordResult<()> {
                 let schema = &mut self.graphrecord.schema;
 
                 match schema.schema_type() {
@@ -93,10 +93,7 @@ macro_rules! impl_attributes_mut {
                     .expect(concat!($entity, " must exist.")) = attributes;
             }
 
-            pub fn replace_attributes(
-                &mut self,
-                attributes: Attributes,
-            ) -> Result<(), GraphRecordError> {
+            pub fn replace_attributes(&mut self, attributes: Attributes) -> GraphRecordResult<()> {
                 let groups = self.get_groups();
                 self.handle_schema(&attributes, &groups)?;
                 self.set_attributes(attributes);
@@ -107,7 +104,7 @@ macro_rules! impl_attributes_mut {
                 &mut self,
                 attribute: &GraphRecordAttribute,
                 value: GraphRecordValue,
-            ) -> Result<(), GraphRecordError> {
+            ) -> GraphRecordResult<()> {
                 let groups = self.get_groups();
 
                 let mut attributes = self
@@ -128,7 +125,7 @@ macro_rules! impl_attributes_mut {
             pub fn remove_attribute(
                 &mut self,
                 attribute: &GraphRecordAttribute,
-            ) -> Result<GraphRecordValue, GraphRecordError> {
+            ) -> GraphRecordResult<GraphRecordValue> {
                 let groups = self.get_groups();
 
                 let mut attributes = self

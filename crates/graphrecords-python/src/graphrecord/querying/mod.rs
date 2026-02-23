@@ -8,7 +8,7 @@ use super::{
     traits::DeepFrom, value::PyGraphRecordValue,
 };
 use crate::{
-    gil_hash_map::GILHashMap,
+    conversion_lut::ConversionLut,
     graphrecord::querying::{
         attributes::{
             PyEdgeSingleAttributeWithoutIndexGroupOperand,
@@ -61,7 +61,8 @@ use graphrecords_core::{
 };
 use nodes::{PyNodeIndexOperand, PyNodeIndicesOperand};
 use pyo3::{
-    Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python, pyclass,
+    Borrowed, Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
+    pyclass,
     types::{PyAnyMethods, PyList},
 };
 use std::collections::HashMap;
@@ -74,7 +75,7 @@ use values::{
     PyNodeSingleValueWithIndexOperand, PyNodeSingleValueWithoutIndexOperand,
 };
 
-#[pyclass]
+#[pyclass(frozen)]
 #[derive(Debug, Clone, Copy)]
 pub enum PyMatchMode {
     Any,
@@ -316,7 +317,7 @@ impl<'a> ReturnOperand<'a> for PyReturnOperand {
     }
 }
 
-static RETURNOPERAND_CONVERSION_LUT: Lut<PyReturnOperand> = GILHashMap::new();
+static RETURNOPERAND_CONVERSION_LUT: Lut<PyReturnOperand> = ConversionLut::new();
 
 #[allow(clippy::unnecessary_wraps, clippy::too_many_lines)]
 pub(crate) fn convert_pyobject_to_pyreturnoperand(
@@ -678,104 +679,102 @@ pub(crate) fn convert_pyobject_to_pyreturnoperand(
 
     let type_pointer = ob.get_type_ptr() as usize;
 
-    let py = ob.py();
+    let conversion_function = RETURNOPERAND_CONVERSION_LUT.get_or_insert(type_pointer, || {
+        if ob.is_instance_of::<PyNodeAttributesTreeOperand>() {
+            convert_py_node_attributes_tree_operand
+        } else if ob.is_instance_of::<PyNodeAttributesTreeGroupOperand>() {
+            convert_py_node_attributes_tree_group_operand
+        } else if ob.is_instance_of::<PyEdgeAttributesTreeOperand>() {
+            convert_py_edge_attributes_tree_operand
+        } else if ob.is_instance_of::<PyEdgeAttributesTreeGroupOperand>() {
+            convert_py_edge_attributes_tree_group_operand
+        } else if ob.is_instance_of::<PyNodeMultipleAttributesWithIndexOperand>() {
+            convert_py_node_multiple_attributes_with_index_operand
+        } else if ob.is_instance_of::<PyNodeMultipleAttributesWithIndexGroupOperand>() {
+            convert_py_node_multiple_attributes_with_index_group_operand
+        } else if ob.is_instance_of::<PyNodeMultipleAttributesWithoutIndexOperand>() {
+            convert_py_node_multiple_attributes_without_index_operand
+        } else if ob.is_instance_of::<PyEdgeMultipleAttributesWithIndexOperand>() {
+            convert_py_edge_multiple_attributes_with_index_operand
+        } else if ob.is_instance_of::<PyEdgeMultipleAttributesWithIndexGroupOperand>() {
+            convert_py_edge_multiple_attributes_with_index_group_operand
+        } else if ob.is_instance_of::<PyEdgeMultipleAttributesWithoutIndexOperand>() {
+            convert_py_edge_multiple_attributes_without_index_operand
+        } else if ob.is_instance_of::<PyNodeSingleAttributeWithIndexOperand>() {
+            convert_py_node_single_attribute_with_index_operand
+        } else if ob.is_instance_of::<PyNodeSingleAttributeWithIndexGroupOperand>() {
+            convert_py_node_single_attribute_with_index_group_operand
+        } else if ob.is_instance_of::<PyNodeSingleAttributeWithoutIndexOperand>() {
+            convert_py_node_single_attribute_without_index_operand
+        } else if ob.is_instance_of::<PyNodeSingleAttributeWithoutIndexGroupOperand>() {
+            convert_py_node_single_attribute_without_index_group_operand
+        } else if ob.is_instance_of::<PyEdgeSingleAttributeWithIndexOperand>() {
+            convert_py_edge_single_attribute_with_index_operand
+        } else if ob.is_instance_of::<PyEdgeSingleAttributeWithIndexGroupOperand>() {
+            convert_py_edge_single_attribute_with_index_group_operand
+        } else if ob.is_instance_of::<PyEdgeSingleAttributeWithoutIndexOperand>() {
+            convert_py_edge_single_attribute_without_index_operand
+        } else if ob.is_instance_of::<PyEdgeSingleAttributeWithoutIndexGroupOperand>() {
+            convert_py_edge_single_attribute_without_index_group_operand
+        } else if ob.is_instance_of::<PyEdgeIndicesOperand>() {
+            convert_py_edge_indices_operand
+        } else if ob.is_instance_of::<PyEdgeIndicesGroupOperand>() {
+            convert_py_edge_indices_group_operand
+        } else if ob.is_instance_of::<PyEdgeIndexOperand>() {
+            convert_py_edge_index_operand
+        } else if ob.is_instance_of::<PyEdgeIndexGroupOperand>() {
+            convert_py_edge_index_group_operand
+        } else if ob.is_instance_of::<PyNodeIndicesOperand>() {
+            convert_py_node_indices_operand
+        } else if ob.is_instance_of::<PyNodeIndicesGroupOperand>() {
+            convert_py_node_indices_group_operand
+        } else if ob.is_instance_of::<PyNodeIndexOperand>() {
+            convert_py_node_index_operand
+        } else if ob.is_instance_of::<PyNodeIndexGroupOperand>() {
+            convert_py_node_index_group_operand
+        } else if ob.is_instance_of::<PyNodeMultipleValuesWithIndexOperand>() {
+            convert_py_node_multiple_values_with_index_operand
+        } else if ob.is_instance_of::<PyNodeMultipleValuesWithIndexGroupOperand>() {
+            convert_py_node_multiple_values_with_index_group_operand
+        } else if ob.is_instance_of::<PyNodeMultipleValuesWithoutIndexOperand>() {
+            convert_py_node_multiple_values_without_index_operand
+        } else if ob.is_instance_of::<PyEdgeMultipleValuesWithIndexOperand>() {
+            convert_py_edge_multiple_values_with_index_operand
+        } else if ob.is_instance_of::<PyEdgeMultipleValuesWithIndexGroupOperand>() {
+            convert_py_edge_multiple_values_with_index_group_operand
+        } else if ob.is_instance_of::<PyEdgeMultipleValuesWithoutIndexOperand>() {
+            convert_py_edge_multiple_values_without_index_operand
+        } else if ob.is_instance_of::<PyNodeSingleValueWithIndexOperand>() {
+            convert_py_node_single_value_with_index_operand
+        } else if ob.is_instance_of::<PyNodeSingleValueWithIndexGroupOperand>() {
+            convert_py_node_single_value_with_index_group_operand
+        } else if ob.is_instance_of::<PyNodeSingleValueWithoutIndexOperand>() {
+            convert_py_node_single_value_without_index_operand
+        } else if ob.is_instance_of::<PyNodeSingleValueWithoutIndexGroupOperand>() {
+            convert_py_node_single_value_without_index_group_operand
+        } else if ob.is_instance_of::<PyEdgeSingleValueWithIndexOperand>() {
+            convert_py_edge_single_value_with_index_operand
+        } else if ob.is_instance_of::<PyEdgeSingleValueWithIndexGroupOperand>() {
+            convert_py_edge_single_value_with_index_group_operand
+        } else if ob.is_instance_of::<PyEdgeSingleValueWithoutIndexOperand>() {
+            convert_py_edge_single_value_without_index_operand
+        } else if ob.is_instance_of::<PyEdgeSingleValueWithoutIndexGroupOperand>() {
+            convert_py_edge_single_value_without_index_group_operand
+        } else if ob.is_instance_of::<PyList>() {
+            convert_py_list
+        } else {
+            throw_error
+        }
+    });
 
-    RETURNOPERAND_CONVERSION_LUT.map(py, |lut| {
-        let conversion_function = lut.entry(type_pointer).or_insert_with(|| {
-            if ob.is_instance_of::<PyNodeAttributesTreeOperand>() {
-                convert_py_node_attributes_tree_operand
-            } else if ob.is_instance_of::<PyNodeAttributesTreeGroupOperand>() {
-                convert_py_node_attributes_tree_group_operand
-            } else if ob.is_instance_of::<PyEdgeAttributesTreeOperand>() {
-                convert_py_edge_attributes_tree_operand
-            } else if ob.is_instance_of::<PyEdgeAttributesTreeGroupOperand>() {
-                convert_py_edge_attributes_tree_group_operand
-            } else if ob.is_instance_of::<PyNodeMultipleAttributesWithIndexOperand>() {
-                convert_py_node_multiple_attributes_with_index_operand
-            } else if ob.is_instance_of::<PyNodeMultipleAttributesWithIndexGroupOperand>() {
-                convert_py_node_multiple_attributes_with_index_group_operand
-            } else if ob.is_instance_of::<PyNodeMultipleAttributesWithoutIndexOperand>() {
-                convert_py_node_multiple_attributes_without_index_operand
-            } else if ob.is_instance_of::<PyEdgeMultipleAttributesWithIndexOperand>() {
-                convert_py_edge_multiple_attributes_with_index_operand
-            } else if ob.is_instance_of::<PyEdgeMultipleAttributesWithIndexGroupOperand>() {
-                convert_py_edge_multiple_attributes_with_index_group_operand
-            } else if ob.is_instance_of::<PyEdgeMultipleAttributesWithoutIndexOperand>() {
-                convert_py_edge_multiple_attributes_without_index_operand
-            } else if ob.is_instance_of::<PyNodeSingleAttributeWithIndexOperand>() {
-                convert_py_node_single_attribute_with_index_operand
-            } else if ob.is_instance_of::<PyNodeSingleAttributeWithIndexGroupOperand>() {
-                convert_py_node_single_attribute_with_index_group_operand
-            } else if ob.is_instance_of::<PyNodeSingleAttributeWithoutIndexOperand>() {
-                convert_py_node_single_attribute_without_index_operand
-            } else if ob.is_instance_of::<PyNodeSingleAttributeWithoutIndexGroupOperand>() {
-                convert_py_node_single_attribute_without_index_group_operand
-            } else if ob.is_instance_of::<PyEdgeSingleAttributeWithIndexOperand>() {
-                convert_py_edge_single_attribute_with_index_operand
-            } else if ob.is_instance_of::<PyEdgeSingleAttributeWithIndexGroupOperand>() {
-                convert_py_edge_single_attribute_with_index_group_operand
-            } else if ob.is_instance_of::<PyEdgeSingleAttributeWithoutIndexOperand>() {
-                convert_py_edge_single_attribute_without_index_operand
-            } else if ob.is_instance_of::<PyEdgeSingleAttributeWithoutIndexGroupOperand>() {
-                convert_py_edge_single_attribute_without_index_group_operand
-            } else if ob.is_instance_of::<PyEdgeIndicesOperand>() {
-                convert_py_edge_indices_operand
-            } else if ob.is_instance_of::<PyEdgeIndicesGroupOperand>() {
-                convert_py_edge_indices_group_operand
-            } else if ob.is_instance_of::<PyEdgeIndexOperand>() {
-                convert_py_edge_index_operand
-            } else if ob.is_instance_of::<PyEdgeIndexGroupOperand>() {
-                convert_py_edge_index_group_operand
-            } else if ob.is_instance_of::<PyNodeIndicesOperand>() {
-                convert_py_node_indices_operand
-            } else if ob.is_instance_of::<PyNodeIndicesGroupOperand>() {
-                convert_py_node_indices_group_operand
-            } else if ob.is_instance_of::<PyNodeIndexOperand>() {
-                convert_py_node_index_operand
-            } else if ob.is_instance_of::<PyNodeIndexGroupOperand>() {
-                convert_py_node_index_group_operand
-            } else if ob.is_instance_of::<PyNodeMultipleValuesWithIndexOperand>() {
-                convert_py_node_multiple_values_with_index_operand
-            } else if ob.is_instance_of::<PyNodeMultipleValuesWithIndexGroupOperand>() {
-                convert_py_node_multiple_values_with_index_group_operand
-            } else if ob.is_instance_of::<PyNodeMultipleValuesWithoutIndexOperand>() {
-                convert_py_node_multiple_values_without_index_operand
-            } else if ob.is_instance_of::<PyEdgeMultipleValuesWithIndexOperand>() {
-                convert_py_edge_multiple_values_with_index_operand
-            } else if ob.is_instance_of::<PyEdgeMultipleValuesWithIndexGroupOperand>() {
-                convert_py_edge_multiple_values_with_index_group_operand
-            } else if ob.is_instance_of::<PyEdgeMultipleValuesWithoutIndexOperand>() {
-                convert_py_edge_multiple_values_without_index_operand
-            } else if ob.is_instance_of::<PyNodeSingleValueWithIndexOperand>() {
-                convert_py_node_single_value_with_index_operand
-            } else if ob.is_instance_of::<PyNodeSingleValueWithIndexGroupOperand>() {
-                convert_py_node_single_value_with_index_group_operand
-            } else if ob.is_instance_of::<PyNodeSingleValueWithoutIndexOperand>() {
-                convert_py_node_single_value_without_index_operand
-            } else if ob.is_instance_of::<PyNodeSingleValueWithoutIndexGroupOperand>() {
-                convert_py_node_single_value_without_index_group_operand
-            } else if ob.is_instance_of::<PyEdgeSingleValueWithIndexOperand>() {
-                convert_py_edge_single_value_with_index_operand
-            } else if ob.is_instance_of::<PyEdgeSingleValueWithIndexGroupOperand>() {
-                convert_py_edge_single_value_with_index_group_operand
-            } else if ob.is_instance_of::<PyEdgeSingleValueWithoutIndexOperand>() {
-                convert_py_edge_single_value_without_index_operand
-            } else if ob.is_instance_of::<PyEdgeSingleValueWithoutIndexGroupOperand>() {
-                convert_py_edge_single_value_without_index_group_operand
-            } else if ob.is_instance_of::<PyList>() {
-                convert_py_list
-            } else {
-                throw_error
-            }
-        });
-
-        conversion_function(ob)
-    })
+    conversion_function(ob)
 }
 
-impl FromPyObject<'_> for PyReturnOperand {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_pyreturnoperand(ob)
+impl FromPyObject<'_, '_> for PyReturnOperand {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
+        convert_pyobject_to_pyreturnoperand(&ob)
     }
 }
 
@@ -1175,8 +1174,10 @@ impl From<PyGraphRecordAttributeCardinalityWrapper> for CardinalityWrapper<Graph
     }
 }
 
-impl FromPyObject<'_> for PyGraphRecordAttributeCardinalityWrapper {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for PyGraphRecordAttributeCardinalityWrapper {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<PyGraphRecordAttribute>() { Ok(attribute) => {
             Ok(CardinalityWrapper::Single(GraphRecordAttribute::from(attribute)).into())
         } _ => { match ob.extract::<Vec<PyGraphRecordAttribute>>() { Ok(attributes) => {
@@ -1200,7 +1201,8 @@ impl FromPyObject<'_> for PyGraphRecordAttributeCardinalityWrapper {
         } _ => {
             Err(
                 PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                    "Failed to convert {ob} into GraphRecordAttribute, List[GraphRecordAttribute] or (List[GraphRecordAttribute], MatchMode)",
+                    "Failed to convert {} into GraphRecordAttribute, List[GraphRecordAttribute] or (List[GraphRecordAttribute], MatchMode)",
+                    ob.to_owned()
                 )))
                 .into(),
             )

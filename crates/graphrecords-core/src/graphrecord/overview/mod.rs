@@ -4,7 +4,7 @@ mod tabled_modifiers;
 
 use crate::{
     GraphRecord,
-    errors::GraphRecordError,
+    errors::{GraphRecordError, GraphRecordResult},
     graphrecord::overview::tabled_modifiers::MergeDuplicatesVerticalByColumn,
     prelude::{
         AttributeType, DataType, GraphRecordAttribute, GraphRecordValue, Group, GroupSchema,
@@ -141,7 +141,7 @@ impl NodeGroupOverview {
         group_schema: &GroupSchema,
         group: Option<&Group>,
         truncate_details: Option<usize>,
-    ) -> Result<Self, GraphRecordError> {
+    ) -> GraphRecordResult<Self> {
         let nodes_in_group: HashSet<_> = match group {
             Some(group) => graphrecord.nodes_in_group(group)?.cloned().collect(),
             None => graphrecord.ungrouped_nodes().cloned().collect(),
@@ -310,7 +310,7 @@ impl EdgeGroupOverview {
         group_schema: &GroupSchema,
         group: Option<&Group>,
         truncate_details: Option<usize>,
-    ) -> Result<Self, GraphRecordError> {
+    ) -> GraphRecordResult<Self> {
         let edges_in_group: HashSet<_> = match group {
             Some(group) => graphrecord.edges_in_group(group)?.copied().collect(),
             None => graphrecord.ungrouped_edges().copied().collect(),
@@ -435,7 +435,7 @@ impl GroupOverview {
         graphrecord: &GraphRecord,
         group: Option<&Group>,
         truncate_details: Option<usize>,
-    ) -> Result<Self, GraphRecordError> {
+    ) -> GraphRecordResult<Self> {
         let schema = &graphrecord.schema;
 
         let group_schema = match group {
@@ -581,7 +581,7 @@ impl Overview {
     pub(crate) fn new(
         graphrecord: &GraphRecord,
         truncate_details: Option<usize>,
-    ) -> Result<Self, GraphRecordError> {
+    ) -> GraphRecordResult<Self> {
         Ok(Self {
             ungrouped_overview: GroupOverview::new(graphrecord, None, truncate_details)?,
             grouped_overviews: graphrecord
