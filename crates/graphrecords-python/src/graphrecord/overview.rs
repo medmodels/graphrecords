@@ -13,7 +13,7 @@ use graphrecords_core::graphrecord::overview::{
 };
 use pyo3::{prelude::*, types::PyDict};
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyAttributeOverview(AttributeOverview);
@@ -57,7 +57,7 @@ impl PyAttributeOverview {
 
     #[getter]
     #[allow(clippy::missing_panics_doc)]
-    pub fn data(&self, py: Python<'_>) -> PyObject {
+    pub fn data(&self, py: Python<'_>) -> Py<PyAny> {
         let dict = PyDict::new(py);
 
         match &self.0.data {
@@ -107,7 +107,7 @@ impl PyAttributeOverview {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyNodeGroupOverview(NodeGroupOverview);
@@ -159,7 +159,7 @@ impl PyNodeGroupOverview {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyEdgeGroupOverview(EdgeGroupOverview);
@@ -215,7 +215,7 @@ impl PyEdgeGroupOverview {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyGroupOverview(GroupOverview);
@@ -267,7 +267,7 @@ impl PyGroupOverview {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyOverview(Overview);

@@ -12,7 +12,8 @@ name = "graphrecords"
 crate-type = ["cdylib"]
 
 [dependencies]
-graphrecords = { workspace = true, features = ["serde", "python"] }
+graphrecords-core = { workspace = true }
+graphrecords-python = { workspace = true }
 
 pyo3 = { workspace = true }
 

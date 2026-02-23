@@ -1,9 +1,9 @@
 use super::{Lut, traits::DeepFrom};
-use crate::{gil_hash_map::GILHashMap, graphrecord::errors::PyGraphRecordError};
+use crate::{conversion_lut::ConversionLut, graphrecord::errors::PyGraphRecordError};
 use chrono::{NaiveDateTime, TimeDelta};
 use graphrecords_core::{errors::GraphRecordError, graphrecord::GraphRecordValue};
 use pyo3::{
-    Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
+    Borrowed, Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
     types::{PyAnyMethods, PyBool, PyDateTime, PyDelta, PyFloat, PyInt, PyString},
 };
 use std::ops::Deref;
@@ -44,7 +44,7 @@ impl Deref for PyGraphRecordValue {
     }
 }
 
-static GRAPHRECORDVALUE_CONVERSION_LUT: Lut<GraphRecordValue> = GILHashMap::new();
+static GRAPHRECORDVALUE_CONVERSION_LUT: Lut<GraphRecordValue> = ConversionLut::new();
 
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) fn convert_pyobject_to_graphrecordvalue(
@@ -102,36 +102,34 @@ pub(crate) fn convert_pyobject_to_graphrecordvalue(
 
     let type_pointer = ob.get_type_ptr() as usize;
 
-    let py = ob.py();
+    let conversion_function = GRAPHRECORDVALUE_CONVERSION_LUT.get_or_insert(type_pointer, || {
+        if ob.is_instance_of::<PyString>() {
+            convert_string
+        } else if ob.is_instance_of::<PyBool>() {
+            convert_bool
+        } else if ob.is_instance_of::<PyInt>() {
+            convert_int
+        } else if ob.is_instance_of::<PyFloat>() {
+            convert_float
+        } else if ob.is_instance_of::<PyDateTime>() {
+            convert_datetime
+        } else if ob.is_instance_of::<PyDelta>() {
+            convert_duration
+        } else if ob.is_none() {
+            convert_null
+        } else {
+            throw_error
+        }
+    });
 
-    GRAPHRECORDVALUE_CONVERSION_LUT.map(py, |lut| {
-        let conversion_function = lut.entry(type_pointer).or_insert_with(|| {
-            if ob.is_instance_of::<PyString>() {
-                convert_string
-            } else if ob.is_instance_of::<PyBool>() {
-                convert_bool
-            } else if ob.is_instance_of::<PyInt>() {
-                convert_int
-            } else if ob.is_instance_of::<PyFloat>() {
-                convert_float
-            } else if ob.is_instance_of::<PyDateTime>() {
-                convert_datetime
-            } else if ob.is_instance_of::<PyDelta>() {
-                convert_duration
-            } else if ob.is_none() {
-                convert_null
-            } else {
-                throw_error
-            }
-        });
-
-        conversion_function(ob)
-    })
+    conversion_function(ob)
 }
 
-impl FromPyObject<'_> for PyGraphRecordValue {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_graphrecordvalue(ob).map(Self::from)
+impl FromPyObject<'_, '_> for PyGraphRecordValue {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
+        convert_pyobject_to_graphrecordvalue(&ob).map(Self::from)
     }
 }
 

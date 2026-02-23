@@ -27,12 +27,12 @@ use graphrecords_core::{
     },
 };
 use pyo3::{
-    Bound, FromPyObject, PyAny, PyResult, pyclass, pymethods,
+    Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, pyclass, pymethods,
     types::{PyAnyMethods, PyFunction},
 };
 use std::ops::Deref;
 
-#[pyclass]
+#[pyclass(frozen)]
 #[derive(Clone)]
 pub enum EdgeOperandGroupDiscriminator {
     SourceNode(),
@@ -54,7 +54,7 @@ impl From<EdgeOperandGroupDiscriminator> for edges::EdgeOperandGroupDiscriminato
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 pub struct PyEdgeOperand(Wrapper<EdgeOperand>);
 
@@ -73,40 +73,40 @@ impl From<PyEdgeOperand> for Wrapper<EdgeOperand> {
 #[pymethods]
 impl PyEdgeOperand {
     pub fn attribute(
-        &mut self,
+        &self,
         attribute: PyGraphRecordAttribute,
     ) -> PyEdgeMultipleValuesWithIndexOperand {
         self.0.attribute(attribute).into()
     }
 
-    pub fn attributes(&mut self) -> PyEdgeAttributesTreeOperand {
+    pub fn attributes(&self) -> PyEdgeAttributesTreeOperand {
         self.0.attributes().into()
     }
 
-    pub fn index(&mut self) -> PyEdgeIndicesOperand {
+    pub fn index(&self) -> PyEdgeIndicesOperand {
         self.0.index().into()
     }
 
-    pub fn in_group(&mut self, group: PyGroupCardinalityWrapper) {
+    pub fn in_group(&self, group: PyGroupCardinalityWrapper) {
         self.0.in_group(group);
     }
 
-    pub fn has_attribute(&mut self, attribute: PyGraphRecordAttributeCardinalityWrapper) {
+    pub fn has_attribute(&self, attribute: PyGraphRecordAttributeCardinalityWrapper) {
         self.0.has_attribute(attribute);
     }
 
-    pub fn source_node(&mut self) -> PyNodeOperand {
+    pub fn source_node(&self) -> PyNodeOperand {
         self.0.source_node().into()
     }
 
-    pub fn target_node(&mut self) -> PyNodeOperand {
+    pub fn target_node(&self) -> PyNodeOperand {
         self.0.target_node().into()
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -123,7 +123,7 @@ impl PyEdgeOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((Self::from(operand.clone()),))
@@ -131,7 +131,7 @@ impl PyEdgeOperand {
         });
     }
 
-    pub fn group_by(&mut self, discriminator: EdgeOperandGroupDiscriminator) -> PyEdgeGroupOperand {
+    pub fn group_by(&self, discriminator: EdgeOperandGroupDiscriminator) -> PyEdgeGroupOperand {
         self.0.group_by(discriminator.into()).into()
     }
 
@@ -140,7 +140,7 @@ impl PyEdgeOperand {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 pub struct PyEdgeGroupOperand(Wrapper<GroupOperand<EdgeOperand>>);
 
@@ -159,40 +159,40 @@ impl From<PyEdgeGroupOperand> for Wrapper<GroupOperand<EdgeOperand>> {
 #[pymethods]
 impl PyEdgeGroupOperand {
     pub fn attribute(
-        &mut self,
+        &self,
         attribute: PyGraphRecordAttribute,
     ) -> PyEdgeMultipleValuesWithIndexGroupOperand {
         self.0.attribute(attribute).into()
     }
 
-    pub fn attributes(&mut self) -> PyEdgeAttributesTreeGroupOperand {
+    pub fn attributes(&self) -> PyEdgeAttributesTreeGroupOperand {
         self.0.attributes().into()
     }
 
-    pub fn index(&mut self) -> PyEdgeIndicesGroupOperand {
+    pub fn index(&self) -> PyEdgeIndicesGroupOperand {
         self.0.index().into()
     }
 
-    pub fn in_group(&mut self, group: PyGroupCardinalityWrapper) {
+    pub fn in_group(&self, group: PyGroupCardinalityWrapper) {
         self.0.in_group(group);
     }
 
-    pub fn has_attribute(&mut self, attribute: PyGraphRecordAttributeCardinalityWrapper) {
+    pub fn has_attribute(&self, attribute: PyGraphRecordAttributeCardinalityWrapper) {
         self.0.has_attribute(attribute);
     }
 
-    pub fn source_node(&mut self) -> PyNodeGroupOperand {
+    pub fn source_node(&self) -> PyNodeGroupOperand {
         self.0.source_node().into()
     }
 
-    pub fn target_node(&mut self) -> PyNodeGroupOperand {
+    pub fn target_node(&self) -> PyNodeGroupOperand {
         self.0.target_node().into()
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -209,7 +209,7 @@ impl PyEdgeGroupOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((PyEdgeOperand::from(operand.clone()),))
@@ -237,15 +237,18 @@ impl From<PyEdgeIndexComparisonOperand> for EdgeIndexComparisonOperand {
     }
 }
 
-impl FromPyObject<'_> for PyEdgeIndexComparisonOperand {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for PyEdgeIndexComparisonOperand {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<EdgeIndex>() {
             Ok(index) => Ok(EdgeIndexComparisonOperand::Index(index).into()),
             _ => match ob.extract::<PyEdgeIndexOperand>() {
                 Ok(operand) => Ok(Self(operand.0.into())),
                 _ => Err(
                     PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                        "Failed to convert {ob} into EdgeIndex or EdgeIndexOperand",
+                        "Failed to convert {} into EdgeIndex or EdgeIndexOperand",
+                        ob.to_owned()
                     )))
                     .into(),
                 ),
@@ -269,15 +272,18 @@ impl From<PyEdgeIndicesComparisonOperand> for EdgeIndicesComparisonOperand {
     }
 }
 
-impl FromPyObject<'_> for PyEdgeIndicesComparisonOperand {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for PyEdgeIndicesComparisonOperand {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<Vec<EdgeIndex>>() {
             Ok(indices) => Ok(EdgeIndicesComparisonOperand::from(indices).into()),
             _ => match ob.extract::<PyEdgeIndicesOperand>() {
                 Ok(operand) => Ok(Self(operand.0.into())),
                 _ => Err(
                     PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                        "Failed to convert {ob} into List[EdgeIndex] or EdgeIndicesOperand",
+                        "Failed to convert {} into List[EdgeIndex] or EdgeIndicesOperand",
+                        ob.to_owned()
                     )))
                     .into(),
                 ),
@@ -286,7 +292,7 @@ impl FromPyObject<'_> for PyEdgeIndicesComparisonOperand {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyEdgeIndicesOperand(Wrapper<EdgeIndicesOperand>);
@@ -313,102 +319,102 @@ impl Deref for PyEdgeIndicesOperand {
 
 #[pymethods]
 impl PyEdgeIndicesOperand {
-    pub fn max(&mut self) -> PyEdgeIndexOperand {
+    pub fn max(&self) -> PyEdgeIndexOperand {
         self.0.max().into()
     }
 
-    pub fn min(&mut self) -> PyEdgeIndexOperand {
+    pub fn min(&self) -> PyEdgeIndexOperand {
         self.0.min().into()
     }
 
-    pub fn count(&mut self) -> PyEdgeIndexOperand {
+    pub fn count(&self) -> PyEdgeIndexOperand {
         self.0.count().into()
     }
 
-    pub fn sum(&mut self) -> PyEdgeIndexOperand {
+    pub fn sum(&self) -> PyEdgeIndexOperand {
         self.0.sum().into()
     }
 
-    pub fn random(&mut self) -> PyEdgeIndexOperand {
+    pub fn random(&self) -> PyEdgeIndexOperand {
         self.0.random().into()
     }
 
-    pub fn greater_than(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn greater_than(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.greater_than(index);
     }
 
-    pub fn greater_than_or_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn greater_than_or_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.greater_than_or_equal_to(index);
     }
 
-    pub fn less_than(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn less_than(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.less_than(index);
     }
 
-    pub fn less_than_or_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn less_than_or_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.less_than_or_equal_to(index);
     }
 
-    pub fn equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.equal_to(index);
     }
 
-    pub fn not_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn not_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.not_equal_to(index);
     }
 
-    pub fn starts_with(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn starts_with(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.starts_with(index);
     }
 
-    pub fn ends_with(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn ends_with(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.ends_with(index);
     }
 
-    pub fn contains(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn contains(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.contains(index);
     }
 
-    pub fn is_in(&mut self, indices: PyEdgeIndicesComparisonOperand) {
+    pub fn is_in(&self, indices: PyEdgeIndicesComparisonOperand) {
         self.0.is_in(indices);
     }
 
-    pub fn is_not_in(&mut self, indices: PyEdgeIndicesComparisonOperand) {
+    pub fn is_not_in(&self, indices: PyEdgeIndicesComparisonOperand) {
         self.0.is_not_in(indices);
     }
 
-    pub fn add(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn add(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.add(index);
     }
 
-    pub fn sub(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn sub(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.sub(index);
     }
 
-    pub fn mul(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn mul(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.mul(index);
     }
 
-    pub fn pow(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn pow(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.pow(index);
     }
 
-    pub fn r#mod(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn r#mod(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.r#mod(index);
     }
 
-    pub fn is_max(&mut self) {
+    pub fn is_max(&self) {
         self.0.is_max();
     }
 
-    pub fn is_min(&mut self) {
+    pub fn is_min(&self) {
         self.0.is_min();
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -425,7 +431,7 @@ impl PyEdgeIndicesOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((Self::from(operand.clone()),))
@@ -438,7 +444,7 @@ impl PyEdgeIndicesOperand {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyEdgeIndicesGroupOperand(Wrapper<GroupOperand<EdgeIndicesOperand>>);
@@ -465,102 +471,102 @@ impl Deref for PyEdgeIndicesGroupOperand {
 
 #[pymethods]
 impl PyEdgeIndicesGroupOperand {
-    pub fn max(&mut self) -> PyEdgeIndexGroupOperand {
+    pub fn max(&self) -> PyEdgeIndexGroupOperand {
         self.0.max().into()
     }
 
-    pub fn min(&mut self) -> PyEdgeIndexGroupOperand {
+    pub fn min(&self) -> PyEdgeIndexGroupOperand {
         self.0.min().into()
     }
 
-    pub fn count(&mut self) -> PyEdgeIndexGroupOperand {
+    pub fn count(&self) -> PyEdgeIndexGroupOperand {
         self.0.count().into()
     }
 
-    pub fn sum(&mut self) -> PyEdgeIndexGroupOperand {
+    pub fn sum(&self) -> PyEdgeIndexGroupOperand {
         self.0.sum().into()
     }
 
-    pub fn random(&mut self) -> PyEdgeIndexGroupOperand {
+    pub fn random(&self) -> PyEdgeIndexGroupOperand {
         self.0.random().into()
     }
 
-    pub fn greater_than(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn greater_than(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.greater_than(index);
     }
 
-    pub fn greater_than_or_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn greater_than_or_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.greater_than_or_equal_to(index);
     }
 
-    pub fn less_than(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn less_than(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.less_than(index);
     }
 
-    pub fn less_than_or_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn less_than_or_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.less_than_or_equal_to(index);
     }
 
-    pub fn equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.equal_to(index);
     }
 
-    pub fn not_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn not_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.not_equal_to(index);
     }
 
-    pub fn starts_with(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn starts_with(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.starts_with(index);
     }
 
-    pub fn ends_with(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn ends_with(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.ends_with(index);
     }
 
-    pub fn contains(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn contains(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.contains(index);
     }
 
-    pub fn is_in(&mut self, indices: PyEdgeIndicesComparisonOperand) {
+    pub fn is_in(&self, indices: PyEdgeIndicesComparisonOperand) {
         self.0.is_in(indices);
     }
 
-    pub fn is_not_in(&mut self, indices: PyEdgeIndicesComparisonOperand) {
+    pub fn is_not_in(&self, indices: PyEdgeIndicesComparisonOperand) {
         self.0.is_not_in(indices);
     }
 
-    pub fn add(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn add(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.add(index);
     }
 
-    pub fn sub(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn sub(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.sub(index);
     }
 
-    pub fn mul(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn mul(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.mul(index);
     }
 
-    pub fn pow(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn pow(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.pow(index);
     }
 
-    pub fn r#mod(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn r#mod(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.r#mod(index);
     }
 
-    pub fn is_max(&mut self) {
+    pub fn is_max(&self) {
         self.0.is_max();
     }
 
-    pub fn is_min(&mut self) {
+    pub fn is_min(&self) {
         self.0.is_min();
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -577,7 +583,7 @@ impl PyEdgeIndicesGroupOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((PyEdgeIndicesOperand::from(operand.clone()),))
@@ -585,7 +591,7 @@ impl PyEdgeIndicesGroupOperand {
         });
     }
 
-    pub fn ungroup(&mut self) -> PyEdgeIndicesOperand {
+    pub fn ungroup(&self) -> PyEdgeIndicesOperand {
         self.0.ungroup().into()
     }
 
@@ -594,7 +600,7 @@ impl PyEdgeIndicesGroupOperand {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyEdgeIndexOperand(Wrapper<EdgeIndexOperand>);
@@ -621,74 +627,74 @@ impl Deref for PyEdgeIndexOperand {
 
 #[pymethods]
 impl PyEdgeIndexOperand {
-    pub fn greater_than(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn greater_than(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.greater_than(index);
     }
 
-    pub fn greater_than_or_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn greater_than_or_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.greater_than_or_equal_to(index);
     }
 
-    pub fn less_than(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn less_than(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.less_than(index);
     }
 
-    pub fn less_than_or_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn less_than_or_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.less_than_or_equal_to(index);
     }
 
-    pub fn equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.equal_to(index);
     }
 
-    pub fn not_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn not_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.not_equal_to(index);
     }
 
-    pub fn starts_with(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn starts_with(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.starts_with(index);
     }
 
-    pub fn ends_with(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn ends_with(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.ends_with(index);
     }
 
-    pub fn contains(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn contains(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.contains(index);
     }
 
-    pub fn is_in(&mut self, indices: PyEdgeIndicesComparisonOperand) {
+    pub fn is_in(&self, indices: PyEdgeIndicesComparisonOperand) {
         self.0.is_in(indices);
     }
 
-    pub fn is_not_in(&mut self, indices: PyEdgeIndicesComparisonOperand) {
+    pub fn is_not_in(&self, indices: PyEdgeIndicesComparisonOperand) {
         self.0.is_not_in(indices);
     }
 
-    pub fn add(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn add(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.add(index);
     }
 
-    pub fn sub(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn sub(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.sub(index);
     }
 
-    pub fn mul(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn mul(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.mul(index);
     }
 
-    pub fn pow(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn pow(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.pow(index);
     }
 
-    pub fn r#mod(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn r#mod(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.r#mod(index);
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -705,7 +711,7 @@ impl PyEdgeIndexOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((Self::from(operand.clone()),))
@@ -718,7 +724,7 @@ impl PyEdgeIndexOperand {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyEdgeIndexGroupOperand(Wrapper<GroupOperand<EdgeIndexOperand>>);
@@ -745,74 +751,74 @@ impl Deref for PyEdgeIndexGroupOperand {
 
 #[pymethods]
 impl PyEdgeIndexGroupOperand {
-    pub fn greater_than(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn greater_than(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.greater_than(index);
     }
 
-    pub fn greater_than_or_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn greater_than_or_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.greater_than_or_equal_to(index);
     }
 
-    pub fn less_than(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn less_than(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.less_than(index);
     }
 
-    pub fn less_than_or_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn less_than_or_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.less_than_or_equal_to(index);
     }
 
-    pub fn equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.equal_to(index);
     }
 
-    pub fn not_equal_to(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn not_equal_to(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.not_equal_to(index);
     }
 
-    pub fn starts_with(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn starts_with(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.starts_with(index);
     }
 
-    pub fn ends_with(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn ends_with(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.ends_with(index);
     }
 
-    pub fn contains(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn contains(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.contains(index);
     }
 
-    pub fn is_in(&mut self, indices: PyEdgeIndicesComparisonOperand) {
+    pub fn is_in(&self, indices: PyEdgeIndicesComparisonOperand) {
         self.0.is_in(indices);
     }
 
-    pub fn is_not_in(&mut self, indices: PyEdgeIndicesComparisonOperand) {
+    pub fn is_not_in(&self, indices: PyEdgeIndicesComparisonOperand) {
         self.0.is_not_in(indices);
     }
 
-    pub fn add(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn add(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.add(index);
     }
 
-    pub fn sub(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn sub(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.sub(index);
     }
 
-    pub fn mul(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn mul(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.mul(index);
     }
 
-    pub fn pow(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn pow(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.pow(index);
     }
 
-    pub fn r#mod(&mut self, index: PyEdgeIndexComparisonOperand) {
+    pub fn r#mod(&self, index: PyEdgeIndexComparisonOperand) {
         self.0.r#mod(index);
     }
 
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn either_or(&mut self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
+    pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
         self.0.either_or(
             |operand| {
                 either
@@ -829,7 +835,7 @@ impl PyEdgeIndexGroupOperand {
     /// # Panics
     ///
     /// Panics if the python typing was not followed.
-    pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+    pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
         self.0.exclude(|operand| {
             query
                 .call1((PyEdgeIndexOperand::from(operand.clone()),))
@@ -837,7 +843,7 @@ impl PyEdgeIndexGroupOperand {
         });
     }
 
-    pub fn ungroup(&mut self) -> PyEdgeIndicesOperand {
+    pub fn ungroup(&self) -> PyEdgeIndicesOperand {
         self.0.ungroup().into()
     }
 

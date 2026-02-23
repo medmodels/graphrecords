@@ -1,5 +1,5 @@
 use super::{EdgeIndex, GraphRecordAttribute, NodeIndex};
-use crate::errors::GraphRecordError;
+use crate::errors::{GraphRecordError, GraphRecordResult};
 use graphrecords_utils::aliases::{GrHashMap, GrHashMapEntry, GrHashSet};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ impl GroupMapping {
         group: Group,
         node_indices: Option<Vec<NodeIndex>>,
         edge_indices: Option<Vec<EdgeIndex>>,
-    ) -> Result<(), GraphRecordError> {
+    ) -> GraphRecordResult<()> {
         if self.nodes_in_group.contains_key(&group) {
             return Err(GraphRecordError::AssertionError(format!(
                 "Group {group} already exists"
@@ -58,7 +58,7 @@ impl GroupMapping {
         &mut self,
         group: Group,
         node_index: NodeIndex,
-    ) -> Result<(), GraphRecordError> {
+    ) -> GraphRecordResult<()> {
         // TODO: This was changed. Add a test for adding to a non-existing group
         let nodes_in_group = self.nodes_in_group.entry(group.clone());
 
@@ -87,7 +87,7 @@ impl GroupMapping {
         &mut self,
         group: Group,
         edge_index: EdgeIndex,
-    ) -> Result<(), GraphRecordError> {
+    ) -> GraphRecordResult<()> {
         // TODO: This was changed. Add a test for adding to a non-existing group
         let edges_in_group = self.edges_in_group.entry(group.clone());
 
@@ -112,7 +112,7 @@ impl GroupMapping {
         Ok(())
     }
 
-    pub fn remove_group(&mut self, group: &Group) -> Result<(), GraphRecordError> {
+    pub fn remove_group(&mut self, group: &Group) -> GraphRecordResult<()> {
         let nodes_in_group = self
             .nodes_in_group
             .remove(group)
@@ -175,7 +175,7 @@ impl GroupMapping {
         &mut self,
         group: &Group,
         node_index: &NodeIndex,
-    ) -> Result<(), GraphRecordError> {
+    ) -> GraphRecordResult<()> {
         let nodes_in_group = self
             .nodes_in_group
             .get_mut(group)
@@ -196,7 +196,7 @@ impl GroupMapping {
         &mut self,
         group: &Group,
         edge_index: &EdgeIndex,
-    ) -> Result<(), GraphRecordError> {
+    ) -> GraphRecordResult<()> {
         let edges_in_group = self
             .edges_in_group
             .get_mut(group)
@@ -219,7 +219,7 @@ impl GroupMapping {
     pub fn nodes_in_group(
         &self,
         group: &Group,
-    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphRecordError> {
+    ) -> GraphRecordResult<impl Iterator<Item = &NodeIndex> + use<'_>> {
         Ok(self
             .nodes_in_group
             .get(group)
@@ -230,7 +230,7 @@ impl GroupMapping {
     pub fn edges_in_group(
         &self,
         group: &Group,
-    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphRecordError> {
+    ) -> GraphRecordResult<impl Iterator<Item = &EdgeIndex> + use<'_>> {
         Ok(self
             .edges_in_group
             .get(group)
