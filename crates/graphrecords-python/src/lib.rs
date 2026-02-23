@@ -5,6 +5,6 @@
     clippy::needless_pass_by_value
 )]
 
-pub mod gil_hash_map;
+pub mod conversion_lut;
 pub mod graphrecord;
 pub mod prelude;

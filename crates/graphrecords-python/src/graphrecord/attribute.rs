@@ -1,7 +1,9 @@
 use super::{traits::DeepFrom, value::convert_pyobject_to_graphrecordvalue};
 use crate::graphrecord::errors::PyGraphRecordError;
 use graphrecords_core::graphrecord::GraphRecordAttribute;
-use pyo3::{Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python};
+use pyo3::{
+    Borrowed, Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
+};
 use std::{hash::Hash, ops::Deref};
 
 #[repr(transparent)]
@@ -48,9 +50,11 @@ pub(crate) fn convert_pyobject_to_graphrecordattribute(
         .map_err(PyGraphRecordError::from)?)
 }
 
-impl FromPyObject<'_> for PyGraphRecordAttribute {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_graphrecordattribute(ob).map(Self::from)
+impl FromPyObject<'_, '_> for PyGraphRecordAttribute {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
+        convert_pyobject_to_graphrecordattribute(&ob).map(Self::from)
     }
 }
 

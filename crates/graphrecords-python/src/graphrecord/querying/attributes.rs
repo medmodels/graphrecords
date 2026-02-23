@@ -28,7 +28,7 @@ use graphrecords_core::{
     },
 };
 use pyo3::{
-    Bound, FromPyObject, PyAny, PyResult, pyclass, pymethods,
+    Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, pyclass, pymethods,
     types::{PyAnyMethods, PyFunction},
 };
 
@@ -55,37 +55,33 @@ impl Deref for PySingleAttributeComparisonOperand {
     }
 }
 
-impl FromPyObject<'_> for PySingleAttributeComparisonOperand {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for PySingleAttributeComparisonOperand {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<PyGraphRecordAttribute>() {
             Ok(attribute) => {
                 Ok(SingleAttributeComparisonOperand::Attribute(attribute.into()).into())
             }
-            _ => {
-                match ob.extract::<PyNodeSingleAttributeWithIndexOperand>() {
+            _ => match ob.extract::<PyNodeSingleAttributeWithIndexOperand>() {
+                Ok(operand) => Ok(Self(operand.0.into())),
+                _ => match ob.extract::<PyNodeSingleAttributeWithoutIndexOperand>() {
                     Ok(operand) => Ok(Self(operand.0.into())),
-                    _ => {
-                        match ob.extract::<PyNodeSingleAttributeWithoutIndexOperand>() {
+                    _ => match ob.extract::<PyEdgeSingleAttributeWithIndexOperand>() {
+                        Ok(operand) => Ok(Self(operand.0.into())),
+                        _ => match ob.extract::<PyEdgeSingleAttributeWithoutIndexOperand>() {
                             Ok(operand) => Ok(Self(operand.0.into())),
-                            _ => match ob.extract::<PyEdgeSingleAttributeWithIndexOperand>() {
-                                Ok(operand) => Ok(Self(operand.0.into())),
-                                _ => {
-                                    match ob.extract::<PyEdgeSingleAttributeWithoutIndexOperand>() { Ok(operand) => {
-            Ok(Self(operand.0.into()))
-        } _ => {
-            Err(
-                PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                    "Failed to convert {ob} into GraphRecordValue or SingleValueOperand",
-                )))
-                .into(),
-            )
-        }}
-                                }
-                            },
-                        }
-                    }
-                }
-            }
+                            _ => Err(PyGraphRecordError::from(GraphRecordError::ConversionError(
+                                format!(
+                    "Failed to convert {} into GraphRecordValue or SingleValueOperand",
+                    ob.to_owned()
+                ),
+                            ))
+                            .into()),
+                        },
+                    },
+                },
+            },
         }
     }
 }
@@ -113,8 +109,10 @@ impl Deref for PyMultipleAttributesComparisonOperand {
     }
 }
 
-impl FromPyObject<'_> for PyMultipleAttributesComparisonOperand {
-    fn extract_bound(ob: &Bound<'_, PyAny>) -> PyResult<Self> {
+impl FromPyObject<'_, '_> for PyMultipleAttributesComparisonOperand {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
         match ob.extract::<Vec<PyGraphRecordAttribute>>() {
             Ok(values) => Ok(MultipleAttributesComparisonOperand::Attributes(
                 values.into_iter().map(GraphRecordAttribute::from).collect(),
@@ -134,7 +132,8 @@ impl FromPyObject<'_> for PyMultipleAttributesComparisonOperand {
         } _ => {
             Err(
                 PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                    "Failed to convert {ob} into List[GraphRecordAttribute] or MultipleAttributesOperand",
+                    "Failed to convert {} into List[GraphRecordAttribute] or MultipleAttributesOperand",
+                    ob.to_owned()
                 )))
                 .into(),
             )
@@ -151,7 +150,7 @@ impl FromPyObject<'_> for PyMultipleAttributesComparisonOperand {
 
 macro_rules! implement_attributes_tree_operand {
     ($name:ident, $generic:ty, $multiple_attributes_operand:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<AttributesTreeOperand<$generic>>);
@@ -306,11 +305,7 @@ macro_rules! implement_attributes_tree_operand {
                 self.0.is_min();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -324,7 +319,7 @@ macro_rules! implement_attributes_tree_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($name::from(operand.clone()),))
@@ -352,7 +347,7 @@ implement_attributes_tree_operand!(
 
 macro_rules! implement_attributes_tree_group_operand {
     ($name:ident, $ungrouped_name:ident, $generic:ty, $multiple_attributes_operand:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<GroupOperand<AttributesTreeOperand<$generic>>>);
@@ -507,11 +502,7 @@ macro_rules! implement_attributes_tree_group_operand {
                 self.0.is_min();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -525,7 +516,7 @@ macro_rules! implement_attributes_tree_group_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($ungrouped_name::from(operand.clone()),))
@@ -533,7 +524,7 @@ macro_rules! implement_attributes_tree_group_operand {
                 });
             }
 
-            pub fn ungroup(&mut self) -> $ungrouped_name {
+            pub fn ungroup(&self) -> $ungrouped_name {
                 self.0.ungroup().into()
             }
 
@@ -559,7 +550,7 @@ implement_attributes_tree_group_operand!(
 
 macro_rules! implement_multiple_attributes_operand {
     ($name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<$kind<$generic>>);
@@ -714,11 +705,7 @@ macro_rules! implement_multiple_attributes_operand {
                 self.0.is_min();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -732,7 +719,7 @@ macro_rules! implement_multiple_attributes_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($name::from(operand.clone()),))
@@ -746,7 +733,7 @@ macro_rules! implement_multiple_attributes_operand {
         }
     };
     ($name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty, $py_multiple_values_operand:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<$kind<$generic>>);
@@ -905,11 +892,7 @@ macro_rules! implement_multiple_attributes_operand {
                 self.0.is_min();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -923,7 +906,7 @@ macro_rules! implement_multiple_attributes_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($name::from(operand.clone()),))
@@ -971,7 +954,7 @@ implement_multiple_attributes_operand!(
 
 macro_rules! implement_multiple_attributes_grouped_operand {
     ($name:ident, $ungrouped_name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty, $py_multiple_values_operand:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<GroupOperand<$kind<$generic>>>);
@@ -1130,11 +1113,7 @@ macro_rules! implement_multiple_attributes_grouped_operand {
                 self.0.is_min();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -1148,7 +1127,7 @@ macro_rules! implement_multiple_attributes_grouped_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($ungrouped_name::from(operand.clone()),))
@@ -1156,7 +1135,7 @@ macro_rules! implement_multiple_attributes_grouped_operand {
                 });
             }
 
-            pub fn ungroup(&mut self) -> $ungrouped_name {
+            pub fn ungroup(&self) -> $ungrouped_name {
                 self.0.ungroup().into()
             }
 
@@ -1188,7 +1167,7 @@ implement_multiple_attributes_grouped_operand!(
 
 macro_rules! implement_single_attribute_operand {
     ($name:ident, $kind:ident, $generic:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<$kind<$generic>>);
@@ -1315,11 +1294,7 @@ macro_rules! implement_single_attribute_operand {
                 self.0.is_int();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -1333,7 +1308,7 @@ macro_rules! implement_single_attribute_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($name::from(operand.clone()),))
@@ -1371,7 +1346,7 @@ implement_single_attribute_operand!(
 
 macro_rules! implement_single_attribute_grouped_operand {
     ($name:ident, $ungrouped_name:ident, $ungrouped_operand_name:ident, $kind:ident, $generic:ty) => {
-        #[pyclass]
+        #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
         pub struct $name(Wrapper<GroupOperand<$kind<$generic>>>);
@@ -1498,11 +1473,7 @@ macro_rules! implement_single_attribute_grouped_operand {
                 self.0.is_int();
             }
 
-            pub fn either_or(
-                &mut self,
-                either: &Bound<'_, PyFunction>,
-                or: &Bound<'_, PyFunction>,
-            ) {
+            pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
                 self.0.either_or(
                     |operand| {
                         either
@@ -1516,7 +1487,7 @@ macro_rules! implement_single_attribute_grouped_operand {
                 );
             }
 
-            pub fn exclude(&mut self, query: &Bound<'_, PyFunction>) {
+            pub fn exclude(&self, query: &Bound<'_, PyFunction>) {
                 self.0.exclude(|operand| {
                     query
                         .call1(($ungrouped_name::from(operand.clone()),))
@@ -1524,7 +1495,7 @@ macro_rules! implement_single_attribute_grouped_operand {
                 });
             }
 
-            pub fn ungroup(&mut self) -> $ungrouped_operand_name {
+            pub fn ungroup(&self) -> $ungrouped_operand_name {
                 self.0.ungroup().into()
             }
 

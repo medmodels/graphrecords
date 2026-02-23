@@ -2,7 +2,7 @@ use super::{
     Abs, Ceil, Contains, EndsWith, Floor, Lowercase, Mod, Pow, Round, Slice, Sqrt, StartsWith,
     Trim, TrimEnd, TrimStart, Uppercase,
 };
-use crate::errors::GraphRecordError;
+use crate::errors::{GraphRecordError, GraphRecordResult};
 use chrono::{DateTime, NaiveDateTime, TimeDelta};
 use graphrecords_utils::implement_from_for_wrapper;
 #[cfg(feature = "serde")]
@@ -105,7 +105,7 @@ impl Display for GraphRecordValue {
 
 // TODO: Add tests for Duration
 impl Add for GraphRecordValue {
-    type Output = Result<Self, GraphRecordError>;
+    type Output = GraphRecordResult<Self>;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -252,7 +252,7 @@ impl Add for GraphRecordValue {
 
 // TODO: Add tests for Duration
 impl Sub for GraphRecordValue {
-    type Output = Result<Self, GraphRecordError>;
+    type Output = GraphRecordResult<Self>;
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -399,7 +399,7 @@ impl Sub for GraphRecordValue {
 
 // TODO: Add tests for Duration
 impl Mul for GraphRecordValue {
-    type Output = Result<Self, GraphRecordError>;
+    type Output = GraphRecordResult<Self>;
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -556,7 +556,7 @@ impl Mul for GraphRecordValue {
 
 // TODO: Add tests for Duration
 impl Div for GraphRecordValue {
-    type Output = Result<Self, GraphRecordError>;
+    type Output = GraphRecordResult<Self>;
 
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -707,7 +707,7 @@ impl Div for GraphRecordValue {
 
 // TODO: Add tests for Duration
 impl Pow for GraphRecordValue {
-    fn pow(self, exp: Self) -> Result<Self, GraphRecordError> {
+    fn pow(self, exp: Self) -> GraphRecordResult<Self> {
         match (self, exp) {
             (Self::String(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
                 format!("Cannot raise {value} to the power of {other}"),
@@ -862,7 +862,7 @@ impl Pow for GraphRecordValue {
 
 // TODO: Add tests for Duration
 impl Mod for GraphRecordValue {
-    fn r#mod(self, other: Self) -> Result<Self, GraphRecordError> {
+    fn r#mod(self, other: Self) -> GraphRecordResult<Self> {
         match (self, other) {
             (Self::String(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
                 format!("Cannot mod {value} with {other}"),
