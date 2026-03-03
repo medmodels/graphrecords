@@ -7,6 +7,7 @@ on:
 jobs:
   publish-documentation:
     runs-on: ubuntu-latest
+    if: startsWith(github.event.release.tag_name, 'python-')
     steps:
       - name: Trigger medmodels/medmodels-website to publish documentation
         uses: peter-evans/repository-dispatch@v2
