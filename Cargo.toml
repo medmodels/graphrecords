@@ -1,6 +1,10 @@
 [workspace]
 members = ["crates/*"]
-default-members = ["crates/graphrecords", "crates/graphrecords-core", "crates/graphrecords-utils"]
+default-members = [
+    "crates/graphrecords",
+    "crates/graphrecords-core",
+    "crates/graphrecords-utils",
+]
 resolver = "2"
 
 [workspace.package]
@@ -22,6 +26,7 @@ rayon = "1.10.0"
 bincode = "1.3.3"
 typetag = "0.2.21"
 
+# Workspace members
 graphrecords = { version = "0.1.0", path = "crates/graphrecords" }
 graphrecords-core = { version = "0.1.0", path = "crates/graphrecords-core" }
 graphrecords-utils = { version = "0.1.0", path = "crates/graphrecords-utils" }

@@ -16,6 +16,20 @@ Once you've made your changes to the GraphRecords codebase and are ready to shar
     - `fix`: Bug fixes or resolving issues.
     - `test`: Adding or improving tests.
     - `refactor`: Code improvements that don't introduce new features or fix bugs (e.g., improving code structure or readability).
+    - `release`: Used by the automated release workflow. Do not use manually.
+
+  - **Scope (optional):** After the type, you can add a scope in parentheses to indicate which part of the project is affected. The allowed scopes are:
+    - `(rust)`: Changes that only affect the Rust crates.
+    - `(python)`: Changes that only affect the Python package.
+    - If no scope is provided, the change is assumed to affect both Rust and Python.
+
+  - **Breaking changes:** Append `!` after the type/scope to indicate a breaking change (e.g., `feat!:` or `feat(rust)!:`).
+
+  - **Examples:**
+    - `feat: add new graph traversal algorithm`
+    - `fix(rust): resolve memory leak in core`
+    - `feat(python)!: change schema validation API`
+    - `docs: update installation instructions`
 
 - Push your local branch to your remote repository on GitHub.
 
