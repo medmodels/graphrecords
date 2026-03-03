@@ -1,0 +1,46 @@
+[changelog]
+header = """
+# Changelog (Python)\n
+All notable changes to the Python package will be documented in this file.\n
+"""
+body = """
+{%- macro remote_url() -%}
+  https://github.com/medmodels/graphrecords
+{%- endmacro -%}
+
+{% if version -%}
+  ## [{{ version | trim_start_matches(pat="python-") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+  ## [Unreleased]
+{% endif -%}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+  ### {{ group | striptags | trim | upper_first }}
+  {% for commit in commits %}
+    - {{ commit.message | upper_first | trim }}\
+      {% if commit.breaking %} (**breaking**){% endif %}\
+  {% endfor %}
+{% endfor %}\n
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+tag_pattern = "python-.*"
+sort_commits = "newest"
+
+commit_parsers = [
+  { message = "^release", skip = true },
+  { message = "^ci", skip = true },
+  { message = "^chore", skip = true },
+  { message = "^[a-z]+\\(rust\\)", skip = true },
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Bug Fixes" },
+  { message = "^refactor", group = "Refactoring" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^test", group = "Testing" },
+  { message = "^build", group = "Build" },
+]
