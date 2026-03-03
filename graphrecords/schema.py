@@ -15,7 +15,7 @@ from typing import (
     overload,
 )
 
-from graphrecords._graphrecords import (
+from graphrecords._graphrecords.schema import (
     PyAttributeDataType,
     PyAttributeType,
     PyGroupSchema,

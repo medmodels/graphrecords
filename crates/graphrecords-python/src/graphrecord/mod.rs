@@ -24,7 +24,8 @@ use errors::PyGraphRecordError;
 use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{
-        Attributes, EdgeIndex, GraphRecord, GraphRecordAttribute, GraphRecordValue, plugins::Plugin,
+        Attributes, EdgeIndex, GraphRecord, GraphRecordAttribute, GraphRecordValue,
+        PluginGraphRecord, plugins::Plugin,
     },
 };
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -59,19 +60,19 @@ pub struct PyGraphRecord {
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 enum PyGraphRecordInner {
-    Owned(RwLock<GraphRecord>),
+    Owned(RwLock<PluginGraphRecord>),
     Borrowed(BorrowedGraphRecord),
 }
 
 pub(crate) enum InnerRef<'a> {
-    Owned(RwLockReadGuard<'a, GraphRecord>),
-    Borrowed(RwLockReadGuard<'a, Option<NonNull<GraphRecord>>>),
+    Owned(RwLockReadGuard<'a, PluginGraphRecord>),
+    Borrowed(RwLockReadGuard<'a, Option<NonNull<PluginGraphRecord>>>),
 }
 
 impl Deref for InnerRef<'_> {
-    type Target = GraphRecord;
+    type Target = PluginGraphRecord;
 
-    fn deref(&self) -> &GraphRecord {
+    fn deref(&self) -> &PluginGraphRecord {
         match self {
             InnerRef::Owned(guard) => guard,
             // SAFETY: The guard is only constructed after checking `is_some()` in `inner()`.
@@ -87,14 +88,14 @@ impl Deref for InnerRef<'_> {
 }
 
 pub(crate) enum InnerRefMut<'a> {
-    Owned(RwLockWriteGuard<'a, GraphRecord>),
-    Borrowed(RwLockWriteGuard<'a, Option<NonNull<GraphRecord>>>),
+    Owned(RwLockWriteGuard<'a, PluginGraphRecord>),
+    Borrowed(RwLockWriteGuard<'a, Option<NonNull<PluginGraphRecord>>>),
 }
 
 impl Deref for InnerRefMut<'_> {
-    type Target = GraphRecord;
+    type Target = PluginGraphRecord;
 
-    fn deref(&self) -> &GraphRecord {
+    fn deref(&self) -> &PluginGraphRecord {
         match self {
             InnerRefMut::Owned(guard) => guard,
             // SAFETY: Same as `InnerRef::Borrowed`. Pointer was checked `is_some()` in
@@ -109,12 +110,12 @@ impl Deref for InnerRefMut<'_> {
 }
 
 impl DerefMut for InnerRefMut<'_> {
-    fn deref_mut(&mut self) -> &mut GraphRecord {
+    fn deref_mut(&mut self) -> &mut PluginGraphRecord {
         match self {
             InnerRefMut::Owned(guard) => &mut *guard,
             // SAFETY: Same as above, plus: the write guard ensures exclusive access to the
-            // pointer, so creating `&mut GraphRecord` is sound. The original `scope()` call
-            // holds `&mut GraphRecord`, guaranteeing no other references to the pointee exist
+            // pointer, so creating `&mut PluginGraphRecord` is sound. The original `scope()` call
+            // holds `&mut PluginGraphRecord`, guaranteeing no other references to the pointee exist
             // outside this lock.
             InnerRefMut::Borrowed(guard) => unsafe {
                 guard
@@ -175,6 +176,14 @@ impl PyGraphRecord {
 impl From<GraphRecord> for PyGraphRecord {
     fn from(value: GraphRecord) -> Self {
         Self {
+            inner: PyGraphRecordInner::Owned(RwLock::new(PluginGraphRecord::from(value))),
+        }
+    }
+}
+
+impl From<PluginGraphRecord> for PyGraphRecord {
+    fn from(value: PluginGraphRecord) -> Self {
+        Self {
             inner: PyGraphRecordInner::Owned(RwLock::new(value)),
         }
     }
@@ -185,7 +194,7 @@ impl TryFrom<PyGraphRecord> for GraphRecord {
 
     fn try_from(value: PyGraphRecord) -> PyResult<Self> {
         match value.inner {
-            PyGraphRecordInner::Owned(lock) => Ok(lock.into_inner()),
+            PyGraphRecordInner::Owned(lock) => Ok(lock.into_inner().into()),
             PyGraphRecordInner::Borrowed(_) => Err(PyRuntimeError::new_err(
                 "Cannot convert a borrowed PyGraphRecord into an owned GraphRecord",
             )),
@@ -233,9 +242,9 @@ impl PyGraphRecord {
             .map(|plugin| Box::new(PyPlugin::new(plugin)) as Box<dyn Plugin>)
             .collect();
 
-        Ok(GraphRecord::with_plugins(plugins)
-            .map_err(PyGraphRecordError::from)?
-            .into())
+        let graphrecord = GraphRecord::with_plugins(plugins).map_err(PyGraphRecordError::from)?;
+
+        Ok(graphrecord.into())
     }
 
     #[staticmethod]
@@ -344,8 +353,8 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            Ok(graphrecord
-                .set_schema_bypass_plugins(schema.into())
+            Ok((**graphrecord)
+                .set_schema(schema.into())
                 .map_err(PyGraphRecordError::from)?)
         } else {
             Ok(graphrecord
@@ -359,7 +368,7 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            graphrecord.freeze_schema_bypass_plugins();
+            (**graphrecord).freeze_schema();
             Ok(())
         } else {
             Ok(graphrecord
@@ -373,7 +382,7 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            graphrecord.unfreeze_schema_bypass_plugins();
+            (**graphrecord).unfreeze_schema();
             Ok(())
         } else {
             Ok(graphrecord
@@ -546,22 +555,27 @@ impl PyGraphRecord {
     ) -> PyResult<HashMap<PyNodeIndex, PyAttributes>> {
         let mut graphrecord = self.inner_mut()?;
 
-        node_indices
-            .into_iter()
-            .map(|node_index| {
-                let attributes = if bypass_plugins {
-                    graphrecord
-                        .remove_node_bypass_plugins(&node_index)
-                        .map_err(PyGraphRecordError::from)?
-                } else {
-                    graphrecord
+        if bypass_plugins {
+            node_indices
+                .into_iter()
+                .map(|node_index| {
+                    let attributes = (**graphrecord)
                         .remove_node(&node_index)
-                        .map_err(PyGraphRecordError::from)?
-                };
-
-                Ok((node_index, attributes.deep_into()))
-            })
-            .collect()
+                        .map_err(PyGraphRecordError::from)?;
+                    Ok((node_index, attributes.deep_into()))
+                })
+                .collect()
+        } else {
+            node_indices
+                .into_iter()
+                .map(|node_index| {
+                    let attributes = graphrecord
+                        .remove_node(&node_index)
+                        .map_err(PyGraphRecordError::from)?;
+                    Ok((node_index, attributes.deep_into()))
+                })
+                .collect()
+        }
     }
 
     pub fn replace_node_attributes(
@@ -641,8 +655,8 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            Ok(graphrecord
-                .add_nodes_bypass_plugins(nodes.deep_into())
+            Ok((**graphrecord)
+                .add_nodes(nodes.deep_into())
                 .map_err(PyGraphRecordError::from)?)
         } else {
             Ok(graphrecord
@@ -661,8 +675,8 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            Ok(graphrecord
-                .add_nodes_with_group_bypass_plugins(nodes.deep_into(), group.into())
+            Ok((**graphrecord)
+                .add_nodes_with_group(nodes.deep_into(), group.into())
                 .map_err(PyGraphRecordError::from)?)
         } else {
             Ok(graphrecord
@@ -680,8 +694,8 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            Ok(graphrecord
-                .add_nodes_dataframes_bypass_plugins(nodes_dataframes)
+            Ok((**graphrecord)
+                .add_nodes_dataframes(nodes_dataframes)
                 .map_err(PyGraphRecordError::from)?)
         } else {
             Ok(graphrecord
@@ -700,8 +714,8 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            Ok(graphrecord
-                .add_nodes_dataframes_with_group_bypass_plugins(nodes_dataframes, group.into())
+            Ok((**graphrecord)
+                .add_nodes_dataframes_with_group(nodes_dataframes, group.into())
                 .map_err(PyGraphRecordError::from)?)
         } else {
             Ok(graphrecord
@@ -718,22 +732,27 @@ impl PyGraphRecord {
     ) -> PyResult<HashMap<EdgeIndex, PyAttributes>> {
         let mut graphrecord = self.inner_mut()?;
 
-        edge_indices
-            .into_iter()
-            .map(|edge_index| {
-                let attributes = if bypass_plugins {
-                    graphrecord
-                        .remove_edge_bypass_plugins(&edge_index)
-                        .map_err(PyGraphRecordError::from)?
-                } else {
-                    graphrecord
+        if bypass_plugins {
+            edge_indices
+                .into_iter()
+                .map(|edge_index| {
+                    let attributes = (**graphrecord)
                         .remove_edge(&edge_index)
-                        .map_err(PyGraphRecordError::from)?
-                };
-
-                Ok((edge_index, attributes.deep_into()))
-            })
-            .collect()
+                        .map_err(PyGraphRecordError::from)?;
+                    Ok((edge_index, attributes.deep_into()))
+                })
+                .collect()
+        } else {
+            edge_indices
+                .into_iter()
+                .map(|edge_index| {
+                    let attributes = graphrecord
+                        .remove_edge(&edge_index)
+                        .map_err(PyGraphRecordError::from)?;
+                    Ok((edge_index, attributes.deep_into()))
+                })
+                .collect()
+        }
     }
 
     pub fn replace_edge_attributes(
@@ -813,8 +832,8 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            Ok(graphrecord
-                .add_edges_bypass_plugins(relations.deep_into())
+            Ok((**graphrecord)
+                .add_edges(relations.deep_into())
                 .map_err(PyGraphRecordError::from)?)
         } else {
             Ok(graphrecord
@@ -833,8 +852,8 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            Ok(graphrecord
-                .add_edges_with_group_bypass_plugins(relations.deep_into(), &group)
+            Ok((**graphrecord)
+                .add_edges_with_group(relations.deep_into(), &group)
                 .map_err(PyGraphRecordError::from)?)
         } else {
             Ok(graphrecord
@@ -852,8 +871,8 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            Ok(graphrecord
-                .add_edges_dataframes_bypass_plugins(edges_dataframes)
+            Ok((**graphrecord)
+                .add_edges_dataframes(edges_dataframes)
                 .map_err(PyGraphRecordError::from)?)
         } else {
             Ok(graphrecord
@@ -872,8 +891,8 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            Ok(graphrecord
-                .add_edges_dataframes_with_group_bypass_plugins(edges_dataframes, &group)
+            Ok((**graphrecord)
+                .add_edges_dataframes_with_group(edges_dataframes, &group)
                 .map_err(PyGraphRecordError::from)?)
         } else {
             Ok(graphrecord
@@ -893,8 +912,8 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            Ok(graphrecord
-                .add_group_bypass_plugins(
+            Ok((**graphrecord)
+                .add_group(
                     group.into(),
                     node_indices_to_add.deep_into(),
                     edge_indices_to_add,
@@ -915,19 +934,21 @@ impl PyGraphRecord {
     pub fn remove_groups(&self, group: Vec<PyGroup>, bypass_plugins: bool) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        group.into_iter().try_for_each(|group| {
-            if bypass_plugins {
-                graphrecord
-                    .remove_group_bypass_plugins(&group)
+        if bypass_plugins {
+            group.into_iter().try_for_each(|group| {
+                (**graphrecord)
+                    .remove_group(&group)
                     .map_err(PyGraphRecordError::from)?;
-            } else {
+                Ok(())
+            })
+        } else {
+            group.into_iter().try_for_each(|group| {
                 graphrecord
                     .remove_group(&group)
                     .map_err(PyGraphRecordError::from)?;
-            }
-
-            Ok(())
-        })
+                Ok(())
+            })
+        }
     }
 
     #[pyo3(signature = (group, node_index, bypass_plugins=false))]
@@ -939,17 +960,19 @@ impl PyGraphRecord {
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        node_index.into_iter().try_for_each(|node_index| {
-            if bypass_plugins {
-                Ok(graphrecord
-                    .add_node_to_group_bypass_plugins(group.clone().into(), node_index.into())
+        if bypass_plugins {
+            node_index.into_iter().try_for_each(|node_index| {
+                Ok((**graphrecord)
+                    .add_node_to_group(group.clone().into(), node_index.into())
                     .map_err(PyGraphRecordError::from)?)
-            } else {
+            })
+        } else {
+            node_index.into_iter().try_for_each(|node_index| {
                 Ok(graphrecord
                     .add_node_to_group(group.clone().into(), node_index.into())
                     .map_err(PyGraphRecordError::from)?)
-            }
-        })
+            })
+        }
     }
 
     #[pyo3(signature = (group, edge_index, bypass_plugins=false))]
@@ -961,17 +984,19 @@ impl PyGraphRecord {
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        edge_index.into_iter().try_for_each(|edge_index| {
-            if bypass_plugins {
-                Ok(graphrecord
-                    .add_edge_to_group_bypass_plugins(group.clone().into(), edge_index)
+        if bypass_plugins {
+            edge_index.into_iter().try_for_each(|edge_index| {
+                Ok((**graphrecord)
+                    .add_edge_to_group(group.clone().into(), edge_index)
                     .map_err(PyGraphRecordError::from)?)
-            } else {
+            })
+        } else {
+            edge_index.into_iter().try_for_each(|edge_index| {
                 Ok(graphrecord
                     .add_edge_to_group(group.clone().into(), edge_index)
                     .map_err(PyGraphRecordError::from)?)
-            }
-        })
+            })
+        }
     }
 
     #[pyo3(signature = (group, node_index, bypass_plugins=false))]
@@ -983,17 +1008,19 @@ impl PyGraphRecord {
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        node_index.into_iter().try_for_each(|node_index| {
-            if bypass_plugins {
-                Ok(graphrecord
-                    .remove_node_from_group_bypass_plugins(&group, &node_index)
+        if bypass_plugins {
+            node_index.into_iter().try_for_each(|node_index| {
+                Ok((**graphrecord)
+                    .remove_node_from_group(&group, &node_index)
                     .map_err(PyGraphRecordError::from)?)
-            } else {
+            })
+        } else {
+            node_index.into_iter().try_for_each(|node_index| {
                 Ok(graphrecord
                     .remove_node_from_group(&group, &node_index)
                     .map_err(PyGraphRecordError::from)?)
-            }
-        })
+            })
+        }
     }
 
     #[pyo3(signature = (group, edge_index, bypass_plugins=false))]
@@ -1005,17 +1032,19 @@ impl PyGraphRecord {
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        edge_index.into_iter().try_for_each(|edge_index| {
-            if bypass_plugins {
-                Ok(graphrecord
-                    .remove_edge_from_group_bypass_plugins(&group, &edge_index)
+        if bypass_plugins {
+            edge_index.into_iter().try_for_each(|edge_index| {
+                Ok((**graphrecord)
+                    .remove_edge_from_group(&group, &edge_index)
                     .map_err(PyGraphRecordError::from)?)
-            } else {
+            })
+        } else {
+            edge_index.into_iter().try_for_each(|edge_index| {
                 Ok(graphrecord
                     .remove_edge_from_group(&group, &edge_index)
                     .map_err(PyGraphRecordError::from)?)
-            }
-        })
+            })
+        }
     }
 
     pub fn nodes_in_group(
@@ -1179,7 +1208,7 @@ impl PyGraphRecord {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            graphrecord.clear_bypass_plugins();
+            (**graphrecord).clear();
             Ok(())
         } else {
             Ok(graphrecord.clear().map_err(PyGraphRecordError::from)?)

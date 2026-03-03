@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 graphrecords-core = { workspace = true }
-graphrecords-python = { workspace = true }
+graphrecords-python = { workspace = true, features = ["pyo3-bindings"] }
 
 pyo3 = { workspace = true }
 

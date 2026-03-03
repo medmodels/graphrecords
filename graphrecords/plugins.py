@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 from graphrecords.types import PyPlugin
 
 if TYPE_CHECKING:
-    from graphrecords._graphrecords import (
-        PyGraphRecord,
+    from graphrecords._graphrecords.graphrecord import PyGraphRecord
+    from graphrecords._graphrecords.plugins import (
         PyPostAddEdgeContext,
         PyPostAddEdgesContext,
         PyPostAddEdgesDataframesContext,
@@ -446,7 +446,7 @@ class PreSetSchemaContext:
         Args:
             schema (Schema): The schema being set.
         """
-        from graphrecords._graphrecords import PyPreSetSchemaContext
+        from graphrecords._graphrecords.plugins import PyPreSetSchemaContext
 
         self._py_pre_set_schema_context = PyPreSetSchemaContext(schema._schema)
 
@@ -478,7 +478,7 @@ class PreAddNodeContext:
             node_index (NodeIndex): The index of the node being added.
             attributes (Attributes): The attributes of the node being added.
         """
-        from graphrecords._graphrecords import PyPreAddNodeContext
+        from graphrecords._graphrecords.plugins import PyPreAddNodeContext
 
         self._py_context = PyPreAddNodeContext(node_index, attributes)
 
@@ -510,7 +510,7 @@ class PostAddNodeContext:
         Args:
             node_index (NodeIndex): The index of the node that was added.
         """
-        from graphrecords._graphrecords import PyPostAddNodeContext
+        from graphrecords._graphrecords.plugins import PyPostAddNodeContext
 
         self._py_context = PyPostAddNodeContext(node_index)
 
@@ -541,7 +541,7 @@ class PreAddNodeWithGroupContext:
             attributes (Attributes): The attributes of the node being added.
             group (Group): The group to add the node to.
         """
-        from graphrecords._graphrecords import PyPreAddNodeWithGroupContext
+        from graphrecords._graphrecords.plugins import PyPreAddNodeWithGroupContext
 
         self._py_context = PyPreAddNodeWithGroupContext(node_index, attributes, group)
 
@@ -581,7 +581,7 @@ class PostAddNodeWithGroupContext:
             node_index (NodeIndex): The index of the node that was added.
             group (Group): The group the node was added to.
         """
-        from graphrecords._graphrecords import PyPostAddNodeWithGroupContext
+        from graphrecords._graphrecords.plugins import PyPostAddNodeWithGroupContext
 
         self._py_context = PyPostAddNodeWithGroupContext(node_index, group)
 
@@ -615,7 +615,7 @@ class PreRemoveNodeContext:
         Args:
             node_index (NodeIndex): The index of the node being removed.
         """
-        from graphrecords._graphrecords import PyPreRemoveNodeContext
+        from graphrecords._graphrecords.plugins import PyPreRemoveNodeContext
 
         self._py_context = PyPreRemoveNodeContext(node_index)
 
@@ -644,7 +644,7 @@ class PostRemoveNodeContext:
         Args:
             node_index (NodeIndex): The index of the node that was removed.
         """
-        from graphrecords._graphrecords import PyPostRemoveNodeContext
+        from graphrecords._graphrecords.plugins import PyPostRemoveNodeContext
 
         self._py_context = PyPostRemoveNodeContext(node_index)
 
@@ -673,7 +673,7 @@ class PreAddNodesContext:
         Args:
             nodes (List[Tuple[NodeIndex, Attributes]]): The nodes being added.
         """
-        from graphrecords._graphrecords import PyPreAddNodesContext
+        from graphrecords._graphrecords.plugins import PyPreAddNodesContext
 
         self._py_context = PyPreAddNodesContext(nodes)
 
@@ -700,7 +700,7 @@ class PostAddNodesContext:
         Args:
             nodes (List[Tuple[NodeIndex, Attributes]]): The nodes that were added.
         """
-        from graphrecords._graphrecords import PyPostAddNodesContext
+        from graphrecords._graphrecords.plugins import PyPostAddNodesContext
 
         self._py_context = PyPostAddNodesContext(nodes)
 
@@ -728,7 +728,7 @@ class PreAddNodesWithGroupContext:
             nodes (List[Tuple[NodeIndex, Attributes]]): The nodes being added.
             group (Group): The group to add the nodes to.
         """
-        from graphrecords._graphrecords import PyPreAddNodesWithGroupContext
+        from graphrecords._graphrecords.plugins import PyPreAddNodesWithGroupContext
 
         self._py_context = PyPreAddNodesWithGroupContext(nodes, group)
 
@@ -763,7 +763,7 @@ class PostAddNodesWithGroupContext:
             nodes (List[Tuple[NodeIndex, Attributes]]): The nodes that were added.
             group (Group): The group the nodes were added to.
         """
-        from graphrecords._graphrecords import PyPostAddNodesWithGroupContext
+        from graphrecords._graphrecords.plugins import PyPostAddNodesWithGroupContext
 
         self._py_context = PyPostAddNodesWithGroupContext(nodes, group)
 
@@ -798,7 +798,7 @@ class PreAddNodesDataframesContext:
             nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
                 inputs.
         """
-        from graphrecords._graphrecords import PyPreAddNodesDataframesContext
+        from graphrecords._graphrecords.plugins import PyPreAddNodesDataframesContext
 
         self._py_context = PyPreAddNodesDataframesContext(nodes_dataframes)
 
@@ -828,7 +828,7 @@ class PostAddNodesDataframesContext:
             nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
                 inputs.
         """
-        from graphrecords._graphrecords import PyPostAddNodesDataframesContext
+        from graphrecords._graphrecords.plugins import PyPostAddNodesDataframesContext
 
         self._py_context = PyPostAddNodesDataframesContext(nodes_dataframes)
 
@@ -861,7 +861,7 @@ class PreAddNodesDataframesWithGroupContext:
                 inputs.
             group (Group): The group to add the nodes to.
         """
-        from graphrecords._graphrecords import (
+        from graphrecords._graphrecords.plugins import (
             PyPreAddNodesDataframesWithGroupContext,
         )
 
@@ -903,7 +903,7 @@ class PostAddNodesDataframesWithGroupContext:
                 inputs.
             group (Group): The group the nodes were added to.
         """
-        from graphrecords._graphrecords import (
+        from graphrecords._graphrecords.plugins import (
             PyPostAddNodesDataframesWithGroupContext,
         )
 
@@ -948,7 +948,7 @@ class PreAddEdgeContext:
             target_node_index (NodeIndex): The index of the target node.
             attributes (Attributes): The attributes of the edge being added.
         """
-        from graphrecords._graphrecords import PyPreAddEdgeContext
+        from graphrecords._graphrecords.plugins import PyPreAddEdgeContext
 
         self._py_context = PyPreAddEdgeContext(
             source_node_index, target_node_index, attributes
@@ -987,7 +987,7 @@ class PostAddEdgeContext:
         Args:
             edge_index (EdgeIndex): The index of the edge that was added.
         """
-        from graphrecords._graphrecords import PyPostAddEdgeContext
+        from graphrecords._graphrecords.plugins import PyPostAddEdgeContext
 
         self._py_context = PyPostAddEdgeContext(edge_index)
 
@@ -1023,7 +1023,7 @@ class PreAddEdgeWithGroupContext:
             attributes (Attributes): The attributes of the edge being added.
             group (Group): The group to add the edge to.
         """
-        from graphrecords._graphrecords import PyPreAddEdgeWithGroupContext
+        from graphrecords._graphrecords.plugins import PyPreAddEdgeWithGroupContext
 
         self._py_context = PyPreAddEdgeWithGroupContext(
             source_node_index, target_node_index, attributes, group
@@ -1069,7 +1069,7 @@ class PostAddEdgeWithGroupContext:
         Args:
             edge_index (EdgeIndex): The index of the edge that was added.
         """
-        from graphrecords._graphrecords import PyPostAddEdgeWithGroupContext
+        from graphrecords._graphrecords.plugins import PyPostAddEdgeWithGroupContext
 
         self._py_context = PyPostAddEdgeWithGroupContext(edge_index)
 
@@ -1098,7 +1098,7 @@ class PreRemoveEdgeContext:
         Args:
             edge_index (EdgeIndex): The index of the edge being removed.
         """
-        from graphrecords._graphrecords import PyPreRemoveEdgeContext
+        from graphrecords._graphrecords.plugins import PyPreRemoveEdgeContext
 
         self._py_context = PyPreRemoveEdgeContext(edge_index)
 
@@ -1127,7 +1127,7 @@ class PostRemoveEdgeContext:
         Args:
             edge_index (EdgeIndex): The index of the edge that was removed.
         """
-        from graphrecords._graphrecords import PyPostRemoveEdgeContext
+        from graphrecords._graphrecords.plugins import PyPostRemoveEdgeContext
 
         self._py_context = PyPostRemoveEdgeContext(edge_index)
 
@@ -1157,7 +1157,7 @@ class PreAddEdgesContext:
             edges (List[Tuple[NodeIndex, NodeIndex, Attributes]]): The edges being
                 added.
         """
-        from graphrecords._graphrecords import PyPreAddEdgesContext
+        from graphrecords._graphrecords.plugins import PyPreAddEdgesContext
 
         self._py_context = PyPreAddEdgesContext(edges)
 
@@ -1184,7 +1184,7 @@ class PostAddEdgesContext:
         Args:
             edge_indices (List[EdgeIndex]): The indices of the edges that were added.
         """
-        from graphrecords._graphrecords import PyPostAddEdgesContext
+        from graphrecords._graphrecords.plugins import PyPostAddEdgesContext
 
         self._py_context = PyPostAddEdgesContext(edge_indices)
 
@@ -1215,7 +1215,7 @@ class PreAddEdgesWithGroupContext:
                 added.
             group (Group): The group to add the edges to.
         """
-        from graphrecords._graphrecords import PyPreAddEdgesWithGroupContext
+        from graphrecords._graphrecords.plugins import PyPreAddEdgesWithGroupContext
 
         self._py_context = PyPreAddEdgesWithGroupContext(edges, group)
 
@@ -1249,7 +1249,7 @@ class PostAddEdgesWithGroupContext:
         Args:
             edge_indices (List[EdgeIndex]): The indices of the edges that were added.
         """
-        from graphrecords._graphrecords import PyPostAddEdgesWithGroupContext
+        from graphrecords._graphrecords.plugins import PyPostAddEdgesWithGroupContext
 
         self._py_context = PyPostAddEdgesWithGroupContext(edge_indices)
 
@@ -1279,7 +1279,7 @@ class PreAddEdgesDataframesContext:
             edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
                 inputs.
         """
-        from graphrecords._graphrecords import PyPreAddEdgesDataframesContext
+        from graphrecords._graphrecords.plugins import PyPreAddEdgesDataframesContext
 
         self._py_context = PyPreAddEdgesDataframesContext(edges_dataframes)
 
@@ -1309,7 +1309,7 @@ class PostAddEdgesDataframesContext:
             edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
                 inputs.
         """
-        from graphrecords._graphrecords import PyPostAddEdgesDataframesContext
+        from graphrecords._graphrecords.plugins import PyPostAddEdgesDataframesContext
 
         self._py_context = PyPostAddEdgesDataframesContext(edges_dataframes)
 
@@ -1342,7 +1342,7 @@ class PreAddEdgesDataframesWithGroupContext:
                 inputs.
             group (Group): The group to add the edges to.
         """
-        from graphrecords._graphrecords import (
+        from graphrecords._graphrecords.plugins import (
             PyPreAddEdgesDataframesWithGroupContext,
         )
 
@@ -1384,7 +1384,7 @@ class PostAddEdgesDataframesWithGroupContext:
                 inputs.
             group (Group): The group the edges were added to.
         """
-        from graphrecords._graphrecords import (
+        from graphrecords._graphrecords.plugins import (
             PyPostAddEdgesDataframesWithGroupContext,
         )
 
@@ -1431,7 +1431,7 @@ class PreAddGroupContext:
             edge_indices (Optional[List[EdgeIndex]]): The edge indices to add to
                 the group.
         """
-        from graphrecords._graphrecords import PyPreAddGroupContext
+        from graphrecords._graphrecords.plugins import PyPreAddGroupContext
 
         self._py_context = PyPreAddGroupContext(group, node_indices, edge_indices)
 
@@ -1477,7 +1477,7 @@ class PostAddGroupContext:
             edge_indices (Optional[List[EdgeIndex]]): The edge indices added to
                 the group.
         """
-        from graphrecords._graphrecords import PyPostAddGroupContext
+        from graphrecords._graphrecords.plugins import PyPostAddGroupContext
 
         self._py_context = PyPostAddGroupContext(group, node_indices, edge_indices)
 
@@ -1514,7 +1514,7 @@ class PreRemoveGroupContext:
         Args:
             group (Group): The group being removed.
         """
-        from graphrecords._graphrecords import PyPreRemoveGroupContext
+        from graphrecords._graphrecords.plugins import PyPreRemoveGroupContext
 
         self._py_context = PyPreRemoveGroupContext(group)
 
@@ -1543,7 +1543,7 @@ class PostRemoveGroupContext:
         Args:
             group (Group): The group that was removed.
         """
-        from graphrecords._graphrecords import PyPostRemoveGroupContext
+        from graphrecords._graphrecords.plugins import PyPostRemoveGroupContext
 
         self._py_context = PyPostRemoveGroupContext(group)
 
@@ -1573,7 +1573,7 @@ class PreAddNodeToGroupContext:
             group (Group): The group to add the node to.
             node_index (NodeIndex): The index of the node being added to the group.
         """
-        from graphrecords._graphrecords import PyPreAddNodeToGroupContext
+        from graphrecords._graphrecords.plugins import PyPreAddNodeToGroupContext
 
         self._py_context = PyPreAddNodeToGroupContext(group, node_index)
 
@@ -1608,7 +1608,7 @@ class PostAddNodeToGroupContext:
             group (Group): The group the node was added to.
             node_index (NodeIndex): The index of the node that was added to the group.
         """
-        from graphrecords._graphrecords import PyPostAddNodeToGroupContext
+        from graphrecords._graphrecords.plugins import PyPostAddNodeToGroupContext
 
         self._py_context = PyPostAddNodeToGroupContext(group, node_index)
 
@@ -1643,7 +1643,7 @@ class PreAddEdgeToGroupContext:
             group (Group): The group to add the edge to.
             edge_index (EdgeIndex): The index of the edge being added to the group.
         """
-        from graphrecords._graphrecords import PyPreAddEdgeToGroupContext
+        from graphrecords._graphrecords.plugins import PyPreAddEdgeToGroupContext
 
         self._py_context = PyPreAddEdgeToGroupContext(group, edge_index)
 
@@ -1678,7 +1678,7 @@ class PostAddEdgeToGroupContext:
             group (Group): The group the edge was added to.
             edge_index (EdgeIndex): The index of the edge that was added to the group.
         """
-        from graphrecords._graphrecords import PyPostAddEdgeToGroupContext
+        from graphrecords._graphrecords.plugins import PyPostAddEdgeToGroupContext
 
         self._py_context = PyPostAddEdgeToGroupContext(group, edge_index)
 
@@ -1713,7 +1713,7 @@ class PreRemoveNodeFromGroupContext:
             group (Group): The group to remove the node from.
             node_index (NodeIndex): The index of the node being removed from the group.
         """
-        from graphrecords._graphrecords import PyPreRemoveNodeFromGroupContext
+        from graphrecords._graphrecords.plugins import PyPreRemoveNodeFromGroupContext
 
         self._py_context = PyPreRemoveNodeFromGroupContext(group, node_index)
 
@@ -1749,7 +1749,7 @@ class PostRemoveNodeFromGroupContext:
             node_index (NodeIndex): The index of the node that was removed from
                 the group.
         """
-        from graphrecords._graphrecords import PyPostRemoveNodeFromGroupContext
+        from graphrecords._graphrecords.plugins import PyPostRemoveNodeFromGroupContext
 
         self._py_context = PyPostRemoveNodeFromGroupContext(group, node_index)
 
@@ -1784,7 +1784,7 @@ class PreRemoveEdgeFromGroupContext:
             group (Group): The group to remove the edge from.
             edge_index (EdgeIndex): The index of the edge being removed from the group.
         """
-        from graphrecords._graphrecords import PyPreRemoveEdgeFromGroupContext
+        from graphrecords._graphrecords.plugins import PyPreRemoveEdgeFromGroupContext
 
         self._py_context = PyPreRemoveEdgeFromGroupContext(group, edge_index)
 
@@ -1820,7 +1820,7 @@ class PostRemoveEdgeFromGroupContext:
             edge_index (EdgeIndex): The index of the edge that was removed from
                 the group.
         """
-        from graphrecords._graphrecords import PyPostRemoveEdgeFromGroupContext
+        from graphrecords._graphrecords.plugins import PyPostRemoveEdgeFromGroupContext
 
         self._py_context = PyPostRemoveEdgeFromGroupContext(group, edge_index)
 
