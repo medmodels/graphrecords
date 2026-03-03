@@ -1,9 +1,11 @@
+mod graphrecord;
+
 use crate::{
-    GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{EdgeDataFrameInput, NodeDataFrameInput},
     prelude::{Attributes, EdgeIndex, Group, NodeIndex, Schema},
 };
+pub use graphrecord::PluginGraphRecord;
 use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
@@ -242,7 +244,7 @@ pub struct PostRemoveEdgeFromGroupContext {
 #[cfg_attr(feature = "serde", typetag::serde(tag = "type"))]
 #[allow(unused_variables)]
 pub trait Plugin: Debug + Send + Sync {
-    fn initialize(&self, _graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
+    fn initialize(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Ok(())
     }
 
@@ -250,35 +252,35 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_set_schema(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreSetSchemaContext,
     ) -> GraphRecordResult<PreSetSchemaContext> {
         Ok(context)
     }
 
-    fn post_set_schema(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
+    fn post_set_schema(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Ok(())
     }
 
-    fn pre_freeze_schema(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
+    fn pre_freeze_schema(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Ok(())
     }
 
-    fn post_freeze_schema(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
+    fn post_freeze_schema(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Ok(())
     }
 
-    fn pre_unfreeze_schema(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
+    fn pre_unfreeze_schema(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Ok(())
     }
 
-    fn post_unfreeze_schema(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
+    fn post_unfreeze_schema(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Ok(())
     }
 
     fn pre_add_node(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddNodeContext,
     ) -> GraphRecordResult<PreAddNodeContext> {
         Ok(context)
@@ -286,7 +288,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_node(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddNodeContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -294,7 +296,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_node_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddNodeWithGroupContext,
     ) -> GraphRecordResult<PreAddNodeWithGroupContext> {
         Ok(context)
@@ -302,7 +304,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_node_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddNodeWithGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -310,7 +312,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_remove_node(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreRemoveNodeContext,
     ) -> GraphRecordResult<PreRemoveNodeContext> {
         Ok(context)
@@ -318,7 +320,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_remove_node(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostRemoveNodeContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -326,7 +328,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_nodes(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddNodesContext,
     ) -> GraphRecordResult<PreAddNodesContext> {
         Ok(context)
@@ -334,7 +336,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_nodes(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddNodesContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -342,7 +344,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_nodes_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddNodesWithGroupContext,
     ) -> GraphRecordResult<PreAddNodesWithGroupContext> {
         Ok(context)
@@ -350,7 +352,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_nodes_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddNodesWithGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -358,7 +360,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_nodes_dataframes(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddNodesDataframesContext,
     ) -> GraphRecordResult<PreAddNodesDataframesContext> {
         Ok(context)
@@ -366,7 +368,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_nodes_dataframes(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddNodesDataframesContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -374,7 +376,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_nodes_dataframes_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddNodesDataframesWithGroupContext,
     ) -> GraphRecordResult<PreAddNodesDataframesWithGroupContext> {
         Ok(context)
@@ -382,7 +384,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_nodes_dataframes_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddNodesDataframesWithGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -390,7 +392,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_edge(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddEdgeContext,
     ) -> GraphRecordResult<PreAddEdgeContext> {
         Ok(context)
@@ -398,7 +400,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_edge(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddEdgeContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -406,7 +408,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_edge_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddEdgeWithGroupContext,
     ) -> GraphRecordResult<PreAddEdgeWithGroupContext> {
         Ok(context)
@@ -414,7 +416,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_edge_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddEdgeWithGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -422,7 +424,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_remove_edge(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreRemoveEdgeContext,
     ) -> GraphRecordResult<PreRemoveEdgeContext> {
         Ok(context)
@@ -430,7 +432,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_remove_edge(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostRemoveEdgeContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -438,7 +440,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_edges(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddEdgesContext,
     ) -> GraphRecordResult<PreAddEdgesContext> {
         Ok(context)
@@ -446,7 +448,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_edges(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddEdgesContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -454,7 +456,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_edges_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddEdgesWithGroupContext,
     ) -> GraphRecordResult<PreAddEdgesWithGroupContext> {
         Ok(context)
@@ -462,7 +464,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_edges_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddEdgesWithGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -470,7 +472,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_edges_dataframes(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddEdgesDataframesContext,
     ) -> GraphRecordResult<PreAddEdgesDataframesContext> {
         Ok(context)
@@ -478,7 +480,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_edges_dataframes(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddEdgesDataframesContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -486,7 +488,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_edges_dataframes_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddEdgesDataframesWithGroupContext,
     ) -> GraphRecordResult<PreAddEdgesDataframesWithGroupContext> {
         Ok(context)
@@ -494,7 +496,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_edges_dataframes_with_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddEdgesDataframesWithGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -502,7 +504,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddGroupContext,
     ) -> GraphRecordResult<PreAddGroupContext> {
         Ok(context)
@@ -510,7 +512,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -518,7 +520,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_remove_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreRemoveGroupContext,
     ) -> GraphRecordResult<PreRemoveGroupContext> {
         Ok(context)
@@ -526,7 +528,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_remove_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostRemoveGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -534,7 +536,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_node_to_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddNodeToGroupContext,
     ) -> GraphRecordResult<PreAddNodeToGroupContext> {
         Ok(context)
@@ -542,7 +544,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_node_to_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddNodeToGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -550,7 +552,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_add_edge_to_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreAddEdgeToGroupContext,
     ) -> GraphRecordResult<PreAddEdgeToGroupContext> {
         Ok(context)
@@ -558,7 +560,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_add_edge_to_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostAddEdgeToGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -566,7 +568,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_remove_node_from_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreRemoveNodeFromGroupContext,
     ) -> GraphRecordResult<PreRemoveNodeFromGroupContext> {
         Ok(context)
@@ -574,7 +576,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_remove_node_from_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostRemoveNodeFromGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
@@ -582,7 +584,7 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn pre_remove_edge_from_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PreRemoveEdgeFromGroupContext,
     ) -> GraphRecordResult<PreRemoveEdgeFromGroupContext> {
         Ok(context)
@@ -590,17 +592,17 @@ pub trait Plugin: Debug + Send + Sync {
 
     fn post_remove_edge_from_group(
         &self,
-        graphrecord: &mut GraphRecord,
+        graphrecord: &mut PluginGraphRecord,
         context: PostRemoveEdgeFromGroupContext,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
-    fn pre_clear(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
+    fn pre_clear(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Ok(())
     }
 
-    fn post_clear(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
+    fn post_clear(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Ok(())
     }
 }
