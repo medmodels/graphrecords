@@ -6,7 +6,7 @@ import typing
 from abc import ABC, abstractmethod
 from typing import Generic, TypeAlias, TypeVar
 
-from graphrecords._graphrecords import (
+from graphrecords._graphrecords.datatype import (
     PyAny,
     PyBool,
     PyDateTime,

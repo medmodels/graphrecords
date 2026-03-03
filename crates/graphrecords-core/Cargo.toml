@@ -25,6 +25,7 @@ serde = { workspace = true, optional = true }
 typetag = { workspace = true, optional = true }
 
 [features]
+plugins = []
 serde = ["dep:serde", "dep:typetag"]
 
 [lints]

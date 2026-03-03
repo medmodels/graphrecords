@@ -1,7 +1,7 @@
 import unittest
 
 import graphrecords as gr
-from graphrecords._graphrecords import (
+from graphrecords._graphrecords.datatype import (
     PyAny,
     PyBool,
     PyDateTime,

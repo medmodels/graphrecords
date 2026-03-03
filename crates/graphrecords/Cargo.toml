@@ -12,6 +12,7 @@ graphrecords-core = { workspace = true }
 graphrecords-utils = { workspace = true }
 
 [features]
+plugins = ["graphrecords-core/plugins"]
 serde = ["graphrecords-core/serde"]
 
 [lints]

@@ -7,7 +7,7 @@ import polars as pl
 import pytest
 
 from graphrecords import GraphRecord
-from graphrecords._graphrecords import PyGraphRecord
+from graphrecords._graphrecords.graphrecord import PyGraphRecord
 from graphrecords.builder import GraphRecordBuilder
 from graphrecords.datatype import Int
 from graphrecords.graphrecord import EdgesDirected
