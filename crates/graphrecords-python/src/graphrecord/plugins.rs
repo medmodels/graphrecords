@@ -3,7 +3,7 @@ use crate::{
     prelude::{PyAttributes, PyGraphRecord, PyGroup, PyNodeIndex, PySchema},
 };
 use graphrecords_core::{
-    GraphRecord,
+    PluginGraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
         EdgeDataFrameInput, EdgeIndex, NodeDataFrameInput,
@@ -35,7 +35,7 @@ macro_rules! impl_pre_hook {
     ($method:ident, $py_context_type:ident, $core_context_type:ident) => {
         fn $method(
             &self,
-            graphrecord: &mut GraphRecord,
+            graphrecord: &mut PluginGraphRecord,
             context: $core_context_type,
         ) -> GraphRecordResult<$core_context_type> {
             Python::attach(|py| {
@@ -59,7 +59,7 @@ macro_rules! impl_pre_hook {
 
 macro_rules! impl_post_hook {
     ($method:ident) => {
-        fn $method(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
+        fn $method(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
             Python::attach(|py| {
                 PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
                     self.0
@@ -74,7 +74,7 @@ macro_rules! impl_post_hook {
     ($method:ident, $py_context_type:ident, $core_context_type:ident) => {
         fn $method(
             &self,
-            graphrecord: &mut GraphRecord,
+            graphrecord: &mut PluginGraphRecord,
             context: $core_context_type,
         ) -> GraphRecordResult<()> {
             Python::attach(|py| {
@@ -2593,7 +2593,7 @@ impl PyPostRemoveEdgeFromGroupContext {
 
 #[typetag::serde]
 impl Plugin for PyPlugin {
-    fn initialize(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
+    fn initialize(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Python::attach(|py| {
             PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
                 self.0

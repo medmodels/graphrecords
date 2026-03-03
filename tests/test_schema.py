@@ -3,7 +3,7 @@ import unittest
 import pytest
 
 import graphrecords as gr
-from graphrecords._graphrecords import (
+from graphrecords._graphrecords.schema import (
     PyAttributeDataType,
     PyAttributeType,
     PyGroupSchema,
