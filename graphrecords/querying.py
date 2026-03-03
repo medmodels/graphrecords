@@ -7,7 +7,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, TypeAlias, Union
 
-from graphrecords._graphrecords import (
+from graphrecords._graphrecords.querying import (
     EdgeOperandGroupDiscriminator,
     NodeOperandGroupDiscriminator,
     PyEdgeAttributesTreeGroupOperand,

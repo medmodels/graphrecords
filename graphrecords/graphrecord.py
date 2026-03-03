@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from enum import Enum, auto
 from typing import (
+    TYPE_CHECKING,
     Callable,
     Dict,
     List,
@@ -25,7 +26,7 @@ from typing import (
 
 import polars as pl
 
-from graphrecords._graphrecords import PyEdgeOperand, PyGraphRecord, PyNodeOperand
+from graphrecords._graphrecords.graphrecord import PyGraphRecord
 from graphrecords.builder import GraphRecordBuilder
 from graphrecords.indexers import EdgeIndexer, NodeIndexer
 from graphrecords.overview import (
@@ -160,6 +161,9 @@ from graphrecords.types import (
     is_polars_node_dataframe_input,
     is_polars_node_dataframe_input_list,
 )
+
+if TYPE_CHECKING:
+    from graphrecords._graphrecords.querying import PyEdgeOperand, PyNodeOperand
 
 
 def process_nodes_dataframe(

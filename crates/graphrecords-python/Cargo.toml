@@ -23,5 +23,8 @@ typetag = { workspace = true }
 pyo3-polars = "0.26.0"
 rustc-hash = "2.1.1"
 
+[features]
+pyo3-bindings = []
+
 [lints]
 workspace = true

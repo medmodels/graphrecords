@@ -2,20 +2,20 @@
 
 from typing import TYPE_CHECKING, Dict, Final, Union
 
-from graphrecords._graphrecords import (
+from graphrecords._graphrecords.overview import (
     PY_DEFAULT_TRUNCATE_DETAILS,
-    PyAttributeType,
     PyEdgeGroupOverview,
     PyGroupOverview,
     PyNodeGroupOverview,
     PyOverview,
 )
+from graphrecords._graphrecords.schema import PyAttributeType
 from graphrecords.datatype import DataType
 from graphrecords.schema import AttributeType
 from graphrecords.types import GraphRecordAttribute
 
 if TYPE_CHECKING:
-    from graphrecords._graphrecords import PyAttributeOverview
+    from graphrecords._graphrecords.overview import PyAttributeOverview
     from graphrecords.types import (
         CategoricalAttributeOverview,
         ContinuousAttributeOverview,

@@ -242,8 +242,7 @@ impl PyGraphRecord {
             .map(|plugin| Box::new(PyPlugin::new(plugin)) as Box<dyn Plugin>)
             .collect();
 
-        let graphrecord =
-            GraphRecord::with_plugins(plugins).map_err(PyGraphRecordError::from)?;
+        let graphrecord = GraphRecord::with_plugins(plugins).map_err(PyGraphRecordError::from)?;
 
         Ok(graphrecord.into())
     }

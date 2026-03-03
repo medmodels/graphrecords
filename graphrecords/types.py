@@ -23,11 +23,9 @@ import polars as pl
 if TYPE_CHECKING:
     from typing_extensions import TypeIs
 
-    from graphrecords._graphrecords import (
-        PyAttributeType,
-        PyGraphRecord,
-        PyPreSetSchemaContext,
-    )
+    from graphrecords._graphrecords.graphrecord import PyGraphRecord
+    from graphrecords._graphrecords.plugins import PyPreSetSchemaContext
+    from graphrecords._graphrecords.schema import PyAttributeType
     from graphrecords.schema import AttributeType
 
 
