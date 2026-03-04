@@ -146,6 +146,7 @@ from graphrecords.types import (
     PandasDataFramesGroupExport,
     PandasEdgeDataFrameInput,
     PandasNodeDataFrameInput,
+    PluginName,
     PolarsDataFramesExport,
     PolarsDataFramesGroupExport,
     PolarsEdgeDataFrameInput,
@@ -325,11 +326,23 @@ class GraphRecord:
         return graphrecord
 
     @classmethod
-    def with_plugins(cls, plugins: List[Plugin]) -> GraphRecord:  # noqa: D102
+    def with_plugins(cls, plugins: Dict[PluginName, Plugin]) -> GraphRecord:
+        """Creates a GraphRecord instance with the specified plugins.
+
+        Args:
+            plugins (Dict[PluginName, Plugin]): A dictionary mapping plugin names to
+                plugin instances.
+
+        Returns:
+            GraphRecord: A new instance with the provided plugins.
+        """
         graphrecord = cls.__new__(cls)
 
         graphrecord._graphrecord = PyGraphRecord.with_plugins(
-            [_PluginBridge(plugin) for plugin in plugins]
+            {
+                plugin_name: _PluginBridge(plugin)
+                for plugin_name, plugin in plugins.items()
+            }
         )
 
         return graphrecord
@@ -501,6 +514,35 @@ class GraphRecord:
                 'groups' DataFrames.
         """
         return self._graphrecord.to_dataframes()
+
+    def add_plugin(self, name: PluginName, plugin: Plugin) -> None:
+        """Adds a plugin to the GraphRecord instance.
+
+        Args:
+            name (PluginName): The name of the plugin.
+            plugin (Plugin): The plugin instance to add.
+        """
+        self._graphrecord.add_plugin(name, _PluginBridge(plugin))
+
+    def remove_plugin(self, name: PluginName) -> None:
+        """Removes a plugin from the GraphRecord instance.
+
+        Args:
+            name (PluginName): The name of the plugin to remove.
+        """
+        self._graphrecord.remove_plugin(name)
+
+    @property
+    def plugins(self) -> List[PluginName]:
+        """Lists the plugins registered in the GraphRecord instance.
+
+        Returns a list of all plugin names currently registered with the GraphRecord
+        instance.
+
+        Returns:
+            List[PluginName]: A list of plugin names.
+        """
+        return self._graphrecord.plugins
 
     def get_schema(self) -> Schema:
         """Returns a copy of the GraphRecord's schema.

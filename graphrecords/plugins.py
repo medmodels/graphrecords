@@ -77,6 +77,9 @@ class _PluginBridge(PyPlugin):  # pyright: ignore[reportUnusedClass]
     def initialize(self, graphrecord: PyGraphRecord) -> None:
         self._plugin.initialize(self._graphrecord(graphrecord))
 
+    def finalize(self, graphrecord: PyGraphRecord) -> None:
+        self._plugin.finalize(self._graphrecord(graphrecord))
+
     def pre_set_schema(
         self, graphrecord: PyGraphRecord, context: PyPreSetSchemaContext
     ) -> PyPreSetSchemaContext:
@@ -1853,6 +1856,14 @@ class Plugin:
 
     def initialize(self, graphrecord: GraphRecord) -> None:
         """Called when the plugin is registered to a GraphRecord.
+
+        Args:
+            graphrecord (GraphRecord): The GraphRecord instance.
+        """
+        pass
+
+    def finalize(self, graphrecord: GraphRecord) -> None:
+        """Called when the plugin is unregistered from a GraphRecord.
 
         Args:
             graphrecord (GraphRecord): The GraphRecord instance.
