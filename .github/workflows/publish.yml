@@ -4,8 +4,13 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
 permissions:
   contents: write
+  actions: write
 
 env:
   PYTHON_VERSIONS_LONG: "python3.10 python3.11 python3.12 python3.13"
@@ -27,8 +32,10 @@ jobs:
     steps:
       - name: Check for release commit
         id: check
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          FIRST_LINE=$(echo "${{ github.event.head_commit.message }}" | head -1)
+          FIRST_LINE=$(echo "$COMMIT_MSG" | head -1)
 
           if echo "$FIRST_LINE" | grep -qE '^release\((rust|python)\): [0-9]+\.[0-9]+\.[0-9]+'; then
             TARGET=$(echo "$FIRST_LINE" | sed 's/release(\(.*\)):.*/\1/')
@@ -41,48 +48,8 @@ jobs:
             echo "is_release=false" >> "$GITHUB_OUTPUT"
           fi
 
-  create-tag:
-    needs: detect-release
-    if: needs.detect-release.outputs.is_release == 'true'
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Create and push tag
-        run: |
-          git tag "${{ needs.detect-release.outputs.tag }}"
-          git push origin "${{ needs.detect-release.outputs.tag }}"
-
-  extract-changelog:
-    needs: [detect-release, create-tag]
-    if: needs.detect-release.outputs.is_release == 'true'
-    runs-on: ubuntu-22.04
-    outputs:
-      changelog: ${{ steps.extract.outputs.changelog }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Extract changelog for version
-        id: extract
-        run: |
-          TARGET="${{ needs.detect-release.outputs.target }}"
-          VERSION="${{ needs.detect-release.outputs.version }}"
-          FILE="CHANGELOG-${TARGET}.md"
-
-          CHANGELOG=$(awk "/^## \[${VERSION}\]/{found=1; next} /^## \[/{if(found) exit} found{print}" "$FILE")
-
-          {
-            echo "changelog<<CHANGELOG_EOF"
-            echo "$CHANGELOG"
-            echo "CHANGELOG_EOF"
-          } >> "$GITHUB_OUTPUT"
-
   publish-rust:
-    needs: [detect-release, create-tag]
+    needs: detect-release
     if: needs.detect-release.outputs.target == 'rust'
     runs-on: ubuntu-22.04
 
@@ -119,18 +86,31 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   release-rust:
-    needs: [detect-release, extract-changelog, publish-rust]
+    needs: [detect-release, publish-rust]
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Create GitHub release
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Finalize GitHub release
+        id: release
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter-rust.yml
+          name: Rust ${{ needs.detect-release.outputs.version }}
+          tag: ${{ needs.detect-release.outputs.tag }}
+          version: ${{ needs.detect-release.outputs.version }}
+          commitish: ${{ github.sha }}
+          disable-autolabeler: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish GitHub release
+        run: gh release edit "$TAG" --draft=false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "${{ needs.detect-release.outputs.tag }}" \
-            --repo "${{ github.repository }}" \
-            --title "Rust ${{ needs.detect-release.outputs.version }}" \
-            --notes "${{ needs.extract-changelog.outputs.changelog }}"
+          TAG: ${{ steps.release.outputs.tag_name }}
 
   build-linux:
     needs: detect-release
@@ -279,7 +259,6 @@ jobs:
   publish-python:
     needs:
       - detect-release
-      - create-tag
       - build-linux
       - build-musllinux
       - build-windows
@@ -300,19 +279,47 @@ jobs:
           args: --non-interactive --skip-existing wheels-*/*
 
   release-python:
-    needs: [detect-release, extract-changelog, publish-python]
+    needs: [detect-release, publish-python]
     runs-on: ubuntu-22.04
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
 
-      - name: Create GitHub release
+      - name: Finalize GitHub release
+        id: release
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter-python.yml
+          name: Python ${{ needs.detect-release.outputs.version }}
+          tag: ${{ needs.detect-release.outputs.tag }}
+          version: ${{ needs.detect-release.outputs.version }}
+          commitish: ${{ github.sha }}
+          disable-autolabeler: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish GitHub release
+        run: gh release edit "$TAG" --draft=false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "${{ needs.detect-release.outputs.tag }}" \
-            --repo "${{ github.repository }}" \
-            --title "Python ${{ needs.detect-release.outputs.version }}" \
-            --notes "${{ needs.extract-changelog.outputs.changelog }}" \
-            wheels-*/*
+          TAG: ${{ steps.release.outputs.tag_name }}
+
+      - name: Upload wheels to release
+        run: gh release upload "$TAG" wheels-*/*
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+
+      - name: Trigger release workflows
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          event-type: python-release
+          client-payload: >
+            {
+              "version": "${{ needs.detect-release.outputs.version }}",
+              "tag": "${{ needs.detect-release.outputs.tag }}"
+            }
