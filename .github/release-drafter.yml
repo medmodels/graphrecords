@@ -1,0 +1,13 @@
+template: |
+  $CHANGES
+change-template: "- $TITLE (#$NUMBER)"
+change-title-escapes: '\<*_&@'
+no-changes-template: "No changes"
+category-template: "### $TITLE"
+
+exclude-labels:
+  - release
+
+replacers:
+  - search: '/- (feat|fix|refactor|docs|ci|chore|test|build|release)(\(.+?\))?!?:\s*/g'
+    replace: '- '

@@ -1,0 +1,29 @@
+_extends: graphrecords:.github/release-drafter.yml
+
+name-template: "Python $RESOLVED_VERSION"
+tag-template: "python-$RESOLVED_VERSION"
+tag-prefix: "python-"
+
+include-labels:
+  - python
+
+categories:
+  - title: Breaking Changes
+    labels: [breaking-python]
+  - title: Features
+    labels: [feat]
+  - title: Bug Fixes
+    labels: [fix]
+  - title: Refactoring
+    labels: [refactor]
+  - title: Documentation
+    labels: [docs]
+  - title: Testing
+    labels: [test]
+  - title: Build
+    labels: [build]
+
+version-resolver:
+  minor:
+    labels: [breaking-python]
+  default: patch
