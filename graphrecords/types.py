@@ -55,6 +55,9 @@ EdgeIndexInputList: TypeAlias = List[EdgeIndex]
 #: A type alias for a group.
 Group: TypeAlias = GraphRecordAttribute
 
+#: A type alias for a plugin name.
+PluginName: TypeAlias = GraphRecordAttribute
+
 #: A type alias for a list of groups.
 GroupInputList: TypeAlias = GraphRecordAttributeInputList
 
