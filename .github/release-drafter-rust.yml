@@ -1,0 +1,29 @@
+_extends: release-drafter.yml
+
+name-template: "Rust $RESOLVED_VERSION"
+tag-template: "rust-$RESOLVED_VERSION"
+tag-prefix: "rust-"
+
+include-labels:
+  - rust
+
+categories:
+  - title: Breaking Changes
+    labels: [breaking-rust]
+  - title: Features
+    labels: [feat]
+  - title: Bug Fixes
+    labels: [fix]
+  - title: Refactoring
+    labels: [refactor]
+  - title: Documentation
+    labels: [docs]
+  - title: Testing
+    labels: [test]
+  - title: Build
+    labels: [build]
+
+version-resolver:
+  minor:
+    labels: [breaking-rust]
+  default: patch

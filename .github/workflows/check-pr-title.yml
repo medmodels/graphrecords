@@ -33,7 +33,7 @@ jobs:
             python
           requireScope: false
 
-      - name: Label PR based on scope
+      - name: Label PR
         uses: actions/github-script@v7
         with:
           script: |
@@ -42,11 +42,15 @@ jobs:
 
             const typeMatch = title.match(/^(\w+)/);
             const scopeMatch = title.match(/^\w+\((\w+)\)/);
-            const isBreaking = /^\w+(\(\w+\))?!:/.test(title);
 
             const labelsToAdd = [];
-            const skipScopeTypes = ['ci', 'chore'];
+            const skipScopeTypes = ['ci', 'chore', 'release'];
             const type = typeMatch ? typeMatch[1] : '';
+
+            const changelogTypes = ['feat', 'fix', 'refactor', 'docs', 'test', 'build'];
+            if (changelogTypes.includes(type)) {
+              labelsToAdd.push(type);
+            }
 
             if (!skipScopeTypes.includes(type)) {
               if (scopeMatch) {
@@ -56,8 +60,8 @@ jobs:
               }
             }
 
-            if (isBreaking) {
-              labelsToAdd.push('breaking');
+            if (type === 'release') {
+              labelsToAdd.push('release');
             }
 
             if (labelsToAdd.length > 0) {
@@ -98,6 +102,18 @@ jobs:
           --workspace
           --exclude py-graphrecords
           --baseline-rev ${{ github.event.pull_request.base.sha }}
+
+      - name: Label breaking Rust changes
+        if: steps.semver.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: ['breaking-rust'],
+            });
 
       - name: Check breaking change disclosure
         if: steps.semver.outcome == 'failure'
@@ -159,6 +175,18 @@ jobs:
             echo "::warning::griffe check failed with exit code $EXIT_CODE (not a breaking change detection)"
             echo "result=error" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Label breaking Python changes
+        if: steps.griffe.outputs.result == 'breaking'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: ['breaking-python'],
+            });
 
       - name: Check breaking change disclosure
         if: steps.griffe.outputs.result == 'breaking'
