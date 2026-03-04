@@ -2593,6 +2593,10 @@ impl PyPostRemoveEdgeFromGroupContext {
 
 #[typetag::serde]
 impl Plugin for PyPlugin {
+    fn clone_box(&self) -> Box<dyn Plugin> {
+        Python::attach(|py| Box::new(Self(self.0.clone_ref(py))))
+    }
+
     fn initialize(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Python::attach(|py| {
             PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
@@ -2605,8 +2609,16 @@ impl Plugin for PyPlugin {
         })
     }
 
-    fn clone_box(&self) -> Box<dyn Plugin> {
-        Python::attach(|py| Box::new(Self(self.0.clone_ref(py))))
+    fn finalize(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
+        Python::attach(|py| {
+            PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
+                self.0
+                    .call_method1(py, "finalize", (graphrecord,))
+                    .map_err(|err| GraphRecordError::ConversionError(format!("{err}")))?;
+
+                Ok(())
+            })
+        })
     }
 
     impl_pre_hook!(pre_set_schema, PyPreSetSchemaContext, PreSetSchemaContext);
