@@ -1,0 +1,34 @@
+name: Release Drafter
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-drafter
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  draft-releases:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Draft Rust release
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter-rust.yml
+          disable-autolabeler: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Draft Python release
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter-python.yml
+          disable-autolabeler: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
