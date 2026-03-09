@@ -15,10 +15,11 @@ use super::{
     PreRemoveNodeFromGroupContext, PreSetSchemaContext,
 };
 use crate::{
-    errors::GraphRecordResult,
+    errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{EdgeDataFrameInput, GraphRecord, NodeDataFrameInput},
-    prelude::{Attributes, EdgeIndex, Group, NodeIndex, Schema},
+    prelude::{Attributes, EdgeIndex, GraphRecordAttribute, Group, NodeIndex, Schema},
 };
+use graphrecords_utils::aliases::GrHashMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
@@ -27,18 +28,20 @@ use std::{
     sync::Arc,
 };
 
+pub type PluginName = GraphRecordAttribute;
+
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PluginGraphRecord {
     graphrecord: GraphRecord,
-    plugins: Arc<Vec<Box<dyn Plugin>>>,
+    plugins: Arc<GrHashMap<PluginName, Box<dyn Plugin>>>,
 }
 
 impl Default for PluginGraphRecord {
     fn default() -> Self {
         Self {
             graphrecord: GraphRecord::default(),
-            plugins: Arc::new(Vec::new()),
+            plugins: Arc::new(GrHashMap::new()),
         }
     }
 }
@@ -73,7 +76,7 @@ impl From<GraphRecord> for PluginGraphRecord {
     fn from(graphrecord: GraphRecord) -> Self {
         Self {
             graphrecord,
-            plugins: Arc::new(Vec::new()),
+            plugins: Arc::new(GrHashMap::new()),
         }
     }
 }
@@ -85,7 +88,10 @@ impl From<PluginGraphRecord> for GraphRecord {
 }
 
 impl PluginGraphRecord {
-    pub fn new(graphrecord: GraphRecord, plugins: Vec<Box<dyn Plugin>>) -> GraphRecordResult<Self> {
+    pub fn new(
+        graphrecord: GraphRecord,
+        plugins: GrHashMap<PluginName, Box<dyn Plugin>>,
+    ) -> GraphRecordResult<Self> {
         let mut graphrecord = Self {
             graphrecord,
             plugins: Arc::new(plugins),
@@ -95,9 +101,47 @@ impl PluginGraphRecord {
 
         plugins
             .iter()
-            .try_for_each(|plugin| plugin.initialize(&mut graphrecord))?;
+            .try_for_each(|(_, plugin)| plugin.initialize(&mut graphrecord))?;
 
         Ok(graphrecord)
+    }
+
+    pub fn add_plugin(
+        &mut self,
+        name: PluginName,
+        plugin: Box<dyn Plugin>,
+    ) -> GraphRecordResult<()> {
+        if self.plugins.contains_key(&name) {
+            return Err(GraphRecordError::KeyError(format!(
+                "Plugin with name '{name}' already exists"
+            )));
+        }
+
+        plugin.initialize(self)?;
+
+        let plugins = Arc::make_mut(&mut self.plugins);
+
+        plugins.insert(name, plugin);
+
+        Ok(())
+    }
+
+    pub fn remove_plugin(&mut self, name: &PluginName) -> GraphRecordResult<()> {
+        let plugin = {
+            let plugins = Arc::make_mut(&mut self.plugins);
+
+            plugins.remove(name).ok_or_else(|| {
+                GraphRecordError::KeyError(format!("Plugin with name '{name}' does not exist"))
+            })?
+        };
+
+        plugin.finalize(self)?;
+
+        Ok(())
+    }
+
+    pub fn plugin_names(&self) -> impl Iterator<Item = &PluginName> {
+        self.plugins.keys()
     }
 
     pub fn set_schema(&mut self, schema: Schema) -> GraphRecordResult<()> {
@@ -106,7 +150,7 @@ impl PluginGraphRecord {
         let pre_context = PreSetSchemaContext { schema };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_set_schema(self, pre_context)
             })?;
 
@@ -114,20 +158,20 @@ impl PluginGraphRecord {
 
         plugins
             .iter()
-            .try_for_each(|plugin| plugin.post_set_schema(self))?;
+            .try_for_each(|(_, plugin)| plugin.post_set_schema(self))?;
 
         Ok(())
     }
 
     pub fn freeze_schema(&mut self) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
-        for plugin in plugins.iter() {
+        for (_, plugin) in plugins.iter() {
             plugin.pre_freeze_schema(self)?;
         }
 
         self.graphrecord.freeze_schema();
 
-        for plugin in plugins.iter() {
+        for (_, plugin) in plugins.iter() {
             plugin.post_freeze_schema(self)?;
         }
 
@@ -136,13 +180,13 @@ impl PluginGraphRecord {
 
     pub fn unfreeze_schema(&mut self) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
-        for plugin in plugins.iter() {
+        for (_, plugin) in plugins.iter() {
             plugin.pre_unfreeze_schema(self)?;
         }
 
         self.graphrecord.unfreeze_schema();
 
-        for plugin in plugins.iter() {
+        for (_, plugin) in plugins.iter() {
             plugin.post_unfreeze_schema(self)?;
         }
 
@@ -162,7 +206,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_node(self, pre_context)
             })?;
 
@@ -173,7 +217,7 @@ impl PluginGraphRecord {
 
         plugins
             .iter()
-            .try_for_each(|plugin| plugin.post_add_node(self, post_context.clone()))?;
+            .try_for_each(|(_, plugin)| plugin.post_add_node(self, post_context.clone()))?;
 
         Ok(())
     }
@@ -194,7 +238,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_node_with_group(self, pre_context)
             })?;
 
@@ -206,9 +250,9 @@ impl PluginGraphRecord {
 
         let post_context = PostAddNodeWithGroupContext { node_index, group };
 
-        plugins
-            .iter()
-            .try_for_each(|plugin| plugin.post_add_node_with_group(self, post_context.clone()))?;
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_node_with_group(self, post_context.clone())
+        })?;
 
         Ok(())
     }
@@ -221,7 +265,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_remove_node(self, pre_context)
             })?;
 
@@ -233,7 +277,7 @@ impl PluginGraphRecord {
 
         plugins
             .iter()
-            .try_for_each(|plugin| plugin.post_remove_node(self, post_context.clone()))?;
+            .try_for_each(|(_, plugin)| plugin.post_remove_node(self, post_context.clone()))?;
 
         Ok(attributes)
     }
@@ -244,7 +288,7 @@ impl PluginGraphRecord {
         let pre_context = PreAddNodesContext { nodes };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_nodes(self, pre_context)
             })?;
 
@@ -256,7 +300,7 @@ impl PluginGraphRecord {
 
         plugins
             .iter()
-            .try_for_each(|plugin| plugin.post_add_nodes(self, post_context.clone()))?;
+            .try_for_each(|(_, plugin)| plugin.post_add_nodes(self, post_context.clone()))?;
 
         Ok(())
     }
@@ -272,7 +316,7 @@ impl PluginGraphRecord {
         let pre_context = PreAddNodesWithGroupContext { nodes, group };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_nodes_with_group(self, pre_context)
             })?;
 
@@ -284,9 +328,9 @@ impl PluginGraphRecord {
             group: pre_context.group,
         };
 
-        plugins
-            .iter()
-            .try_for_each(|plugin| plugin.post_add_nodes_with_group(self, post_context.clone()))?;
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_nodes_with_group(self, post_context.clone())
+        })?;
 
         Ok(())
     }
@@ -302,7 +346,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_nodes_dataframes(self, pre_context)
             })?;
 
@@ -313,9 +357,9 @@ impl PluginGraphRecord {
             nodes_dataframes: pre_context.nodes_dataframes,
         };
 
-        plugins
-            .iter()
-            .try_for_each(|plugin| plugin.post_add_nodes_dataframes(self, post_context.clone()))?;
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_nodes_dataframes(self, post_context.clone())
+        })?;
 
         Ok(())
     }
@@ -333,7 +377,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_nodes_dataframes_with_group(self, pre_context)
             })?;
 
@@ -347,7 +391,7 @@ impl PluginGraphRecord {
             group: pre_context.group,
         };
 
-        plugins.iter().try_for_each(|plugin| {
+        plugins.iter().try_for_each(|(_, plugin)| {
             plugin.post_add_nodes_dataframes_with_group(self, post_context.clone())
         })?;
 
@@ -370,7 +414,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_edge(self, pre_context)
             })?;
 
@@ -384,7 +428,7 @@ impl PluginGraphRecord {
 
         plugins
             .iter()
-            .try_for_each(|plugin| plugin.post_add_edge(self, post_context.clone()))?;
+            .try_for_each(|(_, plugin)| plugin.post_add_edge(self, post_context.clone()))?;
 
         Ok(edge_index)
     }
@@ -407,7 +451,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_edge_with_group(self, pre_context)
             })?;
 
@@ -420,9 +464,9 @@ impl PluginGraphRecord {
 
         let post_context = PostAddEdgeWithGroupContext { edge_index };
 
-        plugins
-            .iter()
-            .try_for_each(|plugin| plugin.post_add_edge_with_group(self, post_context.clone()))?;
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_edge_with_group(self, post_context.clone())
+        })?;
 
         Ok(edge_index)
     }
@@ -435,7 +479,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_remove_edge(self, pre_context)
             })?;
 
@@ -447,7 +491,7 @@ impl PluginGraphRecord {
 
         plugins
             .iter()
-            .try_for_each(|plugin| plugin.post_remove_edge(self, post_context.clone()))?;
+            .try_for_each(|(_, plugin)| plugin.post_remove_edge(self, post_context.clone()))?;
 
         Ok(attributes)
     }
@@ -461,7 +505,7 @@ impl PluginGraphRecord {
         let pre_context = PreAddEdgesContext { edges };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_edges(self, pre_context)
             })?;
 
@@ -473,7 +517,7 @@ impl PluginGraphRecord {
 
         plugins
             .iter()
-            .try_for_each(|plugin| plugin.post_add_edges(self, post_context.clone()))?;
+            .try_for_each(|(_, plugin)| plugin.post_add_edges(self, post_context.clone()))?;
 
         Ok(edge_indices)
     }
@@ -491,7 +535,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_edges_with_group(self, pre_context)
             })?;
 
@@ -503,9 +547,9 @@ impl PluginGraphRecord {
             edge_indices: edge_indices.clone(),
         };
 
-        plugins
-            .iter()
-            .try_for_each(|plugin| plugin.post_add_edges_with_group(self, post_context.clone()))?;
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_edges_with_group(self, post_context.clone())
+        })?;
 
         Ok(edge_indices)
     }
@@ -521,7 +565,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_edges_dataframes(self, pre_context)
             })?;
 
@@ -533,9 +577,9 @@ impl PluginGraphRecord {
             edges_dataframes: pre_context.edges_dataframes,
         };
 
-        plugins
-            .iter()
-            .try_for_each(|plugin| plugin.post_add_edges_dataframes(self, post_context.clone()))?;
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_edges_dataframes(self, post_context.clone())
+        })?;
 
         Ok(edge_indices)
     }
@@ -553,7 +597,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_edges_dataframes_with_group(self, pre_context)
             })?;
 
@@ -567,7 +611,7 @@ impl PluginGraphRecord {
             group: pre_context.group,
         };
 
-        plugins.iter().try_for_each(|plugin| {
+        plugins.iter().try_for_each(|(_, plugin)| {
             plugin.post_add_edges_dataframes_with_group(self, post_context.clone())
         })?;
 
@@ -589,7 +633,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_group(self, pre_context)
             })?;
 
@@ -607,7 +651,7 @@ impl PluginGraphRecord {
 
         plugins
             .iter()
-            .try_for_each(|plugin| plugin.post_add_group(self, post_context.clone()))?;
+            .try_for_each(|(_, plugin)| plugin.post_add_group(self, post_context.clone()))?;
 
         Ok(())
     }
@@ -620,7 +664,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_remove_group(self, pre_context)
             })?;
 
@@ -632,7 +676,7 @@ impl PluginGraphRecord {
 
         plugins
             .iter()
-            .try_for_each(|plugin| plugin.post_remove_group(self, post_context.clone()))?;
+            .try_for_each(|(_, plugin)| plugin.post_remove_group(self, post_context.clone()))?;
 
         Ok(())
     }
@@ -647,7 +691,7 @@ impl PluginGraphRecord {
         let pre_context = PreAddNodeToGroupContext { group, node_index };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_node_to_group(self, pre_context)
             })?;
 
@@ -659,9 +703,9 @@ impl PluginGraphRecord {
             node_index: pre_context.node_index,
         };
 
-        plugins
-            .iter()
-            .try_for_each(|plugin| plugin.post_add_node_to_group(self, post_context.clone()))?;
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_node_to_group(self, post_context.clone())
+        })?;
 
         Ok(())
     }
@@ -676,7 +720,7 @@ impl PluginGraphRecord {
         let pre_context = PreAddEdgeToGroupContext { group, edge_index };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_add_edge_to_group(self, pre_context)
             })?;
 
@@ -688,9 +732,9 @@ impl PluginGraphRecord {
             edge_index: pre_context.edge_index,
         };
 
-        plugins
-            .iter()
-            .try_for_each(|plugin| plugin.post_add_edge_to_group(self, post_context.clone()))?;
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_edge_to_group(self, post_context.clone())
+        })?;
 
         Ok(())
     }
@@ -708,7 +752,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_remove_node_from_group(self, pre_context)
             })?;
 
@@ -720,7 +764,7 @@ impl PluginGraphRecord {
             node_index: pre_context.node_index,
         };
 
-        plugins.iter().try_for_each(|plugin| {
+        plugins.iter().try_for_each(|(_, plugin)| {
             plugin.post_remove_node_from_group(self, post_context.clone())
         })?;
 
@@ -740,7 +784,7 @@ impl PluginGraphRecord {
         };
         let pre_context = plugins
             .iter()
-            .try_fold(pre_context, |pre_context, plugin| {
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
                 plugin.pre_remove_edge_from_group(self, pre_context)
             })?;
 
@@ -752,7 +796,7 @@ impl PluginGraphRecord {
             edge_index: pre_context.edge_index,
         };
 
-        plugins.iter().try_for_each(|plugin| {
+        plugins.iter().try_for_each(|(_, plugin)| {
             plugin.post_remove_edge_from_group(self, post_context.clone())
         })?;
 
@@ -762,13 +806,13 @@ impl PluginGraphRecord {
     pub fn clear(&mut self) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
 
-        for plugin in plugins.iter() {
+        for (_, plugin) in plugins.iter() {
             plugin.pre_clear(self)?;
         }
 
         self.graphrecord.clear();
 
-        for plugin in plugins.iter() {
+        for (_, plugin) in plugins.iter() {
             plugin.post_clear(self)?;
         }
 
