@@ -308,6 +308,9 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_remove_edge_from_group")
 
+    def finalize(self, graphrecord: GraphRecord) -> None:
+        self.calls.append("finalize")
+
     def pre_clear(self, graphrecord: GraphRecord) -> None:
         self.calls.append("pre_clear")
 
@@ -953,6 +956,7 @@ class TestPluginBaseDefaults(unittest.TestCase):
         graphrecord = GraphRecord()
 
         plugin.initialize(graphrecord)
+        plugin.finalize(graphrecord)
 
         schema_context = PreSetSchemaContext(Schema())
         assert plugin.pre_set_schema(graphrecord, schema_context) is schema_context
@@ -1120,13 +1124,13 @@ class TestPluginHooksFiring(unittest.TestCase):
     def test_initialize_fires(self) -> None:
         plugin = RecordingPlugin()
 
-        GraphRecord.with_plugins([plugin])
+        GraphRecord.with_plugins({"recorder": plugin})
 
         assert "initialize" in plugin.calls
 
     def test_set_schema_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         plugin.calls.clear()
 
         graphrecord.set_schema(Schema())
@@ -1135,7 +1139,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_freeze_schema_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         plugin.calls.clear()
 
         graphrecord.freeze_schema()
@@ -1144,7 +1148,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_unfreeze_schema_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.freeze_schema()
         plugin.calls.clear()
 
@@ -1154,7 +1158,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_nodes_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         plugin.calls.clear()
 
         graphrecord.add_nodes([("a", {"x": 1})])
@@ -1164,7 +1168,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_nodes_with_group_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_group("g")
         plugin.calls.clear()
 
@@ -1175,7 +1179,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_nodes_polars_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         plugin.calls.clear()
 
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
@@ -1186,7 +1190,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_nodes_polars_with_group_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_group("g")
         plugin.calls.clear()
 
@@ -1198,7 +1202,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_remove_node_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {})])
         plugin.calls.clear()
 
@@ -1209,7 +1213,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_edges_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {}), ("b", {})])
         plugin.calls.clear()
 
@@ -1220,7 +1224,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_edges_with_group_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {}), ("b", {})])
         graphrecord.add_group("g", ["a", "b"])
         plugin.calls.clear()
@@ -1232,7 +1236,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_edges_polars_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {}), ("b", {})])
         plugin.calls.clear()
 
@@ -1244,7 +1248,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_edges_polars_with_group_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {}), ("b", {})])
         graphrecord.add_group("g", ["a", "b"])
         plugin.calls.clear()
@@ -1257,7 +1261,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_remove_edge_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {}), ("b", {})])
         graphrecord.add_edges([("a", "b", {})])
         plugin.calls.clear()
@@ -1269,7 +1273,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_group_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         plugin.calls.clear()
 
         graphrecord.add_group("g")
@@ -1279,7 +1283,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_remove_group_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_group("g")
         plugin.calls.clear()
 
@@ -1290,7 +1294,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_node_to_group_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {})])
         graphrecord.add_group("g")
         plugin.calls.clear()
@@ -1302,7 +1306,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_add_edge_to_group_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {}), ("b", {})])
         edge_indices = graphrecord.add_edges([("a", "b", {})])
         graphrecord.add_group("g")
@@ -1315,7 +1319,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_remove_node_from_group_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {})])
         graphrecord.add_group("g", ["a"])
         plugin.calls.clear()
@@ -1327,7 +1331,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_remove_edge_from_group_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {}), ("b", {})])
         edge_indices = graphrecord.add_edges([("a", "b", {})])
         graphrecord.add_group("g", edges=edge_indices)
@@ -1340,7 +1344,7 @@ class TestPluginHooksFiring(unittest.TestCase):
 
     def test_clear_hooks(self) -> None:
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([plugin])
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {})])
         plugin.calls.clear()
 
@@ -1357,7 +1361,7 @@ class TestContextModification(unittest.TestCase):
             ) -> PreAddNodesContext:
                 return PreAddNodesContext([("replaced", {"k": 99})])
 
-        graphrecord = GraphRecord.with_plugins([RewritePlugin()])
+        graphrecord = GraphRecord.with_plugins({"rewrite": RewritePlugin()})
         graphrecord.add_nodes([("original", {"k": 1})])
 
         assert "replaced" in graphrecord.nodes
@@ -1370,7 +1374,7 @@ class TestContextModification(unittest.TestCase):
             ) -> PreAddEdgesContext:
                 return PreAddEdgesContext([("a", "c", {})])
 
-        graphrecord = GraphRecord.with_plugins([RedirectPlugin()])
+        graphrecord = GraphRecord.with_plugins({"redirect": RedirectPlugin()})
         graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})])
         graphrecord.add_edges([("a", "b", {})])
 
@@ -1383,7 +1387,7 @@ class TestMultiplePlugins(unittest.TestCase):
     def test_both_plugins_receive_hooks(self) -> None:
         first = RecordingPlugin()
         second = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins([first, second])
+        graphrecord = GraphRecord.with_plugins({"first": first, "second": second})
         first.calls.clear()
         second.calls.clear()
 
@@ -1401,7 +1405,7 @@ class TestMultiplePlugins(unittest.TestCase):
             ) -> PreAddNodesContext:
                 return PreAddNodesContext([*context.nodes, ("extra", {})])
 
-        graphrecord = GraphRecord.with_plugins([AppendPlugin()])
+        graphrecord = GraphRecord.with_plugins({"append": AppendPlugin()})
         graphrecord.add_nodes([("a", {})])
 
         assert "a" in graphrecord.nodes
@@ -1488,6 +1492,15 @@ class TestPluginBridgeSingularHooks(unittest.TestCase):
         bridge.post_add_edge_with_group(graphrecord._graphrecord, context._py_context)
 
         assert "post_add_edge_with_group" in plugin.calls
+
+    def test_finalize_bridge(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord()
+        bridge = _PluginBridge(plugin)
+
+        bridge.finalize(graphrecord._graphrecord)
+
+        assert "finalize" in plugin.calls
 
 
 if __name__ == "__main__":

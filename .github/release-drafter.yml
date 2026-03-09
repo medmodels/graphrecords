@@ -10,4 +10,4 @@ exclude-labels:
 
 replacers:
   - search: '/- (feat|fix|refactor|docs|ci|chore|test|build|release)(\(.+?\))?!?:\s*/g'
-    replace: '- '
+    replace: "- "

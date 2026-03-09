@@ -5,7 +5,7 @@ use crate::{
     graphrecord::{EdgeDataFrameInput, NodeDataFrameInput},
     prelude::{Attributes, EdgeIndex, Group, NodeIndex, Schema},
 };
-pub use graphrecord::PluginGraphRecord;
+pub use graphrecord::{PluginGraphRecord, PluginName};
 use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
@@ -244,11 +244,15 @@ pub struct PostRemoveEdgeFromGroupContext {
 #[cfg_attr(feature = "serde", typetag::serde(tag = "type"))]
 #[allow(unused_variables)]
 pub trait Plugin: Debug + Send + Sync {
+    fn clone_box(&self) -> Box<dyn Plugin>;
+
     fn initialize(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
         Ok(())
     }
 
-    fn clone_box(&self) -> Box<dyn Plugin>;
+    fn finalize(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
+        Ok(())
+    }
 
     fn pre_set_schema(
         &self,
