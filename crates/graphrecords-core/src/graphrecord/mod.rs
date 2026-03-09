@@ -15,6 +15,8 @@ pub use self::{
     group_mapping::Group,
 };
 use crate::errors::GraphRecordResult;
+#[cfg(feature = "plugins")]
+use crate::graphrecord::plugins::PluginName;
 use crate::{
     errors::GraphRecordError,
     graphrecord::{
@@ -25,6 +27,8 @@ use crate::{
 };
 use ::polars::frame::DataFrame;
 use graph::Graph;
+#[cfg(feature = "plugins")]
+use graphrecords_utils::aliases::GrHashMap;
 use graphrecords_utils::aliases::GrHashSet;
 use group_mapping::GroupMapping;
 #[cfg(feature = "plugins")]
@@ -175,7 +179,7 @@ impl GraphRecord {
 
     #[cfg(feature = "plugins")]
     pub fn with_plugins(
-        plugins: Vec<Box<dyn plugins::Plugin>>,
+        plugins: GrHashMap<PluginName, Box<dyn plugins::Plugin>>,
     ) -> GraphRecordResult<PluginGraphRecord> {
         PluginGraphRecord::new(Self::default(), plugins)
     }

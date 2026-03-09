@@ -47,6 +47,7 @@ use value::PyGraphRecordValue;
 
 pub type PyAttributes = HashMap<PyGraphRecordAttribute, PyGraphRecordValue>;
 pub type PyGroup = PyGraphRecordAttribute;
+pub type PyPluginName = PyGraphRecordAttribute;
 pub type PyNodeIndex = PyGraphRecordAttribute;
 pub type PyEdgeIndex = EdgeIndex;
 type Lut<T> = ConversionLut<usize, fn(&Bound<'_, PyAny>) -> PyResult<T>>;
@@ -236,10 +237,15 @@ impl PyGraphRecord {
     }
 
     #[staticmethod]
-    pub fn with_plugins(plugins: Vec<Py<PyAny>>) -> PyResult<Self> {
+    pub fn with_plugins(plugins: HashMap<PyPluginName, Py<PyAny>>) -> PyResult<Self> {
         let plugins = plugins
             .into_iter()
-            .map(|plugin| Box::new(PyPlugin::new(plugin)) as Box<dyn Plugin>)
+            .map(|(name, plugin)| {
+                (
+                    name.into(),
+                    Box::new(PyPlugin::new(plugin)) as Box<dyn Plugin>,
+                )
+            })
             .collect();
 
         let graphrecord = GraphRecord::with_plugins(plugins).map_err(PyGraphRecordError::from)?;
@@ -342,6 +348,36 @@ impl PyGraphRecord {
             .expect("Setting item must succeed");
 
         Ok(outer_dict.into())
+    }
+
+    pub fn add_plugin(&self, name: PyPluginName, plugin: Py<PyAny>) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
+        graphrecord
+            .add_plugin(name.into(), Box::new(PyPlugin::new(plugin)))
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(())
+    }
+
+    pub fn remove_plugin(&self, name: PyPluginName) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+
+        graphrecord
+            .remove_plugin(&name.into())
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(())
+    }
+
+    #[getter]
+    pub fn plugins(&self) -> PyResult<Vec<PyPluginName>> {
+        Ok(self
+            .inner()?
+            .plugin_names()
+            .cloned()
+            .map(|plugin_name| plugin_name.into())
+            .collect())
     }
 
     pub fn get_schema(&self) -> PyResult<PySchema> {

@@ -2400,14 +2400,14 @@ class TestGraphRecord(unittest.TestCase):
 
 class TestGraphRecordPlugins(unittest.TestCase):
     def test_with_plugins_single(self) -> None:
-        graphrecord = GraphRecord.with_plugins([Plugin()])
+        graphrecord = GraphRecord.with_plugins({"noop": Plugin()})
 
         graphrecord.add_nodes([("a", {})])
 
         assert "a" in graphrecord.nodes
 
     def test_with_plugins_list(self) -> None:
-        graphrecord = GraphRecord.with_plugins([Plugin()])
+        graphrecord = GraphRecord.with_plugins({"noop": Plugin()})
 
         graphrecord.add_nodes([("a", {})])
 
@@ -2428,7 +2428,7 @@ class TestGraphRecordPlugins(unittest.TestCase):
             ) -> None:
                 calls.append("post")
 
-        graphrecord = GraphRecord.with_plugins([TrackingPlugin()])
+        graphrecord = GraphRecord.with_plugins({"tracker": TrackingPlugin()})
         graphrecord.add_nodes([("a", {})])
 
         assert calls == ["pre", "post"]
@@ -2444,7 +2444,7 @@ class TestGraphRecordPlugins(unittest.TestCase):
             def post_clear(self, graphrecord: GraphRecord) -> None:
                 calls.append("post_clear")
 
-        graphrecord = GraphRecord.with_plugins([TrackingPlugin()])
+        graphrecord = GraphRecord.with_plugins({"tracker": TrackingPlugin()})
         graphrecord.add_nodes([("a", {})])
         graphrecord.clear()
 
@@ -2465,7 +2465,7 @@ class TestGraphRecordPlugins(unittest.TestCase):
                     raise RuntimeError(msg)
                 return context
 
-        graphrecord = GraphRecord.with_plugins([FailOncePlugin()])
+        graphrecord = GraphRecord.with_plugins({"fail_once": FailOncePlugin()})
 
         with pytest.raises(RuntimeError, match="boom"):
             graphrecord.add_nodes([("a", {})])
@@ -2485,12 +2485,161 @@ class TestGraphRecordPlugins(unittest.TestCase):
                     msg = "boom"
                     raise RuntimeError(msg)
 
-        graphrecord = GraphRecord.with_plugins([FailOncePlugin()])
+        graphrecord = GraphRecord.with_plugins({"fail_once": FailOncePlugin()})
 
         with pytest.raises(RuntimeError, match="boom"):
             graphrecord.clear()
 
         graphrecord.clear()
+
+    def test_plugins_empty_by_default(self) -> None:
+        graphrecord = GraphRecord()
+
+        assert graphrecord.plugins == []
+
+    def test_with_plugins_returns_plugin_names(self) -> None:
+        graphrecord = GraphRecord.with_plugins({"noop": Plugin()})
+
+        assert graphrecord.plugins == ["noop"]
+
+    def test_with_plugins_returns_all_names(self) -> None:
+        graphrecord = GraphRecord.with_plugins({"first": Plugin(), "second": Plugin()})
+
+        assert sorted(graphrecord.plugins) == ["first", "second"]
+
+    def test_add_plugin(self) -> None:
+        graphrecord = GraphRecord()
+
+        graphrecord.add_plugin("noop", Plugin())
+
+        assert graphrecord.plugins == ["noop"]
+
+    def test_add_plugin_fires_initialize(self) -> None:
+        calls: List[str] = []
+
+        class TrackingPlugin(Plugin):
+            def initialize(self, graphrecord: GraphRecord) -> None:
+                calls.append("initialize")
+
+        graphrecord = GraphRecord()
+        graphrecord.add_plugin("tracker", TrackingPlugin())
+
+        assert "initialize" in calls
+
+    def test_add_plugin_hooks_fire_after_registration(self) -> None:
+        calls: List[str] = []
+
+        class TrackingPlugin(Plugin):
+            def pre_add_nodes(
+                self, graphrecord: GraphRecord, context: PreAddNodesContext
+            ) -> PreAddNodesContext:
+                calls.append("pre_add_nodes")
+                return context
+
+            def post_add_nodes(
+                self, graphrecord: GraphRecord, context: PostAddNodesContext
+            ) -> None:
+                calls.append("post_add_nodes")
+
+        graphrecord = GraphRecord()
+        graphrecord.add_plugin("tracker", TrackingPlugin())
+        graphrecord.add_nodes([("a", {})])
+
+        assert "pre_add_nodes" in calls
+        assert "post_add_nodes" in calls
+
+    def test_add_multiple_plugins_sequentially(self) -> None:
+        graphrecord = GraphRecord()
+
+        graphrecord.add_plugin("first", Plugin())
+        graphrecord.add_plugin("second", Plugin())
+
+        assert sorted(graphrecord.plugins) == ["first", "second"]
+
+    def test_add_plugin_to_graphrecord_with_existing_plugins(self) -> None:
+        graphrecord = GraphRecord.with_plugins({"first": Plugin()})
+
+        graphrecord.add_plugin("second", Plugin())
+
+        assert sorted(graphrecord.plugins) == ["first", "second"]
+
+    def test_remove_plugin(self) -> None:
+        graphrecord = GraphRecord.with_plugins({"noop": Plugin()})
+
+        graphrecord.remove_plugin("noop")
+
+        assert graphrecord.plugins == []
+
+    def test_remove_plugin_fires_finalize(self) -> None:
+        calls: List[str] = []
+
+        class TrackingPlugin(Plugin):
+            def finalize(self, graphrecord: GraphRecord) -> None:
+                calls.append("finalize")
+
+        graphrecord = GraphRecord.with_plugins({"tracker": TrackingPlugin()})
+
+        graphrecord.remove_plugin("tracker")
+
+        assert "finalize" in calls
+
+    def test_remove_plugin_stops_hooks(self) -> None:
+        calls: List[str] = []
+
+        class TrackingPlugin(Plugin):
+            def pre_add_nodes(
+                self, graphrecord: GraphRecord, context: PreAddNodesContext
+            ) -> PreAddNodesContext:
+                calls.append("pre_add_nodes")
+                return context
+
+        graphrecord = GraphRecord.with_plugins({"tracker": TrackingPlugin()})
+        graphrecord.add_nodes([("a", {})])
+        assert "pre_add_nodes" in calls
+
+        graphrecord.remove_plugin("tracker")
+        calls.clear()
+
+        graphrecord.add_nodes([("b", {})])
+
+        assert calls == []
+
+    def test_remove_one_of_multiple_plugins(self) -> None:
+        graphrecord = GraphRecord.with_plugins({"first": Plugin(), "second": Plugin()})
+
+        graphrecord.remove_plugin("first")
+
+        assert graphrecord.plugins == ["second"]
+
+    def test_add_then_remove_plugin(self) -> None:
+        calls: List[str] = []
+
+        class TrackingPlugin(Plugin):
+            def finalize(self, graphrecord: GraphRecord) -> None:
+                calls.append("finalize")
+
+        graphrecord = GraphRecord()
+        graphrecord.add_plugin("tracker", TrackingPlugin())
+
+        graphrecord.remove_plugin("tracker")
+
+        assert graphrecord.plugins == []
+        assert "finalize" in calls
+
+    def test_finalize_receives_graphrecord(self) -> None:
+        received_node_count = None
+
+        class InspectingPlugin(Plugin):
+            def finalize(self, graphrecord: GraphRecord) -> None:
+                nonlocal received_node_count
+                received_node_count = graphrecord.node_count()
+
+        graphrecord = GraphRecord.with_plugins({"inspector": InspectingPlugin()})
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+
+        graphrecord.remove_plugin("inspector")
+
+        assert received_node_count == 2
 
 
 if __name__ == "__main__":
