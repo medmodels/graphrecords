@@ -13,25 +13,13 @@ from graphrecords.types import (
     NodeTuple,
     PandasEdgeDataFrameInput,
     PandasNodeDataFrameInput,
+    PluginName,
     PolarsEdgeDataFrameInput,
     PolarsNodeDataFrameInput,
-    is_edge_tuple,
-    is_edge_tuple_list,
-    is_node_tuple,
-    is_node_tuple_list,
-    is_pandas_edge_dataframe_input,
-    is_pandas_edge_dataframe_input_list,
-    is_pandas_node_dataframe_input,
-    is_pandas_node_dataframe_input_list,
-    is_polars_edge_dataframe_input,
-    is_polars_edge_dataframe_input_list,
-    is_polars_node_dataframe_input,
-    is_polars_node_dataframe_input_list,
 )
 
 if TYPE_CHECKING:
-    from typing_extensions import TypeIs
-
+    from graphrecords.plugins import Plugin
     from graphrecords.schema import Schema
 
 NodeInputBuilder = Union[
@@ -43,26 +31,6 @@ NodeInputBuilder = Union[
     List[PolarsNodeDataFrameInput],
 ]
 
-
-def is_node_input_builder(value: object) -> TypeIs[NodeInputBuilder]:
-    """Check if a value is a valid node input.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[NodeInput]: True if the value is a valid node input, otherwise False.
-    """
-    return (
-        is_node_tuple(value)
-        or is_node_tuple_list(value)
-        or is_pandas_node_dataframe_input(value)
-        or is_pandas_node_dataframe_input_list(value)
-        or is_polars_node_dataframe_input(value)
-        or is_polars_node_dataframe_input_list(value)
-    )
-
-
 EdgeInputBuilder = Union[
     EdgeTuple,
     List[EdgeTuple],
@@ -72,28 +40,9 @@ EdgeInputBuilder = Union[
     List[PolarsEdgeDataFrameInput],
 ]
 
-
-def is_edge_input_builder(value: object) -> TypeIs[EdgeInputBuilder]:
-    """Check if a value is a valid edge input.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[EdgeInput]: True if the value is a valid edge input, otherwise False.
-    """
-    return (
-        is_edge_tuple(value)
-        or is_edge_tuple_list(value)
-        or is_pandas_edge_dataframe_input(value)
-        or is_pandas_edge_dataframe_input_list(value)
-        or is_polars_edge_dataframe_input(value)
-        or is_polars_edge_dataframe_input_list(value)
-    )
-
-
-NodeInputWithGroup = Tuple[NodeInputBuilder, Group]
-EdgeInputWithGroup = Tuple[EdgeInputBuilder, Group]
+StoredNode = Tuple[NodeInputBuilder, Optional[Group], bool]
+StoredEdge = Tuple[EdgeInputBuilder, Optional[Group], bool]
+StoredGroup = Tuple[GroupInfo, bool]
 
 
 class GraphRecordBuilder:
@@ -103,10 +52,11 @@ class GraphRecordBuilder:
     specifying a schema.
     """
 
-    _nodes: List[Union[NodeInputBuilder, NodeInputWithGroup]]
-    _edges: List[Union[EdgeInputBuilder, EdgeInputWithGroup]]
-    _groups: Dict[Group, GroupInfo]
-    _schema: Optional[Schema]
+    _nodes: List[StoredNode]
+    _edges: List[StoredEdge]
+    _groups: Dict[Group, StoredGroup]
+    _schema: Optional[Tuple[Schema, bool]]
+    _plugins: Dict[PluginName, Plugin]
 
     def __init__(self) -> None:
         """Initializes a new GraphRecordBuilder instance."""
@@ -114,27 +64,27 @@ class GraphRecordBuilder:
         self._edges = []
         self._groups = {}
         self._schema = None
+        self._plugins = {}
 
     def add_nodes(
         self,
         nodes: NodeInputBuilder,
         *,
         group: Optional[Group] = None,
+        bypass_plugins: bool = False,
     ) -> GraphRecordBuilder:
         """Adds nodes to the builder.
 
         Args:
             nodes (NodeInput): Nodes to add.
             group (Optional[Group], optional): Group to associate with the nodes.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
 
         Returns:
             GraphRecordBuilder: The current instance of the builder.
         """
-        if group is not None:
-            self._nodes.append((nodes, group))
-        else:
-            self._nodes.append(nodes)
-
+        self._nodes.append((nodes, group, bypass_plugins))
         return self
 
     def add_edges(
@@ -142,51 +92,107 @@ class GraphRecordBuilder:
         edges: EdgeInputBuilder,
         *,
         group: Optional[Group] = None,
+        bypass_plugins: bool = False,
     ) -> GraphRecordBuilder:
         """Adds edges to the builder.
 
         Args:
             edges (EdgeInput): Edges to add.
             group (Optional[Group], optional): Group to associate with the edges.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
 
         Returns:
             GraphRecordBuilder: The current instance of the builder.
         """
-        if group is not None:
-            self._edges.append((edges, group))
-        else:
-            self._edges.append(edges)
-
+        self._edges.append((edges, group, bypass_plugins))
         return self
 
     def add_group(
-        self, group: Group, *, nodes: Optional[List[NodeIndex]] = None
+        self,
+        group: Group,
+        *,
+        nodes: Optional[List[NodeIndex]] = None,
+        bypass_plugins: bool = False,
     ) -> GraphRecordBuilder:
         """Adds a group to the builder with an optional list of nodes.
 
         Args:
             group (Group): The name of the group to add.
             nodes (List[NodeIndex], optional): Node indices to add to the group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
 
         Returns:
             GraphRecordBuilder: The current instance of the builder.
         """
         if nodes is None:
             nodes = []
-        self._groups[group] = {"nodes": nodes, "edges": []}
+        self._groups[group] = ({"nodes": nodes, "edges": []}, bypass_plugins)
         return self
 
-    def with_schema(self, schema: Schema) -> GraphRecordBuilder:
+    def with_schema(
+        self, schema: Schema, *, bypass_plugins: bool = False
+    ) -> GraphRecordBuilder:
         """Specifies a schema for the GraphRecord.
 
         Args:
             schema (Schema): The schema to apply.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
 
         Returns:
             GraphRecordBuilder: The current instance of the builder.
         """
-        self._schema = schema
+        self._schema = (schema, bypass_plugins)
         return self
+
+    def with_plugins(self, plugins: Dict[PluginName, Plugin]) -> GraphRecordBuilder:
+        """Specifies plugins for the GraphRecord.
+
+        Args:
+            plugins (Dict[PluginName, Plugin]): A dictionary mapping plugin names
+                to plugin instances.
+
+        Returns:
+            GraphRecordBuilder: The current instance of the builder.
+        """
+        self._plugins.update(plugins)
+        return self
+
+    def add_plugin(self, name: PluginName, plugin: Plugin) -> GraphRecordBuilder:
+        """Adds a plugin to the builder.
+
+        Args:
+            name (PluginName): The name of the plugin.
+            plugin (Plugin): The plugin instance to add.
+
+        Returns:
+            GraphRecordBuilder: The current instance of the builder.
+        """
+        self._plugins[name] = plugin
+        return self
+
+    def _build_group(
+        self,
+        graphrecord: gr.GraphRecord,
+        group_name: Group,
+        group_info: GroupInfo,
+        *,
+        bypass_plugins: bool,
+    ) -> None:
+        nodes = group_info["nodes"]
+
+        if not graphrecord.contains_group(group_name):
+            graphrecord.add_group(group_name, nodes, bypass_plugins=bypass_plugins)
+            return
+
+        existing_nodes = graphrecord.nodes_in_group(group_name)
+        missing_nodes = [node for node in nodes if node not in existing_nodes]
+        if missing_nodes:
+            graphrecord.add_nodes_to_group(
+                group_name, missing_nodes, bypass_plugins=bypass_plugins
+            )
 
     def build(self) -> gr.GraphRecord:
         """Constructs a GraphRecord instance from the builder's configuration.
@@ -194,34 +200,27 @@ class GraphRecordBuilder:
         Returns:
             GraphRecord: The constructed GraphRecord instance.
         """
-        graphrecord = gr.GraphRecord()
+        if self._plugins:
+            graphrecord = gr.GraphRecord.with_plugins(self._plugins)
+        else:
+            graphrecord = gr.GraphRecord()
 
-        for node in self._nodes:
-            if is_node_input_builder(node):
-                graphrecord.add_nodes(node)
-                continue
+        for nodes, group, bypass_plugins in self._nodes:
+            graphrecord.add_nodes(nodes, group, bypass_plugins=bypass_plugins)
 
-            group = node[1]
-            node = node[0]
+        for edges, group, bypass_plugins in self._edges:
+            graphrecord.add_edges(edges, group, bypass_plugins=bypass_plugins)
 
-            graphrecord.add_nodes(node, group)
-
-        for edge in self._edges:
-            if is_edge_input_builder(edge):
-                graphrecord.add_edges(edge)
-                continue
-
-            group = edge[1]
-            edge = edge[0]
-
-            graphrecord.add_edges(edge, group)
-
-        for group in self._groups:
-            graphrecord.add_group(
-                group, self._groups[group]["nodes"], self._groups[group]["edges"]
+        for group_name, (group_info, bypass_plugins) in self._groups.items():
+            self._build_group(
+                graphrecord,
+                group_name,
+                group_info,
+                bypass_plugins=bypass_plugins,
             )
 
         if self._schema is not None:
-            graphrecord.set_schema(self._schema)
+            schema, bypass_plugins = self._schema
+            graphrecord.set_schema(schema, bypass_plugins=bypass_plugins)
 
         return graphrecord

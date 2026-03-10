@@ -324,9 +324,7 @@ class TestGraphRecord(unittest.TestCase):
         nodes = [("0", {"value": 1}), ("1", {"value": 2})]
         edges = [("0", "1", {"weight": 10})]
         schema = Schema(
-            ungrouped=GroupSchema(
-                nodes={"value": Int()}, edges={"weight": Int()}
-            ),
+            ungrouped=GroupSchema(nodes={"value": Int()}, edges={"weight": Int()}),
             schema_type=SchemaType.Provided,
         )
 
@@ -882,9 +880,7 @@ class TestGraphRecord(unittest.TestCase):
 
         assert sorted([0, 2, 3]) == sorted(edges)
 
-        edges = graphrecord.edges_connecting(
-            "0", "1", directed=EdgesDirection.INCOMING
-        )
+        edges = graphrecord.edges_connecting("0", "1", directed=EdgesDirection.INCOMING)
 
         assert edges == [1]
 
@@ -2321,7 +2317,9 @@ class TestGraphRecord(unittest.TestCase):
 
         assert sorted(["1", "3"]) == sorted(neighbors)
 
-        neighbors = graphrecord.neighbors(["0", "1"], directed=EdgesDirection.UNDIRECTED)
+        neighbors = graphrecord.neighbors(
+            ["0", "1"], directed=EdgesDirection.UNDIRECTED
+        )
 
         assert {key: sorted(value) for key, value in neighbors.items()} == {
             "0": sorted(["1", "3"]),
@@ -2347,9 +2345,7 @@ class TestGraphRecord(unittest.TestCase):
 
         assert neighbors == ["1"]
 
-        neighbors = graphrecord.neighbors(
-            ["0", "2"], directed=EdgesDirection.INCOMING
-        )
+        neighbors = graphrecord.neighbors(["0", "2"], directed=EdgesDirection.INCOMING)
 
         assert neighbors == {"0": ["1"], "2": ["1"]}
 
@@ -3095,9 +3091,7 @@ class TestBypassPlugins(unittest.TestCase):
         ]
         plugin.calls.clear()
 
-        graphrecord.add_nodes(
-            [("b", {}), ("c", {})], "group2", bypass_plugins=True
-        )
+        graphrecord.add_nodes([("b", {}), ("c", {})], "group2", bypass_plugins=True)
 
         assert plugin.calls == []
         assert graphrecord.node_count() == 3
@@ -3117,9 +3111,7 @@ class TestBypassPlugins(unittest.TestCase):
 
         dataframe_2 = pl.DataFrame({"index": ["c", "d"], "value": [3, 4]})
 
-        graphrecord.add_nodes_polars(
-            (dataframe_2, "index"), bypass_plugins=True
-        )
+        graphrecord.add_nodes_polars((dataframe_2, "index"), bypass_plugins=True)
 
         assert plugin.calls == []
         assert graphrecord.node_count() == 4
@@ -3147,9 +3139,7 @@ class TestBypassPlugins(unittest.TestCase):
 
     def test_bypass_remove_nodes(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes(
-            [("a", {"x": 1}), ("b", {"x": 2})], bypass_plugins=True
-        )
+        graphrecord.add_nodes([("a", {"x": 1}), ("b", {"x": 2})], bypass_plugins=True)
 
         graphrecord.remove_nodes("a")
 
@@ -3163,27 +3153,21 @@ class TestBypassPlugins(unittest.TestCase):
 
     def test_bypass_add_edges(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes(
-            [("a", {}), ("b", {}), ("c", {})], bypass_plugins=True
-        )
+        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
 
         graphrecord.add_edges([("a", "b", {})])
 
         assert plugin.calls == ["pre_add_edges", "post_add_edges"]
         plugin.calls.clear()
 
-        graphrecord.add_edges(
-            [("b", "c", {})], bypass_plugins=True
-        )
+        graphrecord.add_edges([("b", "c", {})], bypass_plugins=True)
 
         assert plugin.calls == []
         assert graphrecord.edge_count() == 2
 
     def test_bypass_add_edges_with_group(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes(
-            [("a", {}), ("b", {}), ("c", {})], bypass_plugins=True
-        )
+        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
 
         graphrecord.add_edges([("a", "b", {})], "group1")
 
@@ -3193,21 +3177,15 @@ class TestBypassPlugins(unittest.TestCase):
         ]
         plugin.calls.clear()
 
-        graphrecord.add_edges(
-            [("b", "c", {})], "group2", bypass_plugins=True
-        )
+        graphrecord.add_edges([("b", "c", {})], "group2", bypass_plugins=True)
 
         assert plugin.calls == []
         assert graphrecord.edge_count() == 2
 
     def test_bypass_add_edges_polars(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes(
-            [("a", {}), ("b", {}), ("c", {})], bypass_plugins=True
-        )
-        dataframe = pl.DataFrame(
-            {"source": ["a"], "target": ["b"], "value": [1]}
-        )
+        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
+        dataframe = pl.DataFrame({"source": ["a"], "target": ["b"], "value": [1]})
 
         graphrecord.add_edges_polars((dataframe, "source", "target"))
 
@@ -3217,9 +3195,7 @@ class TestBypassPlugins(unittest.TestCase):
         ]
         plugin.calls.clear()
 
-        dataframe_2 = pl.DataFrame(
-            {"source": ["b"], "target": ["c"], "value": [2]}
-        )
+        dataframe_2 = pl.DataFrame({"source": ["b"], "target": ["c"], "value": [2]})
 
         graphrecord.add_edges_polars(
             (dataframe_2, "source", "target"), bypass_plugins=True
@@ -3230,16 +3206,10 @@ class TestBypassPlugins(unittest.TestCase):
 
     def test_bypass_add_edges_polars_with_group(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes(
-            [("a", {}), ("b", {}), ("c", {})], bypass_plugins=True
-        )
-        dataframe = pl.DataFrame(
-            {"source": ["a"], "target": ["b"], "value": [1]}
-        )
+        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
+        dataframe = pl.DataFrame({"source": ["a"], "target": ["b"], "value": [1]})
 
-        graphrecord.add_edges_polars(
-            (dataframe, "source", "target"), "group1"
-        )
+        graphrecord.add_edges_polars((dataframe, "source", "target"), "group1")
 
         assert plugin.calls == [
             "pre_add_edges_dataframes_with_group",
@@ -3247,9 +3217,7 @@ class TestBypassPlugins(unittest.TestCase):
         ]
         plugin.calls.clear()
 
-        dataframe_2 = pl.DataFrame(
-            {"source": ["b"], "target": ["c"], "value": [2]}
-        )
+        dataframe_2 = pl.DataFrame({"source": ["b"], "target": ["c"], "value": [2]})
 
         graphrecord.add_edges_polars(
             (dataframe_2, "source", "target"), "group2", bypass_plugins=True
@@ -3260,9 +3228,7 @@ class TestBypassPlugins(unittest.TestCase):
 
     def test_bypass_remove_edges(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes(
-            [("a", {}), ("b", {})], bypass_plugins=True
-        )
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
         edge_indices = graphrecord.add_edges(
             [("a", "b", {}), ("a", "b", {})], bypass_plugins=True
         )
@@ -3308,9 +3274,7 @@ class TestBypassPlugins(unittest.TestCase):
 
     def test_bypass_add_nodes_to_group(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes(
-            [("a", {}), ("b", {})], bypass_plugins=True
-        )
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
         graphrecord.add_group("group1", bypass_plugins=True)
 
         graphrecord.add_nodes_to_group("group1", "a")
@@ -3321,18 +3285,14 @@ class TestBypassPlugins(unittest.TestCase):
         ]
         plugin.calls.clear()
 
-        graphrecord.add_nodes_to_group(
-            "group1", "b", bypass_plugins=True
-        )
+        graphrecord.add_nodes_to_group("group1", "b", bypass_plugins=True)
 
         assert plugin.calls == []
         assert "b" in graphrecord.nodes_in_group("group1")
 
     def test_bypass_add_edges_to_group(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes(
-            [("a", {}), ("b", {})], bypass_plugins=True
-        )
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
         edge_indices = graphrecord.add_edges(
             [("a", "b", {}), ("a", "b", {})], bypass_plugins=True
         )
@@ -3346,21 +3306,15 @@ class TestBypassPlugins(unittest.TestCase):
         ]
         plugin.calls.clear()
 
-        graphrecord.add_edges_to_group(
-            "group1", edge_indices[1], bypass_plugins=True
-        )
+        graphrecord.add_edges_to_group("group1", edge_indices[1], bypass_plugins=True)
 
         assert plugin.calls == []
         assert edge_indices[1] in graphrecord.edges_in_group("group1")
 
     def test_bypass_remove_nodes_from_group(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes(
-            [("a", {}), ("b", {})], bypass_plugins=True
-        )
-        graphrecord.add_group(
-            "group1", ["a", "b"], bypass_plugins=True
-        )
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
+        graphrecord.add_group("group1", ["a", "b"], bypass_plugins=True)
 
         graphrecord.remove_nodes_from_group("group1", "a")
 
@@ -3370,24 +3324,18 @@ class TestBypassPlugins(unittest.TestCase):
         ]
         plugin.calls.clear()
 
-        graphrecord.remove_nodes_from_group(
-            "group1", "b", bypass_plugins=True
-        )
+        graphrecord.remove_nodes_from_group("group1", "b", bypass_plugins=True)
 
         assert plugin.calls == []
         assert "b" not in graphrecord.nodes_in_group("group1")
 
     def test_bypass_remove_edges_from_group(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes(
-            [("a", {}), ("b", {})], bypass_plugins=True
-        )
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
         edge_indices = graphrecord.add_edges(
             [("a", "b", {}), ("a", "b", {})], bypass_plugins=True
         )
-        graphrecord.add_group(
-            "group1", edges=edge_indices, bypass_plugins=True
-        )
+        graphrecord.add_group("group1", edges=edge_indices, bypass_plugins=True)
 
         graphrecord.remove_edges_from_group("group1", edge_indices[0])
 
@@ -3425,7 +3373,5 @@ if __name__ == "__main__":
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGraphRecord))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGraphRecordPlugins))
-    suite.addTests(
-        unittest.TestLoader().loadTestsFromTestCase(TestBypassPlugins)
-    )
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBypassPlugins))
     unittest.TextTestRunner(verbosity=2).run(suite)

@@ -569,9 +569,7 @@ class GraphRecord:
         """
         return Schema._from_py_schema(self._graphrecord.get_schema())
 
-    def set_schema(
-        self, schema: Schema, *, bypass_plugins: bool = False
-    ) -> None:
+    def set_schema(self, schema: Schema, *, bypass_plugins: bool = False) -> None:
         """Sets the schema of the GraphRecord instance.
 
         Args:
@@ -954,13 +952,11 @@ class GraphRecord:
             query_result = self.query_nodes(nodes)
 
             if isinstance(query_result, list):
-                return self._graphrecord.remove_nodes(
-                    query_result, bypass_plugins
-                )
+                return self._graphrecord.remove_nodes(query_result, bypass_plugins)
             if query_result is not None:
-                return self._graphrecord.remove_nodes(
-                    [query_result], bypass_plugins
-                )[query_result]
+                return self._graphrecord.remove_nodes([query_result], bypass_plugins)[
+                    query_result
+                ]
 
             return {}
 
@@ -998,16 +994,12 @@ class GraphRecord:
         if is_pandas_node_dataframe_input(nodes) or is_pandas_node_dataframe_input_list(
             nodes
         ):
-            return self.add_nodes_pandas(
-                nodes, group, bypass_plugins=bypass_plugins
-            )
+            return self.add_nodes_pandas(nodes, group, bypass_plugins=bypass_plugins)
 
         if is_polars_node_dataframe_input(nodes) or is_polars_node_dataframe_input_list(
             nodes
         ):
-            return self.add_nodes_polars(
-                nodes, group, bypass_plugins=bypass_plugins
-            )
+            return self.add_nodes_polars(nodes, group, bypass_plugins=bypass_plugins)
 
         if is_node_tuple(nodes):
             nodes = [nodes]
@@ -1121,13 +1113,11 @@ class GraphRecord:
             query_result = self.query_edges(edges)
 
             if isinstance(query_result, list):
-                return self._graphrecord.remove_edges(
-                    query_result, bypass_plugins
-                )
+                return self._graphrecord.remove_edges(query_result, bypass_plugins)
             if query_result is not None:
-                return self._graphrecord.remove_edges(
-                    [query_result], bypass_plugins
-                )[query_result]
+                return self._graphrecord.remove_edges([query_result], bypass_plugins)[
+                    query_result
+                ]
 
             return {}
 
@@ -1169,15 +1159,11 @@ class GraphRecord:
         if is_pandas_edge_dataframe_input(edges) or is_pandas_edge_dataframe_input_list(
             edges
         ):
-            return self.add_edges_pandas(
-                edges, group, bypass_plugins=bypass_plugins
-            )
+            return self.add_edges_pandas(edges, group, bypass_plugins=bypass_plugins)
         if is_polars_edge_dataframe_input(edges) or is_polars_edge_dataframe_input_list(
             edges
         ):
-            return self.add_edges_polars(
-                edges, group, bypass_plugins=bypass_plugins
-            )
+            return self.add_edges_polars(edges, group, bypass_plugins=bypass_plugins)
         if is_edge_tuple(edges):
             edges = [edges]
 

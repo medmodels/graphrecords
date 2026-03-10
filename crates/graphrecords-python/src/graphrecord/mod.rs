@@ -261,13 +261,9 @@ impl PyGraphRecord {
         schema: Option<PySchema>,
     ) -> PyResult<Self> {
         Ok(
-            GraphRecord::from_tuples(
-                nodes.deep_into(),
-                edges.deep_into(),
-                schema.map(Into::into),
-            )
-            .map_err(PyGraphRecordError::from)?
-            .into(),
+            GraphRecord::from_tuples(nodes.deep_into(), edges.deep_into(), schema.map(Into::into))
+                .map_err(PyGraphRecordError::from)?
+                .into(),
         )
     }
 
