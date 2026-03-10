@@ -254,35 +254,52 @@ impl PyGraphRecord {
     }
 
     #[staticmethod]
-    #[pyo3(signature = (nodes, edges=None))]
+    #[pyo3(signature = (nodes, edges=None, schema=None))]
     pub fn from_tuples(
         nodes: Vec<(PyNodeIndex, PyAttributes)>,
         edges: Option<Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)>>,
+        schema: Option<PySchema>,
     ) -> PyResult<Self> {
         Ok(
-            GraphRecord::from_tuples(nodes.deep_into(), edges.deep_into(), None)
-                .map_err(PyGraphRecordError::from)?
-                .into(),
+            GraphRecord::from_tuples(
+                nodes.deep_into(),
+                edges.deep_into(),
+                schema.map(Into::into),
+            )
+            .map_err(PyGraphRecordError::from)?
+            .into(),
         )
     }
 
     #[staticmethod]
+    #[pyo3(signature = (nodes_dataframes, edges_dataframes, schema=None))]
     pub fn from_dataframes(
         nodes_dataframes: Vec<(PyDataFrame, String)>,
         edges_dataframes: Vec<(PyDataFrame, String, String)>,
+        schema: Option<PySchema>,
     ) -> PyResult<Self> {
         Ok(
-            GraphRecord::from_dataframes(nodes_dataframes, edges_dataframes, None)
-                .map_err(PyGraphRecordError::from)?
-                .into(),
+            GraphRecord::from_dataframes(
+                nodes_dataframes,
+                edges_dataframes,
+                schema.map(Into::into),
+            )
+            .map_err(PyGraphRecordError::from)?
+            .into(),
         )
     }
 
     #[staticmethod]
-    pub fn from_nodes_dataframes(nodes_dataframes: Vec<(PyDataFrame, String)>) -> PyResult<Self> {
-        Ok(GraphRecord::from_nodes_dataframes(nodes_dataframes, None)
-            .map_err(PyGraphRecordError::from)?
-            .into())
+    #[pyo3(signature = (nodes_dataframes, schema=None))]
+    pub fn from_nodes_dataframes(
+        nodes_dataframes: Vec<(PyDataFrame, String)>,
+        schema: Option<PySchema>,
+    ) -> PyResult<Self> {
+        Ok(
+            GraphRecord::from_nodes_dataframes(nodes_dataframes, schema.map(Into::into))
+                .map_err(PyGraphRecordError::from)?
+                .into(),
+        )
     }
 
     #[staticmethod]
@@ -1199,7 +1216,7 @@ impl PyGraphRecord {
         Ok(self.inner()?.contains_group(&group.into()))
     }
 
-    pub fn neighbors(
+    pub fn neighbors_outgoing(
         &self,
         node_indices: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, Vec<PyNodeIndex>>> {
@@ -1210,6 +1227,26 @@ impl PyGraphRecord {
             .map(|node_index| {
                 let neighbors = graphrecord
                     .neighbors_outgoing(&node_index)
+                    .map_err(PyGraphRecordError::from)?
+                    .map(|neighbor| neighbor.clone().into())
+                    .collect();
+
+                Ok((node_index, neighbors))
+            })
+            .collect()
+    }
+
+    pub fn neighbors_incoming(
+        &self,
+        node_indices: Vec<PyNodeIndex>,
+    ) -> PyResult<HashMap<PyNodeIndex, Vec<PyNodeIndex>>> {
+        let graphrecord = self.inner()?;
+
+        node_indices
+            .into_iter()
+            .map(|node_index| {
+                let neighbors = graphrecord
+                    .neighbors_incoming(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|neighbor| neighbor.clone().into())
                     .collect();

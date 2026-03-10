@@ -268,10 +268,11 @@ def _convert_queryreturnoperand_to_pyqueryreturnoperand(
     return operand._single_value_operand
 
 
-class EdgesDirected(Enum):
-    """Enum for specifying whether edges are considered directed or undirected."""
+class EdgesDirection(Enum):
+    """Enum for specifying the direction of edges."""
 
-    DIRECTED = auto()
+    OUTGOING = auto()
+    INCOMING = auto()
     UNDIRECTED = auto()
 
 
@@ -352,6 +353,7 @@ class GraphRecord:
         cls,
         nodes: Sequence[NodeTuple],
         edges: Optional[Sequence[EdgeTuple]] = None,
+        schema: Optional[Schema] = None,
     ) -> GraphRecord:
         """Creates a GraphRecord instance from lists of node and edge tuples.
 
@@ -362,12 +364,15 @@ class GraphRecord:
         Args:
             nodes (Sequence[NodeTuple]): Sequence of node tuples.
             edges (Optional[Sequence[EdgeTuple]]): Sequence of edge tuples.
+            schema (Optional[Schema]): Schema to apply.
 
         Returns:
             GraphRecord: A new instance created from the provided tuples.
         """
         graphrecord = cls.__new__(cls)
-        graphrecord._graphrecord = PyGraphRecord.from_tuples(nodes, edges)
+        graphrecord._graphrecord = PyGraphRecord.from_tuples(
+            nodes, edges, schema._schema if schema is not None else None
+        )
         return graphrecord
 
     @classmethod
@@ -377,6 +382,7 @@ class GraphRecord:
         edges: Optional[
             Union[PandasEdgeDataFrameInput, List[PandasEdgeDataFrameInput]]
         ] = None,
+        schema: Optional[Schema] = None,
     ) -> GraphRecord:
         """Creates a GraphRecord from Pandas DataFrames of nodes and optionally edges.
 
@@ -389,16 +395,20 @@ class GraphRecord:
                 Node DataFrame(s).
             edges (Optional[Union[PolarsEdgeDataFrameInput, List[PolarsEdgeDataFrameInput]]]):
                 Edge DataFrame(s), optional.
+            schema (Optional[Schema]): Schema to apply.
 
         Returns:
             GraphRecord: A new instance from the provided DataFrames.
         """  # noqa: W505
+        py_schema = schema._schema if schema is not None else None
+
         if edges is None:
             graphrecord = cls.__new__(cls)
             graphrecord._graphrecord = PyGraphRecord.from_nodes_dataframes(
                 [process_nodes_dataframe(nodes_df) for nodes_df in nodes]
                 if isinstance(nodes, list)
-                else [process_nodes_dataframe(nodes)]
+                else [process_nodes_dataframe(nodes)],
+                py_schema,
             )
             return graphrecord
 
@@ -414,6 +424,7 @@ class GraphRecord:
                 if isinstance(edges, list)
                 else [process_edges_dataframe(edges)]
             ),
+            py_schema,
         )
         return graphrecord
 
@@ -424,6 +435,7 @@ class GraphRecord:
         edges: Optional[
             Union[PolarsEdgeDataFrameInput, List[PolarsEdgeDataFrameInput]]
         ] = None,
+        schema: Optional[Schema] = None,
     ) -> GraphRecord:
         """Creates a GraphRecord from Polars DataFrames of nodes and optionally edges.
 
@@ -436,14 +448,18 @@ class GraphRecord:
                 Node data.
             edges (Optional[Union[PolarsEdgeDataFrameInput, List[PolarsEdgeDataFrameInput]]]):
                 Edge data, optional.
+            schema (Optional[Schema]): Schema to apply.
 
         Returns:
             GraphRecord: A new instance from the provided Polars DataFrames.
         """  # noqa: W505
+        py_schema = schema._schema if schema is not None else None
+
         if edges is None:
             graphrecord = cls.__new__(cls)
             graphrecord._graphrecord = PyGraphRecord.from_nodes_dataframes(
-                nodes if isinstance(nodes, list) else [nodes]
+                nodes if isinstance(nodes, list) else [nodes],
+                py_schema,
             )
             return graphrecord
 
@@ -451,6 +467,7 @@ class GraphRecord:
         graphrecord._graphrecord = PyGraphRecord.from_dataframes(
             nodes if isinstance(nodes, list) else [nodes],
             edges if isinstance(edges, list) else [edges],
+            py_schema,
         )
         return graphrecord
 
@@ -552,21 +569,35 @@ class GraphRecord:
         """
         return Schema._from_py_schema(self._graphrecord.get_schema())
 
-    def set_schema(self, schema: Schema) -> None:
+    def set_schema(
+        self, schema: Schema, *, bypass_plugins: bool = False
+    ) -> None:
         """Sets the schema of the GraphRecord instance.
 
         Args:
             schema (Schema): The new schema to apply.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """
-        self._graphrecord.set_schema(schema._schema)
+        self._graphrecord.set_schema(schema._schema, bypass_plugins)
 
-    def freeze_schema(self) -> None:
-        """Freezes the schema. No changes are automatically inferred."""
-        self._graphrecord.freeze_schema()
+    def freeze_schema(self, *, bypass_plugins: bool = False) -> None:
+        """Freezes the schema. No changes are automatically inferred.
 
-    def unfreeze_schema(self) -> None:
-        """Unfreezes the schema. Changes are automatically inferred."""
-        self._graphrecord.unfreeze_schema()
+        Args:
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
+        """
+        self._graphrecord.freeze_schema(bypass_plugins)
+
+    def unfreeze_schema(self, *, bypass_plugins: bool = False) -> None:
+        """Unfreezes the schema. Changes are automatically inferred.
+
+        Args:
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
+        """
+        self._graphrecord.unfreeze_schema(bypass_plugins)
 
     @property
     def nodes(self) -> List[NodeIndex]:
@@ -823,7 +854,7 @@ class GraphRecord:
         target_node: Union[
             NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery
         ],
-        directed: EdgesDirected = EdgesDirected.DIRECTED,
+        directed: EdgesDirection = EdgesDirection.OUTGOING,
     ) -> List[EdgeIndex]:
         """Retrieves the edges connecting the specified source and target nodes.
 
@@ -839,8 +870,8 @@ class GraphRecord:
             target_node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
                 The index or indices of the target node(s), or a node query to
                 select target nodes.
-            directed (EdgesDirected, optional): Whether to consider edges as directed.
-                Defaults to EdgesDirected.DIRECTED.
+            directed (EdgesDirection, optional): The direction to traverse edges.
+                Defaults to EdgesDirection.OUTGOING.
 
         Returns:
             List[EdgeIndex]: A list of edge indices connecting the specified source and
@@ -862,27 +893,46 @@ class GraphRecord:
 
             target_node = query_result
 
-        if directed == EdgesDirected.DIRECTED:
+        source_node_indices = (
+            source_node if isinstance(source_node, list) else [source_node]
+        )
+        target_node_indices = (
+            target_node if isinstance(target_node, list) else [target_node]
+        )
+
+        if directed == EdgesDirection.OUTGOING:
             return self._graphrecord.edges_connecting(
-                (source_node if isinstance(source_node, list) else [source_node]),
-                (target_node if isinstance(target_node, list) else [target_node]),
+                source_node_indices, target_node_indices
+            )
+        if directed == EdgesDirection.INCOMING:
+            return self._graphrecord.edges_connecting(
+                target_node_indices, source_node_indices
             )
         return self._graphrecord.edges_connecting_undirected(
-            (source_node if isinstance(source_node, list) else [source_node]),
-            (target_node if isinstance(target_node, list) else [target_node]),
+            source_node_indices, target_node_indices
         )
 
     @overload
-    def remove_nodes(self, nodes: Union[NodeIndex, NodeIndexQuery]) -> Attributes: ...
+    def remove_nodes(
+        self,
+        nodes: Union[NodeIndex, NodeIndexQuery],
+        *,
+        bypass_plugins: bool = False,
+    ) -> Attributes: ...
 
     @overload
     def remove_nodes(
-        self, nodes: Union[NodeIndexInputList, NodeIndicesQuery]
+        self,
+        nodes: Union[NodeIndexInputList, NodeIndicesQuery],
+        *,
+        bypass_plugins: bool = False,
     ) -> Dict[NodeIndex, Attributes]: ...
 
     def remove_nodes(
         self,
         nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        *,
+        bypass_plugins: bool = False,
     ) -> Union[Attributes, Dict[NodeIndex, Attributes]]:
         """Removes nodes from the GraphRecord and returns their attributes.
 
@@ -893,6 +943,8 @@ class GraphRecord:
         Args:
             nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
 
         Returns:
             Union[Attributes, Dict[NodeIndex, Attributes]]: Attributes of the
@@ -902,14 +954,18 @@ class GraphRecord:
             query_result = self.query_nodes(nodes)
 
             if isinstance(query_result, list):
-                return self._graphrecord.remove_nodes(query_result)
+                return self._graphrecord.remove_nodes(
+                    query_result, bypass_plugins
+                )
             if query_result is not None:
-                return self._graphrecord.remove_nodes([query_result])[query_result]
+                return self._graphrecord.remove_nodes(
+                    [query_result], bypass_plugins
+                )[query_result]
 
             return {}
 
         attributes = self._graphrecord.remove_nodes(
-            nodes if isinstance(nodes, list) else [nodes]
+            nodes if isinstance(nodes, list) else [nodes], bypass_plugins
         )
 
         if isinstance(nodes, list):
@@ -921,6 +977,8 @@ class GraphRecord:
         self,
         nodes: NodeInput,
         group: Optional[Group] = None,
+        *,
+        bypass_plugins: bool = False,
     ) -> None:
         """Adds nodes to the GraphRecord from different data formats.
 
@@ -934,24 +992,30 @@ class GraphRecord:
             nodes (NodeInput): Data representing nodes in various formats.
             group (Optional[Group]): The name of the group to add the nodes to. If not
                 specified, the nodes are added to the GraphRecord without a group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """
         if is_pandas_node_dataframe_input(nodes) or is_pandas_node_dataframe_input_list(
             nodes
         ):
-            return self.add_nodes_pandas(nodes, group)
+            return self.add_nodes_pandas(
+                nodes, group, bypass_plugins=bypass_plugins
+            )
 
         if is_polars_node_dataframe_input(nodes) or is_polars_node_dataframe_input_list(
             nodes
         ):
-            return self.add_nodes_polars(nodes, group)
+            return self.add_nodes_polars(
+                nodes, group, bypass_plugins=bypass_plugins
+            )
 
         if is_node_tuple(nodes):
             nodes = [nodes]
 
         if group is None:
-            self._graphrecord.add_nodes(nodes)
+            self._graphrecord.add_nodes(nodes, bypass_plugins)
         else:
-            self._graphrecord.add_nodes_with_group(nodes, group)
+            self._graphrecord.add_nodes_with_group(nodes, group, bypass_plugins)
 
         return None
 
@@ -959,6 +1023,8 @@ class GraphRecord:
         self,
         nodes: Union[PandasNodeDataFrameInput, List[PandasNodeDataFrameInput]],
         group: Optional[Group] = None,
+        *,
+        bypass_plugins: bool = False,
     ) -> None:
         """Adds nodes to the GraphRecord instance from one or more Pandas DataFrames.
 
@@ -971,18 +1037,23 @@ class GraphRecord:
                 A tuple or list of tuples, each with a DataFrame and index column.
             group (Optional[Group]): The name of the group to add the nodes to. If not
                 specified, the nodes are added to the GraphRecord without a group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """
         self.add_nodes_polars(
             [process_nodes_dataframe(nodes_df) for nodes_df in nodes]
             if isinstance(nodes, list)
             else [process_nodes_dataframe(nodes)],
             group,
+            bypass_plugins=bypass_plugins,
         )
 
     def add_nodes_polars(
         self,
         nodes: Union[PolarsNodeDataFrameInput, List[PolarsNodeDataFrameInput]],
         group: Optional[Group] = None,
+        *,
+        bypass_plugins: bool = False,
     ) -> None:
         """Adds nodes to the GraphRecord instance from one or more Polars DataFrames.
 
@@ -995,26 +1066,40 @@ class GraphRecord:
                 A tuple or list of tuples, each with a DataFrame and index column.
             group (Optional[Group]): The name of the group to add the nodes to. If not
                 specified, the nodes are added to the GraphRecord without a group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """
         if not isinstance(nodes, list):
             nodes = [nodes]
 
         if group is None:
-            self._graphrecord.add_nodes_dataframes(nodes)
+            self._graphrecord.add_nodes_dataframes(nodes, bypass_plugins)
         else:
-            self._graphrecord.add_nodes_dataframes_with_group(nodes, group)
-
-    @overload
-    def remove_edges(self, edges: Union[EdgeIndex, EdgeIndexQuery]) -> Attributes: ...
+            self._graphrecord.add_nodes_dataframes_with_group(
+                nodes, group, bypass_plugins
+            )
 
     @overload
     def remove_edges(
-        self, edges: Union[EdgeIndexInputList, EdgeIndicesQuery]
+        self,
+        edges: Union[EdgeIndex, EdgeIndexQuery],
+        *,
+        bypass_plugins: bool = False,
+    ) -> Attributes: ...
+
+    @overload
+    def remove_edges(
+        self,
+        edges: Union[EdgeIndexInputList, EdgeIndicesQuery],
+        *,
+        bypass_plugins: bool = False,
     ) -> Dict[EdgeIndex, Attributes]: ...
 
     def remove_edges(
         self,
         edges: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
+        *,
+        bypass_plugins: bool = False,
     ) -> Union[Attributes, Dict[EdgeIndex, Attributes]]:
         """Removes edges from the GraphRecord and returns their attributes.
 
@@ -1025,6 +1110,8 @@ class GraphRecord:
         Args:
             edges (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
                 One or more edge indices or an edge query.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
 
         Returns:
             Union[Attributes, Dict[EdgeIndex, Attributes]]: Attributes of the
@@ -1034,14 +1121,18 @@ class GraphRecord:
             query_result = self.query_edges(edges)
 
             if isinstance(query_result, list):
-                return self._graphrecord.remove_edges(query_result)
+                return self._graphrecord.remove_edges(
+                    query_result, bypass_plugins
+                )
             if query_result is not None:
-                return self._graphrecord.remove_edges([query_result])[query_result]
+                return self._graphrecord.remove_edges(
+                    [query_result], bypass_plugins
+                )[query_result]
 
             return {}
 
         attributes = self._graphrecord.remove_edges(
-            edges if isinstance(edges, list) else [edges]
+            edges if isinstance(edges, list) else [edges], bypass_plugins
         )
 
         if isinstance(edges, list):
@@ -1053,6 +1144,8 @@ class GraphRecord:
         self,
         edges: EdgeInput,
         group: Optional[Group] = None,
+        *,
+        bypass_plugins: bool = False,
     ) -> List[EdgeIndex]:
         """Adds edges to the GraphRecord instance from various data formats.
 
@@ -1067,6 +1160,8 @@ class GraphRecord:
             edges (EdgeInput): Data representing edges in several formats.
             group (Optional[Group]): The name of the group to add the edges to. If not
                 specified, the edges are added to the GraphRecord without a group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
 
         Returns:
             List[EdgeIndex]: A list of edge indices that were added.
@@ -1074,23 +1169,29 @@ class GraphRecord:
         if is_pandas_edge_dataframe_input(edges) or is_pandas_edge_dataframe_input_list(
             edges
         ):
-            return self.add_edges_pandas(edges, group)
+            return self.add_edges_pandas(
+                edges, group, bypass_plugins=bypass_plugins
+            )
         if is_polars_edge_dataframe_input(edges) or is_polars_edge_dataframe_input_list(
             edges
         ):
-            return self.add_edges_polars(edges, group)
+            return self.add_edges_polars(
+                edges, group, bypass_plugins=bypass_plugins
+            )
         if is_edge_tuple(edges):
             edges = [edges]
 
         if group is None:
-            return self._graphrecord.add_edges(edges)
+            return self._graphrecord.add_edges(edges, bypass_plugins)
 
-        return self._graphrecord.add_edges_with_group(edges, group)
+        return self._graphrecord.add_edges_with_group(edges, group, bypass_plugins)
 
     def add_edges_pandas(
         self,
         edges: Union[PandasEdgeDataFrameInput, List[PandasEdgeDataFrameInput]],
         group: Optional[Group] = None,
+        *,
+        bypass_plugins: bool = False,
     ) -> List[EdgeIndex]:
         """Adds edges to the GraphRecord from one or more Pandas DataFrames.
 
@@ -1104,6 +1205,8 @@ class GraphRecord:
                 for source and target nodes.
             group (Optional[Group]): The name of the group to add the edges to. If not
                 specified, the edges are added to the GraphRecord without a group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
 
         Returns:
             List[EdgeIndex]: A list of the edge indices added.
@@ -1113,12 +1216,15 @@ class GraphRecord:
             if isinstance(edges, list)
             else [process_edges_dataframe(edges)],
             group,
+            bypass_plugins=bypass_plugins,
         )
 
     def add_edges_polars(
         self,
         edges: Union[PolarsEdgeDataFrameInput, List[PolarsEdgeDataFrameInput]],
         group: Optional[Group] = None,
+        *,
+        bypass_plugins: bool = False,
     ) -> List[EdgeIndex]:
         """Adds edges to the GraphRecord from one or more Polars DataFrames.
 
@@ -1132,6 +1238,8 @@ class GraphRecord:
                 for source and target nodes.
             group (Optional[Group]): The name of the group to add the edges to. If not
                 specified, the edges are added to the GraphRecord without a group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
 
         Returns:
             List[EdgeIndex]: A list of the edge indices added.
@@ -1140,8 +1248,10 @@ class GraphRecord:
             edges = [edges]
 
         if group is None:
-            return self._graphrecord.add_edges_dataframes(edges)
-        return self._graphrecord.add_edges_dataframes_with_group(edges, group)
+            return self._graphrecord.add_edges_dataframes(edges, bypass_plugins)
+        return self._graphrecord.add_edges_dataframes_with_group(
+            edges, group, bypass_plugins
+        )
 
     def add_group(
         self,
@@ -1152,6 +1262,8 @@ class GraphRecord:
         edges: Optional[
             Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]
         ] = None,
+        *,
+        bypass_plugins: bool = False,
     ) -> None:
         """Adds a group to the GraphRecord, optionally with node and edge indices.
 
@@ -1166,6 +1278,8 @@ class GraphRecord:
             edges (Optional[Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]]):
                 One or more edge indices or an edge query to add
                 to the group, optional.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """  # noqa: W505
         if isinstance(nodes, Callable):
             nodes = self.query_nodes(nodes)
@@ -1179,23 +1293,32 @@ class GraphRecord:
         if edges is not None and not isinstance(edges, list):
             edges = [edges]
 
-        self._graphrecord.add_group(group, nodes, edges)
+        self._graphrecord.add_group(group, nodes, edges, bypass_plugins)
 
-    def remove_groups(self, groups: Union[Group, GroupInputList]) -> None:
+    def remove_groups(
+        self,
+        groups: Union[Group, GroupInputList],
+        *,
+        bypass_plugins: bool = False,
+    ) -> None:
         """Removes one or more groups from the GraphRecord instance.
 
         Args:
             groups (Union[Group, GroupInputList]): One or more group names to remove.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """
         if not isinstance(groups, list):
             groups = [groups]
 
-        self._graphrecord.remove_groups(groups)
+        self._graphrecord.remove_groups(groups, bypass_plugins)
 
     def add_nodes_to_group(
         self,
         group: Group,
         nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        *,
+        bypass_plugins: bool = False,
     ) -> None:
         """Adds one or more nodes to a specified group in the GraphRecord.
 
@@ -1203,6 +1326,8 @@ class GraphRecord:
             group (Group): The name of the group to add nodes to.
             nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query to add to the group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """  # noqa: W505
         if isinstance(nodes, Callable):
             query_result = self.query_nodes(nodes)
@@ -1214,12 +1339,14 @@ class GraphRecord:
         elif not isinstance(nodes, list):
             nodes = [nodes]
 
-        self._graphrecord.add_nodes_to_group(group, nodes)
+        self._graphrecord.add_nodes_to_group(group, nodes, bypass_plugins)
 
     def add_edges_to_group(
         self,
         group: Group,
         edges: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
+        *,
+        bypass_plugins: bool = False,
     ) -> None:
         """Adds one or more edges to a specified group in the GraphRecord.
 
@@ -1227,6 +1354,8 @@ class GraphRecord:
             group (Group): The name of the group to add edges to.
             edges (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
                 One or more edge indices or an edge query to add to the group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """  # noqa: W505
         if isinstance(edges, Callable):
             query_result = self.query_edges(edges)
@@ -1238,12 +1367,14 @@ class GraphRecord:
         elif not isinstance(edges, list):
             edges = [edges]
 
-        self._graphrecord.add_edges_to_group(group, edges)
+        self._graphrecord.add_edges_to_group(group, edges, bypass_plugins)
 
     def remove_nodes_from_group(
         self,
         group: Group,
         nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        *,
+        bypass_plugins: bool = False,
     ) -> None:
         """Removes one or more nodes from a specified group in the GraphRecord.
 
@@ -1251,6 +1382,8 @@ class GraphRecord:
             group (Group): The name of the group from which to remove nodes.
             nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query to remove from the group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """  # noqa: W505
         if isinstance(nodes, Callable):
             query_result = self.query_nodes(nodes)
@@ -1262,12 +1395,14 @@ class GraphRecord:
         elif not isinstance(nodes, list):
             nodes = [nodes]
 
-        self._graphrecord.remove_nodes_from_group(group, nodes)
+        self._graphrecord.remove_nodes_from_group(group, nodes, bypass_plugins)
 
     def remove_edges_from_group(
         self,
         group: Group,
         edges: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
+        *,
+        bypass_plugins: bool = False,
     ) -> None:
         """Removes one or more edges from a specified group in the GraphRecord.
 
@@ -1275,6 +1410,8 @@ class GraphRecord:
             group (Group): The name of the group from which to remove edges.
             edges (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
                 One or more edge indices or an edge query to remove from the group.
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """  # noqa: W505
         if isinstance(edges, Callable):
             query_result = self.query_edges(edges)
@@ -1286,7 +1423,7 @@ class GraphRecord:
         elif not isinstance(edges, list):
             edges = [edges]
 
-        self._graphrecord.remove_edges_from_group(group, edges)
+        self._graphrecord.remove_edges_from_group(group, edges, bypass_plugins)
 
     @overload
     def nodes_in_group(self, group: Group) -> List[NodeIndex]: ...
@@ -1517,20 +1654,20 @@ class GraphRecord:
     def neighbors(
         self,
         node: Union[NodeIndex, NodeIndexQuery],
-        directed: EdgesDirected = EdgesDirected.DIRECTED,
+        directed: EdgesDirection = EdgesDirection.OUTGOING,
     ) -> List[NodeIndex]: ...
 
     @overload
     def neighbors(
         self,
         node: Union[NodeIndexInputList, NodeIndicesQuery],
-        directed: EdgesDirected = EdgesDirected.DIRECTED,
+        directed: EdgesDirection = EdgesDirection.OUTGOING,
     ) -> Dict[NodeIndex, List[NodeIndex]]: ...
 
     def neighbors(
         self,
         node: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
-        directed: EdgesDirected = EdgesDirected.DIRECTED,
+        directed: EdgesDirection = EdgesDirection.OUTGOING,
     ) -> Union[List[NodeIndex], Dict[NodeIndex, List[NodeIndex]]]:
         """Retrieves the neighbors of the specified node(s) in the GraphRecord.
 
@@ -1541,8 +1678,8 @@ class GraphRecord:
         Args:
             node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a query that returns node indices.
-            directed (EdgesDirected, optional): Whether to consider edges as directed.
-                Defaults to EdgesDirected.DIRECTED.
+            directed (EdgesDirection, optional): The direction to traverse edges.
+                Defaults to EdgesDirection.OUTGOING.
 
         Returns:
             Union[List[NodeIndex], Dict[NodeIndex, List[NodeIndex]]]: Neighboring nodes.
@@ -1555,26 +1692,30 @@ class GraphRecord:
 
             node = query_result
 
-        if directed == EdgesDirected.DIRECTED:
-            neighbors = self._graphrecord.neighbors(
-                node if isinstance(node, list) else [node]
-            )
+        node_indices = node if isinstance(node, list) else [node]
+
+        if directed == EdgesDirection.OUTGOING:
+            neighbors = self._graphrecord.neighbors_outgoing(node_indices)
+        elif directed == EdgesDirection.INCOMING:
+            neighbors = self._graphrecord.neighbors_incoming(node_indices)
         else:
-            neighbors = self._graphrecord.neighbors_undirected(
-                node if isinstance(node, list) else [node]
-            )
+            neighbors = self._graphrecord.neighbors_undirected(node_indices)
 
         if isinstance(node, list):
             return neighbors
 
         return neighbors[node]
 
-    def clear(self) -> None:
+    def clear(self, *, bypass_plugins: bool = False) -> None:
         """Clears all data from the GraphRecord instance.
 
         Removes all nodes, edges, and groups, effectively resetting the instance.
+
+        Args:
+            bypass_plugins (bool): If True, plugin hooks are not called.
+                Defaults to False.
         """
-        self._graphrecord.clear()
+        self._graphrecord.clear(bypass_plugins)
 
     @overload
     def query_nodes(
