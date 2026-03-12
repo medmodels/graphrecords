@@ -1,4 +1,6 @@
 pub mod attributes;
+#[cfg(feature = "connectors")]
+pub mod connector;
 pub mod datatypes;
 mod graph;
 mod group_mapping;
@@ -14,7 +16,6 @@ pub use self::{
     graph::{Attributes, EdgeIndex, NodeIndex},
     group_mapping::Group,
 };
-use crate::errors::GraphRecordResult;
 #[cfg(feature = "plugins")]
 use crate::graphrecord::plugins::{Plugin, PluginName};
 use crate::{
@@ -25,6 +26,7 @@ use crate::{
         polars::DataFramesExport,
     },
 };
+use crate::{errors::GraphRecordResult, graphrecord::connector::Connector};
 use ::polars::frame::DataFrame;
 use graph::Graph;
 #[cfg(feature = "plugins")]
@@ -178,6 +180,27 @@ impl GraphRecord {
             schema: schema.unwrap_or_default(),
             ..Default::default()
         }
+    }
+
+    pub fn from_connector<C: Connector>(connector: C) -> GraphRecordResult<Self> {
+        let mut graphrecord = Self::new();
+
+        connector.initialize(&mut graphrecord)?;
+
+        Ok(graphrecord)
+    }
+
+    pub fn from_connector_with_data<D, C: Connector<DataSet = D>>(
+        connector: C,
+        data: D,
+    ) -> GraphRecordResult<Self> {
+        let mut graphrecord = Self::new();
+
+        connector.initialize(&mut graphrecord)?;
+
+        connector.ingest(&mut graphrecord, data)?;
+
+        Ok(graphrecord)
     }
 
     pub fn from_tuples(
