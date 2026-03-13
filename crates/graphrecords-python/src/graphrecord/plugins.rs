@@ -3,10 +3,9 @@ use crate::{
     prelude::{PyAttributes, PyGraphRecord, PyGroup, PyNodeIndex, PySchema},
 };
 use graphrecords_core::{
-    PluginGraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
-        EdgeDataFrameInput, EdgeIndex, NodeDataFrameInput,
+        EdgeDataFrameInput, EdgeIndex, GraphRecord, NodeDataFrameInput,
         plugins::{
             Plugin, PostAddEdgeContext, PostAddEdgeToGroupContext, PostAddEdgeWithGroupContext,
             PostAddEdgesContext, PostAddEdgesDataframesContext,
@@ -35,7 +34,7 @@ macro_rules! impl_pre_hook {
     ($method:ident, $py_context_type:ident, $core_context_type:ident) => {
         fn $method(
             &self,
-            graphrecord: &mut PluginGraphRecord,
+            graphrecord: &mut GraphRecord,
             context: $core_context_type,
         ) -> GraphRecordResult<$core_context_type> {
             Python::attach(|py| {
@@ -59,7 +58,7 @@ macro_rules! impl_pre_hook {
 
 macro_rules! impl_post_hook {
     ($method:ident) => {
-        fn $method(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
+        fn $method(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
             Python::attach(|py| {
                 PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
                     self.0
@@ -74,7 +73,7 @@ macro_rules! impl_post_hook {
     ($method:ident, $py_context_type:ident, $core_context_type:ident) => {
         fn $method(
             &self,
-            graphrecord: &mut PluginGraphRecord,
+            graphrecord: &mut GraphRecord,
             context: $core_context_type,
         ) -> GraphRecordResult<()> {
             Python::attach(|py| {
@@ -2597,7 +2596,7 @@ impl Plugin for PyPlugin {
         Python::attach(|py| Box::new(Self(self.0.clone_ref(py))))
     }
 
-    fn initialize(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
+    fn initialize(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
         Python::attach(|py| {
             PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
                 self.0
@@ -2609,7 +2608,7 @@ impl Plugin for PyPlugin {
         })
     }
 
-    fn finalize(&self, graphrecord: &mut PluginGraphRecord) -> GraphRecordResult<()> {
+    fn finalize(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
         Python::attach(|py| {
             PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
                 self.0

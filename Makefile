@@ -54,7 +54,7 @@ build-dev: install-dev
 
 test: install-tests
 	$(UV_LOC) run pytest -vv -W error
-	cargo test --all-targets --all-features
+	cargo hack test --feature-powerset -p graphrecords -p graphrecords-core -p graphrecords-utils
 
 test-python-coverage: install-tests
 	$(UV_LOC) run tests/coverage_report.py table
@@ -76,13 +76,13 @@ lint: install-dev
 	$(UV_LOC) run ruff check
 	$(UV_LOC) run ruff check --select I
 	$(UV_LOC) run python -m pyright
-	cargo clippy --all-targets --all-features
+	cargo hack clippy --feature-powerset -- -D warnings
 
 format: install-dev
 	$(UV_LOC) run ruff check --select I --fix
 	$(UV_LOC) run ruff format
 	cargo fmt
-	cargo clippy --all-targets --all-features --fix --allow-staged
+	cargo hack clippy --feature-powerset --fix --allow-dirty -- -D warnings
 
 clean: docs-clean
 ifeq ($(OS),Windows_NT)

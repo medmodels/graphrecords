@@ -1,6 +1,6 @@
 use super::{PyGraphRecord, PyGraphRecordInner};
 use graphrecords_core::{
-    PluginGraphRecord,
+    GraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
 };
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -10,7 +10,7 @@ use std::{
     ptr::NonNull,
 };
 
-/// Wrapper around a borrowed `PluginGraphRecord` pointer, protected by an [`RwLock`].
+/// Wrapper around a borrowed `GraphRecord` pointer, protected by an [`RwLock`].
 ///
 /// The inner [`NonNull`] is only set to `Some` inside [`PyGraphRecord::scope`] and is
 /// cleared when the scope ends. A "dead" handle (`None`) returns a runtime error
@@ -21,9 +21,9 @@ use std::{
 /// Only [`PyGraphRecord::scope`] (defined in this module) can create a *live*
 /// `BorrowedGraphRecord`. Outside code can only obtain a *dead* handle via
 /// [`BorrowedGraphRecord::dead`], because the tuple field is private to this module.
-pub(super) struct BorrowedGraphRecord(RwLock<Option<NonNull<PluginGraphRecord>>>);
+pub(super) struct BorrowedGraphRecord(RwLock<Option<NonNull<GraphRecord>>>);
 
-// SAFETY: The `NonNull<PluginGraphRecord>` is protected by an `RwLock`, ensuring synchronized
+// SAFETY: The `NonNull<GraphRecord>` is protected by an `RwLock`, ensuring synchronized
 // access. The pointer is only valid during the `scope()` call, and the scope's Drop guard
 // acquires a write lock to clear it, which cannot proceed while any read/write guard is
 // held, preventing use-after-free.
@@ -44,17 +44,17 @@ impl BorrowedGraphRecord {
         Self(RwLock::new(None))
     }
 
-    pub(super) fn read(&self) -> RwLockReadGuard<'_, Option<NonNull<PluginGraphRecord>>> {
+    pub(super) fn read(&self) -> RwLockReadGuard<'_, Option<NonNull<GraphRecord>>> {
         self.0.read()
     }
 
-    pub(super) fn write(&self) -> RwLockWriteGuard<'_, Option<NonNull<PluginGraphRecord>>> {
+    pub(super) fn write(&self) -> RwLockWriteGuard<'_, Option<NonNull<GraphRecord>>> {
         self.0.write()
     }
 }
 
 impl PyGraphRecord {
-    /// Safely pass a `&mut PluginGraphRecord` to Python as a `PyGraphRecord` for the
+    /// Safely pass a `&mut GraphRecord` to Python as a `PyGraphRecord` for the
     /// duration of the callback. The pointer is invalidated when `function` returns.
     ///
     /// Based on the discussion in:
@@ -64,7 +64,7 @@ impl PyGraphRecord {
     /// - <https://github.com/PyO3/pyo3/issues/1180#issuecomment-692898577>
     pub fn scope<R>(
         py: Python<'_>,
-        graphrecord: &mut PluginGraphRecord,
+        graphrecord: &mut GraphRecord,
         function: impl FnOnce(Python<'_>, &Py<Self>) -> GraphRecordResult<R>,
     ) -> GraphRecordResult<R> {
         struct PanicOnDrop(bool);
@@ -74,7 +74,7 @@ impl PyGraphRecord {
             }
         }
 
-        struct Guard<'py>(Python<'py>, Py<PyGraphRecord>, NonNull<PluginGraphRecord>);
+        struct Guard<'py>(Python<'py>, Py<PyGraphRecord>, NonNull<GraphRecord>);
         impl Drop for Guard<'_> {
             #[allow(clippy::significant_drop_tightening)]
             fn drop(&mut self) {
