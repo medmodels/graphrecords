@@ -15,6 +15,9 @@ jobs:
         with:
           components: clippy
 
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
 
@@ -44,4 +47,4 @@ jobs:
           version: PATH
 
       - name: Lint with clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo hack clippy --feature-powerset -- -D warnings

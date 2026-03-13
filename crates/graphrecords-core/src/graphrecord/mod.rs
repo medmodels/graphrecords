@@ -16,7 +16,7 @@ pub use self::{
 };
 use crate::errors::GraphRecordResult;
 #[cfg(feature = "plugins")]
-use crate::graphrecord::plugins::PluginName;
+use crate::graphrecord::plugins::{Plugin, PluginName};
 use crate::{
     errors::GraphRecordError,
     graphrecord::{
@@ -31,8 +31,6 @@ use graph::Graph;
 use graphrecords_utils::aliases::GrHashMap;
 use graphrecords_utils::aliases::GrHashSet;
 use group_mapping::GroupMapping;
-#[cfg(feature = "plugins")]
-pub use plugins::PluginGraphRecord;
 use polars::{dataframe_to_edges, dataframe_to_nodes};
 use querying::{
     ReturnOperand, Selection, edges::EdgeOperand, nodes::NodeOperand, wrapper::Wrapper,
@@ -40,6 +38,8 @@ use querying::{
 use schema::{GroupSchema, Schema, SchemaType};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "plugins")]
+use std::sync::Arc;
 use std::{
     collections::{HashMap, hash_map::Entry},
     fmt::{Display, Formatter},
@@ -142,6 +142,9 @@ pub struct GraphRecord {
     graph: Graph,
     group_mapping: GroupMapping,
     schema: Schema,
+
+    #[cfg(feature = "plugins")]
+    plugins: Arc<GrHashMap<PluginName, Box<dyn Plugin>>>,
 }
 
 impl Display for GraphRecord {
@@ -177,13 +180,6 @@ impl GraphRecord {
         }
     }
 
-    #[cfg(feature = "plugins")]
-    pub fn with_plugins(
-        plugins: GrHashMap<PluginName, Box<dyn plugins::Plugin>>,
-    ) -> GraphRecordResult<PluginGraphRecord> {
-        PluginGraphRecord::new(Self::default(), plugins)
-    }
-
     pub fn from_tuples(
         nodes: Vec<(NodeIndex, Attributes)>,
         edges: Option<Vec<(NodeIndex, NodeIndex, Attributes)>>,
@@ -196,12 +192,12 @@ impl GraphRecord {
         );
 
         for (node_index, attributes) in nodes {
-            graphrecord.add_node(node_index, attributes)?;
+            graphrecord.add_node_impl(node_index, attributes)?;
         }
 
         if let Some(edges) = edges {
             for (source_node_index, target_node_index, attributes) in edges {
-                graphrecord.add_edge(source_node_index, target_node_index, attributes)?;
+                graphrecord.add_edge_impl(source_node_index, target_node_index, attributes)?;
             }
         }
 
@@ -271,14 +267,13 @@ impl GraphRecord {
     }
 
     #[allow(clippy::too_many_lines)]
-    pub fn set_schema(&mut self, mut schema: Schema) -> GraphRecordResult<()> {
+    fn set_schema_impl(&mut self, mut schema: Schema) -> GraphRecordResult<()> {
         let mut nodes_group_cache = HashMap::<&Group, usize>::new();
         let mut nodes_ungrouped_visited = false;
         let mut edges_group_cache = HashMap::<&Group, usize>::new();
         let mut edges_ungrouped_visited = false;
 
         for (node_index, node) in &self.graph.nodes {
-            #[expect(clippy::missing_panics_doc, reason = "infallible")]
             let groups_of_node: Vec<_> = self
                 .groups_of_node(node_index)
                 .expect("groups of node must exist")
@@ -334,7 +329,6 @@ impl GraphRecord {
         }
 
         for (edge_index, edge) in &self.graph.edges {
-            #[expect(clippy::missing_panics_doc, reason = "infallible")]
             let groups_of_edge: Vec<_> = self
                 .groups_of_edge(edge_index)
                 .expect("groups of edge must exist")
@@ -408,11 +402,11 @@ impl GraphRecord {
         &self.schema
     }
 
-    pub const fn freeze_schema(&mut self) {
+    const fn freeze_schema_impl(&mut self) {
         self.schema.freeze();
     }
 
-    pub const fn unfreeze_schema(&mut self) {
+    const fn unfreeze_schema_impl(&mut self) {
         self.schema.unfreeze();
     }
 
@@ -495,7 +489,7 @@ impl GraphRecord {
             .edges_connecting_undirected(first_node_indices, second_node_indices)
     }
 
-    pub fn add_node(
+    fn add_node_impl(
         &mut self,
         node_index: NodeIndex,
         attributes: Attributes,
@@ -521,7 +515,7 @@ impl GraphRecord {
 
     // TODO: Add tests
     #[allow(clippy::needless_pass_by_value)]
-    pub fn add_node_with_group(
+    fn add_node_with_group_impl(
         &mut self,
         node_index: NodeIndex,
         attributes: Attributes,
@@ -551,14 +545,13 @@ impl GraphRecord {
         self.group_mapping
             .add_node_to_group(group, node_index.clone())
             .inspect_err(|_| {
-                #[expect(clippy::missing_panics_doc, reason = "infallible")]
                 self.graph
                     .remove_node(&node_index, &mut self.group_mapping)
                     .expect("Node must exist");
             })
     }
 
-    pub fn remove_node(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
+    fn remove_node_impl(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
         self.group_mapping.remove_node(node_index);
 
         self.graph
@@ -566,9 +559,9 @@ impl GraphRecord {
             .map_err(GraphRecordError::from)
     }
 
-    pub fn add_nodes(&mut self, nodes: Vec<(NodeIndex, Attributes)>) -> GraphRecordResult<()> {
+    fn add_nodes_impl(&mut self, nodes: Vec<(NodeIndex, Attributes)>) -> GraphRecordResult<()> {
         for (node_index, attributes) in nodes {
-            self.add_node(node_index, attributes)?;
+            self.add_node_impl(node_index, attributes)?;
         }
 
         Ok(())
@@ -576,23 +569,23 @@ impl GraphRecord {
 
     // TODO: Add tests
     #[allow(clippy::needless_pass_by_value)]
-    pub fn add_nodes_with_group(
+    fn add_nodes_with_group_impl(
         &mut self,
         nodes: Vec<(NodeIndex, Attributes)>,
         group: Group,
     ) -> GraphRecordResult<()> {
         if !self.contains_group(&group) {
-            self.add_group(group.clone(), None, None)?;
+            self.add_group_impl(group.clone(), None, None)?;
         }
 
         for (node_index, attributes) in nodes {
-            self.add_node_with_group(node_index, attributes, group.clone())?;
+            self.add_node_with_group_impl(node_index, attributes, group.clone())?;
         }
 
         Ok(())
     }
 
-    pub fn add_nodes_dataframes(
+    fn add_nodes_dataframes_impl(
         &mut self,
         nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
     ) -> GraphRecordResult<()> {
@@ -608,11 +601,11 @@ impl GraphRecord {
             .flatten()
             .collect();
 
-        self.add_nodes(nodes)
+        self.add_nodes_impl(nodes)
     }
 
     // TODO: Add tests
-    pub fn add_nodes_dataframes_with_group(
+    fn add_nodes_dataframes_with_group_impl(
         &mut self,
         nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
         group: Group,
@@ -629,11 +622,11 @@ impl GraphRecord {
             .flatten()
             .collect();
 
-        self.add_nodes_with_group(nodes, group)
+        self.add_nodes_with_group_impl(nodes, group)
     }
 
     #[allow(clippy::needless_pass_by_value)]
-    pub fn add_edge(
+    fn add_edge_impl(
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
@@ -659,7 +652,6 @@ impl GraphRecord {
                 match self.schema.validate_edge(&edge_index, &attributes, None) {
                     Ok(()) => Ok(edge_index),
                     Err(e) => {
-                        #[expect(clippy::missing_panics_doc, reason = "infallible")]
                         self.graph
                             .remove_edge(&edge_index)
                             .expect("Edge must exist");
@@ -673,7 +665,7 @@ impl GraphRecord {
 
     // TODO: Add tests
     #[allow(clippy::needless_pass_by_value)]
-    pub fn add_edge_with_group(
+    fn add_edge_with_group_impl(
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
@@ -700,7 +692,6 @@ impl GraphRecord {
                 self.schema
                     .validate_edge(&edge_index, &attributes, Some(&group))
                     .inspect_err(|_| {
-                        #[expect(clippy::missing_panics_doc, reason = "infallible")]
                         self.graph
                             .remove_edge(&edge_index)
                             .expect("Edge must exist");
@@ -711,7 +702,6 @@ impl GraphRecord {
         self.group_mapping
             .add_edge_to_group(group, edge_index)
             .inspect_err(|_| {
-                #[expect(clippy::missing_panics_doc, reason = "infallible")]
                 self.graph
                     .remove_edge(&edge_index)
                     .expect("Edge must exist");
@@ -720,7 +710,8 @@ impl GraphRecord {
         Ok(edge_index)
     }
 
-    pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<Attributes> {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn remove_edge_impl(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<Attributes> {
         self.group_mapping.remove_edge(edge_index);
 
         self.graph
@@ -728,32 +719,32 @@ impl GraphRecord {
             .map_err(GraphRecordError::from)
     }
 
-    pub fn add_edges(
+    fn add_edges_impl(
         &mut self,
         edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         edges
             .into_iter()
             .map(|(source_node_index, target_node_index, attributes)| {
-                self.add_edge(source_node_index, target_node_index, attributes)
+                self.add_edge_impl(source_node_index, target_node_index, attributes)
             })
             .collect()
     }
 
     // TODO: Add tests
-    pub fn add_edges_with_group(
+    fn add_edges_with_group_impl(
         &mut self,
         edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
         group: &Group,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         if !self.contains_group(group) {
-            self.add_group(group.clone(), None, None)?;
+            self.add_group_impl(group.clone(), None, None)?;
         }
 
         edges
             .into_iter()
             .map(|(source_node_index, target_node_index, attributes)| {
-                self.add_edge_with_group(
+                self.add_edge_with_group_impl(
                     source_node_index,
                     target_node_index,
                     attributes,
@@ -763,7 +754,7 @@ impl GraphRecord {
             .collect()
     }
 
-    pub fn add_edges_dataframes(
+    fn add_edges_dataframes_impl(
         &mut self,
         edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
@@ -783,11 +774,11 @@ impl GraphRecord {
             .flatten()
             .collect();
 
-        self.add_edges(edges)
+        self.add_edges_impl(edges)
     }
 
     // TODO: Add tests
-    pub fn add_edges_dataframes_with_group(
+    fn add_edges_dataframes_with_group_impl(
         &mut self,
         edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
         group: &Group,
@@ -808,10 +799,10 @@ impl GraphRecord {
             .flatten()
             .collect();
 
-        self.add_edges_with_group(edges, group)
+        self.add_edges_with_group_impl(edges, group)
     }
 
-    pub fn add_group(
+    fn add_group_impl(
         &mut self,
         group: Group,
         node_indices: Option<Vec<NodeIndex>>,
@@ -903,7 +894,6 @@ impl GraphRecord {
             }
         }
 
-        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         self.group_mapping
             .add_group(group, node_indices, edge_indices)
             .expect("Group must not exist");
@@ -911,11 +901,11 @@ impl GraphRecord {
         Ok(())
     }
 
-    pub fn remove_group(&mut self, group: &Group) -> GraphRecordResult<()> {
+    fn remove_group_impl(&mut self, group: &Group) -> GraphRecordResult<()> {
         self.group_mapping.remove_group(group)
     }
 
-    pub fn add_node_to_group(
+    fn add_node_to_group_impl(
         &mut self,
         group: Group,
         node_index: NodeIndex,
@@ -942,7 +932,7 @@ impl GraphRecord {
         self.group_mapping.add_node_to_group(group, node_index)
     }
 
-    pub fn add_edge_to_group(
+    fn add_edge_to_group_impl(
         &mut self,
         group: Group,
         edge_index: EdgeIndex,
@@ -969,7 +959,7 @@ impl GraphRecord {
         self.group_mapping.add_edge_to_group(group, edge_index)
     }
 
-    pub fn remove_node_from_group(
+    fn remove_node_from_group_impl(
         &mut self,
         group: &Group,
         node_index: &NodeIndex,
@@ -983,7 +973,8 @@ impl GraphRecord {
         self.group_mapping.remove_node_from_group(group, node_index)
     }
 
-    pub fn remove_edge_from_group(
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn remove_edge_from_group_impl(
         &mut self,
         group: &Group,
         edge_index: &EdgeIndex,
@@ -1127,7 +1118,7 @@ impl GraphRecord {
             .map_err(GraphRecordError::from)
     }
 
-    pub fn clear(&mut self) {
+    fn clear_impl(&mut self) {
         self.graph.clear();
         self.group_mapping.clear();
     }
@@ -1158,6 +1149,181 @@ impl GraphRecord {
         truncate_details: Option<usize>,
     ) -> GraphRecordResult<GroupOverview> {
         GroupOverview::new(self, Some(group), truncate_details)
+    }
+}
+
+#[cfg(not(feature = "plugins"))]
+impl GraphRecord {
+    pub fn set_schema(&mut self, schema: Schema) -> GraphRecordResult<()> {
+        self.set_schema_impl(schema)
+    }
+
+    pub const fn freeze_schema(&mut self) -> GraphRecordResult<()> {
+        self.freeze_schema_impl();
+
+        Ok(())
+    }
+
+    pub const fn unfreeze_schema(&mut self) -> GraphRecordResult<()> {
+        self.unfreeze_schema_impl();
+
+        Ok(())
+    }
+
+    pub fn add_node(
+        &mut self,
+        node_index: NodeIndex,
+        attributes: Attributes,
+    ) -> GraphRecordResult<()> {
+        self.add_node_impl(node_index, attributes)
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn add_node_with_group(
+        &mut self,
+        node_index: NodeIndex,
+        attributes: Attributes,
+        group: Group,
+    ) -> GraphRecordResult<()> {
+        self.add_node_with_group_impl(node_index, attributes, group)
+    }
+
+    pub fn remove_node(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
+        self.remove_node_impl(node_index)
+    }
+
+    pub fn add_nodes(&mut self, nodes: Vec<(NodeIndex, Attributes)>) -> GraphRecordResult<()> {
+        self.add_nodes_impl(nodes)
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn add_nodes_with_group(
+        &mut self,
+        nodes: Vec<(NodeIndex, Attributes)>,
+        group: Group,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_with_group_impl(nodes, group)
+    }
+
+    pub fn add_nodes_dataframes(
+        &mut self,
+        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_dataframes_impl(nodes_dataframes)
+    }
+
+    pub fn add_nodes_dataframes_with_group(
+        &mut self,
+        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
+        group: Group,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_dataframes_with_group_impl(nodes_dataframes, group)
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn add_edge(
+        &mut self,
+        source_node_index: NodeIndex,
+        target_node_index: NodeIndex,
+        attributes: Attributes,
+    ) -> GraphRecordResult<EdgeIndex> {
+        self.add_edge_impl(source_node_index, target_node_index, attributes)
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn add_edge_with_group(
+        &mut self,
+        source_node_index: NodeIndex,
+        target_node_index: NodeIndex,
+        attributes: Attributes,
+        group: Group,
+    ) -> GraphRecordResult<EdgeIndex> {
+        self.add_edge_with_group_impl(source_node_index, target_node_index, attributes, group)
+    }
+
+    pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<Attributes> {
+        self.remove_edge_impl(edge_index)
+    }
+
+    pub fn add_edges(
+        &mut self,
+        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_impl(edges)
+    }
+
+    pub fn add_edges_with_group(
+        &mut self,
+        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        group: &Group,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_with_group_impl(edges, group)
+    }
+
+    pub fn add_edges_dataframes(
+        &mut self,
+        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_dataframes_impl(edges_dataframes)
+    }
+
+    pub fn add_edges_dataframes_with_group(
+        &mut self,
+        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
+        group: &Group,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_dataframes_with_group_impl(edges_dataframes, group)
+    }
+
+    pub fn add_group(
+        &mut self,
+        group: Group,
+        node_indices: Option<Vec<NodeIndex>>,
+        edge_indices: Option<Vec<EdgeIndex>>,
+    ) -> GraphRecordResult<()> {
+        self.add_group_impl(group, node_indices, edge_indices)
+    }
+
+    pub fn remove_group(&mut self, group: &Group) -> GraphRecordResult<()> {
+        self.remove_group_impl(group)
+    }
+
+    pub fn add_node_to_group(
+        &mut self,
+        group: Group,
+        node_index: NodeIndex,
+    ) -> GraphRecordResult<()> {
+        self.add_node_to_group_impl(group, node_index)
+    }
+
+    pub fn add_edge_to_group(
+        &mut self,
+        group: Group,
+        edge_index: EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        self.add_edge_to_group_impl(group, edge_index)
+    }
+
+    pub fn remove_node_from_group(
+        &mut self,
+        group: &Group,
+        node_index: &NodeIndex,
+    ) -> GraphRecordResult<()> {
+        self.remove_node_from_group_impl(group, node_index)
+    }
+
+    pub fn remove_edge_from_group(
+        &mut self,
+        group: &Group,
+        edge_index: &EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        self.remove_edge_from_group_impl(group, edge_index)
+    }
+
+    pub fn clear(&mut self) -> GraphRecordResult<()> {
+        self.clear_impl();
+
+        Ok(())
     }
 }
 
@@ -1476,7 +1642,7 @@ mod test {
             *graphrecord.get_schema().schema_type()
         );
 
-        graphrecord.freeze_schema();
+        graphrecord.freeze_schema().unwrap();
 
         assert_eq!(
             SchemaType::Provided,
@@ -1494,7 +1660,7 @@ mod test {
             SchemaType::Provided
         );
 
-        graphrecord.unfreeze_schema();
+        graphrecord.unfreeze_schema().unwrap();
 
         assert_eq!(
             *graphrecord.get_schema().schema_type(),
@@ -1758,7 +1924,7 @@ mod test {
 
         assert_eq!(1, graphrecord.node_count());
 
-        graphrecord.freeze_schema();
+        graphrecord.freeze_schema().unwrap();
 
         graphrecord.add_node("1".into(), HashMap::new()).unwrap();
 
@@ -1775,7 +1941,7 @@ mod test {
                 .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
         );
 
-        graphrecord.freeze_schema();
+        graphrecord.freeze_schema().unwrap();
 
         assert!(
             graphrecord
@@ -1911,7 +2077,7 @@ mod test {
 
         assert_eq!(5, graphrecord.edge_count());
 
-        graphrecord.freeze_schema();
+        graphrecord.freeze_schema().unwrap();
 
         graphrecord
             .add_edge("0".into(), "3".into(), HashMap::new())
@@ -1942,7 +2108,7 @@ mod test {
                 .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
         );
 
-        graphrecord.freeze_schema();
+        graphrecord.freeze_schema().unwrap();
 
         assert!(
             graphrecord
@@ -2058,7 +2224,7 @@ mod test {
                 .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
         );
 
-        graphrecord.freeze_schema();
+        graphrecord.freeze_schema().unwrap();
 
         assert!(
             graphrecord
@@ -2129,7 +2295,7 @@ mod test {
             .add_group("1".into(), Some(vec!["4".into()]), None)
             .unwrap();
 
-        graphrecord.freeze_schema();
+        graphrecord.freeze_schema().unwrap();
 
         graphrecord
             .add_node("5".into(), HashMap::from([("test".into(), "test".into())]))
@@ -2173,7 +2339,7 @@ mod test {
             .unwrap();
         graphrecord.add_group("group".into(), None, None).unwrap();
 
-        graphrecord.freeze_schema();
+        graphrecord.freeze_schema().unwrap();
 
         assert!(
             graphrecord
@@ -2204,7 +2370,7 @@ mod test {
             .add_group("1".into(), None, Some(vec![3]))
             .unwrap();
 
-        graphrecord.freeze_schema();
+        graphrecord.freeze_schema().unwrap();
 
         let edge_index = graphrecord
             .add_edge("0".into(), "1".into(), HashMap::new())
@@ -2253,7 +2419,7 @@ mod test {
             .unwrap();
         graphrecord.add_group("group".into(), None, None).unwrap();
 
-        graphrecord.freeze_schema();
+        graphrecord.freeze_schema().unwrap();
 
         assert!(
             graphrecord
@@ -2579,7 +2745,7 @@ mod test {
     fn test_clear() {
         let mut graphrecord = create_graphrecord();
 
-        graphrecord.clear();
+        graphrecord.clear().unwrap();
 
         assert_eq!(0, graphrecord.node_count());
         assert_eq!(0, graphrecord.edge_count());
