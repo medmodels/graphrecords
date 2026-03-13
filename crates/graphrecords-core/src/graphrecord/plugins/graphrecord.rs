@@ -1,3 +1,5 @@
+use graphrecords_utils::aliases::GrHashMap;
+
 use super::{
     Plugin, PostAddEdgeContext, PostAddEdgeToGroupContext, PostAddEdgeWithGroupContext,
     PostAddEdgesContext, PostAddEdgesDataframesContext, PostAddEdgesDataframesWithGroupContext,
@@ -19,82 +21,17 @@ use crate::{
     graphrecord::{EdgeDataFrameInput, GraphRecord, NodeDataFrameInput},
     prelude::{Attributes, EdgeIndex, GraphRecordAttribute, Group, NodeIndex, Schema},
 };
-use graphrecords_utils::aliases::GrHashMap;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-use std::{
-    fmt::{Display, Formatter},
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 pub type PluginName = GraphRecordAttribute;
 
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct PluginGraphRecord {
-    graphrecord: GraphRecord,
-    plugins: Arc<GrHashMap<PluginName, Box<dyn Plugin>>>,
-}
-
-impl Default for PluginGraphRecord {
-    fn default() -> Self {
-        Self {
-            graphrecord: GraphRecord::default(),
-            plugins: Arc::new(GrHashMap::new()),
-        }
-    }
-}
-
-impl Display for PluginGraphRecord {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.graphrecord, f)
-    }
-}
-
-impl Deref for PluginGraphRecord {
-    type Target = GraphRecord;
-
-    fn deref(&self) -> &GraphRecord {
-        &self.graphrecord
-    }
-}
-
-impl DerefMut for PluginGraphRecord {
-    fn deref_mut(&mut self) -> &mut GraphRecord {
-        &mut self.graphrecord
-    }
-}
-
-impl AsRef<GraphRecord> for PluginGraphRecord {
-    fn as_ref(&self) -> &GraphRecord {
-        &self.graphrecord
-    }
-}
-
-impl From<GraphRecord> for PluginGraphRecord {
-    fn from(graphrecord: GraphRecord) -> Self {
-        Self {
-            graphrecord,
-            plugins: Arc::new(GrHashMap::new()),
-        }
-    }
-}
-
-impl From<PluginGraphRecord> for GraphRecord {
-    fn from(graphrecord: PluginGraphRecord) -> Self {
-        graphrecord.graphrecord
-    }
-}
-
-impl PluginGraphRecord {
-    pub fn new(
-        graphrecord: GraphRecord,
+impl GraphRecord {
+    pub fn with_plugins(
         plugins: GrHashMap<PluginName, Box<dyn Plugin>>,
     ) -> GraphRecordResult<Self> {
         let mut graphrecord = Self {
-            graphrecord,
             plugins: Arc::new(plugins),
+            ..Default::default()
         };
 
         let plugins = graphrecord.plugins.clone();
@@ -154,7 +91,7 @@ impl PluginGraphRecord {
                 plugin.pre_set_schema(self, pre_context)
             })?;
 
-        self.graphrecord.set_schema(pre_context.schema)?;
+        self.set_schema_impl(pre_context.schema)?;
 
         plugins
             .iter()
@@ -163,17 +100,27 @@ impl PluginGraphRecord {
         Ok(())
     }
 
+    pub fn set_schema_bypass_plugins(&mut self, schema: Schema) -> GraphRecordResult<()> {
+        self.set_schema_impl(schema)
+    }
+
     pub fn freeze_schema(&mut self) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
         for (_, plugin) in plugins.iter() {
             plugin.pre_freeze_schema(self)?;
         }
 
-        self.graphrecord.freeze_schema();
+        self.freeze_schema_impl();
 
         for (_, plugin) in plugins.iter() {
             plugin.post_freeze_schema(self)?;
         }
+
+        Ok(())
+    }
+
+    pub const fn freeze_schema_bypass_plugins(&mut self) -> GraphRecordResult<()> {
+        self.freeze_schema_impl();
 
         Ok(())
     }
@@ -184,11 +131,17 @@ impl PluginGraphRecord {
             plugin.pre_unfreeze_schema(self)?;
         }
 
-        self.graphrecord.unfreeze_schema();
+        self.unfreeze_schema_impl();
 
         for (_, plugin) in plugins.iter() {
             plugin.post_unfreeze_schema(self)?;
         }
+
+        Ok(())
+    }
+
+    pub const fn unfreeze_schema_bypass_plugins(&mut self) -> GraphRecordResult<()> {
+        self.unfreeze_schema_impl();
 
         Ok(())
     }
@@ -210,8 +163,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_node(self, pre_context)
             })?;
 
-        self.graphrecord
-            .add_node(pre_context.node_index, pre_context.attributes)?;
+        self.add_node_impl(pre_context.node_index, pre_context.attributes)?;
 
         let post_context = PostAddNodeContext { node_index };
 
@@ -220,6 +172,14 @@ impl PluginGraphRecord {
             .try_for_each(|(_, plugin)| plugin.post_add_node(self, post_context.clone()))?;
 
         Ok(())
+    }
+
+    pub fn add_node_bypass_plugins(
+        &mut self,
+        node_index: NodeIndex,
+        attributes: Attributes,
+    ) -> GraphRecordResult<()> {
+        self.add_node_impl(node_index, attributes)
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -242,7 +202,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_node_with_group(self, pre_context)
             })?;
 
-        self.graphrecord.add_node_with_group(
+        self.add_node_with_group_impl(
             pre_context.node_index,
             pre_context.attributes,
             pre_context.group,
@@ -257,6 +217,15 @@ impl PluginGraphRecord {
         Ok(())
     }
 
+    pub fn add_node_with_group_bypass_plugins(
+        &mut self,
+        node_index: NodeIndex,
+        attributes: Attributes,
+        group: Group,
+    ) -> GraphRecordResult<()> {
+        self.add_node_with_group_impl(node_index, attributes, group)
+    }
+
     pub fn remove_node(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
         let plugins = self.plugins.clone();
 
@@ -269,7 +238,7 @@ impl PluginGraphRecord {
                 plugin.pre_remove_node(self, pre_context)
             })?;
 
-        let attributes = self.graphrecord.remove_node(&pre_context.node_index)?;
+        let attributes = self.remove_node_impl(&pre_context.node_index)?;
 
         let post_context = PostRemoveNodeContext {
             node_index: pre_context.node_index,
@@ -282,6 +251,13 @@ impl PluginGraphRecord {
         Ok(attributes)
     }
 
+    pub fn remove_node_bypass_plugins(
+        &mut self,
+        node_index: &NodeIndex,
+    ) -> GraphRecordResult<Attributes> {
+        self.remove_node_impl(node_index)
+    }
+
     pub fn add_nodes(&mut self, nodes: Vec<(NodeIndex, Attributes)>) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
 
@@ -292,7 +268,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_nodes(self, pre_context)
             })?;
 
-        self.graphrecord.add_nodes(pre_context.nodes.clone())?;
+        self.add_nodes_impl(pre_context.nodes.clone())?;
 
         let post_context = PostAddNodesContext {
             nodes: pre_context.nodes,
@@ -303,6 +279,13 @@ impl PluginGraphRecord {
             .try_for_each(|(_, plugin)| plugin.post_add_nodes(self, post_context.clone()))?;
 
         Ok(())
+    }
+
+    pub fn add_nodes_bypass_plugins(
+        &mut self,
+        nodes: Vec<(NodeIndex, Attributes)>,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_impl(nodes)
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -320,8 +303,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_nodes_with_group(self, pre_context)
             })?;
 
-        self.graphrecord
-            .add_nodes_with_group(pre_context.nodes.clone(), pre_context.group.clone())?;
+        self.add_nodes_with_group_impl(pre_context.nodes.clone(), pre_context.group.clone())?;
 
         let post_context = PostAddNodesWithGroupContext {
             nodes: pre_context.nodes,
@@ -333,6 +315,14 @@ impl PluginGraphRecord {
         })?;
 
         Ok(())
+    }
+
+    pub fn add_nodes_with_group_bypass_plugins(
+        &mut self,
+        nodes: Vec<(NodeIndex, Attributes)>,
+        group: Group,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_with_group_impl(nodes, group)
     }
 
     pub fn add_nodes_dataframes(
@@ -350,8 +340,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_nodes_dataframes(self, pre_context)
             })?;
 
-        self.graphrecord
-            .add_nodes_dataframes(pre_context.nodes_dataframes.clone())?;
+        self.add_nodes_dataframes_impl(pre_context.nodes_dataframes.clone())?;
 
         let post_context = PostAddNodesDataframesContext {
             nodes_dataframes: pre_context.nodes_dataframes,
@@ -362,6 +351,13 @@ impl PluginGraphRecord {
         })?;
 
         Ok(())
+    }
+
+    pub fn add_nodes_dataframes_bypass_plugins(
+        &mut self,
+        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_dataframes_impl(nodes_dataframes)
     }
 
     pub fn add_nodes_dataframes_with_group(
@@ -381,7 +377,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_nodes_dataframes_with_group(self, pre_context)
             })?;
 
-        self.graphrecord.add_nodes_dataframes_with_group(
+        self.add_nodes_dataframes_with_group_impl(
             pre_context.nodes_dataframes.clone(),
             pre_context.group.clone(),
         )?;
@@ -396,6 +392,14 @@ impl PluginGraphRecord {
         })?;
 
         Ok(())
+    }
+
+    pub fn add_nodes_dataframes_with_group_bypass_plugins(
+        &mut self,
+        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
+        group: Group,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_dataframes_with_group_impl(nodes_dataframes, group)
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -418,7 +422,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_edge(self, pre_context)
             })?;
 
-        let edge_index = self.graphrecord.add_edge(
+        let edge_index = self.add_edge_impl(
             pre_context.source_node_index,
             pre_context.target_node_index,
             pre_context.attributes,
@@ -431,6 +435,15 @@ impl PluginGraphRecord {
             .try_for_each(|(_, plugin)| plugin.post_add_edge(self, post_context.clone()))?;
 
         Ok(edge_index)
+    }
+
+    pub fn add_edge_bypass_plugins(
+        &mut self,
+        source_node_index: NodeIndex,
+        target_node_index: NodeIndex,
+        attributes: Attributes,
+    ) -> GraphRecordResult<EdgeIndex> {
+        self.add_edge_impl(source_node_index, target_node_index, attributes)
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -455,7 +468,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_edge_with_group(self, pre_context)
             })?;
 
-        let edge_index = self.graphrecord.add_edge_with_group(
+        let edge_index = self.add_edge_with_group_impl(
             pre_context.source_node_index,
             pre_context.target_node_index,
             pre_context.attributes,
@@ -471,6 +484,16 @@ impl PluginGraphRecord {
         Ok(edge_index)
     }
 
+    pub fn add_edge_with_group_bypass_plugins(
+        &mut self,
+        source_node_index: NodeIndex,
+        target_node_index: NodeIndex,
+        attributes: Attributes,
+        group: Group,
+    ) -> GraphRecordResult<EdgeIndex> {
+        self.add_edge_with_group_impl(source_node_index, target_node_index, attributes, group)
+    }
+
     pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<Attributes> {
         let plugins = self.plugins.clone();
 
@@ -483,7 +506,7 @@ impl PluginGraphRecord {
                 plugin.pre_remove_edge(self, pre_context)
             })?;
 
-        let attributes = self.graphrecord.remove_edge(&pre_context.edge_index)?;
+        let attributes = self.remove_edge_impl(&pre_context.edge_index)?;
 
         let post_context = PostRemoveEdgeContext {
             edge_index: pre_context.edge_index,
@@ -494,6 +517,13 @@ impl PluginGraphRecord {
             .try_for_each(|(_, plugin)| plugin.post_remove_edge(self, post_context.clone()))?;
 
         Ok(attributes)
+    }
+
+    pub fn remove_edge_bypass_plugins(
+        &mut self,
+        edge_index: &EdgeIndex,
+    ) -> GraphRecordResult<Attributes> {
+        self.remove_edge_impl(edge_index)
     }
 
     pub fn add_edges(
@@ -509,7 +539,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_edges(self, pre_context)
             })?;
 
-        let edge_indices = self.graphrecord.add_edges(pre_context.edges)?;
+        let edge_indices = self.add_edges_impl(pre_context.edges)?;
 
         let post_context = PostAddEdgesContext {
             edge_indices: edge_indices.clone(),
@@ -520,6 +550,13 @@ impl PluginGraphRecord {
             .try_for_each(|(_, plugin)| plugin.post_add_edges(self, post_context.clone()))?;
 
         Ok(edge_indices)
+    }
+
+    pub fn add_edges_bypass_plugins(
+        &mut self,
+        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_impl(edges)
     }
 
     pub fn add_edges_with_group(
@@ -539,9 +576,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_edges_with_group(self, pre_context)
             })?;
 
-        let edge_indices = self
-            .graphrecord
-            .add_edges_with_group(pre_context.edges, &pre_context.group)?;
+        let edge_indices = self.add_edges_with_group_impl(pre_context.edges, &pre_context.group)?;
 
         let post_context = PostAddEdgesWithGroupContext {
             edge_indices: edge_indices.clone(),
@@ -552,6 +587,14 @@ impl PluginGraphRecord {
         })?;
 
         Ok(edge_indices)
+    }
+
+    pub fn add_edges_with_group_bypass_plugins(
+        &mut self,
+        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        group: &Group,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_with_group_impl(edges, group)
     }
 
     pub fn add_edges_dataframes(
@@ -569,9 +612,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_edges_dataframes(self, pre_context)
             })?;
 
-        let edge_indices = self
-            .graphrecord
-            .add_edges_dataframes(pre_context.edges_dataframes.clone())?;
+        let edge_indices = self.add_edges_dataframes_impl(pre_context.edges_dataframes.clone())?;
 
         let post_context = PostAddEdgesDataframesContext {
             edges_dataframes: pre_context.edges_dataframes,
@@ -582,6 +623,13 @@ impl PluginGraphRecord {
         })?;
 
         Ok(edge_indices)
+    }
+
+    pub fn add_edges_dataframes_bypass_plugins(
+        &mut self,
+        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_dataframes_impl(edges_dataframes)
     }
 
     pub fn add_edges_dataframes_with_group(
@@ -601,7 +649,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_edges_dataframes_with_group(self, pre_context)
             })?;
 
-        let edge_indices = self.graphrecord.add_edges_dataframes_with_group(
+        let edge_indices = self.add_edges_dataframes_with_group_impl(
             pre_context.edges_dataframes.clone(),
             &pre_context.group,
         )?;
@@ -616,6 +664,14 @@ impl PluginGraphRecord {
         })?;
 
         Ok(edge_indices)
+    }
+
+    pub fn add_edges_dataframes_with_group_bypass_plugins(
+        &mut self,
+        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
+        group: &Group,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_dataframes_with_group_impl(edges_dataframes, group)
     }
 
     pub fn add_group(
@@ -637,7 +693,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_group(self, pre_context)
             })?;
 
-        self.graphrecord.add_group(
+        self.add_group_impl(
             pre_context.group.clone(),
             pre_context.node_indices.clone(),
             pre_context.edge_indices.clone(),
@@ -656,6 +712,15 @@ impl PluginGraphRecord {
         Ok(())
     }
 
+    pub fn add_group_bypass_plugins(
+        &mut self,
+        group: Group,
+        node_indices: Option<Vec<NodeIndex>>,
+        edge_indices: Option<Vec<EdgeIndex>>,
+    ) -> GraphRecordResult<()> {
+        self.add_group_impl(group, node_indices, edge_indices)
+    }
+
     pub fn remove_group(&mut self, group: &Group) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
 
@@ -668,7 +733,7 @@ impl PluginGraphRecord {
                 plugin.pre_remove_group(self, pre_context)
             })?;
 
-        self.graphrecord.remove_group(&pre_context.group)?;
+        self.remove_group_impl(&pre_context.group)?;
 
         let post_context = PostRemoveGroupContext {
             group: pre_context.group,
@@ -679,6 +744,10 @@ impl PluginGraphRecord {
             .try_for_each(|(_, plugin)| plugin.post_remove_group(self, post_context.clone()))?;
 
         Ok(())
+    }
+
+    pub fn remove_group_bypass_plugins(&mut self, group: &Group) -> GraphRecordResult<()> {
+        self.remove_group_impl(group)
     }
 
     pub fn add_node_to_group(
@@ -695,8 +764,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_node_to_group(self, pre_context)
             })?;
 
-        self.graphrecord
-            .add_node_to_group(pre_context.group.clone(), pre_context.node_index.clone())?;
+        self.add_node_to_group_impl(pre_context.group.clone(), pre_context.node_index.clone())?;
 
         let post_context = PostAddNodeToGroupContext {
             group: pre_context.group,
@@ -708,6 +776,14 @@ impl PluginGraphRecord {
         })?;
 
         Ok(())
+    }
+
+    pub fn add_node_to_group_bypass_plugins(
+        &mut self,
+        group: Group,
+        node_index: NodeIndex,
+    ) -> GraphRecordResult<()> {
+        self.add_node_to_group_impl(group, node_index)
     }
 
     pub fn add_edge_to_group(
@@ -724,8 +800,7 @@ impl PluginGraphRecord {
                 plugin.pre_add_edge_to_group(self, pre_context)
             })?;
 
-        self.graphrecord
-            .add_edge_to_group(pre_context.group.clone(), pre_context.edge_index)?;
+        self.add_edge_to_group_impl(pre_context.group.clone(), pre_context.edge_index)?;
 
         let post_context = PostAddEdgeToGroupContext {
             group: pre_context.group,
@@ -737,6 +812,14 @@ impl PluginGraphRecord {
         })?;
 
         Ok(())
+    }
+
+    pub fn add_edge_to_group_bypass_plugins(
+        &mut self,
+        group: Group,
+        edge_index: EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        self.add_edge_to_group_impl(group, edge_index)
     }
 
     pub fn remove_node_from_group(
@@ -756,8 +839,7 @@ impl PluginGraphRecord {
                 plugin.pre_remove_node_from_group(self, pre_context)
             })?;
 
-        self.graphrecord
-            .remove_node_from_group(&pre_context.group, &pre_context.node_index)?;
+        self.remove_node_from_group_impl(&pre_context.group, &pre_context.node_index)?;
 
         let post_context = PostRemoveNodeFromGroupContext {
             group: pre_context.group,
@@ -769,6 +851,14 @@ impl PluginGraphRecord {
         })?;
 
         Ok(())
+    }
+
+    pub fn remove_node_from_group_bypass_plugins(
+        &mut self,
+        group: &Group,
+        node_index: &NodeIndex,
+    ) -> GraphRecordResult<()> {
+        self.remove_node_from_group_impl(group, node_index)
     }
 
     pub fn remove_edge_from_group(
@@ -788,8 +878,7 @@ impl PluginGraphRecord {
                 plugin.pre_remove_edge_from_group(self, pre_context)
             })?;
 
-        self.graphrecord
-            .remove_edge_from_group(&pre_context.group, &pre_context.edge_index)?;
+        self.remove_edge_from_group_impl(&pre_context.group, &pre_context.edge_index)?;
 
         let post_context = PostRemoveEdgeFromGroupContext {
             group: pre_context.group,
@@ -803,6 +892,14 @@ impl PluginGraphRecord {
         Ok(())
     }
 
+    pub fn remove_edge_from_group_bypass_plugins(
+        &mut self,
+        group: &Group,
+        edge_index: &EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        self.remove_edge_from_group_impl(group, edge_index)
+    }
+
     pub fn clear(&mut self) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
 
@@ -810,11 +907,17 @@ impl PluginGraphRecord {
             plugin.pre_clear(self)?;
         }
 
-        self.graphrecord.clear();
+        self.clear_impl();
 
         for (_, plugin) in plugins.iter() {
             plugin.post_clear(self)?;
         }
+
+        Ok(())
+    }
+
+    pub fn clear_bypass_plugins(&mut self) -> GraphRecordResult<()> {
+        self.clear_impl();
 
         Ok(())
     }
