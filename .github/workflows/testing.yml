@@ -18,6 +18,9 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
 
@@ -35,4 +38,4 @@ jobs:
       - name: Run tests
         run: |
           uv run pytest -W error
-          cargo test --all-features
+          cargo hack test --feature-powerset -p graphrecords -p graphrecords-core -p graphrecords-utils
