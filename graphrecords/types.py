@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from typing import (
     TYPE_CHECKING,
+    Any,
     Dict,
     List,
     Literal,
@@ -221,15 +222,26 @@ class PandasDataFramesExport(TypedDict):
     groups: Dict[Group, PandasDataFramesGroupExport]
 
 
-class PyPlugin(ABC):  # noqa: D101
+class _PyPlugin(ABC):  # pyright: ignore[reportUnusedClass]
     @abstractmethod
-    def initialize(self, graphrecord: PyGraphRecord) -> None: ...  # noqa: D102
+    def initialize(self, graphrecord: PyGraphRecord) -> None: ...
     @abstractmethod
-    def pre_set_schema(  # noqa: D102
+    def pre_set_schema(
         self, graphrecord: PyGraphRecord, context: PyPreSetSchemaContext
     ) -> PyPreSetSchemaContext: ...
     @abstractmethod
-    def post_set_schema(self, graphrecord: PyGraphRecord) -> None: ...  # noqa: D102
+    def post_set_schema(self, graphrecord: PyGraphRecord) -> None: ...
+
+
+class _PyConnector(ABC):  # pyright: ignore[reportUnusedClass]
+    @abstractmethod
+    def initialize(self, graphrecord: PyGraphRecord) -> None: ...
+    @abstractmethod
+    def disconnect(self, graphrecord: PyGraphRecord) -> None: ...
+    @abstractmethod
+    def ingest(self, graphrecord: PyGraphRecord, data: Any) -> None: ...  # noqa: ANN401
+    @abstractmethod
+    def export(self, graphrecord: PyGraphRecord) -> Any: ...  # noqa: ANN401
 
 
 def is_graphrecord_attribute(value: object) -> TypeIs[GraphRecordAttribute]:

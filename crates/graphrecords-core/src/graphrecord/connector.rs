@@ -8,6 +8,7 @@ use std::{
 
 pub trait Connector {
     fn initialize(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()>;
+    fn disconnect(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()>;
 }
 
 pub trait IngestConnector: Connector {
@@ -108,6 +109,12 @@ impl<C: Connector> ConnectedGraphRecord<C> {
             graphrecord,
             connector,
         })
+    }
+
+    pub fn disconnect(mut self) -> GraphRecordResult<GraphRecord> {
+        self.connector.disconnect(&mut self.graphrecord)?;
+
+        Ok(self.graphrecord)
     }
 }
 
