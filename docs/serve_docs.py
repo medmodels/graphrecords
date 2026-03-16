@@ -40,7 +40,7 @@ def setup_live_docs_server() -> None:
         "api/*",
         "user_guide/*",
         "developer_guide/*",
-        "../medmodels/**/*",
+        "../graphrecords/**/*",
     ]
 
     # Set up file watchers

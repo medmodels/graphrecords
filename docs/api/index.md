@@ -1,6 +1,6 @@
 # API Reference
 
-This page contains auto-generated API reference documentation for the `medmodels` package.
+This page contains auto-generated API reference documentation for the `graphrecords` package.
 
 ```{toctree}
 :maxdepth: 1
@@ -13,6 +13,5 @@ self
 :maxdepth: 1
 :caption: Contents:
 
-medrecord
-treatment_effect
+graphrecord
 ```

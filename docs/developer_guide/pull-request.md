@@ -1,6 +1,6 @@
 # Creating a Pull Request
 
-Once you've made your changes to the MedModels codebase and are ready to share them, you'll submit a pull request (PR). Here's a guide to walk you through the process:
+Once you've made your changes to the GraphRecords codebase and are ready to share them, you'll submit a pull request (PR). Here's a guide to walk you through the process:
 
 **1. Push your Local Branch:**
 
@@ -25,14 +25,14 @@ Once you've made your changes to the MedModels codebase and are ready to share t
 
 **3. Ensure Test Coverage:**
 
-- MedModels requires 100% Python isolated test coverage. That means that each module should be tested on its own (isolated coverage).
-- For every Python file in the main `medmodels/` directory, there has to be a matching test file in the `tests/` directory (e.g., `medmodels/utils.py` → `tests/test_utils.py`).
+- GraphRecords requires 100% Python isolated test coverage. That means that each module should be tested on its own (isolated coverage).
+- For every Python file in the main `graphrecords/` directory, there has to be a matching test file in the `tests/` directory (e.g., `graphrecords/utils.py` → `tests/test_utils.py`).
 - Use the Makefile command `make test-python-coverage` to run the tests with isolated coverage reporting. Also use the Makefile command `make test-python-coverage-non-isolated` to ensure all modules are 100% covered (including tests and `__init__.py` files).
 - If your code is not fully covered, add or revise tests accordingly before submitting your PR.
 
 **4. Create a Pull Request:**
 
-- Navigate to the [MedModels pull requests](https://github.com/limebit/medmodels/pulls) and create a new PR.
+- Navigate to the [GraphRecords pull requests](https://github.com/medmodels/graphrecords/pulls) and create a new PR.
 - Choose the branch you want your changes merged into from the "base" branch dropdown (usually the `main` branch).
 - Provide a clear and descriptive title for your pull request that reflects the changes you made.
   - The title should follow the Conventional Commits type (e.g., "feat: Add support for new image format").

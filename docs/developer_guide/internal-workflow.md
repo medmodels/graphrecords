@@ -1,4 +1,4 @@
-# Internal Workflow at MedModels
+# Internal Workflow at GraphRecords
 
 ## IDE Config: VSCode
 

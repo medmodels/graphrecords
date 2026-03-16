@@ -20,7 +20,7 @@ internal-workflow.md
 
 ## Overview
 
-This contribution guide provides details on how we are working on MedModels and which standards and best practices we stick to.
+This contribution guide provides details on how we are working on GraphRecords and which standards and best practices we stick to.
 
 The guide covers the following topics:
 

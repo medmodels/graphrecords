@@ -1,160 +1,203 @@
 <div align="center">
-    <img src="https://raw.githubusercontent.com/limebit/medmodels-static/refs/heads/main/logos/logo_black_with_background.svg" alt="MedModels Logo">
+    <img src="https://raw.githubusercontent.com/medmodels/graphrecords-static/refs/heads/main/logos/logo_with_background.svg" alt="GraphRecords Logo">
 </div>
 
 <br>
 
 <div align="center">
   <img alt="Python Versions" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue">
-  <a href="https://github.com/limebit/medmodels/blob/main/LICENSE">
-    <img alt="MedModels License" src="https://img.shields.io/github/license/limebit/medmodels.svg">
+  <a href="https://github.com/medmodels/graphrecords/blob/main/LICENSE">
+    <img alt="GraphRecords License" src="https://img.shields.io/github/license/medmodels/graphrecords.svg">
   </a>
-  <a href="https://github.com/limebit/medmodels/actions/workflows/testing.yml">
-    <img src="https://github.com/limebit/medmodels/actions/workflows/testing.yml/badge.svg?branch=main" alt="Tests">
+  <a href="https://github.com/medmodels/graphrecords/actions/workflows/testing.yml">
+    <img src="https://github.com/medmodels/graphrecords/actions/workflows/testing.yml/badge.svg?branch=main" alt="Tests">
   </a>
-  <img alt="Coverage percentage" src="https://raw.githubusercontent.com/limebit/medmodels-static/refs/heads/main/icons/coverage-badge.svg">
-  <a href="https://pypi.org/project/medmodels/">
-    <img src="https://img.shields.io/pypi/v/medmodels" alt="PyPI Version">
+  <img alt="Coverage percentage" src="https://raw.githubusercontent.com/medmodels/graphrecords-static/refs/heads/main/icons/coverage-badge.svg">
+  <a href="https://pypi.org/project/graphrecords/">
+    <img src="https://img.shields.io/pypi/v/graphrecords" alt="PyPI Version">
   </a>
   <a href="https://github.com/astral-sh/ruff">
     <img alt="Code Style" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json">
   </a>
 </div>
 
-<h2 align="center">
-  MedModels: A Rust-Powered Python Framework for Modern Healthcare Research
-</h2>
+# GraphRecords
 
-## Motivation
+GraphRecords stores entities and their relationships as a graph. Nodes hold attributes. Edges connect nodes and can also hold attributes. Groups organize subsets of nodes and edges.
 
-Analyzing real-world evidence, especially patient data, is a complex task demanding accuracy and reproducibility. Currently, research teams often re-implement the same statistical methods and data processing pipelines, leading to inefficient codebases, faulty implementations and technical debt.
+## When to Use GraphRecords
 
-MedModels addresses these challenges by providing a standardized, reliable, and efficient framework for handling, processing, and analyzing electronic health records (EHR) and claims data.
+GraphRecords fits problems where:
 
-**Target Audience:**
+- Data has natural relationships (users and products, documents and citations, components and dependencies)
+- You need to query based on relationships ("find all users connected to products over $100")
+- Different entity types have different attributes (users have age, products have price)
 
-MedModels is designed for a wide range of users working with real-world data and electronic health records, including:
-
-- (Pharmaco-)Epidemiologists
-- Real-World Data Analysts
-- Health Economists
-- Clinicians
-- Data Scientists
-- Software Developers
-
-## Key Features
-
-- **Rust-Based Data Class:** Facilitates the efficient transformation of patient data into adaptable and scalable network graph structures.
-- **High-Performance Computing:** Handles large datasets in memory while maintaining fast processing speeds due to the underlying Rust implementation.
-- **Standardized Workflows:** Streamlines common tasks in real-world evidence analysis, reducing the need for custom code.
-- **Interoperability:** Supports collaboration and data sharing through a unified data structure and analysis framework.
-
-## Key Components
-
-- **MedRecord Data Structure:**
-
-  - **Graph-Based Representation:** Organizes medical data using nodes (e.g., patients, medications, diagnoses) and edges (e.g., date, dosage, duration) to capture complex interactions and dependencies.
-  - **Efficient Querying:** Enables efficient querying and retrieval of information from the graph structure, supporting various analytical tasks.
-  - **Dynamic Management:** Provides methods to add, remove, and modify nodes and edges, as well as their associated attributes, allowing for flexible data manipulation.
-  - **Effortless Creation:** Easily create a `MedRecord` from various data sources:
-    - **Pandas DataFrames:** Seamlessly convert your existing Pandas DataFrames into a `MedRecord`.
-    - **Polars DataFrames:** Alternatively, use Polars DataFrames as input for efficient data handling.
-    - **Standard Python Structures:** Create a `MedRecord` directly from standard Python data structures like dictionaries and lists, offering flexibility for different data formats.
-  - **Grouping and Filtering:** Allows grouping of nodes and edges for simplified management and targeted analysis of specific subsets of data.
-  - **High-Performance Backend:** Built on a Rust backend for optimal performance and efficient handling of large-scale medical datasets.
-
-- **Treatment Effect Analysis:**
-
-  - **Estimating Treatment Effects:** Provides a range of methods for estimating treatment effects from observational data, including:
-
-    - **Continuous Outcomes:** Analyze treatment effects on continuous outcomes.
-    - **Binary Outcomes:** Estimate odds ratios, risk ratios, and other metrics for binary outcomes.
-    - **Time-to-Event Outcomes:** Perform survival analysis and estimate hazard ratios for time-to-event outcomes.
-    - **Effect Size Metrics:** Calculate standardized effect size metrics like Cohen's d and Hedges' g.
-
-  - **Matching:**
-    - **(High Dimensional) Propensity Score Matching:** Reduce confounding bias by matching treated and untreated individuals based on their propensity scores.
-    - **Nearest Neighbor Matching:** Match individuals based on similarity in their observed characteristics.
-
-## Getting Started
-
-**Installation:**
-
-MedModels can be installed from [PyPI](https://pypi.org/project/medmodels/) using the `pip` command:
+## Installation
 
 ```bash
-pip install medmodels
+pip install graphrecords
 ```
 
-**Quick Start:**
+## Building a Graph
 
-Here's a quick start guide showing an example of how to use MedModels to create a `MedRecord` object, add nodes and edges, and perform basic operations.
+```python
+import graphrecords as gr
+
+# Add nodes as tuples: (id, {attributes})
+record = gr.GraphRecord()
+record.add_nodes(
+    [
+        ("alice", {"age": 30}),
+        ("bob", {"age": 25}),
+        ("carol", {"age": 35}),
+    ],
+    group="users",
+)
+
+record.add_nodes(
+    [
+        ("widget", {"price": 10.0}),
+        ("gadget", {"price": 25.0}),
+    ],
+    group="products",
+)
+
+# Add edges as tuples: (source, target, {attributes})
+record.add_edges(
+    [
+        ("alice", "widget", {"quantity": 1}),
+        ("bob", "gadget", {"quantity": 2}),
+        ("alice", "gadget", {"quantity": 1}),
+    ],
+    group="purchases",
+)
+```
+
+You can also use Pandas or Polars DataFrames:
 
 ```python
 import pandas as pd
-import medmodels as mm
 
-# Patients DataFrame (Nodes)
-patients = pd.DataFrame(
-    [
-        ["Patient 01", 72, "M", "USA"],
-        ["Patient 02", 74, "M", "USA"],
-        ["Patient 03", 64, "F", "GER"],
-    ],
-    columns=["ID", "Age", "Sex", "Loc"],
+users_df = pd.DataFrame({"id": ["alice", "bob"], "age": [30, 25]})
+record.add_nodes((users_df, "id"), group="users")
+
+purchases_df = pd.DataFrame(
+    {"user": ["alice"], "product": ["widget"], "qty": [1]}
 )
-
-# Medications DataFrame (Nodes)
-medications = pd.DataFrame(
-    [["Med 01", "Insulin"], ["Med 02", "Warfarin"]], columns=["ID", "Name"]
-)
-
-# Patients-Medication Relation (Edges)
-patient_medication = pd.DataFrame(
-    [
-        ["Patient 02", "Med 01", pd.Timestamp("20200607")],
-        ["Patient 02", "Med 02", pd.Timestamp("20180202")],
-        ["Patient 03", "Med 02", pd.Timestamp("20190302")],
-    ],
-    columns=["Pat_ID", "Med_ID", "Date"],
-)
-
-# Create a MedRecord object using the builder pattern
-record = (
-    mm.MedRecord.builder()
-    .add_nodes((patients, "ID"), group="Patients")
-    .add_nodes((medications, "ID"), group="Medications")
-    .add_edges((patient_medication, "Pat_ID", "Med_ID"))
-    .add_group("US-Patients", nodes=["Patient 01", "Patient 02"])
-    .build()
-)
-
-# Print an combined overview of the nodes and edges in the MedRecord
-print(record)
-
-# You can also print only nodes and edges respectively
-print(record.overview_nodes())
-print(record.overview_edges())
-
-# Accessing all available nodes
-print(record.nodes)
-# Output: ['Patient 03', 'Med 01', 'Med 02', 'Patient 01', 'Patient 02']
-
-# Accessing a certain node and its attributes
-print(record.node["Patient 01"])
-# Output: {'Age': 72, 'Loc': 'USA', 'Sex': 'M'}
-
-# Getting all available groups
-print(record.groups)
-# Output: ['Medications', 'Patients', 'US-Patients']
-
-# Getting the nodes that are within a certain group
-print(record.nodes_in_group("Medications"))
-# Output: ['Med 02', 'Med 01']
-
-# Save the MedRecord to a file in RON format
-record.to_ron("record.ron")
-
-# Load the MedRecord from the RON file
-new_record = mm.MedRecord.from_ron("record.ron")
+record.add_edges((purchases_df, "user", "product"), group="purchases")
 ```
+
+## Accessing Data
+
+```python
+# Get all nodes
+record.nodes  # ['alice', 'bob', 'carol', 'widget', 'gadget']
+
+# Get attributes of a node
+record.node["alice"]  # {'age': 30}
+
+# Get nodes in a group
+record.nodes_in_group("users")  # ['alice', 'bob', 'carol']
+
+# Get edges connected to a node
+record.outgoing_edges("alice")  # [0, 2]
+
+# Get edge attributes
+record.edge[0]  # {'quantity': 1}
+```
+
+## Query Engine
+
+The query engine finds nodes and edges based on their attributes and relationships.
+
+Queries are functions that receive an operand, apply conditions, and return results:
+
+```python
+from graphrecords.querying import NodeOperand, NodeIndicesOperand
+
+def users_over_25(node: NodeOperand) -> NodeIndicesOperand:
+    node.in_group("users")
+    node.attribute("age").greater_than(25)
+    return node.index()
+
+record.query_nodes(users_over_25)  # ['alice', 'carol']
+```
+
+Queries can follow relationships:
+
+```python
+def users_who_bought_expensive_items(node: NodeOperand) -> NodeIndicesOperand:
+    node.in_group("users")
+    # Follow edges to products, check price
+    node.neighbors().attribute("price").greater_than(20)
+    return node.index()
+
+record.query_nodes(users_who_bought_expensive_items)  # ['alice', 'bob']
+```
+
+Queries can aggregate:
+
+```python
+from graphrecords.querying import NodeSingleValueWithoutIndexOperand
+
+def average_user_age(node: NodeOperand) -> NodeSingleValueWithoutIndexOperand:
+    node.in_group("users")
+    return node.attribute("age").mean()
+
+record.query_nodes(average_user_age)  # 30.0
+```
+
+See the [Query Engine Guide](https://www.medmodels.de/docs/graphrecords/latest/user_guide/05_query_engine/index.html) for the full API.
+
+## Schema
+
+Schemas define what attributes are allowed and their types.
+
+**Inferred mode** (default): The schema learns from data as you add it. Any attribute is allowed.
+
+**Provided mode**: The schema is fixed. Data that doesn't match is rejected.
+
+```python
+from graphrecords.schema import Schema, GroupSchema
+from graphrecords.datatype import Int, String
+
+schema = Schema(
+    groups={"users": GroupSchema(nodes={"age": Int, "name": String})}
+)
+
+record = gr.GraphRecord.builder().with_schema(schema).build()
+record.freeze_schema()  # Switch to provided mode
+
+# Now adding a user without 'age' or 'name' raises an error
+```
+
+See the [Schema Guide](https://www.medmodels.de/docs/graphrecords/latest/user_guide/06_schema.html) for details.
+
+## Serialization
+
+Save and load graphs using RON format:
+
+```python
+record.to_ron("graph.ron")
+loaded = gr.GraphRecord.from_ron("graph.ron")
+```
+
+Export to DataFrames:
+
+```python
+dataframes = record.to_pandas()  # or record.to_polars()
+```
+
+## Documentation
+
+- [User Guide](https://www.medmodels.de/docs/graphrecords/latest/user_guide/index.html)
+- [API Reference](https://www.medmodels.de/docs/graphrecords/latest/api/index.html)
+
+## Background
+
+GraphRecords started as `MedRecord` in the [medmodels](https://github.com/limebit/medmodels) library. We realized it has applications beyond the medical domain and published it as a standalone library.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

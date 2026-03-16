@@ -19,7 +19,7 @@ jobs:
             const message = `
               Thank you for your pull request! 🎉
 
-              Please make sure to read the ***pull request guidelines*** at: https://www.medmodels.de/docs/latest/developer_guide/pull-request.html
+              Please make sure to read the ***pull request guidelines*** at: https://www.medmodels.de/docs/graphrecords/latest/developer_guide/pull-request.html
 
               While you're waiting for a review, please ensure that:
 

@@ -87,14 +87,14 @@ format: install-dev
 clean: docs-clean
 ifeq ($(OS),Windows_NT)
 	@if exist $(VENV_NAME) $(rmrf) $(VENV_NAME)
-	@for %%d in (target dist medmodels.egg-info .ruff_cache .pytest_cache) do @if exist %%d $(rmrf) %%d
-	@if exist medmodels\*.pyd $(rmf) medmodels\*.pyd
+	@for %%d in (target dist graphrecords.egg-info .ruff_cache .pytest_cache) do @if exist %%d $(rmrf) %%d
+	@if exist graphrecords\*.pyd $(rmf) graphrecords\*.pyd
 	@if exist .vscode\*.log $(rmf) .vscode\*.log
 	@if exist .coverage $(rmf) .coverage
 	@for /d /r %%i in (__pycache__) do @if exist "%%i" $(rmrf) "%%i"
 else
-	$(rmrf) $(VENV_NAME) target dist medmodels.egg-info .ruff_cache .pytest_cache
-	$(rmf) medmodels/*.so
+	$(rmrf) $(VENV_NAME) target dist graphrecords.egg-info .ruff_cache .pytest_cache
+	$(rmf) graphrecords/*.so
 	$(rmf) .vscode/*.log
 	$(rmf) .coverage
 	find . -type d -name "__pycache__" -exec rm -rf {} +

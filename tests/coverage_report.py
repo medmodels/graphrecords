@@ -22,14 +22,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MEDMODELS_ROOT = PROJECT_ROOT / "medmodels"
+GRAPHRECORDS_ROOT = PROJECT_ROOT / "graphrecords"
 TESTS_ROOT = PROJECT_ROOT / "tests"
 COVERAGE_FOLDER = PROJECT_ROOT / "coverage"
 COVERAGE_XML = PROJECT_ROOT / "coverage.xml"
 
 IGNORE_PATTERNS = [
     "**/__init__.py",
-    "**/medrecord/overview.py",  # TODO(https://github.com/limebit/medmodels/issues/443): Add tests for overview module and remove from ignore list
+    "**/overview.py",  # TODO(@JabobKrauskopf): #001 Add tests for overview module and remove from ignore list
 ]
 
 
@@ -54,7 +54,7 @@ def map_to_test(module_path: Path) -> Path:
     Returns:
         Path: full test path
     """
-    rel = module_path.relative_to(MEDMODELS_ROOT)
+    rel = module_path.relative_to(GRAPHRECORDS_ROOT)
 
     test_name = f"test_{rel.name}"
 
@@ -73,7 +73,7 @@ def get_coverage_path(module_path: Path) -> Path:
     Returns:
         Path: Coverage file path.
     """
-    rel = module_path.relative_to(MEDMODELS_ROOT)
+    rel = module_path.relative_to(GRAPHRECORDS_ROOT)
     return COVERAGE_FOLDER / rel.parent / f"{rel.stem}.coverage"
 
 
@@ -98,7 +98,7 @@ def main() -> None:
 
     modules = {
         module_path: (map_to_test(module_path), get_coverage_path(module_path))
-        for module_path in MEDMODELS_ROOT.rglob("*.py")
+        for module_path in GRAPHRECORDS_ROOT.rglob("*.py")
         if not is_ignored(module_path)
     }
 
@@ -107,7 +107,7 @@ def main() -> None:
             logger.info(
                 "Isolated run: %s testing %s",
                 test_path,
-                module_path.relative_to(MEDMODELS_ROOT),
+                module_path.relative_to(GRAPHRECORDS_ROOT),
             )
             subprocess.run(
                 [

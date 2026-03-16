@@ -1,41 +1,80 @@
 # ruff: noqa: D100, D103
-from typing import Tuple
-
 import pandas as pd
 
-from medmodels import MedRecord
+import graphrecords as gr
 
-medrecord = MedRecord().from_simple_example_dataset()
+# Create example dataset manually
+users = pd.DataFrame(
+    [
+        ["pat_0", 20, "M"],
+        ["pat_1", 30, "F"],
+        ["pat_2", 40, "M"],
+        ["pat_3", 50, "F"],
+        ["pat_4", 60, "M"],
+    ],
+    columns=["index", "age", "gender"],
+)
+
+products = pd.DataFrame(
+    [
+        ["drug_0", "fentanyl injection"],
+        ["drug_1", "aspirin tablet"],
+        ["drug_2", "insulin pen"],
+    ],
+    columns=["index", "description"],
+)
+
+user_product = pd.DataFrame(
+    [
+        ["pat_0", "drug_0", 100, 1, "2020-01-01"],
+        ["pat_1", "drug_0", 150, 2, "2020-02-15"],
+        ["pat_1", "drug_1", 50, 1, "2020-03-10"],
+        ["pat_2", "drug_1", 75, 12, "2020-04-20"],
+        ["pat_2", "drug_2", 200, 1, "2020-05-05"],
+        ["pat_3", "drug_2", 180, 12, "2020-06-30"],
+        ["pat_4", "drug_0", 120, 1, "2020-07-15"],
+        ["pat_4", "drug_1", 60, 2, "2020-08-01"],
+    ],
+    columns=["source", "target", "cost", "quantity", "time"],
+)
+
+graphrecord = (
+    gr.GraphRecord.builder()
+    .add_nodes((users, "index"), group="user")
+    .add_nodes((products, "index"), group="product")
+    .add_edges((user_product, "source", "target"), group="user_product")
+    .build()
+)
 
 
 # Showing example dataset
 def retrieve_example_dataset(
-    medrecord: MedRecord,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    patients = pd.DataFrame(
-        medrecord.node[medrecord.nodes_in_group("patient")]
+    graphrecord: gr.GraphRecord,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    users_df = pd.DataFrame(
+        graphrecord.node[graphrecord.nodes_in_group("user")]
     ).T.sort_index()
-    drugs = pd.DataFrame(
-        medrecord.node[medrecord.nodes_in_group("drug")]
+    products_df = pd.DataFrame(
+        graphrecord.node[graphrecord.nodes_in_group("product")]
     ).T.sort_index()
 
-    patients_drugs_edges = medrecord.edge[medrecord.edges_in_group("patient_drug")]
-    for edge in patients_drugs_edges:
-        patients_drugs_edges[edge]["source"], patients_drugs_edges[edge]["target"] = (
-            medrecord.edge_endpoints(edge)
+    user_product_edges = graphrecord.edge[graphrecord.edges_in_group("user_product")]
+    for edge in user_product_edges:
+        user_product_edges[edge]["source"], user_product_edges[edge]["target"] = (
+            graphrecord.edge_endpoints(edge)
         )
 
-    patients_drugs = pd.DataFrame(patients_drugs_edges).T.sort_index()
-    patients_drugs = patients_drugs[
+    user_product_df = pd.DataFrame(user_product_edges).T.sort_index()
+    user_product_df = user_product_df[
         ["source", "target"]
-        + [col for col in patients_drugs.columns if col not in ["source", "target"]]
+        + [col for col in user_product_df.columns if col not in ["source", "target"]]
     ]
 
-    return patients, drugs, patients_drugs
+    return users_df, products_df, user_product_df
 
 
-patients, drugs, patients_drugs_edges = retrieve_example_dataset(medrecord)
+users_df, products_df, user_product_edges = retrieve_example_dataset(graphrecord)
 
-patients.head(10)
-drugs.head(10)
-patients_drugs_edges.head(10)
+users_df.head(10)
+products_df.head(10)
+user_product_edges.head(10)

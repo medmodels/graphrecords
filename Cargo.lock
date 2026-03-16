@@ -710,6 +710,62 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
+name = "graphrecords"
+version = "0.1.0"
+dependencies = [
+ "graphrecords-core",
+ "graphrecords-utils",
+]
+
+[[package]]
+name = "graphrecords-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "graphrecords-utils",
+ "itertools 0.13.0",
+ "polars",
+ "rand 0.9.2",
+ "rayon",
+ "roaring",
+ "ron",
+ "serde",
+ "tabled",
+]
+
+[[package]]
+name = "graphrecords-pyo3-interop"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "graphrecords",
+ "graphrecords-python",
+ "pyo3",
+]
+
+[[package]]
+name = "graphrecords-python"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "chrono",
+ "graphrecords",
+ "numpy",
+ "polars",
+ "pyo3",
+ "pyo3-polars",
+ "rayon",
+ "serde",
+]
+
+[[package]]
+name = "graphrecords-utils"
+version = "0.1.0"
+dependencies = [
+ "hashbrown 0.14.5",
+]
+
+[[package]]
 name = "h2"
 version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1183,62 +1239,6 @@ checksum = "a06de3016e9fae57a36fd14dba131fccf49f74b40b7fbdb472f96e361ec71a08"
 dependencies = [
  "autocfg",
  "rawpointer",
-]
-
-[[package]]
-name = "medmodels"
-version = "0.4.9"
-dependencies = [
- "medmodels-core",
- "medmodels-utils",
-]
-
-[[package]]
-name = "medmodels-core"
-version = "0.4.9"
-dependencies = [
- "chrono",
- "itertools 0.13.0",
- "medmodels-utils",
- "polars",
- "rand 0.9.2",
- "rayon",
- "roaring",
- "ron",
- "serde",
- "tabled",
-]
-
-[[package]]
-name = "medmodels-pyo3-interop"
-version = "0.4.9"
-dependencies = [
- "bincode",
- "medmodels",
- "medmodels-python",
- "pyo3",
-]
-
-[[package]]
-name = "medmodels-python"
-version = "0.4.9"
-dependencies = [
- "bincode",
- "chrono",
- "medmodels",
- "numpy",
- "polars",
- "pyo3",
- "pyo3-polars",
- "rayon",
- "serde",
-]
-
-[[package]]
-name = "medmodels-utils"
-version = "0.4.9"
-dependencies = [
- "hashbrown 0.14.5",
 ]
 
 [[package]]
@@ -2115,11 +2115,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "py-medmodels"
-version = "0.4.9"
+name = "py-graphrecords"
+version = "0.1.0"
 dependencies = [
- "medmodels",
- "medmodels-python",
+ "graphrecords",
+ "graphrecords-python",
  "pyo3",
 ]
 

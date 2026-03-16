@@ -1,6 +1,6 @@
-# Setting up MedModels
+# Setting up GraphRecords
 
-MedModels leverages a combination of Python and Rust code. To contribute effectively, you'll need to set up a development environment that supports both languages.
+GraphRecords leverages a combination of Python and Rust code. To contribute effectively, you'll need to set up a development environment that supports both languages.
 
 **Requirements:**
 
@@ -9,7 +9,7 @@ MedModels leverages a combination of Python and Rust code. To contribute effecti
 
 **Using the Makefile:**
 
-MedModels utilizes a `Makefile` to manage development tasks. Here's a breakdown of the available commands and their functionalities:
+GraphRecords utilizes a `Makefile` to manage development tasks. Here's a breakdown of the available commands and their functionalities:
 
 - **install:** Sets up the virtual environment and installs the project in editable mode (meaning changes to the code are reflected without needing to reinstall).
 - **install-dev:** Similar to `install`, but additionally installs development dependencies needed for running tests, linting, code formatting and the documentation.
