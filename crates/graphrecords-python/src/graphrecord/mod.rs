@@ -2,6 +2,7 @@
 
 pub mod attribute;
 mod borrowed;
+pub mod connector;
 pub mod datatype;
 pub mod errors;
 pub mod overview;
@@ -20,11 +21,13 @@ use crate::{
 };
 use attribute::PyGraphRecordAttribute;
 use borrowed::BorrowedGraphRecord;
+use connector::PyConnector;
 use errors::PyGraphRecordError;
 use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{
-        Attributes, EdgeIndex, GraphRecord, GraphRecordAttribute, GraphRecordValue, plugins::Plugin,
+        Attributes, EdgeIndex, GraphRecord, GraphRecordAttribute, GraphRecordValue,
+        connector::ConnectedGraphRecord, plugins::Plugin,
     },
 };
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -61,11 +64,13 @@ pub struct PyGraphRecord {
 #[allow(clippy::large_enum_variant)]
 enum PyGraphRecordInner {
     Owned(RwLock<GraphRecord>),
+    Connected(RwLock<ConnectedGraphRecord<PyConnector>>),
     Borrowed(BorrowedGraphRecord),
 }
 
 pub(crate) enum InnerRef<'a> {
     Owned(RwLockReadGuard<'a, GraphRecord>),
+    Connected(RwLockReadGuard<'a, ConnectedGraphRecord<PyConnector>>),
     Borrowed(RwLockReadGuard<'a, Option<NonNull<GraphRecord>>>),
 }
 
@@ -75,9 +80,11 @@ impl Deref for InnerRef<'_> {
     fn deref(&self) -> &GraphRecord {
         match self {
             InnerRef::Owned(guard) => guard,
+            InnerRef::Connected(guard) => guard,
             // SAFETY: The guard is only constructed after checking `is_some()` in `inner()`.
-            // The pointer is valid for the duration of the `scope()` call because the scope's
-            // Drop guard needs a write lock to clear it, and this read guard prevents that.
+            // The pointer is valid for the duration of the `scope()`/`scope_mut()` call
+            // because the scope's Drop guard needs a write lock to clear it, and this read
+            // guard prevents that.
             InnerRef::Borrowed(guard) => unsafe {
                 guard
                     .expect("Borrowed pointer must be Some when InnerRef is alive")
@@ -89,6 +96,7 @@ impl Deref for InnerRef<'_> {
 
 pub(crate) enum InnerRefMut<'a> {
     Owned(RwLockWriteGuard<'a, GraphRecord>),
+    Connected(RwLockWriteGuard<'a, ConnectedGraphRecord<PyConnector>>),
     Borrowed(RwLockWriteGuard<'a, Option<NonNull<GraphRecord>>>),
 }
 
@@ -98,8 +106,10 @@ impl Deref for InnerRefMut<'_> {
     fn deref(&self) -> &GraphRecord {
         match self {
             InnerRefMut::Owned(guard) => guard,
+            InnerRefMut::Connected(guard) => guard,
             // SAFETY: Same as `InnerRef::Borrowed`. Pointer was checked `is_some()` in
             // `inner_mut()`, and the write guard keeps the scope's Drop from clearing it.
+            // Additionally, `inner_mut()` has already verified `is_mutable()` is true.
             InnerRefMut::Borrowed(guard) => unsafe {
                 guard
                     .expect("Borrowed pointer must be Some when InnerRefMut is alive")
@@ -113,10 +123,12 @@ impl DerefMut for InnerRefMut<'_> {
     fn deref_mut(&mut self) -> &mut GraphRecord {
         match self {
             InnerRefMut::Owned(guard) => &mut *guard,
+            InnerRefMut::Connected(guard) => &mut *guard,
             // SAFETY: Same as above, plus: the write guard ensures exclusive access to the
-            // pointer, so creating `&mut GraphRecord` is sound. The original `scope()` call
-            // holds `&mut GraphRecord`, guaranteeing no other references to the pointee exist
-            // outside this lock.
+            // pointer, so creating `&mut GraphRecord` is sound. The original `scope_mut()`
+            // call holds `&mut GraphRecord`, guaranteeing no other references to the pointee
+            // exist outside this lock. `inner_mut()` has verified `is_mutable()` is true,
+            // ensuring this path is only reachable for pointers originating from `&mut`.
             InnerRefMut::Borrowed(guard) => unsafe {
                 guard
                     .expect("Borrowed pointer must be Some when InnerRefMut is alive")
@@ -132,6 +144,9 @@ impl Clone for PyGraphRecord {
             PyGraphRecordInner::Owned(lock) => Self {
                 inner: PyGraphRecordInner::Owned(RwLock::new(lock.read().clone())),
             },
+            PyGraphRecordInner::Connected(lock) => Self {
+                inner: PyGraphRecordInner::Connected(RwLock::new(lock.read().clone())),
+            },
             PyGraphRecordInner::Borrowed(_) => Self {
                 inner: PyGraphRecordInner::Borrowed(BorrowedGraphRecord::dead()),
             },
@@ -143,29 +158,45 @@ impl PyGraphRecord {
     pub(crate) fn inner(&self) -> PyResult<InnerRef<'_>> {
         match &self.inner {
             PyGraphRecordInner::Owned(lock) => Ok(InnerRef::Owned(lock.read())),
+            PyGraphRecordInner::Connected(lock) => Ok(InnerRef::Connected(lock.read())),
             PyGraphRecordInner::Borrowed(borrowed) => {
                 let guard = borrowed.read();
                 if guard.is_some() {
                     Ok(InnerRef::Borrowed(guard))
                 } else {
                     Err(PyRuntimeError::new_err(
-                        "GraphRecord reference is no longer valid (used outside plugin callback scope)",
+                        "GraphRecord reference is no longer valid (used outside callback scope)",
                     ))
                 }
             }
         }
     }
 
+    pub(crate) fn connected(
+        &self,
+    ) -> PyResult<RwLockWriteGuard<'_, ConnectedGraphRecord<PyConnector>>> {
+        match &self.inner {
+            PyGraphRecordInner::Connected(lock) => Ok(lock.write()),
+            _ => Err(PyRuntimeError::new_err(
+                "GraphRecord has no connector attached",
+            )),
+        }
+    }
+
     pub(crate) fn inner_mut(&self) -> PyResult<InnerRefMut<'_>> {
         match &self.inner {
             PyGraphRecordInner::Owned(lock) => Ok(InnerRefMut::Owned(lock.write())),
+            PyGraphRecordInner::Connected(lock) => Ok(InnerRefMut::Connected(lock.write())),
             PyGraphRecordInner::Borrowed(borrowed) => {
+                if !borrowed.is_mutable() {
+                    return Err(PyRuntimeError::new_err("GraphRecord is read-only"));
+                }
                 let guard = borrowed.write();
                 if guard.is_some() {
                     Ok(InnerRefMut::Borrowed(guard))
                 } else {
                     Err(PyRuntimeError::new_err(
-                        "GraphRecord reference is no longer valid (used outside plugin callback scope)",
+                        "GraphRecord reference is no longer valid (used outside callback scope)",
                     ))
                 }
             }
@@ -181,12 +212,21 @@ impl From<GraphRecord> for PyGraphRecord {
     }
 }
 
+impl From<ConnectedGraphRecord<PyConnector>> for PyGraphRecord {
+    fn from(value: ConnectedGraphRecord<PyConnector>) -> Self {
+        Self {
+            inner: PyGraphRecordInner::Connected(RwLock::new(value)),
+        }
+    }
+}
+
 impl TryFrom<PyGraphRecord> for GraphRecord {
     type Error = PyErr;
 
     fn try_from(value: PyGraphRecord) -> PyResult<Self> {
         match value.inner {
             PyGraphRecordInner::Owned(lock) => Ok(lock.into_inner()),
+            PyGraphRecordInner::Connected(lock) => Ok(lock.into_inner().into()),
             PyGraphRecordInner::Borrowed(_) => Err(PyRuntimeError::new_err(
                 "Cannot convert a borrowed PyGraphRecord into an owned GraphRecord",
             )),
@@ -296,6 +336,14 @@ impl PyGraphRecord {
             .into())
     }
 
+    #[staticmethod]
+    pub fn with_connector(connector: Py<PyAny>) -> PyResult<Self> {
+        let connected = ConnectedGraphRecord::new(PyConnector::new(connector))
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(connected.into())
+    }
+
     pub fn to_ron(&self, path: &str) -> PyResult<()> {
         Ok(self
             .inner()?
@@ -352,6 +400,33 @@ impl PyGraphRecord {
             .expect("Setting item must succeed");
 
         Ok(outer_dict.into())
+    }
+
+    pub fn disconnect(&self) -> PyResult<Self> {
+        let graphrecord = self
+            .connected()?
+            .clone()
+            .disconnect()
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(graphrecord.into())
+    }
+
+    pub fn ingest(&self, data: Py<PyAny>) -> PyResult<()> {
+        self.connected()?
+            .ingest(data)
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(())
+    }
+
+    pub fn export(&self) -> PyResult<Py<PyAny>> {
+        let data = self
+            .connected()?
+            .export()
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(data)
     }
 
     pub fn add_plugin(&self, name: PyPluginName, plugin: Py<PyAny>) -> PyResult<()> {

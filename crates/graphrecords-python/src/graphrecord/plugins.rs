@@ -38,7 +38,7 @@ macro_rules! impl_pre_hook {
             context: $core_context_type,
         ) -> GraphRecordResult<$core_context_type> {
             Python::attach(|py| {
-                PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
+                PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                     let py_context = $py_context_type::bind(py, context);
 
                     let result = self
@@ -60,7 +60,7 @@ macro_rules! impl_post_hook {
     ($method:ident) => {
         fn $method(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
             Python::attach(|py| {
-                PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
+                PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                     self.0
                         .call_method1(py, stringify!($method), (graphrecord,))
                         .map_err(|err| GraphRecordError::ConversionError(format!("{}", err)))?;
@@ -77,7 +77,7 @@ macro_rules! impl_post_hook {
             context: $core_context_type,
         ) -> GraphRecordResult<()> {
             Python::attach(|py| {
-                PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
+                PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                     let py_context = $py_context_type::bind(py, context);
 
                     self.0
@@ -2598,7 +2598,7 @@ impl Plugin for PyPlugin {
 
     fn initialize(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
         Python::attach(|py| {
-            PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
+            PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                 self.0
                     .call_method1(py, "initialize", (graphrecord,))
                     .map_err(|err| GraphRecordError::ConversionError(format!("{err}")))?;
@@ -2610,7 +2610,7 @@ impl Plugin for PyPlugin {
 
     fn finalize(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()> {
         Python::attach(|py| {
-            PyGraphRecord::scope(py, graphrecord, |py, graphrecord| {
+            PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                 self.0
                     .call_method1(py, "finalize", (graphrecord,))
                     .map_err(|err| GraphRecordError::ConversionError(format!("{err}")))?;

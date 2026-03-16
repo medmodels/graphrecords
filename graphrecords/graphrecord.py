@@ -20,6 +20,7 @@ from typing import (
     List,
     Optional,
     Sequence,
+    TypeVar,
     Union,
     overload,
 )
@@ -165,6 +166,9 @@ from graphrecords.types import (
 
 if TYPE_CHECKING:
     from graphrecords._graphrecords.querying import PyEdgeOperand, PyNodeOperand
+    from graphrecords.connectors import ConnectedGraphRecord, Connector
+
+    ConnectorType = TypeVar("ConnectorType", bound=Connector)
 
 
 def process_nodes_dataframe(
@@ -487,6 +491,22 @@ class GraphRecord:
         graphrecord = cls.__new__(cls)
         graphrecord._graphrecord = PyGraphRecord.from_ron(path)
         return graphrecord
+
+    @staticmethod
+    def with_connector(connector: ConnectorType) -> ConnectedGraphRecord[ConnectorType]:
+        """Creates a ConnectedGraphRecord with the specified connector.
+
+        Initializes a new GraphRecord and calls the connector's initialize method.
+
+        Args:
+            connector (ConnectorType): The connector to attach.
+
+        Returns:
+            ConnectedGraphRecord[ConnectorType]: A new connected instance.
+        """
+        from graphrecords.connectors import ConnectedGraphRecord
+
+        return ConnectedGraphRecord(connector)
 
     def to_ron(self, path: str) -> None:
         """Writes the GraphRecord instance to a RON file.
