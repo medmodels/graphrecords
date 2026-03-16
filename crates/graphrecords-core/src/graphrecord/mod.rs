@@ -1,4 +1,6 @@
 pub mod attributes;
+#[cfg(feature = "connectors")]
+pub mod connector;
 pub mod datatypes;
 mod graph;
 mod group_mapping;

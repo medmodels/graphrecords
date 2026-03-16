@@ -3369,9 +3369,23 @@ class TestBypassPlugins(unittest.TestCase):
         assert graphrecord.node_count() == 0
 
 
+class TestGraphRecordConnectors(unittest.TestCase):
+    def test_with_connector(self) -> None:
+        from graphrecords.connectors import ConnectedGraphRecord, Connector
+
+        connector = Connector()
+        record = GraphRecord.with_connector(connector)
+
+        assert isinstance(record, ConnectedGraphRecord)
+        assert record.node_count() == 0
+
+
 if __name__ == "__main__":
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGraphRecord))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGraphRecordPlugins))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBypassPlugins))
+    suite.addTests(
+        unittest.TestLoader().loadTestsFromTestCase(TestGraphRecordConnectors)
+    )
     unittest.TextTestRunner(verbosity=2).run(suite)

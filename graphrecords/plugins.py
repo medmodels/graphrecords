@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from graphrecords.types import PyPlugin
+from graphrecords.types import _PyPlugin
 
 if TYPE_CHECKING:
     from graphrecords._graphrecords.graphrecord import PyGraphRecord
@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     )
 
 
-class _PluginBridge(PyPlugin):  # pyright: ignore[reportUnusedClass]
+class _PluginBridge(_PyPlugin):  # pyright: ignore[reportUnusedClass]
     _plugin: Plugin
 
     def __init__(self, plugin: Plugin) -> None:
