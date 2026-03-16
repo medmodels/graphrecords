@@ -2,6 +2,20 @@
 
 All notable changes to the Rust crates will be documented in this file.
 
+## [0.4.0] - 2026-03-16
+
+### Breaking Changes
+
+- merge PluginGraphRecord into GraphRecord (#42)
+
+### Features
+
+- implement graphrecord connectors (#43)
+
+### Refactoring
+
+- merge PluginGraphRecord into GraphRecord (#42)
+
 ## [0.3.0] - 2026-03-09
 
 ### Breaking Changes
