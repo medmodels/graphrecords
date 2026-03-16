@@ -13,12 +13,13 @@ permissions:
   actions: write
 
 env:
-  PYTHON_VERSIONS_LONG: "python3.10 python3.11 python3.12 python3.13"
+  PYTHON_VERSIONS_LONG: "python3.10 python3.11 python3.12 python3.13 python3.14"
   PYTHON_VERSIONS_SHORT: |
     3.10
     3.11
     3.12
     3.13
+    3.14
 
 jobs:
   detect-release:
