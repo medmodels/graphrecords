@@ -2,6 +2,18 @@
 
 All notable changes to the Python package will be documented in this file.
 
+## [0.4.0] - 2026-03-16
+
+### Breaking Changes
+
+- implement graphrecord connectors (#43)
+- add missing builder functionality (#39)
+
+### Features
+
+- implement graphrecord connectors (#43)
+- add missing builder functionality (#39)
+
 ## [0.3.0] - 2026-03-09
 
 ### Breaking Changes
