@@ -992,7 +992,7 @@ class GraphRecord:
     def add_nodes(
         self,
         nodes: NodeInput,
-        group: Optional[Group] = None,
+        group: Optional[Union[Group, GroupInputList]] = None,
         *,
         bypass_plugins: bool = False,
     ) -> None:
@@ -1002,12 +1002,13 @@ class GraphRecord:
         PolarsNodeDataFrameInput(s) to add nodes. If a DataFrame or list of DataFrames
         is used, the add_nodes_pandas method is called. If PolarsNodeDataFrameInput(s)
         are provided, each tuple must include a DataFrame and the index column. If a
-        group is specified, the nodes are added to the group.
+        group or list of groups is specified, the nodes are added to the group(s).
 
         Args:
             nodes (NodeInput): Data representing nodes in various formats.
-            group (Optional[Group]): The name of the group to add the nodes to. If not
-                specified, the nodes are added to the GraphRecord without a group.
+            group (Optional[Union[Group, GroupInputList]]): The name of the group or
+                list of groups to add the nodes to. If not specified, the nodes are
+                added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
         """
@@ -1026,6 +1027,8 @@ class GraphRecord:
 
         if group is None:
             self._graphrecord.add_nodes(nodes, bypass_plugins)
+        elif isinstance(group, list):
+            self._graphrecord.add_nodes_with_groups(nodes, group, bypass_plugins)
         else:
             self._graphrecord.add_nodes_with_group(nodes, group, bypass_plugins)
 
@@ -1034,21 +1037,22 @@ class GraphRecord:
     def add_nodes_pandas(
         self,
         nodes: Union[PandasNodeDataFrameInput, List[PandasNodeDataFrameInput]],
-        group: Optional[Group] = None,
+        group: Optional[Union[Group, GroupInputList]] = None,
         *,
         bypass_plugins: bool = False,
     ) -> None:
         """Adds nodes to the GraphRecord instance from one or more Pandas DataFrames.
 
         This method accepts either a single tuple or a list of tuples, where each tuple
-        consists of a Pandas DataFrame and an index column string. If a group is
-        specified, the nodes are added to the group.
+        consists of a Pandas DataFrame and an index column string. If a group or list of
+        groups is specified, the nodes are added to the group(s).
 
         Args:
             nodes (Union[PandasNodeDataFrameInput, List[PandasNodeDataFrameInput]]):
                 A tuple or list of tuples, each with a DataFrame and index column.
-            group (Optional[Group]): The name of the group to add the nodes to. If not
-                specified, the nodes are added to the GraphRecord without a group.
+            group (Optional[Union[Group, GroupInputList]]): The name of the group or
+                list of groups to add the nodes to. If not specified, the nodes are
+                added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
         """
@@ -1063,21 +1067,22 @@ class GraphRecord:
     def add_nodes_polars(
         self,
         nodes: Union[PolarsNodeDataFrameInput, List[PolarsNodeDataFrameInput]],
-        group: Optional[Group] = None,
+        group: Optional[Union[Group, GroupInputList]] = None,
         *,
         bypass_plugins: bool = False,
     ) -> None:
         """Adds nodes to the GraphRecord instance from one or more Polars DataFrames.
 
         This method accepts either a single tuple or a list of tuples, where each tuple
-        consists of a Polars DataFrame and an index column string. If a group is
-        specified, the nodes are added to the group.
+        consists of a Polars DataFrame and an index column string. If a group or list of
+        groups is specified, the nodes are added to the group(s).
 
         Args:
             nodes (Union[PolarsNodeDataFrameInput, List[PolarsNodeDataFrameInput]]):
                 A tuple or list of tuples, each with a DataFrame and index column.
-            group (Optional[Group]): The name of the group to add the nodes to. If not
-                specified, the nodes are added to the GraphRecord without a group.
+            group (Optional[Union[Group, GroupInputList]]): The name of the group or
+                list of groups to add the nodes to. If not specified, the nodes are
+                added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
         """
@@ -1086,6 +1091,10 @@ class GraphRecord:
 
         if group is None:
             self._graphrecord.add_nodes_dataframes(nodes, bypass_plugins)
+        elif isinstance(group, list):
+            self._graphrecord.add_nodes_dataframes_with_groups(
+                nodes, group, bypass_plugins
+            )
         else:
             self._graphrecord.add_nodes_dataframes_with_group(
                 nodes, group, bypass_plugins
@@ -1153,7 +1162,7 @@ class GraphRecord:
     def add_edges(
         self,
         edges: EdgeInput,
-        group: Optional[Group] = None,
+        group: Optional[Union[Group, GroupInputList]] = None,
         *,
         bypass_plugins: bool = False,
     ) -> List[EdgeIndex]:
@@ -1164,12 +1173,14 @@ class GraphRecord:
         dictionary of attributes. If a DataFrame or list of DataFrames is used, the
         add_edges_dataframe method is invoked. If PolarsEdgeDataFrameInput(s) are
         provided, each tuple must include a DataFrame and index columns for source and
-        target nodes. If a group is specified, the edges are added to the group.
+        target nodes. If a group or list of groups is specified, the edges are added to
+        the group(s).
 
         Args:
             edges (EdgeInput): Data representing edges in several formats.
-            group (Optional[Group]): The name of the group to add the edges to. If not
-                specified, the edges are added to the GraphRecord without a group.
+            group (Optional[Union[Group, GroupInputList]]): The name of the group or
+                list of groups to add the edges to. If not specified, the edges are
+                added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
 
@@ -1189,13 +1200,15 @@ class GraphRecord:
 
         if group is None:
             return self._graphrecord.add_edges(edges, bypass_plugins)
+        if isinstance(group, list):
+            return self._graphrecord.add_edges_with_groups(edges, group, bypass_plugins)
 
         return self._graphrecord.add_edges_with_group(edges, group, bypass_plugins)
 
     def add_edges_pandas(
         self,
         edges: Union[PandasEdgeDataFrameInput, List[PandasEdgeDataFrameInput]],
-        group: Optional[Group] = None,
+        group: Optional[Union[Group, GroupInputList]] = None,
         *,
         bypass_plugins: bool = False,
     ) -> List[EdgeIndex]:
@@ -1203,14 +1216,16 @@ class GraphRecord:
 
         This method accepts either a single PandasEdgeDataFrameInput tuple or a list of
         such tuples, each including a DataFrame and index columns for the source and
-        target nodes. If a group is specified, the edges are added to the group.
+        target nodes. If a group or list of groups is specified, the edges are added to
+        the group(s).
 
         Args:
             edges (Union[PandasEdgeDataFrameInput, List[PandasEdgeDataFrameInput]]):
                 A tuple or list of tuples, each including a DataFrame and index columns
                 for source and target nodes.
-            group (Optional[Group]): The name of the group to add the edges to. If not
-                specified, the edges are added to the GraphRecord without a group.
+            group (Optional[Union[Group, GroupInputList]]): The name of the group or
+                list of groups to add the edges to. If not specified, the edges are
+                added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
 
@@ -1228,7 +1243,7 @@ class GraphRecord:
     def add_edges_polars(
         self,
         edges: Union[PolarsEdgeDataFrameInput, List[PolarsEdgeDataFrameInput]],
-        group: Optional[Group] = None,
+        group: Optional[Union[Group, GroupInputList]] = None,
         *,
         bypass_plugins: bool = False,
     ) -> List[EdgeIndex]:
@@ -1236,14 +1251,16 @@ class GraphRecord:
 
         This method accepts either a single PolarsEdgeDataFrameInput tuple or a list of
         such tuples, each including a DataFrame and index columns for the source and
-        target nodes. If a group is specified, the edges are added to the group.
+        target nodes. If a group or list of groups is specified, the edges are added to
+        the group(s).
 
         Args:
             edges (Union[PolarsEdgeDataFrameInput, List[PolarsEdgeDataFrameInput]]):
                 A tuple or list of tuples, each including a DataFrame and index columns
                 for source and target nodes.
-            group (Optional[Group]): The name of the group to add the edges to. If not
-                specified, the edges are added to the GraphRecord without a group.
+            group (Optional[Union[Group, GroupInputList]]): The name of the group or
+                list of groups to add the edges to. If not specified, the edges are
+                added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
 
@@ -1255,6 +1272,10 @@ class GraphRecord:
 
         if group is None:
             return self._graphrecord.add_edges_dataframes(edges, bypass_plugins)
+        if isinstance(group, list):
+            return self._graphrecord.add_edges_dataframes_with_groups(
+                edges, group, bypass_plugins
+            )
         return self._graphrecord.add_edges_dataframes_with_group(
             edges, group, bypass_plugins
         )
@@ -1321,15 +1342,16 @@ class GraphRecord:
 
     def add_nodes_to_group(
         self,
-        group: Group,
+        group: Union[Group, GroupInputList],
         nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> None:
-        """Adds one or more nodes to a specified group in the GraphRecord.
+        """Adds one or more nodes to a specified group or groups in the GraphRecord.
 
         Args:
-            group (Group): The name of the group to add nodes to.
+            group (Union[Group, GroupInputList]): The name of the group or list of
+                groups to add nodes to.
             nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query to add to the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
@@ -1345,19 +1367,23 @@ class GraphRecord:
         elif not isinstance(nodes, list):
             nodes = [nodes]
 
-        self._graphrecord.add_nodes_to_group(group, nodes, bypass_plugins)
+        if isinstance(group, list):
+            self._graphrecord.add_nodes_to_groups(nodes, group, bypass_plugins)
+        else:
+            self._graphrecord.add_nodes_to_group(group, nodes, bypass_plugins)
 
     def add_edges_to_group(
         self,
-        group: Group,
+        group: Union[Group, GroupInputList],
         edges: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> None:
-        """Adds one or more edges to a specified group in the GraphRecord.
+        """Adds one or more edges to a specified group or groups in the GraphRecord.
 
         Args:
-            group (Group): The name of the group to add edges to.
+            group (Union[Group, GroupInputList]): The name of the group or list of
+                groups to add edges to.
             edges (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
                 One or more edge indices or an edge query to add to the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
@@ -1373,19 +1399,23 @@ class GraphRecord:
         elif not isinstance(edges, list):
             edges = [edges]
 
-        self._graphrecord.add_edges_to_group(group, edges, bypass_plugins)
+        if isinstance(group, list):
+            self._graphrecord.add_edges_to_groups(edges, group, bypass_plugins)
+        else:
+            self._graphrecord.add_edges_to_group(group, edges, bypass_plugins)
 
     def remove_nodes_from_group(
         self,
-        group: Group,
+        group: Union[Group, GroupInputList],
         nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> None:
-        """Removes one or more nodes from a specified group in the GraphRecord.
+        """Removes one or more nodes from a specified group or groups in the GraphRecord.
 
         Args:
-            group (Group): The name of the group from which to remove nodes.
+            group (Union[Group, GroupInputList]): The name of the group or list of
+                groups from which to remove nodes.
             nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query to remove from the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
@@ -1401,19 +1431,23 @@ class GraphRecord:
         elif not isinstance(nodes, list):
             nodes = [nodes]
 
-        self._graphrecord.remove_nodes_from_group(group, nodes, bypass_plugins)
+        if isinstance(group, list):
+            self._graphrecord.remove_nodes_from_groups(nodes, group, bypass_plugins)
+        else:
+            self._graphrecord.remove_nodes_from_group(group, nodes, bypass_plugins)
 
     def remove_edges_from_group(
         self,
-        group: Group,
+        group: Union[Group, GroupInputList],
         edges: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> None:
-        """Removes one or more edges from a specified group in the GraphRecord.
+        """Removes one or more edges from a specified group or groups in the GraphRecord.
 
         Args:
-            group (Group): The name of the group from which to remove edges.
+            group (Union[Group, GroupInputList]): The name of the group or list of
+                groups from which to remove edges.
             edges (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
                 One or more edge indices or an edge query to remove from the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
@@ -1429,7 +1463,10 @@ class GraphRecord:
         elif not isinstance(edges, list):
             edges = [edges]
 
-        self._graphrecord.remove_edges_from_group(group, edges, bypass_plugins)
+        if isinstance(group, list):
+            self._graphrecord.remove_edges_from_groups(edges, group, bypass_plugins)
+        else:
+            self._graphrecord.remove_edges_from_group(group, edges, bypass_plugins)
 
     @overload
     def nodes_in_group(self, group: Group) -> List[NodeIndex]: ...

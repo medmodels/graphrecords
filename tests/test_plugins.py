@@ -10,42 +10,70 @@ from graphrecords.plugins import (
     PostAddEdgesContext,
     PostAddEdgesDataframesContext,
     PostAddEdgesDataframesWithGroupContext,
+    PostAddEdgesDataframesWithGroupsContext,
+    PostAddEdgesToGroupsContext,
     PostAddEdgesWithGroupContext,
+    PostAddEdgesWithGroupsContext,
     PostAddEdgeToGroupContext,
+    PostAddEdgeToGroupsContext,
     PostAddEdgeWithGroupContext,
+    PostAddEdgeWithGroupsContext,
     PostAddGroupContext,
     PostAddNodeContext,
     PostAddNodesContext,
     PostAddNodesDataframesContext,
     PostAddNodesDataframesWithGroupContext,
+    PostAddNodesDataframesWithGroupsContext,
+    PostAddNodesToGroupsContext,
     PostAddNodesWithGroupContext,
+    PostAddNodesWithGroupsContext,
     PostAddNodeToGroupContext,
+    PostAddNodeToGroupsContext,
     PostAddNodeWithGroupContext,
+    PostAddNodeWithGroupsContext,
     PostRemoveEdgeContext,
     PostRemoveEdgeFromGroupContext,
+    PostRemoveEdgeFromGroupsContext,
+    PostRemoveEdgesFromGroupsContext,
     PostRemoveGroupContext,
     PostRemoveNodeContext,
     PostRemoveNodeFromGroupContext,
+    PostRemoveNodeFromGroupsContext,
+    PostRemoveNodesFromGroupsContext,
     PreAddEdgeContext,
     PreAddEdgesContext,
     PreAddEdgesDataframesContext,
     PreAddEdgesDataframesWithGroupContext,
+    PreAddEdgesDataframesWithGroupsContext,
+    PreAddEdgesToGroupsContext,
     PreAddEdgesWithGroupContext,
+    PreAddEdgesWithGroupsContext,
     PreAddEdgeToGroupContext,
+    PreAddEdgeToGroupsContext,
     PreAddEdgeWithGroupContext,
+    PreAddEdgeWithGroupsContext,
     PreAddGroupContext,
     PreAddNodeContext,
     PreAddNodesContext,
     PreAddNodesDataframesContext,
     PreAddNodesDataframesWithGroupContext,
+    PreAddNodesDataframesWithGroupsContext,
+    PreAddNodesToGroupsContext,
     PreAddNodesWithGroupContext,
+    PreAddNodesWithGroupsContext,
     PreAddNodeToGroupContext,
+    PreAddNodeToGroupsContext,
     PreAddNodeWithGroupContext,
+    PreAddNodeWithGroupsContext,
     PreRemoveEdgeContext,
     PreRemoveEdgeFromGroupContext,
+    PreRemoveEdgeFromGroupsContext,
+    PreRemoveEdgesFromGroupsContext,
     PreRemoveGroupContext,
     PreRemoveNodeContext,
     PreRemoveNodeFromGroupContext,
+    PreRemoveNodeFromGroupsContext,
+    PreRemoveNodesFromGroupsContext,
     PreSetSchemaContext,
     _PluginBridge,
 )
@@ -102,6 +130,17 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_add_node_with_group")
 
+    def pre_add_node_with_groups(
+        self, graphrecord: GraphRecord, context: PreAddNodeWithGroupsContext
+    ) -> PreAddNodeWithGroupsContext:
+        self.calls.append("pre_add_node_with_groups")
+        return context
+
+    def post_add_node_with_groups(
+        self, graphrecord: GraphRecord, context: PostAddNodeWithGroupsContext
+    ) -> None:
+        self.calls.append("post_add_node_with_groups")
+
     def pre_remove_node(
         self, graphrecord: GraphRecord, context: PreRemoveNodeContext
     ) -> PreRemoveNodeContext:
@@ -135,6 +174,17 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_add_nodes_with_group")
 
+    def pre_add_nodes_with_groups(
+        self, graphrecord: GraphRecord, context: PreAddNodesWithGroupsContext
+    ) -> PreAddNodesWithGroupsContext:
+        self.calls.append("pre_add_nodes_with_groups")
+        return context
+
+    def post_add_nodes_with_groups(
+        self, graphrecord: GraphRecord, context: PostAddNodesWithGroupsContext
+    ) -> None:
+        self.calls.append("post_add_nodes_with_groups")
+
     def pre_add_nodes_dataframes(
         self, graphrecord: GraphRecord, context: PreAddNodesDataframesContext
     ) -> PreAddNodesDataframesContext:
@@ -161,6 +211,21 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_add_nodes_dataframes_with_group")
 
+    def pre_add_nodes_dataframes_with_groups(
+        self,
+        graphrecord: GraphRecord,
+        context: PreAddNodesDataframesWithGroupsContext,
+    ) -> PreAddNodesDataframesWithGroupsContext:
+        self.calls.append("pre_add_nodes_dataframes_with_groups")
+        return context
+
+    def post_add_nodes_dataframes_with_groups(
+        self,
+        graphrecord: GraphRecord,
+        context: PostAddNodesDataframesWithGroupsContext,
+    ) -> None:
+        self.calls.append("post_add_nodes_dataframes_with_groups")
+
     def pre_add_edge(
         self, graphrecord: GraphRecord, context: PreAddEdgeContext
     ) -> PreAddEdgeContext:
@@ -182,6 +247,17 @@ class RecordingPlugin(Plugin):
         self, graphrecord: GraphRecord, context: PostAddEdgeWithGroupContext
     ) -> None:
         self.calls.append("post_add_edge_with_group")
+
+    def pre_add_edge_with_groups(
+        self, graphrecord: GraphRecord, context: PreAddEdgeWithGroupsContext
+    ) -> PreAddEdgeWithGroupsContext:
+        self.calls.append("pre_add_edge_with_groups")
+        return context
+
+    def post_add_edge_with_groups(
+        self, graphrecord: GraphRecord, context: PostAddEdgeWithGroupsContext
+    ) -> None:
+        self.calls.append("post_add_edge_with_groups")
 
     def pre_remove_edge(
         self, graphrecord: GraphRecord, context: PreRemoveEdgeContext
@@ -216,6 +292,17 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_add_edges_with_group")
 
+    def pre_add_edges_with_groups(
+        self, graphrecord: GraphRecord, context: PreAddEdgesWithGroupsContext
+    ) -> PreAddEdgesWithGroupsContext:
+        self.calls.append("pre_add_edges_with_groups")
+        return context
+
+    def post_add_edges_with_groups(
+        self, graphrecord: GraphRecord, context: PostAddEdgesWithGroupsContext
+    ) -> None:
+        self.calls.append("post_add_edges_with_groups")
+
     def pre_add_edges_dataframes(
         self, graphrecord: GraphRecord, context: PreAddEdgesDataframesContext
     ) -> PreAddEdgesDataframesContext:
@@ -241,6 +328,21 @@ class RecordingPlugin(Plugin):
         context: PostAddEdgesDataframesWithGroupContext,
     ) -> None:
         self.calls.append("post_add_edges_dataframes_with_group")
+
+    def pre_add_edges_dataframes_with_groups(
+        self,
+        graphrecord: GraphRecord,
+        context: PreAddEdgesDataframesWithGroupsContext,
+    ) -> PreAddEdgesDataframesWithGroupsContext:
+        self.calls.append("pre_add_edges_dataframes_with_groups")
+        return context
+
+    def post_add_edges_dataframes_with_groups(
+        self,
+        graphrecord: GraphRecord,
+        context: PostAddEdgesDataframesWithGroupsContext,
+    ) -> None:
+        self.calls.append("post_add_edges_dataframes_with_groups")
 
     def pre_add_group(
         self, graphrecord: GraphRecord, context: PreAddGroupContext
@@ -275,6 +377,28 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_add_node_to_group")
 
+    def pre_add_node_to_groups(
+        self, graphrecord: GraphRecord, context: PreAddNodeToGroupsContext
+    ) -> PreAddNodeToGroupsContext:
+        self.calls.append("pre_add_node_to_groups")
+        return context
+
+    def post_add_node_to_groups(
+        self, graphrecord: GraphRecord, context: PostAddNodeToGroupsContext
+    ) -> None:
+        self.calls.append("post_add_node_to_groups")
+
+    def pre_add_nodes_to_groups(
+        self, graphrecord: GraphRecord, context: PreAddNodesToGroupsContext
+    ) -> PreAddNodesToGroupsContext:
+        self.calls.append("pre_add_nodes_to_groups")
+        return context
+
+    def post_add_nodes_to_groups(
+        self, graphrecord: GraphRecord, context: PostAddNodesToGroupsContext
+    ) -> None:
+        self.calls.append("post_add_nodes_to_groups")
+
     def pre_add_edge_to_group(
         self, graphrecord: GraphRecord, context: PreAddEdgeToGroupContext
     ) -> PreAddEdgeToGroupContext:
@@ -285,6 +409,28 @@ class RecordingPlugin(Plugin):
         self, graphrecord: GraphRecord, context: PostAddEdgeToGroupContext
     ) -> None:
         self.calls.append("post_add_edge_to_group")
+
+    def pre_add_edge_to_groups(
+        self, graphrecord: GraphRecord, context: PreAddEdgeToGroupsContext
+    ) -> PreAddEdgeToGroupsContext:
+        self.calls.append("pre_add_edge_to_groups")
+        return context
+
+    def post_add_edge_to_groups(
+        self, graphrecord: GraphRecord, context: PostAddEdgeToGroupsContext
+    ) -> None:
+        self.calls.append("post_add_edge_to_groups")
+
+    def pre_add_edges_to_groups(
+        self, graphrecord: GraphRecord, context: PreAddEdgesToGroupsContext
+    ) -> PreAddEdgesToGroupsContext:
+        self.calls.append("pre_add_edges_to_groups")
+        return context
+
+    def post_add_edges_to_groups(
+        self, graphrecord: GraphRecord, context: PostAddEdgesToGroupsContext
+    ) -> None:
+        self.calls.append("post_add_edges_to_groups")
 
     def pre_remove_node_from_group(
         self, graphrecord: GraphRecord, context: PreRemoveNodeFromGroupContext
@@ -297,6 +443,28 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_remove_node_from_group")
 
+    def pre_remove_node_from_groups(
+        self, graphrecord: GraphRecord, context: PreRemoveNodeFromGroupsContext
+    ) -> PreRemoveNodeFromGroupsContext:
+        self.calls.append("pre_remove_node_from_groups")
+        return context
+
+    def post_remove_node_from_groups(
+        self, graphrecord: GraphRecord, context: PostRemoveNodeFromGroupsContext
+    ) -> None:
+        self.calls.append("post_remove_node_from_groups")
+
+    def pre_remove_nodes_from_groups(
+        self, graphrecord: GraphRecord, context: PreRemoveNodesFromGroupsContext
+    ) -> PreRemoveNodesFromGroupsContext:
+        self.calls.append("pre_remove_nodes_from_groups")
+        return context
+
+    def post_remove_nodes_from_groups(
+        self, graphrecord: GraphRecord, context: PostRemoveNodesFromGroupsContext
+    ) -> None:
+        self.calls.append("post_remove_nodes_from_groups")
+
     def pre_remove_edge_from_group(
         self, graphrecord: GraphRecord, context: PreRemoveEdgeFromGroupContext
     ) -> PreRemoveEdgeFromGroupContext:
@@ -307,6 +475,28 @@ class RecordingPlugin(Plugin):
         self, graphrecord: GraphRecord, context: PostRemoveEdgeFromGroupContext
     ) -> None:
         self.calls.append("post_remove_edge_from_group")
+
+    def pre_remove_edge_from_groups(
+        self, graphrecord: GraphRecord, context: PreRemoveEdgeFromGroupsContext
+    ) -> PreRemoveEdgeFromGroupsContext:
+        self.calls.append("pre_remove_edge_from_groups")
+        return context
+
+    def post_remove_edge_from_groups(
+        self, graphrecord: GraphRecord, context: PostRemoveEdgeFromGroupsContext
+    ) -> None:
+        self.calls.append("post_remove_edge_from_groups")
+
+    def pre_remove_edges_from_groups(
+        self, graphrecord: GraphRecord, context: PreRemoveEdgesFromGroupsContext
+    ) -> PreRemoveEdgesFromGroupsContext:
+        self.calls.append("pre_remove_edges_from_groups")
+        return context
+
+    def post_remove_edges_from_groups(
+        self, graphrecord: GraphRecord, context: PostRemoveEdgesFromGroupsContext
+    ) -> None:
+        self.calls.append("post_remove_edges_from_groups")
 
     def finalize(self, graphrecord: GraphRecord) -> None:
         self.calls.append("finalize")
@@ -348,6 +538,19 @@ class TestContextConstruction(unittest.TestCase):
         assert context.node_index == "a"
         assert context.group == "g"
 
+    def test_pre_add_node_with_groups_context(self) -> None:
+        context = PreAddNodeWithGroupsContext("a", {"x": 1}, ["g0", "g1"])
+
+        assert context.node_index == "a"
+        assert context.attributes == {"x": 1}
+        assert context.groups == ["g0", "g1"]
+
+    def test_post_add_node_with_groups_context(self) -> None:
+        context = PostAddNodeWithGroupsContext("a", ["g0", "g1"])
+
+        assert context.node_index == "a"
+        assert context.groups == ["g0", "g1"]
+
     def test_pre_remove_node_context(self) -> None:
         context = PreRemoveNodeContext("a")
 
@@ -380,6 +583,18 @@ class TestContextConstruction(unittest.TestCase):
         assert context.nodes == [("a", {"x": 1})]
         assert context.group == "g"
 
+    def test_pre_add_nodes_with_groups_context(self) -> None:
+        context = PreAddNodesWithGroupsContext([("a", {"x": 1})], ["g0", "g1"])
+
+        assert context.nodes == [("a", {"x": 1})]
+        assert context.groups == ["g0", "g1"]
+
+    def test_post_add_nodes_with_groups_context(self) -> None:
+        context = PostAddNodesWithGroupsContext([("a", {"x": 1})], ["g0", "g1"])
+
+        assert context.nodes == [("a", {"x": 1})]
+        assert context.groups == ["g0", "g1"]
+
     def test_pre_add_nodes_dataframes_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
         context = PreAddNodesDataframesContext([(dataframe, "idx")])
@@ -406,6 +621,24 @@ class TestContextConstruction(unittest.TestCase):
         assert len(context.nodes_dataframes) == 1
         assert context.group == "g"
 
+    def test_pre_add_nodes_dataframes_with_groups_context(self) -> None:
+        dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
+        context = PreAddNodesDataframesWithGroupsContext(
+            [(dataframe, "idx")], ["g0", "g1"]
+        )
+
+        assert len(context.nodes_dataframes) == 1
+        assert context.groups == ["g0", "g1"]
+
+    def test_post_add_nodes_dataframes_with_groups_context(self) -> None:
+        dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
+        context = PostAddNodesDataframesWithGroupsContext(
+            [(dataframe, "idx")], ["g0", "g1"]
+        )
+
+        assert len(context.nodes_dataframes) == 1
+        assert context.groups == ["g0", "g1"]
+
     def test_pre_add_edge_context(self) -> None:
         context = PreAddEdgeContext("a", "b", {"w": 1})
 
@@ -430,6 +663,20 @@ class TestContextConstruction(unittest.TestCase):
         context = PostAddEdgeWithGroupContext(0)
 
         assert context.edge_index == 0
+
+    def test_pre_add_edge_with_groups_context(self) -> None:
+        context = PreAddEdgeWithGroupsContext("a", "b", {"x": 1}, ["g0", "g1"])
+
+        assert context.source_node_index == "a"
+        assert context.target_node_index == "b"
+        assert context.attributes == {"x": 1}
+        assert context.groups == ["g0", "g1"]
+
+    def test_post_add_edge_with_groups_context(self) -> None:
+        context = PostAddEdgeWithGroupsContext(0, ["g0", "g1"])
+
+        assert context.edge_index == 0
+        assert context.groups == ["g0", "g1"]
 
     def test_pre_remove_edge_context(self) -> None:
         context = PreRemoveEdgeContext(0)
@@ -462,6 +709,18 @@ class TestContextConstruction(unittest.TestCase):
 
         assert context.edge_indices == [0]
 
+    def test_pre_add_edges_with_groups_context(self) -> None:
+        context = PreAddEdgesWithGroupsContext([("a", "b", {})], ["g0", "g1"])
+
+        assert context.edges == [("a", "b", {})]
+        assert context.groups == ["g0", "g1"]
+
+    def test_post_add_edges_with_groups_context(self) -> None:
+        context = PostAddEdgesWithGroupsContext([0], ["g0", "g1"])
+
+        assert context.edge_indices == [0]
+        assert context.groups == ["g0", "g1"]
+
     def test_pre_add_edges_dataframes_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
         context = PreAddEdgesDataframesContext([(dataframe, "src", "tgt")])
@@ -491,6 +750,24 @@ class TestContextConstruction(unittest.TestCase):
 
         assert len(context.edges_dataframes) == 1
         assert context.group == "g"
+
+    def test_pre_add_edges_dataframes_with_groups_context(self) -> None:
+        dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
+        context = PreAddEdgesDataframesWithGroupsContext(
+            [(dataframe, "src", "tgt")], ["g0", "g1"]
+        )
+
+        assert len(context.edges_dataframes) == 1
+        assert context.groups == ["g0", "g1"]
+
+    def test_post_add_edges_dataframes_with_groups_context(self) -> None:
+        dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
+        context = PostAddEdgesDataframesWithGroupsContext(
+            [(dataframe, "src", "tgt")], ["g0", "g1"]
+        )
+
+        assert len(context.edges_dataframes) == 1
+        assert context.groups == ["g0", "g1"]
 
     def test_pre_add_group_context(self) -> None:
         context = PreAddGroupContext("g", ["a"], [0])
@@ -542,6 +819,30 @@ class TestContextConstruction(unittest.TestCase):
         assert context.group == "g"
         assert context.node_index == "a"
 
+    def test_pre_add_node_to_groups_context(self) -> None:
+        context = PreAddNodeToGroupsContext(["g1", "g2"], "a")
+
+        assert context.groups == ["g1", "g2"]
+        assert context.node_index == "a"
+
+    def test_post_add_node_to_groups_context(self) -> None:
+        context = PostAddNodeToGroupsContext(["g1", "g2"], "a")
+
+        assert context.groups == ["g1", "g2"]
+        assert context.node_index == "a"
+
+    def test_pre_add_nodes_to_groups_context(self) -> None:
+        context = PreAddNodesToGroupsContext(["g0", "g1"], ["a", "b"])
+
+        assert context.groups == ["g0", "g1"]
+        assert context.node_indices == ["a", "b"]
+
+    def test_post_add_nodes_to_groups_context(self) -> None:
+        context = PostAddNodesToGroupsContext(["g0", "g1"], ["a", "b"])
+
+        assert context.groups == ["g0", "g1"]
+        assert context.node_indices == ["a", "b"]
+
     def test_pre_add_edge_to_group_context(self) -> None:
         context = PreAddEdgeToGroupContext("g", 0)
 
@@ -553,6 +854,30 @@ class TestContextConstruction(unittest.TestCase):
 
         assert context.group == "g"
         assert context.edge_index == 0
+
+    def test_pre_add_edge_to_groups_context(self) -> None:
+        context = PreAddEdgeToGroupsContext(["g1", "g2"], 0)
+
+        assert context.groups == ["g1", "g2"]
+        assert context.edge_index == 0
+
+    def test_post_add_edge_to_groups_context(self) -> None:
+        context = PostAddEdgeToGroupsContext(["g1", "g2"], 0)
+
+        assert context.groups == ["g1", "g2"]
+        assert context.edge_index == 0
+
+    def test_pre_add_edges_to_groups_context(self) -> None:
+        context = PreAddEdgesToGroupsContext(["g0", "g1"], [0, 1])
+
+        assert context.groups == ["g0", "g1"]
+        assert context.edge_indices == [0, 1]
+
+    def test_post_add_edges_to_groups_context(self) -> None:
+        context = PostAddEdgesToGroupsContext(["g0", "g1"], [0, 1])
+
+        assert context.groups == ["g0", "g1"]
+        assert context.edge_indices == [0, 1]
 
     def test_pre_remove_node_from_group_context(self) -> None:
         context = PreRemoveNodeFromGroupContext("g", "a")
@@ -566,6 +891,30 @@ class TestContextConstruction(unittest.TestCase):
         assert context.group == "g"
         assert context.node_index == "a"
 
+    def test_pre_remove_node_from_groups_context(self) -> None:
+        context = PreRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+
+        assert context.groups == ["g1", "g2"]
+        assert context.node_index == "a"
+
+    def test_post_remove_node_from_groups_context(self) -> None:
+        context = PostRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+
+        assert context.groups == ["g1", "g2"]
+        assert context.node_index == "a"
+
+    def test_pre_remove_nodes_from_groups_context(self) -> None:
+        context = PreRemoveNodesFromGroupsContext(["g0", "g1"], ["a", "b"])
+
+        assert context.groups == ["g0", "g1"]
+        assert context.node_indices == ["a", "b"]
+
+    def test_post_remove_nodes_from_groups_context(self) -> None:
+        context = PostRemoveNodesFromGroupsContext(["g0", "g1"], ["a", "b"])
+
+        assert context.groups == ["g0", "g1"]
+        assert context.node_indices == ["a", "b"]
+
     def test_pre_remove_edge_from_group_context(self) -> None:
         context = PreRemoveEdgeFromGroupContext("g", 0)
 
@@ -577,6 +926,30 @@ class TestContextConstruction(unittest.TestCase):
 
         assert context.group == "g"
         assert context.edge_index == 0
+
+    def test_pre_remove_edge_from_groups_context(self) -> None:
+        context = PreRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+
+        assert context.groups == ["g1", "g2"]
+        assert context.edge_index == 0
+
+    def test_post_remove_edge_from_groups_context(self) -> None:
+        context = PostRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+
+        assert context.groups == ["g1", "g2"]
+        assert context.edge_index == 0
+
+    def test_pre_remove_edges_from_groups_context(self) -> None:
+        context = PreRemoveEdgesFromGroupsContext(["g0", "g1"], [0, 1])
+
+        assert context.groups == ["g0", "g1"]
+        assert context.edge_indices == [0, 1]
+
+    def test_post_remove_edges_from_groups_context(self) -> None:
+        context = PostRemoveEdgesFromGroupsContext(["g0", "g1"], [0, 1])
+
+        assert context.groups == ["g0", "g1"]
+        assert context.edge_indices == [0, 1]
 
 
 class TestContextFromPyContext(unittest.TestCase):
@@ -624,6 +997,27 @@ class TestContextFromPyContext(unittest.TestCase):
 
         assert reconstructed.node_index == "a"
         assert reconstructed.group == "g"
+
+    def test_pre_add_node_with_groups_from_py_context(self) -> None:
+        original = PreAddNodeWithGroupsContext("a", {"x": 1}, ["g0", "g1"])
+
+        reconstructed = PreAddNodeWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.node_index == "a"
+        assert reconstructed.attributes == {"x": 1}
+        assert reconstructed.groups == ["g0", "g1"]
+
+    def test_post_add_node_with_groups_from_py_context(self) -> None:
+        original = PostAddNodeWithGroupsContext("a", ["g0", "g1"])
+
+        reconstructed = PostAddNodeWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.node_index == "a"
+        assert reconstructed.groups == ["g0", "g1"]
 
     def test_pre_remove_node_from_py_context(self) -> None:
         original = PreRemoveNodeContext("a")
@@ -673,6 +1067,26 @@ class TestContextFromPyContext(unittest.TestCase):
         assert reconstructed.nodes == [("a", {})]
         assert reconstructed.group == "g"
 
+    def test_pre_add_nodes_with_groups_from_py_context(self) -> None:
+        original = PreAddNodesWithGroupsContext([("a", {})], ["g0", "g1"])
+
+        reconstructed = PreAddNodesWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.nodes == [("a", {})]
+        assert reconstructed.groups == ["g0", "g1"]
+
+    def test_post_add_nodes_with_groups_from_py_context(self) -> None:
+        original = PostAddNodesWithGroupsContext([("a", {})], ["g0", "g1"])
+
+        reconstructed = PostAddNodesWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.nodes == [("a", {})]
+        assert reconstructed.groups == ["g0", "g1"]
+
     def test_pre_add_nodes_dataframes_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
         original = PreAddNodesDataframesContext([(dataframe, "idx")])
@@ -715,6 +1129,32 @@ class TestContextFromPyContext(unittest.TestCase):
         assert len(reconstructed.nodes_dataframes) == 1
         assert reconstructed.group == "g"
 
+    def test_pre_add_nodes_dataframes_with_groups_from_py_context(self) -> None:
+        dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
+        original = PreAddNodesDataframesWithGroupsContext(
+            [(dataframe, "idx")], ["g0", "g1"]
+        )
+
+        reconstructed = PreAddNodesDataframesWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert len(reconstructed.nodes_dataframes) == 1
+        assert reconstructed.groups == ["g0", "g1"]
+
+    def test_post_add_nodes_dataframes_with_groups_from_py_context(self) -> None:
+        dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
+        original = PostAddNodesDataframesWithGroupsContext(
+            [(dataframe, "idx")], ["g0", "g1"]
+        )
+
+        reconstructed = PostAddNodesDataframesWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert len(reconstructed.nodes_dataframes) == 1
+        assert reconstructed.groups == ["g0", "g1"]
+
     def test_pre_add_edge_from_py_context(self) -> None:
         original = PreAddEdgeContext("a", "b", {"w": 1})
 
@@ -751,6 +1191,28 @@ class TestContextFromPyContext(unittest.TestCase):
         )
 
         assert reconstructed.edge_index == 0
+
+    def test_pre_add_edge_with_groups_from_py_context(self) -> None:
+        original = PreAddEdgeWithGroupsContext("a", "b", {"x": 1}, ["g0", "g1"])
+
+        reconstructed = PreAddEdgeWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.source_node_index == "a"
+        assert reconstructed.target_node_index == "b"
+        assert reconstructed.attributes == {"x": 1}
+        assert reconstructed.groups == ["g0", "g1"]
+
+    def test_post_add_edge_with_groups_from_py_context(self) -> None:
+        original = PostAddEdgeWithGroupsContext(0, ["g0", "g1"])
+
+        reconstructed = PostAddEdgeWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.edge_index == 0
+        assert reconstructed.groups == ["g0", "g1"]
 
     def test_pre_remove_edge_from_py_context(self) -> None:
         original = PreRemoveEdgeContext(0)
@@ -799,6 +1261,26 @@ class TestContextFromPyContext(unittest.TestCase):
 
         assert reconstructed.edge_indices == [0]
 
+    def test_pre_add_edges_with_groups_from_py_context(self) -> None:
+        original = PreAddEdgesWithGroupsContext([("a", "b", {})], ["g0", "g1"])
+
+        reconstructed = PreAddEdgesWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.edges == [("a", "b", {})]
+        assert reconstructed.groups == ["g0", "g1"]
+
+    def test_post_add_edges_with_groups_from_py_context(self) -> None:
+        original = PostAddEdgesWithGroupsContext([0], ["g0", "g1"])
+
+        reconstructed = PostAddEdgesWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.edge_indices == [0]
+        assert reconstructed.groups == ["g0", "g1"]
+
     def test_pre_add_edges_dataframes_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
         original = PreAddEdgesDataframesContext([(dataframe, "src", "tgt")])
@@ -844,6 +1326,32 @@ class TestContextFromPyContext(unittest.TestCase):
 
         assert len(reconstructed.edges_dataframes) == 1
         assert reconstructed.group == "g"
+
+    def test_pre_add_edges_dataframes_with_groups_from_py_context(self) -> None:
+        dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
+        original = PreAddEdgesDataframesWithGroupsContext(
+            [(dataframe, "src", "tgt")], ["g0", "g1"]
+        )
+
+        reconstructed = PreAddEdgesDataframesWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert len(reconstructed.edges_dataframes) == 1
+        assert reconstructed.groups == ["g0", "g1"]
+
+    def test_post_add_edges_dataframes_with_groups_from_py_context(self) -> None:
+        dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
+        original = PostAddEdgesDataframesWithGroupsContext(
+            [(dataframe, "src", "tgt")], ["g0", "g1"]
+        )
+
+        reconstructed = PostAddEdgesDataframesWithGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert len(reconstructed.edges_dataframes) == 1
+        assert reconstructed.groups == ["g0", "g1"]
 
     def test_pre_add_group_from_py_context(self) -> None:
         original = PreAddGroupContext("g", ["a"], [0])
@@ -893,6 +1401,44 @@ class TestContextFromPyContext(unittest.TestCase):
         assert reconstructed.group == "g"
         assert reconstructed.node_index == "a"
 
+    def test_pre_add_node_to_groups_from_py_context(self) -> None:
+        original = PreAddNodeToGroupsContext(["g1", "g2"], "a")
+
+        reconstructed = PreAddNodeToGroupsContext._from_py_context(original._py_context)
+
+        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.node_index == "a"
+
+    def test_post_add_node_to_groups_from_py_context(self) -> None:
+        original = PostAddNodeToGroupsContext(["g1", "g2"], "a")
+
+        reconstructed = PostAddNodeToGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.node_index == "a"
+
+    def test_pre_add_nodes_to_groups_from_py_context(self) -> None:
+        original = PreAddNodesToGroupsContext(["g0", "g1"], ["a", "b"])
+
+        reconstructed = PreAddNodesToGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.node_indices == ["a", "b"]
+
+    def test_post_add_nodes_to_groups_from_py_context(self) -> None:
+        original = PostAddNodesToGroupsContext(["g0", "g1"], ["a", "b"])
+
+        reconstructed = PostAddNodesToGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.node_indices == ["a", "b"]
+
     def test_pre_add_edge_to_group_from_py_context(self) -> None:
         original = PreAddEdgeToGroupContext("g", 0)
 
@@ -908,6 +1454,44 @@ class TestContextFromPyContext(unittest.TestCase):
 
         assert reconstructed.group == "g"
         assert reconstructed.edge_index == 0
+
+    def test_pre_add_edge_to_groups_from_py_context(self) -> None:
+        original = PreAddEdgeToGroupsContext(["g1", "g2"], 0)
+
+        reconstructed = PreAddEdgeToGroupsContext._from_py_context(original._py_context)
+
+        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.edge_index == 0
+
+    def test_post_add_edge_to_groups_from_py_context(self) -> None:
+        original = PostAddEdgeToGroupsContext(["g1", "g2"], 0)
+
+        reconstructed = PostAddEdgeToGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.edge_index == 0
+
+    def test_pre_add_edges_to_groups_from_py_context(self) -> None:
+        original = PreAddEdgesToGroupsContext(["g0", "g1"], [0, 1])
+
+        reconstructed = PreAddEdgesToGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.edge_indices == [0, 1]
+
+    def test_post_add_edges_to_groups_from_py_context(self) -> None:
+        original = PostAddEdgesToGroupsContext(["g0", "g1"], [0, 1])
+
+        reconstructed = PostAddEdgesToGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.edge_indices == [0, 1]
 
     def test_pre_remove_node_from_group_from_py_context(self) -> None:
         original = PreRemoveNodeFromGroupContext("g", "a")
@@ -929,6 +1513,46 @@ class TestContextFromPyContext(unittest.TestCase):
         assert reconstructed.group == "g"
         assert reconstructed.node_index == "a"
 
+    def test_pre_remove_node_from_groups_from_py_context(self) -> None:
+        original = PreRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+
+        reconstructed = PreRemoveNodeFromGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.node_index == "a"
+
+    def test_post_remove_node_from_groups_from_py_context(self) -> None:
+        original = PostRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+
+        reconstructed = PostRemoveNodeFromGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.node_index == "a"
+
+    def test_pre_remove_nodes_from_groups_from_py_context(self) -> None:
+        original = PreRemoveNodesFromGroupsContext(["g0", "g1"], ["a", "b"])
+
+        reconstructed = PreRemoveNodesFromGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.node_indices == ["a", "b"]
+
+    def test_post_remove_nodes_from_groups_from_py_context(self) -> None:
+        original = PostRemoveNodesFromGroupsContext(["g0", "g1"], ["a", "b"])
+
+        reconstructed = PostRemoveNodesFromGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.node_indices == ["a", "b"]
+
     def test_pre_remove_edge_from_group_from_py_context(self) -> None:
         original = PreRemoveEdgeFromGroupContext("g", 0)
 
@@ -948,6 +1572,46 @@ class TestContextFromPyContext(unittest.TestCase):
 
         assert reconstructed.group == "g"
         assert reconstructed.edge_index == 0
+
+    def test_pre_remove_edge_from_groups_from_py_context(self) -> None:
+        original = PreRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+
+        reconstructed = PreRemoveEdgeFromGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.edge_index == 0
+
+    def test_post_remove_edge_from_groups_from_py_context(self) -> None:
+        original = PostRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+
+        reconstructed = PostRemoveEdgeFromGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.edge_index == 0
+
+    def test_pre_remove_edges_from_groups_from_py_context(self) -> None:
+        original = PreRemoveEdgesFromGroupsContext(["g0", "g1"], [0, 1])
+
+        reconstructed = PreRemoveEdgesFromGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.edge_indices == [0, 1]
+
+    def test_post_remove_edges_from_groups_from_py_context(self) -> None:
+        original = PostRemoveEdgesFromGroupsContext(["g0", "g1"], [0, 1])
+
+        reconstructed = PostRemoveEdgesFromGroupsContext._from_py_context(
+            original._py_context
+        )
+
+        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.edge_indices == [0, 1]
 
 
 class TestPluginBaseDefaults(unittest.TestCase):
@@ -980,6 +1644,15 @@ class TestPluginBaseDefaults(unittest.TestCase):
             graphrecord, PostAddNodeWithGroupContext("a", "g")
         )
 
+        pre_add_node_wgs = PreAddNodeWithGroupsContext("a", {}, ["g0", "g1"])
+        assert (
+            plugin.pre_add_node_with_groups(graphrecord, pre_add_node_wgs)
+            is pre_add_node_wgs
+        )
+        plugin.post_add_node_with_groups(
+            graphrecord, PostAddNodeWithGroupsContext("a", ["g0", "g1"])
+        )
+
         pre_remove_node = PreRemoveNodeContext("a")
         assert plugin.pre_remove_node(graphrecord, pre_remove_node) is pre_remove_node
         plugin.post_remove_node(graphrecord, PostRemoveNodeContext("a"))
@@ -995,6 +1668,15 @@ class TestPluginBaseDefaults(unittest.TestCase):
         )
         plugin.post_add_nodes_with_group(
             graphrecord, PostAddNodesWithGroupContext([("a", {})], "g")
+        )
+
+        pre_add_nodes_wgs = PreAddNodesWithGroupsContext([("a", {})], ["g0", "g1"])
+        assert (
+            plugin.pre_add_nodes_with_groups(graphrecord, pre_add_nodes_wgs)
+            is pre_add_nodes_wgs
+        )
+        plugin.post_add_nodes_with_groups(
+            graphrecord, PostAddNodesWithGroupsContext([("a", {})], ["g0", "g1"])
         )
 
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
@@ -1020,6 +1702,20 @@ class TestPluginBaseDefaults(unittest.TestCase):
             PostAddNodesDataframesWithGroupContext([(dataframe, "idx")], "g"),
         )
 
+        pre_add_nodes_df_wgs = PreAddNodesDataframesWithGroupsContext(
+            [(dataframe, "idx")], ["g0", "g1"]
+        )
+        assert (
+            plugin.pre_add_nodes_dataframes_with_groups(
+                graphrecord, pre_add_nodes_df_wgs
+            )
+            is pre_add_nodes_df_wgs
+        )
+        plugin.post_add_nodes_dataframes_with_groups(
+            graphrecord,
+            PostAddNodesDataframesWithGroupsContext([(dataframe, "idx")], ["g0", "g1"]),
+        )
+
         pre_add_edge = PreAddEdgeContext("a", "b", {})
         assert plugin.pre_add_edge(graphrecord, pre_add_edge) is pre_add_edge
         plugin.post_add_edge(graphrecord, PostAddEdgeContext(0))
@@ -1030,6 +1726,15 @@ class TestPluginBaseDefaults(unittest.TestCase):
             is pre_add_edge_wg
         )
         plugin.post_add_edge_with_group(graphrecord, PostAddEdgeWithGroupContext(0))
+
+        pre_add_edge_wgs = PreAddEdgeWithGroupsContext("a", "b", {}, ["g0", "g1"])
+        assert (
+            plugin.pre_add_edge_with_groups(graphrecord, pre_add_edge_wgs)
+            is pre_add_edge_wgs
+        )
+        plugin.post_add_edge_with_groups(
+            graphrecord, PostAddEdgeWithGroupsContext(0, ["g0", "g1"])
+        )
 
         pre_remove_edge = PreRemoveEdgeContext(0)
         assert plugin.pre_remove_edge(graphrecord, pre_remove_edge) is pre_remove_edge
@@ -1045,6 +1750,15 @@ class TestPluginBaseDefaults(unittest.TestCase):
             is pre_add_edges_wg
         )
         plugin.post_add_edges_with_group(graphrecord, PostAddEdgesWithGroupContext([0]))
+
+        pre_add_edges_wgs = PreAddEdgesWithGroupsContext([("a", "b", {})], ["g0", "g1"])
+        assert (
+            plugin.pre_add_edges_with_groups(graphrecord, pre_add_edges_wgs)
+            is pre_add_edges_wgs
+        )
+        plugin.post_add_edges_with_groups(
+            graphrecord, PostAddEdgesWithGroupsContext([0], ["g0", "g1"])
+        )
 
         edge_dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
 
@@ -1074,6 +1788,22 @@ class TestPluginBaseDefaults(unittest.TestCase):
             ),
         )
 
+        pre_add_edges_df_wgs = PreAddEdgesDataframesWithGroupsContext(
+            [(edge_dataframe, "src", "tgt")], ["g0", "g1"]
+        )
+        assert (
+            plugin.pre_add_edges_dataframes_with_groups(
+                graphrecord, pre_add_edges_df_wgs
+            )
+            is pre_add_edges_df_wgs
+        )
+        plugin.post_add_edges_dataframes_with_groups(
+            graphrecord,
+            PostAddEdgesDataframesWithGroupsContext(
+                [(edge_dataframe, "src", "tgt")], ["g0", "g1"]
+            ),
+        )
+
         pre_add_group = PreAddGroupContext("g", None, None)
         assert plugin.pre_add_group(graphrecord, pre_add_group) is pre_add_group
         plugin.post_add_group(graphrecord, PostAddGroupContext("g", None, None))
@@ -1091,12 +1821,48 @@ class TestPluginBaseDefaults(unittest.TestCase):
         )
         plugin.post_add_node_to_group(graphrecord, PostAddNodeToGroupContext("g", "a"))
 
+        pre_add_node_to_groups = PreAddNodeToGroupsContext(["g1", "g2"], "a")
+        assert (
+            plugin.pre_add_node_to_groups(graphrecord, pre_add_node_to_groups)
+            is pre_add_node_to_groups
+        )
+        plugin.post_add_node_to_groups(
+            graphrecord, PostAddNodeToGroupsContext(["g1", "g2"], "a")
+        )
+
+        pre_add_nodes_to_groups = PreAddNodesToGroupsContext(["g0", "g1"], ["a"])
+        assert (
+            plugin.pre_add_nodes_to_groups(graphrecord, pre_add_nodes_to_groups)
+            is pre_add_nodes_to_groups
+        )
+        plugin.post_add_nodes_to_groups(
+            graphrecord, PostAddNodesToGroupsContext(["g0", "g1"], ["a"])
+        )
+
         pre_add_edge_to_group = PreAddEdgeToGroupContext("g", 0)
         assert (
             plugin.pre_add_edge_to_group(graphrecord, pre_add_edge_to_group)
             is pre_add_edge_to_group
         )
         plugin.post_add_edge_to_group(graphrecord, PostAddEdgeToGroupContext("g", 0))
+
+        pre_add_edge_to_groups = PreAddEdgeToGroupsContext(["g1", "g2"], 0)
+        assert (
+            plugin.pre_add_edge_to_groups(graphrecord, pre_add_edge_to_groups)
+            is pre_add_edge_to_groups
+        )
+        plugin.post_add_edge_to_groups(
+            graphrecord, PostAddEdgeToGroupsContext(["g1", "g2"], 0)
+        )
+
+        pre_add_edges_to_groups = PreAddEdgesToGroupsContext(["g0", "g1"], [0])
+        assert (
+            plugin.pre_add_edges_to_groups(graphrecord, pre_add_edges_to_groups)
+            is pre_add_edges_to_groups
+        )
+        plugin.post_add_edges_to_groups(
+            graphrecord, PostAddEdgesToGroupsContext(["g0", "g1"], [0])
+        )
 
         pre_remove_node_from_group = PreRemoveNodeFromGroupContext("g", "a")
         assert (
@@ -1107,6 +1873,28 @@ class TestPluginBaseDefaults(unittest.TestCase):
             graphrecord, PostRemoveNodeFromGroupContext("g", "a")
         )
 
+        pre_remove_node_from_groups = PreRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+        assert (
+            plugin.pre_remove_node_from_groups(graphrecord, pre_remove_node_from_groups)
+            is pre_remove_node_from_groups
+        )
+        plugin.post_remove_node_from_groups(
+            graphrecord, PostRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+        )
+
+        pre_remove_nodes_from_groups = PreRemoveNodesFromGroupsContext(
+            ["g0", "g1"], ["a"]
+        )
+        assert (
+            plugin.pre_remove_nodes_from_groups(
+                graphrecord, pre_remove_nodes_from_groups
+            )
+            is pre_remove_nodes_from_groups
+        )
+        plugin.post_remove_nodes_from_groups(
+            graphrecord, PostRemoveNodesFromGroupsContext(["g0", "g1"], ["a"])
+        )
+
         pre_remove_edge_from_group = PreRemoveEdgeFromGroupContext("g", 0)
         assert (
             plugin.pre_remove_edge_from_group(graphrecord, pre_remove_edge_from_group)
@@ -1114,6 +1902,28 @@ class TestPluginBaseDefaults(unittest.TestCase):
         )
         plugin.post_remove_edge_from_group(
             graphrecord, PostRemoveEdgeFromGroupContext("g", 0)
+        )
+
+        pre_remove_edge_from_groups = PreRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+        assert (
+            plugin.pre_remove_edge_from_groups(graphrecord, pre_remove_edge_from_groups)
+            is pre_remove_edge_from_groups
+        )
+        plugin.post_remove_edge_from_groups(
+            graphrecord, PostRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+        )
+
+        pre_remove_edges_from_groups = PreRemoveEdgesFromGroupsContext(
+            ["g0", "g1"], [0]
+        )
+        assert (
+            plugin.pre_remove_edges_from_groups(
+                graphrecord, pre_remove_edges_from_groups
+            )
+            is pre_remove_edges_from_groups
+        )
+        plugin.post_remove_edges_from_groups(
+            graphrecord, PostRemoveEdgesFromGroupsContext(["g0", "g1"], [0])
         )
 
         plugin.pre_clear(graphrecord)
@@ -1177,6 +1987,26 @@ class TestPluginHooksFiring(unittest.TestCase):
         assert "pre_add_nodes_with_group" in plugin.calls
         assert "post_add_nodes_with_group" in plugin.calls
 
+    def test_add_node_with_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        plugin.calls.clear()
+
+        graphrecord._graphrecord.add_node_with_groups("a", {}, ["g0", "g1"])
+
+        assert "pre_add_node_with_groups" in plugin.calls
+        assert "post_add_node_with_groups" in plugin.calls
+
+    def test_add_nodes_with_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        plugin.calls.clear()
+
+        graphrecord.add_nodes([("a", {})], group=["g0", "g1"])
+
+        assert "pre_add_nodes_with_groups" in plugin.calls
+        assert "post_add_nodes_with_groups" in plugin.calls
+
     def test_add_nodes_polars_hooks(self) -> None:
         plugin = RecordingPlugin()
         graphrecord = GraphRecord.with_plugins({"recorder": plugin})
@@ -1199,6 +2029,17 @@ class TestPluginHooksFiring(unittest.TestCase):
 
         assert "pre_add_nodes_dataframes_with_group" in plugin.calls
         assert "post_add_nodes_dataframes_with_group" in plugin.calls
+
+    def test_add_nodes_polars_with_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        plugin.calls.clear()
+
+        dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
+        graphrecord.add_nodes_polars([(dataframe, "idx")], group=["g0", "g1"])
+
+        assert "pre_add_nodes_dataframes_with_groups" in plugin.calls
+        assert "post_add_nodes_dataframes_with_groups" in plugin.calls
 
     def test_remove_node_hooks(self) -> None:
         plugin = RecordingPlugin()
@@ -1234,6 +2075,28 @@ class TestPluginHooksFiring(unittest.TestCase):
         assert "pre_add_edges_with_group" in plugin.calls
         assert "post_add_edges_with_group" in plugin.calls
 
+    def test_add_edge_with_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+        plugin.calls.clear()
+
+        graphrecord._graphrecord.add_edge_with_groups("a", "b", {}, ["g0", "g1"])
+
+        assert "pre_add_edge_with_groups" in plugin.calls
+        assert "post_add_edge_with_groups" in plugin.calls
+
+    def test_add_edges_with_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+        plugin.calls.clear()
+
+        graphrecord.add_edges([("a", "b", {})], group=["g0", "g1"])
+
+        assert "pre_add_edges_with_groups" in plugin.calls
+        assert "post_add_edges_with_groups" in plugin.calls
+
     def test_add_edges_polars_hooks(self) -> None:
         plugin = RecordingPlugin()
         graphrecord = GraphRecord.with_plugins({"recorder": plugin})
@@ -1258,6 +2121,18 @@ class TestPluginHooksFiring(unittest.TestCase):
 
         assert "pre_add_edges_dataframes_with_group" in plugin.calls
         assert "post_add_edges_dataframes_with_group" in plugin.calls
+
+    def test_add_edges_polars_with_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+        plugin.calls.clear()
+
+        dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
+        graphrecord.add_edges_polars([(dataframe, "src", "tgt")], group=["g0", "g1"])
+
+        assert "pre_add_edges_dataframes_with_groups" in plugin.calls
+        assert "post_add_edges_dataframes_with_groups" in plugin.calls
 
     def test_remove_edge_hooks(self) -> None:
         plugin = RecordingPlugin()
@@ -1304,6 +2179,32 @@ class TestPluginHooksFiring(unittest.TestCase):
         assert "pre_add_node_to_group" in plugin.calls
         assert "post_add_node_to_group" in plugin.calls
 
+    def test_add_node_to_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {})])
+        graphrecord.add_group("g1")
+        graphrecord.add_group("g2")
+        plugin.calls.clear()
+
+        graphrecord._graphrecord.add_node_to_groups("a", ["g1", "g2"])
+
+        assert "pre_add_node_to_groups" in plugin.calls
+        assert "post_add_node_to_groups" in plugin.calls
+
+    def test_add_nodes_to_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
+        plugin.calls.clear()
+
+        graphrecord.add_nodes_to_group(["g0", "g1"], ["a", "b"])
+
+        assert "pre_add_nodes_to_groups" in plugin.calls
+        assert "post_add_nodes_to_groups" in plugin.calls
+
     def test_add_edge_to_group_hooks(self) -> None:
         plugin = RecordingPlugin()
         graphrecord = GraphRecord.with_plugins({"recorder": plugin})
@@ -1317,6 +2218,34 @@ class TestPluginHooksFiring(unittest.TestCase):
         assert "pre_add_edge_to_group" in plugin.calls
         assert "post_add_edge_to_group" in plugin.calls
 
+    def test_add_edge_to_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+        edge_indices = graphrecord.add_edges([("a", "b", {})])
+        graphrecord.add_group("g1")
+        graphrecord.add_group("g2")
+        plugin.calls.clear()
+
+        graphrecord._graphrecord.add_edge_to_groups(edge_indices[0], ["g1", "g2"])
+
+        assert "pre_add_edge_to_groups" in plugin.calls
+        assert "post_add_edge_to_groups" in plugin.calls
+
+    def test_add_edges_to_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+        edge_indices = graphrecord.add_edges([("a", "b", {})])
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
+        plugin.calls.clear()
+
+        graphrecord.add_edges_to_group(["g0", "g1"], edge_indices)
+
+        assert "pre_add_edges_to_groups" in plugin.calls
+        assert "post_add_edges_to_groups" in plugin.calls
+
     def test_remove_node_from_group_hooks(self) -> None:
         plugin = RecordingPlugin()
         graphrecord = GraphRecord.with_plugins({"recorder": plugin})
@@ -1328,6 +2257,32 @@ class TestPluginHooksFiring(unittest.TestCase):
 
         assert "pre_remove_node_from_group" in plugin.calls
         assert "post_remove_node_from_group" in plugin.calls
+
+    def test_remove_node_from_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {})])
+        graphrecord.add_group("g1", ["a"])
+        graphrecord.add_group("g2", ["a"])
+        plugin.calls.clear()
+
+        graphrecord._graphrecord.remove_node_from_groups("a", ["g1", "g2"])
+
+        assert "pre_remove_node_from_groups" in plugin.calls
+        assert "post_remove_node_from_groups" in plugin.calls
+
+    def test_remove_nodes_from_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+        graphrecord.add_group("g0", ["a", "b"])
+        graphrecord.add_group("g1", ["a", "b"])
+        plugin.calls.clear()
+
+        graphrecord.remove_nodes_from_group(["g0", "g1"], ["a", "b"])
+
+        assert "pre_remove_nodes_from_groups" in plugin.calls
+        assert "post_remove_nodes_from_groups" in plugin.calls
 
     def test_remove_edge_from_group_hooks(self) -> None:
         plugin = RecordingPlugin()
@@ -1341,6 +2296,34 @@ class TestPluginHooksFiring(unittest.TestCase):
 
         assert "pre_remove_edge_from_group" in plugin.calls
         assert "post_remove_edge_from_group" in plugin.calls
+
+    def test_remove_edge_from_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+        edge_indices = graphrecord.add_edges([("a", "b", {})])
+        graphrecord.add_group("g1", edges=edge_indices)
+        graphrecord.add_group("g2", edges=edge_indices)
+        plugin.calls.clear()
+
+        graphrecord._graphrecord.remove_edge_from_groups(edge_indices[0], ["g1", "g2"])
+
+        assert "pre_remove_edge_from_groups" in plugin.calls
+        assert "post_remove_edge_from_groups" in plugin.calls
+
+    def test_remove_edges_from_groups_hooks(self) -> None:
+        plugin = RecordingPlugin()
+        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+        edge_indices = graphrecord.add_edges([("a", "b", {})])
+        graphrecord.add_group("g0", edges=edge_indices)
+        graphrecord.add_group("g1", edges=edge_indices)
+        plugin.calls.clear()
+
+        graphrecord.remove_edges_from_group(["g0", "g1"], edge_indices)
+
+        assert "pre_remove_edges_from_groups" in plugin.calls
+        assert "post_remove_edges_from_groups" in plugin.calls
 
     def test_clear_hooks(self) -> None:
         plugin = RecordingPlugin()

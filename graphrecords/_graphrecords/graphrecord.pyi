@@ -113,6 +113,12 @@ class PyGraphRecord:
     def add_nodes_with_group(
         self, nodes: Sequence[NodeTuple], group: Group, bypass_plugins: bool = False
     ) -> None: ...
+    def add_nodes_with_groups(
+        self,
+        nodes: Sequence[NodeTuple],
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> None: ...
     def add_nodes_dataframes(
         self,
         nodes_dataframe: List[PolarsNodeDataFrameInput],
@@ -122,6 +128,12 @@ class PyGraphRecord:
         self,
         nodes_dataframe: List[PolarsNodeDataFrameInput],
         group: Group,
+        bypass_plugins: bool = False,
+    ) -> None: ...
+    def add_nodes_dataframes_with_groups(
+        self,
+        nodes_dataframe: List[PolarsNodeDataFrameInput],
+        groups: GroupInputList,
         bypass_plugins: bool = False,
     ) -> None: ...
     def remove_edges(
@@ -145,6 +157,12 @@ class PyGraphRecord:
     def add_edges_with_group(
         self, edges: Sequence[EdgeTuple], group: Group, bypass_plugins: bool = False
     ) -> List[EdgeIndex]: ...
+    def add_edges_with_groups(
+        self,
+        edges: Sequence[EdgeTuple],
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> List[EdgeIndex]: ...
     def add_edges_dataframes(
         self,
         edges_dataframe: List[PolarsEdgeDataFrameInput],
@@ -154,6 +172,12 @@ class PyGraphRecord:
         self,
         edges_dataframe: List[PolarsEdgeDataFrameInput],
         group: Group,
+        bypass_plugins: bool = False,
+    ) -> List[EdgeIndex]: ...
+    def add_edges_dataframes_with_groups(
+        self,
+        edges_dataframe: List[PolarsEdgeDataFrameInput],
+        groups: GroupInputList,
         bypass_plugins: bool = False,
     ) -> List[EdgeIndex]: ...
     def add_group(
@@ -169,15 +193,78 @@ class PyGraphRecord:
     def add_nodes_to_group(
         self, group: Group, node_index: NodeIndexInputList, bypass_plugins: bool = False
     ) -> None: ...
+    def add_node_to_groups(
+        self,
+        node_index: NodeIndex,
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> None: ...
+    def add_nodes_to_groups(
+        self,
+        node_indices: NodeIndexInputList,
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> None: ...
     def add_edges_to_group(
         self, group: Group, edge_index: EdgeIndexInputList, bypass_plugins: bool = False
+    ) -> None: ...
+    def add_edge_to_groups(
+        self,
+        edge_index: EdgeIndex,
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> None: ...
+    def add_edges_to_groups(
+        self,
+        edge_indices: EdgeIndexInputList,
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
     ) -> None: ...
     def remove_nodes_from_group(
         self, group: Group, node_index: NodeIndexInputList, bypass_plugins: bool = False
     ) -> None: ...
+    def remove_node_from_groups(
+        self,
+        node_index: NodeIndex,
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> None: ...
+    def remove_nodes_from_groups(
+        self,
+        node_indices: NodeIndexInputList,
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> None: ...
     def remove_edges_from_group(
         self, group: Group, edge_index: EdgeIndexInputList, bypass_plugins: bool = False
     ) -> None: ...
+    def remove_edge_from_groups(
+        self,
+        edge_index: EdgeIndex,
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> None: ...
+    def remove_edges_from_groups(
+        self,
+        edge_indices: EdgeIndexInputList,
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> None: ...
+    def add_node_with_groups(
+        self,
+        node_index: NodeIndex,
+        attributes: AttributesInput,
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> None: ...
+    def add_edge_with_groups(
+        self,
+        source_node_index: NodeIndex,
+        target_node_index: NodeIndex,
+        attributes: AttributesInput,
+        groups: GroupInputList,
+        bypass_plugins: bool = False,
+    ) -> EdgeIndex: ...
     def nodes_in_group(self, group: GroupInputList) -> Dict[Group, List[NodeIndex]]: ...
     def ungrouped_nodes(self) -> List[NodeIndex]: ...
     def edges_in_group(self, group: GroupInputList) -> Dict[Group, List[EdgeIndex]]: ...
