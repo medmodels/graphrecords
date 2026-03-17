@@ -26,9 +26,11 @@ use errors::PyGraphRecordError;
 use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{
-        Attributes, EdgeIndex, GraphRecord, GraphRecordAttribute, GraphRecordValue,
-        connector::ConnectedGraphRecord, plugins::Plugin,
+        Attributes, EdgeDataFrameInput, EdgeIndex, GraphRecord, GraphRecordAttribute,
+        GraphRecordValue, Group, NodeDataFrameInput, connector::ConnectedGraphRecord,
+        plugins::Plugin,
     },
+    prelude::NodeIndex,
 };
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use pyo3::{
@@ -802,6 +804,53 @@ impl PyGraphRecord {
         }
     }
 
+    #[pyo3(signature = (nodes, groups, bypass_plugins=false))]
+    pub fn add_nodes_with_groups(
+        &self,
+        nodes: Vec<(PyNodeIndex, PyAttributes)>,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<graphrecords_core::graphrecord::Group> = groups.deep_into();
+
+        if bypass_plugins {
+            Ok(graphrecord
+                .add_nodes_with_groups_bypass_plugins(nodes.deep_into(), &groups)
+                .map_err(PyGraphRecordError::from)?)
+        } else {
+            Ok(graphrecord
+                .add_nodes_with_groups(nodes.deep_into(), &groups)
+                .map_err(PyGraphRecordError::from)?)
+        }
+    }
+
+    #[pyo3(signature = (node_index, attributes, groups, bypass_plugins=false))]
+    pub fn add_node_with_groups(
+        &self,
+        node_index: PyNodeIndex,
+        attributes: PyAttributes,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<graphrecords_core::graphrecord::Group> = groups.deep_into();
+
+        if bypass_plugins {
+            Ok(graphrecord
+                .add_node_with_groups_bypass_plugins(
+                    node_index.into(),
+                    attributes.deep_into(),
+                    &groups,
+                )
+                .map_err(PyGraphRecordError::from)?)
+        } else {
+            Ok(graphrecord
+                .add_node_with_groups(node_index.into(), attributes.deep_into(), &groups)
+                .map_err(PyGraphRecordError::from)?)
+        }
+    }
+
     #[pyo3(signature = (nodes_dataframes, bypass_plugins=false))]
     pub fn add_nodes_dataframes(
         &self,
@@ -837,6 +886,29 @@ impl PyGraphRecord {
         } else {
             Ok(graphrecord
                 .add_nodes_dataframes_with_group(nodes_dataframes, group.into())
+                .map_err(PyGraphRecordError::from)?)
+        }
+    }
+
+    #[pyo3(signature = (nodes_dataframes, groups, bypass_plugins=false))]
+    pub fn add_nodes_dataframes_with_groups(
+        &self,
+        nodes_dataframes: Vec<(PyDataFrame, String)>,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+        let nodes_dataframes: Vec<NodeDataFrameInput> =
+            nodes_dataframes.into_iter().map(Into::into).collect();
+
+        if bypass_plugins {
+            Ok(graphrecord
+                .add_nodes_dataframes_with_groups_bypass_plugins(nodes_dataframes, &groups)
+                .map_err(PyGraphRecordError::from)?)
+        } else {
+            Ok(graphrecord
+                .add_nodes_dataframes_with_groups(nodes_dataframes, &groups)
                 .map_err(PyGraphRecordError::from)?)
         }
     }
@@ -979,6 +1051,60 @@ impl PyGraphRecord {
         }
     }
 
+    #[pyo3(signature = (relations, groups, bypass_plugins=false))]
+    pub fn add_edges_with_groups(
+        &self,
+        relations: Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)>,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<Vec<EdgeIndex>> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+
+        if bypass_plugins {
+            Ok(graphrecord
+                .add_edges_with_groups_bypass_plugins(relations.deep_into(), &groups)
+                .map_err(PyGraphRecordError::from)?)
+        } else {
+            Ok(graphrecord
+                .add_edges_with_groups(relations.deep_into(), &groups)
+                .map_err(PyGraphRecordError::from)?)
+        }
+    }
+
+    #[pyo3(signature = (source_node_index, target_node_index, attributes, groups, bypass_plugins=false))]
+    pub fn add_edge_with_groups(
+        &self,
+        source_node_index: PyNodeIndex,
+        target_node_index: PyNodeIndex,
+        attributes: PyAttributes,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<EdgeIndex> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<graphrecords_core::graphrecord::Group> = groups.deep_into();
+
+        if bypass_plugins {
+            Ok(graphrecord
+                .add_edge_with_groups_bypass_plugins(
+                    source_node_index.into(),
+                    target_node_index.into(),
+                    attributes.deep_into(),
+                    &groups,
+                )
+                .map_err(PyGraphRecordError::from)?)
+        } else {
+            Ok(graphrecord
+                .add_edge_with_groups(
+                    source_node_index.into(),
+                    target_node_index.into(),
+                    attributes.deep_into(),
+                    &groups,
+                )
+                .map_err(PyGraphRecordError::from)?)
+        }
+    }
+
     #[pyo3(signature = (edges_dataframes, bypass_plugins=false))]
     pub fn add_edges_dataframes(
         &self,
@@ -1014,6 +1140,29 @@ impl PyGraphRecord {
         } else {
             Ok(graphrecord
                 .add_edges_dataframes_with_group(edges_dataframes, &group)
+                .map_err(PyGraphRecordError::from)?)
+        }
+    }
+
+    #[pyo3(signature = (edges_dataframes, groups, bypass_plugins=false))]
+    pub fn add_edges_dataframes_with_groups(
+        &self,
+        edges_dataframes: Vec<(PyDataFrame, String, String)>,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<Vec<EdgeIndex>> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+        let edges_dataframes: Vec<EdgeDataFrameInput> =
+            edges_dataframes.into_iter().map(Into::into).collect();
+
+        if bypass_plugins {
+            Ok(graphrecord
+                .add_edges_dataframes_with_groups_bypass_plugins(edges_dataframes, &groups)
+                .map_err(PyGraphRecordError::from)?)
+        } else {
+            Ok(graphrecord
+                .add_edges_dataframes_with_groups(edges_dataframes, &groups)
                 .map_err(PyGraphRecordError::from)?)
         }
     }
@@ -1092,6 +1241,52 @@ impl PyGraphRecord {
         }
     }
 
+    #[pyo3(signature = (node_index, groups, bypass_plugins=false))]
+    pub fn add_node_to_groups(
+        &self,
+        node_index: PyNodeIndex,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+
+        if bypass_plugins {
+            graphrecord
+                .add_node_to_groups_bypass_plugins(&groups, node_index.into())
+                .map_err(PyGraphRecordError::from)?;
+        } else {
+            graphrecord
+                .add_node_to_groups(&groups, node_index.into())
+                .map_err(PyGraphRecordError::from)?;
+        }
+
+        Ok(())
+    }
+
+    #[pyo3(signature = (node_indices, groups, bypass_plugins=false))]
+    pub fn add_nodes_to_groups(
+        &self,
+        node_indices: Vec<PyNodeIndex>,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+
+        if bypass_plugins {
+            graphrecord
+                .add_nodes_to_groups_bypass_plugins(&groups, node_indices.deep_into())
+                .map_err(PyGraphRecordError::from)?;
+        } else {
+            graphrecord
+                .add_nodes_to_groups(&groups, node_indices.deep_into())
+                .map_err(PyGraphRecordError::from)?;
+        }
+
+        Ok(())
+    }
+
     #[pyo3(signature = (group, edge_index, bypass_plugins=false))]
     pub fn add_edges_to_group(
         &self,
@@ -1114,6 +1309,52 @@ impl PyGraphRecord {
                     .map_err(PyGraphRecordError::from)?)
             })
         }
+    }
+
+    #[pyo3(signature = (edge_index, groups, bypass_plugins=false))]
+    pub fn add_edge_to_groups(
+        &self,
+        edge_index: EdgeIndex,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+
+        if bypass_plugins {
+            graphrecord
+                .add_edge_to_groups_bypass_plugins(&groups, edge_index)
+                .map_err(PyGraphRecordError::from)?;
+        } else {
+            graphrecord
+                .add_edge_to_groups(&groups, edge_index)
+                .map_err(PyGraphRecordError::from)?;
+        }
+
+        Ok(())
+    }
+
+    #[pyo3(signature = (edge_indices, groups, bypass_plugins=false))]
+    pub fn add_edges_to_groups(
+        &self,
+        edge_indices: Vec<EdgeIndex>,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+
+        if bypass_plugins {
+            graphrecord
+                .add_edges_to_groups_bypass_plugins(&groups, edge_indices)
+                .map_err(PyGraphRecordError::from)?;
+        } else {
+            graphrecord
+                .add_edges_to_groups(&groups, edge_indices)
+                .map_err(PyGraphRecordError::from)?;
+        }
+
+        Ok(())
     }
 
     #[pyo3(signature = (group, node_index, bypass_plugins=false))]
@@ -1140,6 +1381,54 @@ impl PyGraphRecord {
         }
     }
 
+    #[pyo3(signature = (node_index, groups, bypass_plugins=false))]
+    pub fn remove_node_from_groups(
+        &self,
+        node_index: PyNodeIndex,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+        let node_index: NodeIndex = node_index.into();
+
+        if bypass_plugins {
+            graphrecord
+                .remove_node_from_groups_bypass_plugins(&groups, &node_index)
+                .map_err(PyGraphRecordError::from)?;
+        } else {
+            graphrecord
+                .remove_node_from_groups(&groups, &node_index)
+                .map_err(PyGraphRecordError::from)?;
+        }
+
+        Ok(())
+    }
+
+    #[pyo3(signature = (node_indices, groups, bypass_plugins=false))]
+    pub fn remove_nodes_from_groups(
+        &self,
+        node_indices: Vec<PyNodeIndex>,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+        let node_indices: Vec<NodeIndex> = node_indices.deep_into();
+
+        if bypass_plugins {
+            graphrecord
+                .remove_nodes_from_groups_bypass_plugins(&groups, &node_indices)
+                .map_err(PyGraphRecordError::from)?;
+        } else {
+            graphrecord
+                .remove_nodes_from_groups(&groups, &node_indices)
+                .map_err(PyGraphRecordError::from)?;
+        }
+
+        Ok(())
+    }
+
     #[pyo3(signature = (group, edge_index, bypass_plugins=false))]
     pub fn remove_edges_from_group(
         &self,
@@ -1162,6 +1451,52 @@ impl PyGraphRecord {
                     .map_err(PyGraphRecordError::from)?)
             })
         }
+    }
+
+    #[pyo3(signature = (edge_index, groups, bypass_plugins=false))]
+    pub fn remove_edge_from_groups(
+        &self,
+        edge_index: EdgeIndex,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+
+        if bypass_plugins {
+            graphrecord
+                .remove_edge_from_groups_bypass_plugins(&groups, &edge_index)
+                .map_err(PyGraphRecordError::from)?;
+        } else {
+            graphrecord
+                .remove_edge_from_groups(&groups, &edge_index)
+                .map_err(PyGraphRecordError::from)?;
+        }
+
+        Ok(())
+    }
+
+    #[pyo3(signature = (edge_indices, groups, bypass_plugins=false))]
+    pub fn remove_edges_from_groups(
+        &self,
+        edge_indices: Vec<EdgeIndex>,
+        groups: Vec<PyGroup>,
+        bypass_plugins: bool,
+    ) -> PyResult<()> {
+        let mut graphrecord = self.inner_mut()?;
+        let groups: Vec<Group> = groups.deep_into();
+
+        if bypass_plugins {
+            graphrecord
+                .remove_edges_from_groups_bypass_plugins(&groups, &edge_indices)
+                .map_err(PyGraphRecordError::from)?;
+        } else {
+            graphrecord
+                .remove_edges_from_groups(&groups, &edge_indices)
+                .map_err(PyGraphRecordError::from)?;
+        }
+
+        Ok(())
     }
 
     pub fn nodes_in_group(

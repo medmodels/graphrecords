@@ -39,6 +39,19 @@ pub struct PostAddNodeWithGroupContext {
 }
 
 #[derive(Debug, Clone)]
+pub struct PreAddNodeWithGroupsContext {
+    pub node_index: NodeIndex,
+    pub attributes: Attributes,
+    pub groups: Vec<Group>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostAddNodeWithGroupsContext {
+    pub node_index: NodeIndex,
+    pub groups: Vec<Group>,
+}
+
+#[derive(Debug, Clone)]
 pub struct PreRemoveNodeContext {
     pub node_index: NodeIndex,
 }
@@ -71,6 +84,18 @@ pub struct PostAddNodesWithGroupContext {
 }
 
 #[derive(Debug, Clone)]
+pub struct PreAddNodesWithGroupsContext {
+    pub nodes: Vec<(NodeIndex, Attributes)>,
+    pub groups: Vec<Group>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostAddNodesWithGroupsContext {
+    pub nodes: Vec<(NodeIndex, Attributes)>,
+    pub groups: Vec<Group>,
+}
+
+#[derive(Debug, Clone)]
 pub struct PreAddNodesDataframesContext {
     pub nodes_dataframes: Vec<NodeDataFrameInput>,
 }
@@ -90,6 +115,18 @@ pub struct PreAddNodesDataframesWithGroupContext {
 pub struct PostAddNodesDataframesWithGroupContext {
     pub nodes_dataframes: Vec<NodeDataFrameInput>,
     pub group: Group,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreAddNodesDataframesWithGroupsContext {
+    pub nodes_dataframes: Vec<NodeDataFrameInput>,
+    pub groups: Vec<Group>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostAddNodesDataframesWithGroupsContext {
+    pub nodes_dataframes: Vec<NodeDataFrameInput>,
+    pub groups: Vec<Group>,
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +152,20 @@ pub struct PreAddEdgeWithGroupContext {
 #[derive(Debug, Clone)]
 pub struct PostAddEdgeWithGroupContext {
     pub edge_index: EdgeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreAddEdgeWithGroupsContext {
+    pub source_node_index: NodeIndex,
+    pub target_node_index: NodeIndex,
+    pub attributes: Attributes,
+    pub groups: Vec<Group>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostAddEdgeWithGroupsContext {
+    pub edge_index: EdgeIndex,
+    pub groups: Vec<Group>,
 }
 
 #[derive(Debug, Clone)]
@@ -149,6 +200,18 @@ pub struct PostAddEdgesWithGroupContext {
 }
 
 #[derive(Debug, Clone)]
+pub struct PreAddEdgesWithGroupsContext {
+    pub edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+    pub groups: Vec<Group>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostAddEdgesWithGroupsContext {
+    pub edge_indices: Vec<EdgeIndex>,
+    pub groups: Vec<Group>,
+}
+
+#[derive(Debug, Clone)]
 pub struct PreAddEdgesDataframesContext {
     pub edges_dataframes: Vec<EdgeDataFrameInput>,
 }
@@ -168,6 +231,18 @@ pub struct PreAddEdgesDataframesWithGroupContext {
 pub struct PostAddEdgesDataframesWithGroupContext {
     pub edges_dataframes: Vec<EdgeDataFrameInput>,
     pub group: Group,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreAddEdgesDataframesWithGroupsContext {
+    pub edges_dataframes: Vec<EdgeDataFrameInput>,
+    pub groups: Vec<Group>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostAddEdgesDataframesWithGroupsContext {
+    pub edges_dataframes: Vec<EdgeDataFrameInput>,
+    pub groups: Vec<Group>,
 }
 
 #[derive(Debug, Clone)]
@@ -207,6 +282,30 @@ pub struct PostAddNodeToGroupContext {
 }
 
 #[derive(Debug, Clone)]
+pub struct PreAddNodeToGroupsContext {
+    pub groups: Vec<Group>,
+    pub node_index: NodeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostAddNodeToGroupsContext {
+    pub groups: Vec<Group>,
+    pub node_index: NodeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreAddNodesToGroupsContext {
+    pub groups: Vec<Group>,
+    pub node_indices: Vec<NodeIndex>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostAddNodesToGroupsContext {
+    pub groups: Vec<Group>,
+    pub node_indices: Vec<NodeIndex>,
+}
+
+#[derive(Debug, Clone)]
 pub struct PreAddEdgeToGroupContext {
     pub group: Group,
     pub edge_index: EdgeIndex,
@@ -216,6 +315,30 @@ pub struct PreAddEdgeToGroupContext {
 pub struct PostAddEdgeToGroupContext {
     pub group: Group,
     pub edge_index: EdgeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreAddEdgeToGroupsContext {
+    pub groups: Vec<Group>,
+    pub edge_index: EdgeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostAddEdgeToGroupsContext {
+    pub groups: Vec<Group>,
+    pub edge_index: EdgeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreAddEdgesToGroupsContext {
+    pub groups: Vec<Group>,
+    pub edge_indices: Vec<EdgeIndex>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostAddEdgesToGroupsContext {
+    pub groups: Vec<Group>,
+    pub edge_indices: Vec<EdgeIndex>,
 }
 
 #[derive(Debug, Clone)]
@@ -231,6 +354,30 @@ pub struct PostRemoveNodeFromGroupContext {
 }
 
 #[derive(Debug, Clone)]
+pub struct PreRemoveNodeFromGroupsContext {
+    pub groups: Vec<Group>,
+    pub node_index: NodeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostRemoveNodeFromGroupsContext {
+    pub groups: Vec<Group>,
+    pub node_index: NodeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreRemoveNodesFromGroupsContext {
+    pub groups: Vec<Group>,
+    pub node_indices: Vec<NodeIndex>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostRemoveNodesFromGroupsContext {
+    pub groups: Vec<Group>,
+    pub node_indices: Vec<NodeIndex>,
+}
+
+#[derive(Debug, Clone)]
 pub struct PreRemoveEdgeFromGroupContext {
     pub group: Group,
     pub edge_index: EdgeIndex,
@@ -240,6 +387,30 @@ pub struct PreRemoveEdgeFromGroupContext {
 pub struct PostRemoveEdgeFromGroupContext {
     pub group: Group,
     pub edge_index: EdgeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreRemoveEdgeFromGroupsContext {
+    pub groups: Vec<Group>,
+    pub edge_index: EdgeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostRemoveEdgeFromGroupsContext {
+    pub groups: Vec<Group>,
+    pub edge_index: EdgeIndex,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreRemoveEdgesFromGroupsContext {
+    pub groups: Vec<Group>,
+    pub edge_indices: Vec<EdgeIndex>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostRemoveEdgesFromGroupsContext {
+    pub groups: Vec<Group>,
+    pub edge_indices: Vec<EdgeIndex>,
 }
 
 #[cfg_attr(feature = "serde", typetag::serde(tag = "type"))]
@@ -315,6 +486,22 @@ pub trait Plugin: Debug + Send + Sync {
         Ok(())
     }
 
+    fn pre_add_node_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreAddNodeWithGroupsContext,
+    ) -> GraphRecordResult<PreAddNodeWithGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_add_node_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostAddNodeWithGroupsContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
     fn pre_remove_node(
         &self,
         graphrecord: &mut GraphRecord,
@@ -363,6 +550,22 @@ pub trait Plugin: Debug + Send + Sync {
         Ok(())
     }
 
+    fn pre_add_nodes_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreAddNodesWithGroupsContext,
+    ) -> GraphRecordResult<PreAddNodesWithGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_add_nodes_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostAddNodesWithGroupsContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
     fn pre_add_nodes_dataframes(
         &self,
         graphrecord: &mut GraphRecord,
@@ -395,6 +598,22 @@ pub trait Plugin: Debug + Send + Sync {
         Ok(())
     }
 
+    fn pre_add_nodes_dataframes_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreAddNodesDataframesWithGroupsContext,
+    ) -> GraphRecordResult<PreAddNodesDataframesWithGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_add_nodes_dataframes_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostAddNodesDataframesWithGroupsContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
     fn pre_add_edge(
         &self,
         graphrecord: &mut GraphRecord,
@@ -423,6 +642,22 @@ pub trait Plugin: Debug + Send + Sync {
         &self,
         graphrecord: &mut GraphRecord,
         context: PostAddEdgeWithGroupContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
+    fn pre_add_edge_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreAddEdgeWithGroupsContext,
+    ) -> GraphRecordResult<PreAddEdgeWithGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_add_edge_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostAddEdgeWithGroupsContext,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
@@ -475,6 +710,22 @@ pub trait Plugin: Debug + Send + Sync {
         Ok(())
     }
 
+    fn pre_add_edges_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreAddEdgesWithGroupsContext,
+    ) -> GraphRecordResult<PreAddEdgesWithGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_add_edges_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostAddEdgesWithGroupsContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
     fn pre_add_edges_dataframes(
         &self,
         graphrecord: &mut GraphRecord,
@@ -503,6 +754,22 @@ pub trait Plugin: Debug + Send + Sync {
         &self,
         graphrecord: &mut GraphRecord,
         context: PostAddEdgesDataframesWithGroupContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
+    fn pre_add_edges_dataframes_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreAddEdgesDataframesWithGroupsContext,
+    ) -> GraphRecordResult<PreAddEdgesDataframesWithGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_add_edges_dataframes_with_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostAddEdgesDataframesWithGroupsContext,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
@@ -555,6 +822,38 @@ pub trait Plugin: Debug + Send + Sync {
         Ok(())
     }
 
+    fn pre_add_node_to_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreAddNodeToGroupsContext,
+    ) -> GraphRecordResult<PreAddNodeToGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_add_node_to_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostAddNodeToGroupsContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
+    fn pre_add_nodes_to_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreAddNodesToGroupsContext,
+    ) -> GraphRecordResult<PreAddNodesToGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_add_nodes_to_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostAddNodesToGroupsContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
     fn pre_add_edge_to_group(
         &self,
         graphrecord: &mut GraphRecord,
@@ -567,6 +866,38 @@ pub trait Plugin: Debug + Send + Sync {
         &self,
         graphrecord: &mut GraphRecord,
         context: PostAddEdgeToGroupContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
+    fn pre_add_edge_to_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreAddEdgeToGroupsContext,
+    ) -> GraphRecordResult<PreAddEdgeToGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_add_edge_to_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostAddEdgeToGroupsContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
+    fn pre_add_edges_to_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreAddEdgesToGroupsContext,
+    ) -> GraphRecordResult<PreAddEdgesToGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_add_edges_to_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostAddEdgesToGroupsContext,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
@@ -587,6 +918,38 @@ pub trait Plugin: Debug + Send + Sync {
         Ok(())
     }
 
+    fn pre_remove_node_from_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreRemoveNodeFromGroupsContext,
+    ) -> GraphRecordResult<PreRemoveNodeFromGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_remove_node_from_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostRemoveNodeFromGroupsContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
+    fn pre_remove_nodes_from_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreRemoveNodesFromGroupsContext,
+    ) -> GraphRecordResult<PreRemoveNodesFromGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_remove_nodes_from_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostRemoveNodesFromGroupsContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
     fn pre_remove_edge_from_group(
         &self,
         graphrecord: &mut GraphRecord,
@@ -599,6 +962,38 @@ pub trait Plugin: Debug + Send + Sync {
         &self,
         graphrecord: &mut GraphRecord,
         context: PostRemoveEdgeFromGroupContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
+    fn pre_remove_edge_from_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreRemoveEdgeFromGroupsContext,
+    ) -> GraphRecordResult<PreRemoveEdgeFromGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_remove_edge_from_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostRemoveEdgeFromGroupsContext,
+    ) -> GraphRecordResult<()> {
+        Ok(())
+    }
+
+    fn pre_remove_edges_from_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PreRemoveEdgesFromGroupsContext,
+    ) -> GraphRecordResult<PreRemoveEdgesFromGroupsContext> {
+        Ok(context)
+    }
+
+    fn post_remove_edges_from_groups(
+        &self,
+        graphrecord: &mut GraphRecord,
+        context: PostRemoveEdgesFromGroupsContext,
     ) -> GraphRecordResult<()> {
         Ok(())
     }

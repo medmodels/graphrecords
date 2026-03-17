@@ -1,20 +1,32 @@
 use graphrecords_utils::aliases::GrHashMap;
 
 use super::{
-    Plugin, PostAddEdgeContext, PostAddEdgeToGroupContext, PostAddEdgeWithGroupContext,
-    PostAddEdgesContext, PostAddEdgesDataframesContext, PostAddEdgesDataframesWithGroupContext,
-    PostAddEdgesWithGroupContext, PostAddGroupContext, PostAddNodeContext,
-    PostAddNodeToGroupContext, PostAddNodeWithGroupContext, PostAddNodesContext,
+    Plugin, PostAddEdgeContext, PostAddEdgeToGroupContext, PostAddEdgeToGroupsContext,
+    PostAddEdgeWithGroupContext, PostAddEdgeWithGroupsContext, PostAddEdgesContext,
+    PostAddEdgesDataframesContext, PostAddEdgesDataframesWithGroupContext,
+    PostAddEdgesDataframesWithGroupsContext, PostAddEdgesToGroupsContext,
+    PostAddEdgesWithGroupContext, PostAddEdgesWithGroupsContext, PostAddGroupContext,
+    PostAddNodeContext, PostAddNodeToGroupContext, PostAddNodeToGroupsContext,
+    PostAddNodeWithGroupContext, PostAddNodeWithGroupsContext, PostAddNodesContext,
     PostAddNodesDataframesContext, PostAddNodesDataframesWithGroupContext,
-    PostAddNodesWithGroupContext, PostRemoveEdgeContext, PostRemoveEdgeFromGroupContext,
-    PostRemoveGroupContext, PostRemoveNodeContext, PostRemoveNodeFromGroupContext,
-    PreAddEdgeContext, PreAddEdgeToGroupContext, PreAddEdgeWithGroupContext, PreAddEdgesContext,
-    PreAddEdgesDataframesContext, PreAddEdgesDataframesWithGroupContext,
-    PreAddEdgesWithGroupContext, PreAddGroupContext, PreAddNodeContext, PreAddNodeToGroupContext,
-    PreAddNodeWithGroupContext, PreAddNodesContext, PreAddNodesDataframesContext,
-    PreAddNodesDataframesWithGroupContext, PreAddNodesWithGroupContext, PreRemoveEdgeContext,
-    PreRemoveEdgeFromGroupContext, PreRemoveGroupContext, PreRemoveNodeContext,
-    PreRemoveNodeFromGroupContext, PreSetSchemaContext,
+    PostAddNodesDataframesWithGroupsContext, PostAddNodesToGroupsContext,
+    PostAddNodesWithGroupContext, PostAddNodesWithGroupsContext, PostRemoveEdgeContext,
+    PostRemoveEdgeFromGroupContext, PostRemoveEdgeFromGroupsContext,
+    PostRemoveEdgesFromGroupsContext, PostRemoveGroupContext, PostRemoveNodeContext,
+    PostRemoveNodeFromGroupContext, PostRemoveNodeFromGroupsContext,
+    PostRemoveNodesFromGroupsContext, PreAddEdgeContext, PreAddEdgeToGroupContext,
+    PreAddEdgeToGroupsContext, PreAddEdgeWithGroupContext, PreAddEdgeWithGroupsContext,
+    PreAddEdgesContext, PreAddEdgesDataframesContext, PreAddEdgesDataframesWithGroupContext,
+    PreAddEdgesDataframesWithGroupsContext, PreAddEdgesToGroupsContext,
+    PreAddEdgesWithGroupContext, PreAddEdgesWithGroupsContext, PreAddGroupContext,
+    PreAddNodeContext, PreAddNodeToGroupContext, PreAddNodeToGroupsContext,
+    PreAddNodeWithGroupContext, PreAddNodeWithGroupsContext, PreAddNodesContext,
+    PreAddNodesDataframesContext, PreAddNodesDataframesWithGroupContext,
+    PreAddNodesDataframesWithGroupsContext, PreAddNodesToGroupsContext,
+    PreAddNodesWithGroupContext, PreAddNodesWithGroupsContext, PreRemoveEdgeContext,
+    PreRemoveEdgeFromGroupContext, PreRemoveEdgeFromGroupsContext, PreRemoveEdgesFromGroupsContext,
+    PreRemoveGroupContext, PreRemoveNodeContext, PreRemoveNodeFromGroupContext,
+    PreRemoveNodeFromGroupsContext, PreRemoveNodesFromGroupsContext, PreSetSchemaContext,
 };
 use crate::{
     errors::{GraphRecordError, GraphRecordResult},
@@ -226,6 +238,52 @@ impl GraphRecord {
         self.add_node_with_group_impl(node_index, attributes, group)
     }
 
+    pub fn add_node_with_groups(
+        &mut self,
+        node_index: NodeIndex,
+        attributes: Attributes,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreAddNodeWithGroupsContext {
+            node_index,
+            attributes,
+            groups: groups.as_ref().to_vec(),
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_add_node_with_groups(self, pre_context)
+            })?;
+
+        self.add_node_with_groups_impl(
+            pre_context.node_index.clone(),
+            pre_context.attributes,
+            &pre_context.groups,
+        )?;
+
+        let post_context = PostAddNodeWithGroupsContext {
+            node_index: pre_context.node_index,
+            groups: pre_context.groups,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_node_with_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn add_node_with_groups_bypass_plugins(
+        &mut self,
+        node_index: NodeIndex,
+        attributes: Attributes,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        self.add_node_with_groups_impl(node_index, attributes, groups)
+    }
+
     pub fn remove_node(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
         let plugins = self.plugins.clone();
 
@@ -325,6 +383,45 @@ impl GraphRecord {
         self.add_nodes_with_group_impl(nodes, group)
     }
 
+    pub fn add_nodes_with_groups(
+        &mut self,
+        nodes: Vec<(NodeIndex, Attributes)>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreAddNodesWithGroupsContext {
+            nodes,
+            groups: groups.as_ref().to_vec(),
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_add_nodes_with_groups(self, pre_context)
+            })?;
+
+        self.add_nodes_with_groups_impl(pre_context.nodes.clone(), &pre_context.groups)?;
+
+        let post_context = PostAddNodesWithGroupsContext {
+            nodes: pre_context.nodes,
+            groups: pre_context.groups,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_nodes_with_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn add_nodes_with_groups_bypass_plugins(
+        &mut self,
+        nodes: Vec<(NodeIndex, Attributes)>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_with_groups_impl(nodes, groups)
+    }
+
     pub fn add_nodes_dataframes(
         &mut self,
         nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
@@ -400,6 +497,48 @@ impl GraphRecord {
         group: Group,
     ) -> GraphRecordResult<()> {
         self.add_nodes_dataframes_with_group_impl(nodes_dataframes, group)
+    }
+
+    pub fn add_nodes_dataframes_with_groups(
+        &mut self,
+        nodes_dataframes: Vec<NodeDataFrameInput>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreAddNodesDataframesWithGroupsContext {
+            nodes_dataframes,
+            groups: groups.as_ref().to_vec(),
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_add_nodes_dataframes_with_groups(self, pre_context)
+            })?;
+
+        self.add_nodes_dataframes_with_groups_impl(
+            pre_context.nodes_dataframes.clone(),
+            &pre_context.groups,
+        )?;
+
+        let post_context = PostAddNodesDataframesWithGroupsContext {
+            nodes_dataframes: pre_context.nodes_dataframes,
+            groups: pre_context.groups,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_nodes_dataframes_with_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn add_nodes_dataframes_with_groups_bypass_plugins(
+        &mut self,
+        nodes_dataframes: Vec<NodeDataFrameInput>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_dataframes_with_groups_impl(nodes_dataframes, groups)
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -492,6 +631,56 @@ impl GraphRecord {
         group: Group,
     ) -> GraphRecordResult<EdgeIndex> {
         self.add_edge_with_group_impl(source_node_index, target_node_index, attributes, group)
+    }
+
+    pub fn add_edge_with_groups(
+        &mut self,
+        source_node_index: NodeIndex,
+        target_node_index: NodeIndex,
+        attributes: Attributes,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<EdgeIndex> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreAddEdgeWithGroupsContext {
+            source_node_index,
+            target_node_index,
+            attributes,
+            groups: groups.as_ref().to_vec(),
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_add_edge_with_groups(self, pre_context)
+            })?;
+
+        let edge_index = self.add_edge_with_groups_impl(
+            pre_context.source_node_index,
+            pre_context.target_node_index,
+            pre_context.attributes,
+            &pre_context.groups,
+        )?;
+
+        let post_context = PostAddEdgeWithGroupsContext {
+            edge_index,
+            groups: pre_context.groups,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_edge_with_groups(self, post_context.clone())
+        })?;
+
+        Ok(edge_index)
+    }
+
+    pub fn add_edge_with_groups_bypass_plugins(
+        &mut self,
+        source_node_index: NodeIndex,
+        target_node_index: NodeIndex,
+        attributes: Attributes,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<EdgeIndex> {
+        self.add_edge_with_groups_impl(source_node_index, target_node_index, attributes, groups)
     }
 
     pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<Attributes> {
@@ -597,6 +786,46 @@ impl GraphRecord {
         self.add_edges_with_group_impl(edges, group)
     }
 
+    pub fn add_edges_with_groups(
+        &mut self,
+        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreAddEdgesWithGroupsContext {
+            edges,
+            groups: groups.as_ref().to_vec(),
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_add_edges_with_groups(self, pre_context)
+            })?;
+
+        let edge_indices =
+            self.add_edges_with_groups_impl(pre_context.edges.clone(), &pre_context.groups)?;
+
+        let post_context = PostAddEdgesWithGroupsContext {
+            edge_indices: edge_indices.clone(),
+            groups: pre_context.groups,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_edges_with_groups(self, post_context.clone())
+        })?;
+
+        Ok(edge_indices)
+    }
+
+    pub fn add_edges_with_groups_bypass_plugins(
+        &mut self,
+        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_with_groups_impl(edges, groups)
+    }
+
     pub fn add_edges_dataframes(
         &mut self,
         edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
@@ -672,6 +901,48 @@ impl GraphRecord {
         group: &Group,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         self.add_edges_dataframes_with_group_impl(edges_dataframes, group)
+    }
+
+    pub fn add_edges_dataframes_with_groups(
+        &mut self,
+        edges_dataframes: Vec<EdgeDataFrameInput>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreAddEdgesDataframesWithGroupsContext {
+            edges_dataframes,
+            groups: groups.as_ref().to_vec(),
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_add_edges_dataframes_with_groups(self, pre_context)
+            })?;
+
+        let edge_indices = self.add_edges_dataframes_with_groups_impl(
+            pre_context.edges_dataframes.clone(),
+            &pre_context.groups,
+        )?;
+
+        let post_context = PostAddEdgesDataframesWithGroupsContext {
+            edges_dataframes: pre_context.edges_dataframes,
+            groups: pre_context.groups,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_edges_dataframes_with_groups(self, post_context.clone())
+        })?;
+
+        Ok(edge_indices)
+    }
+
+    pub fn add_edges_dataframes_with_groups_bypass_plugins(
+        &mut self,
+        edges_dataframes: Vec<EdgeDataFrameInput>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_dataframes_with_groups_impl(edges_dataframes, groups)
     }
 
     pub fn add_group(
@@ -786,6 +1057,84 @@ impl GraphRecord {
         self.add_node_to_group_impl(group, node_index)
     }
 
+    pub fn add_node_to_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_index: NodeIndex,
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreAddNodeToGroupsContext {
+            groups: groups.as_ref().to_vec(),
+            node_index,
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_add_node_to_groups(self, pre_context)
+            })?;
+
+        self.add_node_to_groups_impl(&pre_context.groups, pre_context.node_index.clone())?;
+
+        let post_context = PostAddNodeToGroupsContext {
+            groups: pre_context.groups,
+            node_index: pre_context.node_index,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_node_to_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn add_node_to_groups_bypass_plugins(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_index: NodeIndex,
+    ) -> GraphRecordResult<()> {
+        self.add_node_to_groups_impl(groups, node_index)
+    }
+
+    pub fn add_nodes_to_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_indices: Vec<NodeIndex>,
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreAddNodesToGroupsContext {
+            groups: groups.as_ref().to_vec(),
+            node_indices,
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_add_nodes_to_groups(self, pre_context)
+            })?;
+
+        self.add_nodes_to_groups_impl(&pre_context.groups, pre_context.node_indices.clone())?;
+
+        let post_context = PostAddNodesToGroupsContext {
+            groups: pre_context.groups,
+            node_indices: pre_context.node_indices,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_nodes_to_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn add_nodes_to_groups_bypass_plugins(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_indices: Vec<NodeIndex>,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_to_groups_impl(groups, node_indices)
+    }
+
     pub fn add_edge_to_group(
         &mut self,
         group: Group,
@@ -820,6 +1169,84 @@ impl GraphRecord {
         edge_index: EdgeIndex,
     ) -> GraphRecordResult<()> {
         self.add_edge_to_group_impl(group, edge_index)
+    }
+
+    pub fn add_edge_to_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_index: EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreAddEdgeToGroupsContext {
+            groups: groups.as_ref().to_vec(),
+            edge_index,
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_add_edge_to_groups(self, pre_context)
+            })?;
+
+        self.add_edge_to_groups_impl(&pre_context.groups, pre_context.edge_index)?;
+
+        let post_context = PostAddEdgeToGroupsContext {
+            groups: pre_context.groups,
+            edge_index: pre_context.edge_index,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_edge_to_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn add_edge_to_groups_bypass_plugins(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_index: EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        self.add_edge_to_groups_impl(groups, edge_index)
+    }
+
+    pub fn add_edges_to_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_indices: Vec<EdgeIndex>,
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreAddEdgesToGroupsContext {
+            groups: groups.as_ref().to_vec(),
+            edge_indices,
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_add_edges_to_groups(self, pre_context)
+            })?;
+
+        self.add_edges_to_groups_impl(&pre_context.groups, pre_context.edge_indices.clone())?;
+
+        let post_context = PostAddEdgesToGroupsContext {
+            groups: pre_context.groups,
+            edge_indices: pre_context.edge_indices,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_add_edges_to_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn add_edges_to_groups_bypass_plugins(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_indices: Vec<EdgeIndex>,
+    ) -> GraphRecordResult<()> {
+        self.add_edges_to_groups_impl(groups, edge_indices)
     }
 
     pub fn remove_node_from_group(
@@ -861,6 +1288,84 @@ impl GraphRecord {
         self.remove_node_from_group_impl(group, node_index)
     }
 
+    pub fn remove_node_from_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_index: &NodeIndex,
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreRemoveNodeFromGroupsContext {
+            groups: groups.as_ref().to_vec(),
+            node_index: node_index.clone(),
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_remove_node_from_groups(self, pre_context)
+            })?;
+
+        self.remove_node_from_groups_impl(&pre_context.groups, &pre_context.node_index)?;
+
+        let post_context = PostRemoveNodeFromGroupsContext {
+            groups: pre_context.groups,
+            node_index: pre_context.node_index,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_remove_node_from_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn remove_node_from_groups_bypass_plugins(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_index: &NodeIndex,
+    ) -> GraphRecordResult<()> {
+        self.remove_node_from_groups_impl(groups, node_index)
+    }
+
+    pub fn remove_nodes_from_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_indices: &[NodeIndex],
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreRemoveNodesFromGroupsContext {
+            groups: groups.as_ref().to_vec(),
+            node_indices: node_indices.to_vec(),
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_remove_nodes_from_groups(self, pre_context)
+            })?;
+
+        self.remove_nodes_from_groups_impl(&pre_context.groups, &pre_context.node_indices)?;
+
+        let post_context = PostRemoveNodesFromGroupsContext {
+            groups: pre_context.groups,
+            node_indices: pre_context.node_indices,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_remove_nodes_from_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn remove_nodes_from_groups_bypass_plugins(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_indices: &[NodeIndex],
+    ) -> GraphRecordResult<()> {
+        self.remove_nodes_from_groups_impl(groups, node_indices)
+    }
+
     pub fn remove_edge_from_group(
         &mut self,
         group: &Group,
@@ -898,6 +1403,84 @@ impl GraphRecord {
         edge_index: &EdgeIndex,
     ) -> GraphRecordResult<()> {
         self.remove_edge_from_group_impl(group, edge_index)
+    }
+
+    pub fn remove_edge_from_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_index: &EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreRemoveEdgeFromGroupsContext {
+            groups: groups.as_ref().to_vec(),
+            edge_index: *edge_index,
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_remove_edge_from_groups(self, pre_context)
+            })?;
+
+        self.remove_edge_from_groups_impl(&pre_context.groups, &pre_context.edge_index)?;
+
+        let post_context = PostRemoveEdgeFromGroupsContext {
+            groups: pre_context.groups,
+            edge_index: pre_context.edge_index,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_remove_edge_from_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn remove_edge_from_groups_bypass_plugins(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_index: &EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        self.remove_edge_from_groups_impl(groups, edge_index)
+    }
+
+    pub fn remove_edges_from_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_indices: &[EdgeIndex],
+    ) -> GraphRecordResult<()> {
+        let plugins = self.plugins.clone();
+
+        let pre_context = PreRemoveEdgesFromGroupsContext {
+            groups: groups.as_ref().to_vec(),
+            edge_indices: edge_indices.to_vec(),
+        };
+        let pre_context = plugins
+            .iter()
+            .try_fold(pre_context, |pre_context, (_, plugin)| {
+                plugin.pre_remove_edges_from_groups(self, pre_context)
+            })?;
+
+        self.remove_edges_from_groups_impl(&pre_context.groups, &pre_context.edge_indices)?;
+
+        let post_context = PostRemoveEdgesFromGroupsContext {
+            groups: pre_context.groups,
+            edge_indices: pre_context.edge_indices,
+        };
+
+        plugins.iter().try_for_each(|(_, plugin)| {
+            plugin.post_remove_edges_from_groups(self, post_context.clone())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn remove_edges_from_groups_bypass_plugins(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_indices: &[EdgeIndex],
+    ) -> GraphRecordResult<()> {
+        self.remove_edges_from_groups_impl(groups, edge_indices)
     }
 
     pub fn clear(&mut self) -> GraphRecordResult<()> {

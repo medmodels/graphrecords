@@ -16,35 +16,51 @@ from graphrecords.plugins import (
     PostAddEdgesContext,
     PostAddEdgesDataframesContext,
     PostAddEdgesDataframesWithGroupContext,
+    PostAddEdgesDataframesWithGroupsContext,
+    PostAddEdgesToGroupsContext,
     PostAddEdgesWithGroupContext,
+    PostAddEdgesWithGroupsContext,
     PostAddEdgeToGroupContext,
     PostAddGroupContext,
     PostAddNodesContext,
     PostAddNodesDataframesContext,
     PostAddNodesDataframesWithGroupContext,
+    PostAddNodesDataframesWithGroupsContext,
+    PostAddNodesToGroupsContext,
     PostAddNodesWithGroupContext,
+    PostAddNodesWithGroupsContext,
     PostAddNodeToGroupContext,
     PostRemoveEdgeContext,
     PostRemoveEdgeFromGroupContext,
+    PostRemoveEdgesFromGroupsContext,
     PostRemoveGroupContext,
     PostRemoveNodeContext,
     PostRemoveNodeFromGroupContext,
+    PostRemoveNodesFromGroupsContext,
     PreAddEdgesContext,
     PreAddEdgesDataframesContext,
     PreAddEdgesDataframesWithGroupContext,
+    PreAddEdgesDataframesWithGroupsContext,
+    PreAddEdgesToGroupsContext,
     PreAddEdgesWithGroupContext,
+    PreAddEdgesWithGroupsContext,
     PreAddEdgeToGroupContext,
     PreAddGroupContext,
     PreAddNodesContext,
     PreAddNodesDataframesContext,
     PreAddNodesDataframesWithGroupContext,
+    PreAddNodesDataframesWithGroupsContext,
+    PreAddNodesToGroupsContext,
     PreAddNodesWithGroupContext,
+    PreAddNodesWithGroupsContext,
     PreAddNodeToGroupContext,
     PreRemoveEdgeContext,
     PreRemoveEdgeFromGroupContext,
+    PreRemoveEdgesFromGroupsContext,
     PreRemoveGroupContext,
     PreRemoveNodeContext,
     PreRemoveNodeFromGroupContext,
+    PreRemoveNodesFromGroupsContext,
     PreSetSchemaContext,
 )
 from graphrecords.querying import (
@@ -1257,6 +1273,33 @@ class TestGraphRecord(unittest.TestCase):
         with pytest.raises(RuntimeError):
             graphrecord.add_nodes_polars([(nodes, "index"), (second_nodes, "invalid")])
 
+    def test_add_nodes_with_groups(self) -> None:
+        graphrecord = GraphRecord()
+
+        graphrecord.add_nodes(create_nodes(), group=["0", "1"])
+
+        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1", "2", "3"])
+        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1", "2", "3"])
+
+    def test_invalid_add_nodes_with_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        with pytest.raises(AssertionError):
+            graphrecord.add_nodes(create_nodes(), group=["0", "1"])
+
+    def test_add_nodes_dataframes_with_groups(self) -> None:
+        graphrecord = GraphRecord()
+
+        nodes = pl.from_pandas(create_pandas_nodes_dataframe())
+        second_nodes = pl.from_pandas(create_second_pandas_nodes_dataframe())
+
+        graphrecord.add_nodes_polars(
+            [(nodes, "index"), (second_nodes, "index")], group=["0", "1"]
+        )
+
+        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1", "2", "3"])
+        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1", "2", "3"])
+
     def test_remove_edges(self) -> None:
         graphrecord = create_graphrecord()
 
@@ -1598,6 +1641,40 @@ class TestGraphRecord(unittest.TestCase):
         with pytest.raises(RuntimeError):
             graphrecord.add_edges_polars((edges, "source", "invalid"))
 
+    def test_add_edges_with_groups(self) -> None:
+        graphrecord = GraphRecord()
+
+        graphrecord.add_nodes(create_nodes())
+
+        edge_indices = graphrecord.add_edges(create_edges(), group=["0", "1"])
+
+        assert sorted(graphrecord.edges_in_group("0")) == sorted(edge_indices)
+        assert sorted(graphrecord.edges_in_group("1")) == sorted(edge_indices)
+
+    def test_invalid_add_edges_with_groups(self) -> None:
+        graphrecord = GraphRecord()
+
+        graphrecord.add_nodes(create_nodes())
+
+        with pytest.raises(IndexError):
+            graphrecord.add_edges([("0", "50", {})], group=["0", "1"])
+
+    def test_add_edges_dataframes_with_groups(self) -> None:
+        graphrecord = GraphRecord()
+
+        graphrecord.add_nodes(create_nodes())
+
+        edges = pl.from_pandas(create_pandas_edges_dataframe())
+        second_edges = pl.from_pandas(create_second_pandas_edges_dataframe())
+
+        graphrecord.add_edges_polars(
+            [(edges, "source", "target"), (second_edges, "source", "target")],
+            group=["0", "1"],
+        )
+
+        assert len(graphrecord.edges_in_group("0")) == 4
+        assert len(graphrecord.edges_in_group("1")) == 4
+
     def test_add_group(self) -> None:
         graphrecord = create_graphrecord()
 
@@ -1813,6 +1890,89 @@ class TestGraphRecord(unittest.TestCase):
         ):
             graphrecord.add_nodes_to_group("0", "0")
 
+    def test_add_nodes_to_multiple_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
+
+        graphrecord.add_nodes_to_group(["0", "1"], "0")
+
+        assert graphrecord.nodes_in_group("0") == ["0"]
+        assert graphrecord.nodes_in_group("1") == ["0"]
+
+        graphrecord.add_nodes_to_group(["0", "1"], ["1", "2"])
+
+        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1", "2"])
+        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1", "2"])
+
+    def test_invalid_add_nodes_to_multiple_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", ["0"])
+        graphrecord.add_group("1")
+
+        with pytest.raises(AssertionError):
+            graphrecord.add_nodes_to_group(["0", "1"], "0")
+
+        with pytest.raises(IndexError):
+            graphrecord.add_nodes_to_group(["0", "1"], "50")
+
+    def test_add_nodes_to_multiple_groups_with_query(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
+
+        def query(node: NodeOperand) -> NodeIndicesOperand:
+            node.index().is_in(["0", "1"])
+
+            return node.index()
+
+        graphrecord.add_nodes_to_group(["0", "1"], query)
+
+        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1"])
+        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1"])
+
+    def test_add_nodes_to_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
+
+        graphrecord.add_nodes_to_group(["0", "1"], ["0", "1"])
+
+        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1"])
+        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1"])
+
+    def test_invalid_add_nodes_to_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", ["0"])
+        graphrecord.add_group("1")
+
+        with pytest.raises(AssertionError):
+            graphrecord.add_nodes_to_group(["0", "1"], ["0", "1"])
+
+        with pytest.raises(IndexError):
+            graphrecord.add_nodes_to_group(["0", "1"], ["50"])
+
+    def test_add_nodes_to_groups_with_query(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
+
+        def query(node: NodeOperand) -> NodeIndicesOperand:
+            node.index().is_in(["0", "1"])
+
+            return node.index()
+
+        graphrecord.add_nodes_to_group(["0", "1"], query)
+
+        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1"])
+        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1"])
+
     def test_add_edges_to_group(self) -> None:
         graphrecord = create_graphrecord()
 
@@ -1908,6 +2068,89 @@ class TestGraphRecord(unittest.TestCase):
         with pytest.raises(AssertionError):
             graphrecord.add_edges_to_group("0", 0)
 
+    def test_add_edges_to_multiple_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
+
+        graphrecord.add_edges_to_group(["0", "1"], 0)
+
+        assert graphrecord.edges_in_group("0") == [0]
+        assert graphrecord.edges_in_group("1") == [0]
+
+        graphrecord.add_edges_to_group(["0", "1"], [1, 2])
+
+        assert sorted(graphrecord.edges_in_group("0")) == sorted([0, 1, 2])
+        assert sorted(graphrecord.edges_in_group("1")) == sorted([0, 1, 2])
+
+    def test_invalid_add_edges_to_multiple_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", edges=[0])
+        graphrecord.add_group("1")
+
+        with pytest.raises(AssertionError):
+            graphrecord.add_edges_to_group(["0", "1"], 0)
+
+        with pytest.raises(IndexError):
+            graphrecord.add_edges_to_group(["0", "1"], 50)
+
+    def test_add_edges_to_multiple_groups_with_query(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
+
+        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
+            edge.index().is_in([0, 1])
+
+            return edge.index()
+
+        graphrecord.add_edges_to_group(["0", "1"], query)
+
+        assert sorted(graphrecord.edges_in_group("0")) == sorted([0, 1])
+        assert sorted(graphrecord.edges_in_group("1")) == sorted([0, 1])
+
+    def test_add_edges_to_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
+
+        graphrecord.add_edges_to_group(["0", "1"], [0, 1])
+
+        assert sorted(graphrecord.edges_in_group("0")) == sorted([0, 1])
+        assert sorted(graphrecord.edges_in_group("1")) == sorted([0, 1])
+
+    def test_invalid_add_edges_to_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", edges=[0])
+        graphrecord.add_group("1")
+
+        with pytest.raises(AssertionError):
+            graphrecord.add_edges_to_group(["0", "1"], [0, 1])
+
+        with pytest.raises(IndexError):
+            graphrecord.add_edges_to_group(["0", "1"], [50])
+
+    def test_add_edges_to_groups_with_query(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
+
+        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
+            edge.index().is_in([0, 1])
+
+            return edge.index()
+
+        graphrecord.add_edges_to_group(["0", "1"], query)
+
+        assert sorted(graphrecord.edges_in_group("0")) == sorted([0, 1])
+        assert sorted(graphrecord.edges_in_group("1")) == sorted([0, 1])
+
     def test_remove_nodes_from_group(self) -> None:
         graphrecord = create_graphrecord()
 
@@ -1991,6 +2234,68 @@ class TestGraphRecord(unittest.TestCase):
         with pytest.raises(IndexError):
             graphrecord.remove_nodes_from_group("0", ["0", "50"])
 
+    def test_remove_nodes_from_multiple_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", ["0", "1"])
+        graphrecord.add_group("1", ["0", "2"])
+
+        graphrecord.remove_nodes_from_group(["0", "1"], "0")
+
+        assert graphrecord.nodes_in_group("0") == ["1"]
+        assert graphrecord.nodes_in_group("1") == ["2"]
+
+    def test_invalid_remove_nodes_from_multiple_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", ["0"])
+        graphrecord.add_group("1")
+
+        with pytest.raises(IndexError):
+            graphrecord.remove_nodes_from_group(["0", "1"], "50")
+
+        with pytest.raises(AssertionError):
+            graphrecord.remove_nodes_from_group(["0", "1"], "1")
+
+    def test_remove_nodes_from_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", ["0", "1"])
+        graphrecord.add_group("1", ["0", "1"])
+
+        graphrecord.remove_nodes_from_group(["0", "1"], ["0", "1"])
+
+        assert graphrecord.nodes_in_group("0") == []
+        assert graphrecord.nodes_in_group("1") == []
+
+    def test_invalid_remove_nodes_from_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", ["0"])
+        graphrecord.add_group("1")
+
+        with pytest.raises(IndexError):
+            graphrecord.remove_nodes_from_group(["0", "1"], ["50"])
+
+        with pytest.raises(AssertionError):
+            graphrecord.remove_nodes_from_group(["0", "1"], ["0"])
+
+    def test_remove_nodes_from_groups_with_query(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", ["0", "1"])
+        graphrecord.add_group("1", ["0", "1"])
+
+        def query(node: NodeOperand) -> NodeIndicesOperand:
+            node.index().is_in(["0", "1"])
+
+            return node.index()
+
+        graphrecord.remove_nodes_from_group(["0", "1"], query)
+
+        assert graphrecord.nodes_in_group("0") == []
+        assert graphrecord.nodes_in_group("1") == []
+
     def test_remove_edges_from_group(self) -> None:
         graphrecord = create_graphrecord()
 
@@ -2072,6 +2377,68 @@ class TestGraphRecord(unittest.TestCase):
         # Removing a non-existing edge from a group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_edges_from_group("0", [0, 50])
+
+    def test_remove_edges_from_multiple_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", edges=[0, 1])
+        graphrecord.add_group("1", edges=[0, 2])
+
+        graphrecord.remove_edges_from_group(["0", "1"], 0)
+
+        assert graphrecord.edges_in_group("0") == [1]
+        assert graphrecord.edges_in_group("1") == [2]
+
+    def test_invalid_remove_edges_from_multiple_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", edges=[0])
+        graphrecord.add_group("1")
+
+        with pytest.raises(IndexError):
+            graphrecord.remove_edges_from_group(["0", "1"], 50)
+
+        with pytest.raises(AssertionError):
+            graphrecord.remove_edges_from_group(["0", "1"], 1)
+
+    def test_remove_edges_from_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", edges=[0, 1])
+        graphrecord.add_group("1", edges=[0, 1])
+
+        graphrecord.remove_edges_from_group(["0", "1"], [0, 1])
+
+        assert graphrecord.edges_in_group("0") == []
+        assert graphrecord.edges_in_group("1") == []
+
+    def test_invalid_remove_edges_from_groups(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", edges=[0])
+        graphrecord.add_group("1")
+
+        with pytest.raises(IndexError):
+            graphrecord.remove_edges_from_group(["0", "1"], [50])
+
+        with pytest.raises(AssertionError):
+            graphrecord.remove_edges_from_group(["0", "1"], [0])
+
+    def test_remove_edges_from_groups_with_query(self) -> None:
+        graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0", edges=[0, 1])
+        graphrecord.add_group("1", edges=[0, 1])
+
+        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
+            edge.index().is_in([0, 1])
+
+            return edge.index()
+
+        graphrecord.remove_edges_from_group(["0", "1"], query)
+
+        assert graphrecord.edges_in_group("0") == []
+        assert graphrecord.edges_in_group("1") == []
 
     def test_nodes_in_group(self) -> None:
         graphrecord = create_graphrecord()
@@ -2847,6 +3214,17 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_add_nodes_with_group")
 
+    def pre_add_nodes_with_groups(
+        self, graphrecord: GraphRecord, context: PreAddNodesWithGroupsContext
+    ) -> PreAddNodesWithGroupsContext:
+        self.calls.append("pre_add_nodes_with_groups")
+        return context
+
+    def post_add_nodes_with_groups(
+        self, graphrecord: GraphRecord, context: PostAddNodesWithGroupsContext
+    ) -> None:
+        self.calls.append("post_add_nodes_with_groups")
+
     def pre_add_nodes_dataframes(
         self, graphrecord: GraphRecord, context: PreAddNodesDataframesContext
     ) -> PreAddNodesDataframesContext:
@@ -2872,6 +3250,21 @@ class RecordingPlugin(Plugin):
         context: PostAddNodesDataframesWithGroupContext,
     ) -> None:
         self.calls.append("post_add_nodes_dataframes_with_group")
+
+    def pre_add_nodes_dataframes_with_groups(
+        self,
+        graphrecord: GraphRecord,
+        context: PreAddNodesDataframesWithGroupsContext,
+    ) -> PreAddNodesDataframesWithGroupsContext:
+        self.calls.append("pre_add_nodes_dataframes_with_groups")
+        return context
+
+    def post_add_nodes_dataframes_with_groups(
+        self,
+        graphrecord: GraphRecord,
+        context: PostAddNodesDataframesWithGroupsContext,
+    ) -> None:
+        self.calls.append("post_add_nodes_dataframes_with_groups")
 
     def pre_remove_node(
         self, graphrecord: GraphRecord, context: PreRemoveNodeContext
@@ -2906,6 +3299,17 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_add_edges_with_group")
 
+    def pre_add_edges_with_groups(
+        self, graphrecord: GraphRecord, context: PreAddEdgesWithGroupsContext
+    ) -> PreAddEdgesWithGroupsContext:
+        self.calls.append("pre_add_edges_with_groups")
+        return context
+
+    def post_add_edges_with_groups(
+        self, graphrecord: GraphRecord, context: PostAddEdgesWithGroupsContext
+    ) -> None:
+        self.calls.append("post_add_edges_with_groups")
+
     def pre_add_edges_dataframes(
         self, graphrecord: GraphRecord, context: PreAddEdgesDataframesContext
     ) -> PreAddEdgesDataframesContext:
@@ -2931,6 +3335,21 @@ class RecordingPlugin(Plugin):
         context: PostAddEdgesDataframesWithGroupContext,
     ) -> None:
         self.calls.append("post_add_edges_dataframes_with_group")
+
+    def pre_add_edges_dataframes_with_groups(
+        self,
+        graphrecord: GraphRecord,
+        context: PreAddEdgesDataframesWithGroupsContext,
+    ) -> PreAddEdgesDataframesWithGroupsContext:
+        self.calls.append("pre_add_edges_dataframes_with_groups")
+        return context
+
+    def post_add_edges_dataframes_with_groups(
+        self,
+        graphrecord: GraphRecord,
+        context: PostAddEdgesDataframesWithGroupsContext,
+    ) -> None:
+        self.calls.append("post_add_edges_dataframes_with_groups")
 
     def pre_remove_edge(
         self, graphrecord: GraphRecord, context: PreRemoveEdgeContext
@@ -2976,6 +3395,17 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_add_node_to_group")
 
+    def pre_add_nodes_to_groups(
+        self, graphrecord: GraphRecord, context: PreAddNodesToGroupsContext
+    ) -> PreAddNodesToGroupsContext:
+        self.calls.append("pre_add_nodes_to_groups")
+        return context
+
+    def post_add_nodes_to_groups(
+        self, graphrecord: GraphRecord, context: PostAddNodesToGroupsContext
+    ) -> None:
+        self.calls.append("post_add_nodes_to_groups")
+
     def pre_add_edge_to_group(
         self, graphrecord: GraphRecord, context: PreAddEdgeToGroupContext
     ) -> PreAddEdgeToGroupContext:
@@ -2986,6 +3416,17 @@ class RecordingPlugin(Plugin):
         self, graphrecord: GraphRecord, context: PostAddEdgeToGroupContext
     ) -> None:
         self.calls.append("post_add_edge_to_group")
+
+    def pre_add_edges_to_groups(
+        self, graphrecord: GraphRecord, context: PreAddEdgesToGroupsContext
+    ) -> PreAddEdgesToGroupsContext:
+        self.calls.append("pre_add_edges_to_groups")
+        return context
+
+    def post_add_edges_to_groups(
+        self, graphrecord: GraphRecord, context: PostAddEdgesToGroupsContext
+    ) -> None:
+        self.calls.append("post_add_edges_to_groups")
 
     def pre_remove_node_from_group(
         self, graphrecord: GraphRecord, context: PreRemoveNodeFromGroupContext
@@ -2998,6 +3439,17 @@ class RecordingPlugin(Plugin):
     ) -> None:
         self.calls.append("post_remove_node_from_group")
 
+    def pre_remove_nodes_from_groups(
+        self, graphrecord: GraphRecord, context: PreRemoveNodesFromGroupsContext
+    ) -> PreRemoveNodesFromGroupsContext:
+        self.calls.append("pre_remove_nodes_from_groups")
+        return context
+
+    def post_remove_nodes_from_groups(
+        self, graphrecord: GraphRecord, context: PostRemoveNodesFromGroupsContext
+    ) -> None:
+        self.calls.append("post_remove_nodes_from_groups")
+
     def pre_remove_edge_from_group(
         self, graphrecord: GraphRecord, context: PreRemoveEdgeFromGroupContext
     ) -> PreRemoveEdgeFromGroupContext:
@@ -3008,6 +3460,17 @@ class RecordingPlugin(Plugin):
         self, graphrecord: GraphRecord, context: PostRemoveEdgeFromGroupContext
     ) -> None:
         self.calls.append("post_remove_edge_from_group")
+
+    def pre_remove_edges_from_groups(
+        self, graphrecord: GraphRecord, context: PreRemoveEdgesFromGroupsContext
+    ) -> PreRemoveEdgesFromGroupsContext:
+        self.calls.append("pre_remove_edges_from_groups")
+        return context
+
+    def post_remove_edges_from_groups(
+        self, graphrecord: GraphRecord, context: PostRemoveEdgesFromGroupsContext
+    ) -> None:
+        self.calls.append("post_remove_edges_from_groups")
 
     def pre_clear(self, graphrecord: GraphRecord) -> None:
         self.calls.append("pre_clear")
@@ -3097,6 +3560,25 @@ class TestBypassPlugins(unittest.TestCase):
         assert graphrecord.node_count() == 3
         assert graphrecord.contains_group("group2")
 
+    def test_bypass_add_nodes_with_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+
+        graphrecord.add_nodes([("a", {})], group=["group1", "group2"])
+
+        assert plugin.calls == [
+            "pre_add_nodes_with_groups",
+            "post_add_nodes_with_groups",
+        ]
+        plugin.calls.clear()
+
+        graphrecord.add_nodes(
+            [("b", {})], group=["group1", "group2"], bypass_plugins=True
+        )
+
+        assert plugin.calls == []
+        assert "b" in graphrecord.nodes_in_group("group1")
+        assert "b" in graphrecord.nodes_in_group("group2")
+
     def test_bypass_add_nodes_polars(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
         dataframe = pl.DataFrame({"index": ["a", "b"], "value": [1, 2]})
@@ -3136,6 +3618,30 @@ class TestBypassPlugins(unittest.TestCase):
 
         assert plugin.calls == []
         assert graphrecord.node_count() == 4
+
+    def test_bypass_add_nodes_polars_with_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        dataframe = pl.DataFrame({"index": ["a", "b"], "value": [1, 2]})
+
+        graphrecord.add_nodes_polars((dataframe, "index"), group=["group1", "group2"])
+
+        assert plugin.calls == [
+            "pre_add_nodes_dataframes_with_groups",
+            "post_add_nodes_dataframes_with_groups",
+        ]
+        plugin.calls.clear()
+
+        dataframe_2 = pl.DataFrame({"index": ["c", "d"], "value": [3, 4]})
+
+        graphrecord.add_nodes_polars(
+            (dataframe_2, "index"),
+            group=["group1", "group2"],
+            bypass_plugins=True,
+        )
+
+        assert plugin.calls == []
+        assert "c" in graphrecord.nodes_in_group("group1")
+        assert "c" in graphrecord.nodes_in_group("group2")
 
     def test_bypass_remove_nodes(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
@@ -3182,6 +3688,25 @@ class TestBypassPlugins(unittest.TestCase):
         assert plugin.calls == []
         assert graphrecord.edge_count() == 2
 
+    def test_bypass_add_edges_with_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
+
+        graphrecord.add_edges([("a", "b", {})], group=["group1", "group2"])
+
+        assert plugin.calls == [
+            "pre_add_edges_with_groups",
+            "post_add_edges_with_groups",
+        ]
+        plugin.calls.clear()
+
+        graphrecord.add_edges(
+            [("a", "b", {})], group=["group1", "group2"], bypass_plugins=True
+        )
+
+        assert plugin.calls == []
+        assert graphrecord.edge_count() == 2
+
     def test_bypass_add_edges_polars(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
         graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
@@ -3221,6 +3746,32 @@ class TestBypassPlugins(unittest.TestCase):
 
         graphrecord.add_edges_polars(
             (dataframe_2, "source", "target"), "group2", bypass_plugins=True
+        )
+
+        assert plugin.calls == []
+        assert graphrecord.edge_count() == 2
+
+    def test_bypass_add_edges_polars_with_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
+        dataframe = pl.DataFrame({"source": ["a"], "target": ["b"], "value": [1]})
+
+        graphrecord.add_edges_polars(
+            (dataframe, "source", "target"), group=["group1", "group2"]
+        )
+
+        assert plugin.calls == [
+            "pre_add_edges_dataframes_with_groups",
+            "post_add_edges_dataframes_with_groups",
+        ]
+        plugin.calls.clear()
+
+        dataframe_2 = pl.DataFrame({"source": ["b"], "target": ["c"], "value": [2]})
+
+        graphrecord.add_edges_polars(
+            (dataframe_2, "source", "target"),
+            group=["group1", "group2"],
+            bypass_plugins=True,
         )
 
         assert plugin.calls == []
@@ -3290,6 +3841,24 @@ class TestBypassPlugins(unittest.TestCase):
         assert plugin.calls == []
         assert "b" in graphrecord.nodes_in_group("group1")
 
+    def test_bypass_add_nodes_to_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
+
+        graphrecord.add_nodes_to_group(["group1", "group2"], ["a", "b"])
+
+        assert "pre_add_nodes_to_groups" in plugin.calls
+        assert "post_add_nodes_to_groups" in plugin.calls
+        plugin.calls.clear()
+
+        graphrecord.add_nodes_to_group(["group1", "group2"], ["c"], bypass_plugins=True)
+
+        assert plugin.calls == []
+        assert "c" in graphrecord.nodes_in_group("group1")
+        assert "c" in graphrecord.nodes_in_group("group2")
+
     def test_bypass_add_edges_to_group(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
         graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
@@ -3311,6 +3880,31 @@ class TestBypassPlugins(unittest.TestCase):
         assert plugin.calls == []
         assert edge_indices[1] in graphrecord.edges_in_group("group1")
 
+    def test_bypass_add_edges_to_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
+        edge_indices = graphrecord.add_edges(
+            [("a", "b", {}), ("a", "b", {}), ("a", "b", {})], bypass_plugins=True
+        )
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
+
+        graphrecord.add_edges_to_group(
+            ["group1", "group2"], [edge_indices[0], edge_indices[1]]
+        )
+
+        assert "pre_add_edges_to_groups" in plugin.calls
+        assert "post_add_edges_to_groups" in plugin.calls
+        plugin.calls.clear()
+
+        graphrecord.add_edges_to_group(
+            ["group1", "group2"], [edge_indices[2]], bypass_plugins=True
+        )
+
+        assert plugin.calls == []
+        assert edge_indices[2] in graphrecord.edges_in_group("group1")
+        assert edge_indices[2] in graphrecord.edges_in_group("group2")
+
     def test_bypass_remove_nodes_from_group(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
         graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
@@ -3328,6 +3922,26 @@ class TestBypassPlugins(unittest.TestCase):
 
         assert plugin.calls == []
         assert "b" not in graphrecord.nodes_in_group("group1")
+
+    def test_bypass_remove_nodes_from_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
+        graphrecord.add_group("group1", ["a", "b", "c"], bypass_plugins=True)
+        graphrecord.add_group("group2", ["a", "b", "c"], bypass_plugins=True)
+
+        graphrecord.remove_nodes_from_group(["group1", "group2"], ["a", "b"])
+
+        assert "pre_remove_nodes_from_groups" in plugin.calls
+        assert "post_remove_nodes_from_groups" in plugin.calls
+        plugin.calls.clear()
+
+        graphrecord.remove_nodes_from_group(
+            ["group1", "group2"], ["c"], bypass_plugins=True
+        )
+
+        assert plugin.calls == []
+        assert "c" not in graphrecord.nodes_in_group("group1")
+        assert "c" not in graphrecord.nodes_in_group("group2")
 
     def test_bypass_remove_edges_from_group(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
@@ -3351,6 +3965,123 @@ class TestBypassPlugins(unittest.TestCase):
 
         assert plugin.calls == []
         assert edge_indices[1] not in graphrecord.edges_in_group("group1")
+
+    def test_bypass_remove_edges_from_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
+        edge_indices = graphrecord.add_edges(
+            [("a", "b", {}), ("a", "b", {}), ("a", "b", {})], bypass_plugins=True
+        )
+        graphrecord.add_group("group1", edges=edge_indices, bypass_plugins=True)
+        graphrecord.add_group("group2", edges=edge_indices, bypass_plugins=True)
+
+        graphrecord.remove_edges_from_group(
+            ["group1", "group2"], [edge_indices[0], edge_indices[1]]
+        )
+
+        assert "pre_remove_edges_from_groups" in plugin.calls
+        assert "post_remove_edges_from_groups" in plugin.calls
+        plugin.calls.clear()
+
+        graphrecord.remove_edges_from_group(
+            ["group1", "group2"], [edge_indices[2]], bypass_plugins=True
+        )
+
+        assert plugin.calls == []
+        assert edge_indices[2] not in graphrecord.edges_in_group("group1")
+        assert edge_indices[2] not in graphrecord.edges_in_group("group2")
+
+    def test_bypass_add_nodes_to_multiple_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
+
+        graphrecord.add_nodes_to_group(["group1", "group2"], "a")
+
+        assert plugin.calls == [
+            "pre_add_nodes_to_groups",
+            "post_add_nodes_to_groups",
+        ]
+        plugin.calls.clear()
+
+        graphrecord.add_nodes_to_group(["group1", "group2"], "b", bypass_plugins=True)
+
+        assert plugin.calls == []
+        assert "b" in graphrecord.nodes_in_group("group1")
+        assert "b" in graphrecord.nodes_in_group("group2")
+
+    def test_bypass_add_edges_to_multiple_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
+        edge_indices = graphrecord.add_edges(
+            [("a", "b", {}), ("a", "b", {})], bypass_plugins=True
+        )
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
+
+        graphrecord.add_edges_to_group(["group1", "group2"], edge_indices[0])
+
+        assert plugin.calls == [
+            "pre_add_edges_to_groups",
+            "post_add_edges_to_groups",
+        ]
+        plugin.calls.clear()
+
+        graphrecord.add_edges_to_group(
+            ["group1", "group2"], edge_indices[1], bypass_plugins=True
+        )
+
+        assert plugin.calls == []
+        assert edge_indices[1] in graphrecord.edges_in_group("group1")
+        assert edge_indices[1] in graphrecord.edges_in_group("group2")
+
+    def test_bypass_remove_nodes_from_multiple_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
+        graphrecord.add_group("group1", ["a", "b"], bypass_plugins=True)
+        graphrecord.add_group("group2", ["a", "b"], bypass_plugins=True)
+
+        graphrecord.remove_nodes_from_group(["group1", "group2"], "a")
+
+        assert plugin.calls == [
+            "pre_remove_nodes_from_groups",
+            "post_remove_nodes_from_groups",
+        ]
+        plugin.calls.clear()
+
+        graphrecord.remove_nodes_from_group(
+            ["group1", "group2"], "b", bypass_plugins=True
+        )
+
+        assert plugin.calls == []
+        assert "b" not in graphrecord.nodes_in_group("group1")
+        assert "b" not in graphrecord.nodes_in_group("group2")
+
+    def test_bypass_remove_edges_from_multiple_groups(self) -> None:
+        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
+        edge_indices = graphrecord.add_edges(
+            [("a", "b", {}), ("a", "b", {})], bypass_plugins=True
+        )
+        graphrecord.add_group("group1", edges=edge_indices, bypass_plugins=True)
+        graphrecord.add_group("group2", edges=edge_indices, bypass_plugins=True)
+
+        graphrecord.remove_edges_from_group(["group1", "group2"], edge_indices[0])
+
+        assert plugin.calls == [
+            "pre_remove_edges_from_groups",
+            "post_remove_edges_from_groups",
+        ]
+        plugin.calls.clear()
+
+        graphrecord.remove_edges_from_group(
+            ["group1", "group2"], edge_indices[1], bypass_plugins=True
+        )
+
+        assert plugin.calls == []
+        assert edge_indices[1] not in graphrecord.edges_in_group("group1")
+        assert edge_indices[1] not in graphrecord.edges_in_group("group2")
 
     def test_bypass_clear(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()

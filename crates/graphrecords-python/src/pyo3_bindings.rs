@@ -177,7 +177,11 @@ pub mod _graphrecords {
         #[pymodule_export]
         use crate::prelude::PyPostAddEdgeToGroupContext;
         #[pymodule_export]
+        use crate::prelude::PyPostAddEdgeToGroupsContext;
+        #[pymodule_export]
         use crate::prelude::PyPostAddEdgeWithGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPostAddEdgeWithGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPostAddEdgesContext;
         #[pymodule_export]
@@ -185,7 +189,13 @@ pub mod _graphrecords {
         #[pymodule_export]
         use crate::prelude::PyPostAddEdgesDataframesWithGroupContext;
         #[pymodule_export]
+        use crate::prelude::PyPostAddEdgesDataframesWithGroupsContext;
+        #[pymodule_export]
+        use crate::prelude::PyPostAddEdgesToGroupsContext;
+        #[pymodule_export]
         use crate::prelude::PyPostAddEdgesWithGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPostAddEdgesWithGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPostAddGroupContext;
         #[pymodule_export]
@@ -193,7 +203,11 @@ pub mod _graphrecords {
         #[pymodule_export]
         use crate::prelude::PyPostAddNodeToGroupContext;
         #[pymodule_export]
+        use crate::prelude::PyPostAddNodeToGroupsContext;
+        #[pymodule_export]
         use crate::prelude::PyPostAddNodeWithGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPostAddNodeWithGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPostAddNodesContext;
         #[pymodule_export]
@@ -201,11 +215,21 @@ pub mod _graphrecords {
         #[pymodule_export]
         use crate::prelude::PyPostAddNodesDataframesWithGroupContext;
         #[pymodule_export]
+        use crate::prelude::PyPostAddNodesDataframesWithGroupsContext;
+        #[pymodule_export]
+        use crate::prelude::PyPostAddNodesToGroupsContext;
+        #[pymodule_export]
         use crate::prelude::PyPostAddNodesWithGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPostAddNodesWithGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPostRemoveEdgeContext;
         #[pymodule_export]
         use crate::prelude::PyPostRemoveEdgeFromGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPostRemoveEdgeFromGroupsContext;
+        #[pymodule_export]
+        use crate::prelude::PyPostRemoveEdgesFromGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPostRemoveGroupContext;
         #[pymodule_export]
@@ -213,11 +237,19 @@ pub mod _graphrecords {
         #[pymodule_export]
         use crate::prelude::PyPostRemoveNodeFromGroupContext;
         #[pymodule_export]
+        use crate::prelude::PyPostRemoveNodeFromGroupsContext;
+        #[pymodule_export]
+        use crate::prelude::PyPostRemoveNodesFromGroupsContext;
+        #[pymodule_export]
         use crate::prelude::PyPreAddEdgeContext;
         #[pymodule_export]
         use crate::prelude::PyPreAddEdgeToGroupContext;
         #[pymodule_export]
+        use crate::prelude::PyPreAddEdgeToGroupsContext;
+        #[pymodule_export]
         use crate::prelude::PyPreAddEdgeWithGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPreAddEdgeWithGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPreAddEdgesContext;
         #[pymodule_export]
@@ -225,7 +257,13 @@ pub mod _graphrecords {
         #[pymodule_export]
         use crate::prelude::PyPreAddEdgesDataframesWithGroupContext;
         #[pymodule_export]
+        use crate::prelude::PyPreAddEdgesDataframesWithGroupsContext;
+        #[pymodule_export]
+        use crate::prelude::PyPreAddEdgesToGroupsContext;
+        #[pymodule_export]
         use crate::prelude::PyPreAddEdgesWithGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPreAddEdgesWithGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPreAddGroupContext;
         #[pymodule_export]
@@ -233,7 +271,11 @@ pub mod _graphrecords {
         #[pymodule_export]
         use crate::prelude::PyPreAddNodeToGroupContext;
         #[pymodule_export]
+        use crate::prelude::PyPreAddNodeToGroupsContext;
+        #[pymodule_export]
         use crate::prelude::PyPreAddNodeWithGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPreAddNodeWithGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPreAddNodesContext;
         #[pymodule_export]
@@ -241,17 +283,31 @@ pub mod _graphrecords {
         #[pymodule_export]
         use crate::prelude::PyPreAddNodesDataframesWithGroupContext;
         #[pymodule_export]
+        use crate::prelude::PyPreAddNodesDataframesWithGroupsContext;
+        #[pymodule_export]
+        use crate::prelude::PyPreAddNodesToGroupsContext;
+        #[pymodule_export]
         use crate::prelude::PyPreAddNodesWithGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPreAddNodesWithGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPreRemoveEdgeContext;
         #[pymodule_export]
         use crate::prelude::PyPreRemoveEdgeFromGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPreRemoveEdgeFromGroupsContext;
+        #[pymodule_export]
+        use crate::prelude::PyPreRemoveEdgesFromGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPreRemoveGroupContext;
         #[pymodule_export]
         use crate::prelude::PyPreRemoveNodeContext;
         #[pymodule_export]
         use crate::prelude::PyPreRemoveNodeFromGroupContext;
+        #[pymodule_export]
+        use crate::prelude::PyPreRemoveNodeFromGroupsContext;
+        #[pymodule_export]
+        use crate::prelude::PyPreRemoveNodesFromGroupsContext;
         #[pymodule_export]
         use crate::prelude::PyPreSetSchemaContext;
     }

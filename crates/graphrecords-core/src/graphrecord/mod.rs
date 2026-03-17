@@ -553,6 +553,33 @@ impl GraphRecord {
             })
     }
 
+    fn add_node_with_groups_impl(
+        &mut self,
+        node_index: NodeIndex,
+        attributes: Attributes,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        let groups = groups.as_ref();
+
+        match groups.split_first() {
+            None => self.add_node_impl(node_index, attributes),
+            Some((first, rest)) => {
+                self.add_node_with_group_impl(node_index.clone(), attributes, first.clone())?;
+
+                for group in rest {
+                    self.add_node_to_group_impl(group.clone(), node_index.clone())
+                        .inspect_err(|_| {
+                            self.graph
+                                .remove_node(&node_index, &mut self.group_mapping)
+                                .expect("Node must exist");
+                        })?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+
     fn remove_node_impl(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
         self.group_mapping.remove_node(node_index);
 
@@ -582,6 +609,26 @@ impl GraphRecord {
 
         for (node_index, attributes) in nodes {
             self.add_node_with_group_impl(node_index, attributes, group.clone())?;
+        }
+
+        Ok(())
+    }
+
+    fn add_nodes_with_groups_impl(
+        &mut self,
+        nodes: Vec<(NodeIndex, Attributes)>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        let groups = groups.as_ref();
+
+        for group in groups {
+            if !self.contains_group(group) {
+                self.add_group_impl(group.clone(), None, None)?;
+            }
+        }
+
+        for (node_index, attributes) in nodes {
+            self.add_node_with_groups_impl(node_index, attributes, groups)?;
         }
 
         Ok(())
@@ -625,6 +672,26 @@ impl GraphRecord {
             .collect();
 
         self.add_nodes_with_group_impl(nodes, group)
+    }
+
+    fn add_nodes_dataframes_with_groups_impl(
+        &mut self,
+        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        let nodes = nodes_dataframes
+            .into_iter()
+            .map(|dataframe_input| {
+                let dataframe_input = dataframe_input.into();
+
+                dataframe_to_nodes(dataframe_input.dataframe, &dataframe_input.index_column)
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        self.add_nodes_with_groups_impl(nodes, groups)
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -712,6 +779,39 @@ impl GraphRecord {
         Ok(edge_index)
     }
 
+    fn add_edge_with_groups_impl(
+        &mut self,
+        source_node_index: NodeIndex,
+        target_node_index: NodeIndex,
+        attributes: Attributes,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<EdgeIndex> {
+        let groups = groups.as_ref();
+
+        match groups.split_first() {
+            None => self.add_edge_impl(source_node_index, target_node_index, attributes),
+            Some((first, rest)) => {
+                let edge_index = self.add_edge_with_group_impl(
+                    source_node_index,
+                    target_node_index,
+                    attributes,
+                    first.clone(),
+                )?;
+
+                for group in rest {
+                    self.add_edge_to_group_impl(group.clone(), edge_index)
+                        .inspect_err(|_| {
+                            self.graph
+                                .remove_edge(&edge_index)
+                                .expect("Edge must exist");
+                        })?;
+                }
+
+                Ok(edge_index)
+            }
+        }
+    }
+
     #[allow(clippy::trivially_copy_pass_by_ref)]
     fn remove_edge_impl(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<Attributes> {
         self.group_mapping.remove_edge(edge_index);
@@ -751,6 +851,32 @@ impl GraphRecord {
                     target_node_index,
                     attributes,
                     group.clone(),
+                )
+            })
+            .collect()
+    }
+
+    fn add_edges_with_groups_impl(
+        &mut self,
+        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        let groups = groups.as_ref();
+
+        for group in groups {
+            if !self.contains_group(group) {
+                self.add_group_impl(group.clone(), None, None)?;
+            }
+        }
+
+        edges
+            .into_iter()
+            .map(|(source_node_index, target_node_index, attributes)| {
+                self.add_edge_with_groups_impl(
+                    source_node_index,
+                    target_node_index,
+                    attributes,
+                    groups,
                 )
             })
             .collect()
@@ -802,6 +928,30 @@ impl GraphRecord {
             .collect();
 
         self.add_edges_with_group_impl(edges, group)
+    }
+
+    fn add_edges_dataframes_with_groups_impl(
+        &mut self,
+        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        let edges = edges_dataframes
+            .into_iter()
+            .map(|dataframe_input| {
+                let dataframe_input = dataframe_input.into();
+
+                dataframe_to_edges(
+                    dataframe_input.dataframe,
+                    &dataframe_input.source_index_column,
+                    &dataframe_input.target_index_column,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        self.add_edges_with_groups_impl(edges, groups)
     }
 
     fn add_group_impl(
@@ -934,6 +1084,30 @@ impl GraphRecord {
         self.group_mapping.add_node_to_group(group, node_index)
     }
 
+    #[allow(clippy::needless_pass_by_value)]
+    fn add_node_to_groups_impl(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_index: NodeIndex,
+    ) -> GraphRecordResult<()> {
+        groups
+            .as_ref()
+            .iter()
+            .try_for_each(|group| self.add_node_to_group_impl(group.clone(), node_index.clone()))
+    }
+
+    fn add_nodes_to_groups_impl(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_indices: Vec<NodeIndex>,
+    ) -> GraphRecordResult<()> {
+        let groups = groups.as_ref();
+
+        node_indices
+            .into_iter()
+            .try_for_each(|node_index| self.add_node_to_groups_impl(groups, node_index))
+    }
+
     fn add_edge_to_group_impl(
         &mut self,
         group: Group,
@@ -961,6 +1135,29 @@ impl GraphRecord {
         self.group_mapping.add_edge_to_group(group, edge_index)
     }
 
+    fn add_edge_to_groups_impl(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_index: EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        groups
+            .as_ref()
+            .iter()
+            .try_for_each(|group| self.add_edge_to_group_impl(group.clone(), edge_index))
+    }
+
+    fn add_edges_to_groups_impl(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_indices: Vec<EdgeIndex>,
+    ) -> GraphRecordResult<()> {
+        let groups = groups.as_ref();
+
+        edge_indices
+            .into_iter()
+            .try_for_each(|edge_index| self.add_edge_to_groups_impl(groups, edge_index))
+    }
+
     fn remove_node_from_group_impl(
         &mut self,
         group: &Group,
@@ -973,6 +1170,29 @@ impl GraphRecord {
         }
 
         self.group_mapping.remove_node_from_group(group, node_index)
+    }
+
+    fn remove_node_from_groups_impl(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_index: &NodeIndex,
+    ) -> GraphRecordResult<()> {
+        groups
+            .as_ref()
+            .iter()
+            .try_for_each(|group| self.remove_node_from_group_impl(group, node_index))
+    }
+
+    fn remove_nodes_from_groups_impl(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_indices: &[NodeIndex],
+    ) -> GraphRecordResult<()> {
+        let groups = groups.as_ref();
+
+        node_indices
+            .iter()
+            .try_for_each(|node_index| self.remove_node_from_groups_impl(groups, node_index))
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -988,6 +1208,30 @@ impl GraphRecord {
         }
 
         self.group_mapping.remove_edge_from_group(group, edge_index)
+    }
+
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn remove_edge_from_groups_impl(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_index: &EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        groups
+            .as_ref()
+            .iter()
+            .try_for_each(|group| self.remove_edge_from_group_impl(group, edge_index))
+    }
+
+    fn remove_edges_from_groups_impl(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_indices: &[EdgeIndex],
+    ) -> GraphRecordResult<()> {
+        let groups = groups.as_ref();
+
+        edge_indices
+            .iter()
+            .try_for_each(|edge_index| self.remove_edge_from_groups_impl(groups, edge_index))
     }
 
     pub fn groups(&self) -> impl Iterator<Item = &Group> {
@@ -1190,6 +1434,15 @@ impl GraphRecord {
         self.add_node_with_group_impl(node_index, attributes, group)
     }
 
+    pub fn add_node_with_groups(
+        &mut self,
+        node_index: NodeIndex,
+        attributes: Attributes,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        self.add_node_with_groups_impl(node_index, attributes, groups)
+    }
+
     pub fn remove_node(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
         self.remove_node_impl(node_index)
     }
@@ -1207,6 +1460,14 @@ impl GraphRecord {
         self.add_nodes_with_group_impl(nodes, group)
     }
 
+    pub fn add_nodes_with_groups(
+        &mut self,
+        nodes: Vec<(NodeIndex, Attributes)>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_with_groups_impl(nodes, groups)
+    }
+
     pub fn add_nodes_dataframes(
         &mut self,
         nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
@@ -1220,6 +1481,14 @@ impl GraphRecord {
         group: Group,
     ) -> GraphRecordResult<()> {
         self.add_nodes_dataframes_with_group_impl(nodes_dataframes, group)
+    }
+
+    pub fn add_nodes_dataframes_with_groups(
+        &mut self,
+        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_dataframes_with_groups_impl(nodes_dataframes, groups)
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -1243,6 +1512,16 @@ impl GraphRecord {
         self.add_edge_with_group_impl(source_node_index, target_node_index, attributes, group)
     }
 
+    pub fn add_edge_with_groups(
+        &mut self,
+        source_node_index: NodeIndex,
+        target_node_index: NodeIndex,
+        attributes: Attributes,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<EdgeIndex> {
+        self.add_edge_with_groups_impl(source_node_index, target_node_index, attributes, groups)
+    }
+
     pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<Attributes> {
         self.remove_edge_impl(edge_index)
     }
@@ -1262,6 +1541,14 @@ impl GraphRecord {
         self.add_edges_with_group_impl(edges, group)
     }
 
+    pub fn add_edges_with_groups(
+        &mut self,
+        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_with_groups_impl(edges, groups)
+    }
+
     pub fn add_edges_dataframes(
         &mut self,
         edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
@@ -1275,6 +1562,14 @@ impl GraphRecord {
         group: &Group,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         self.add_edges_dataframes_with_group_impl(edges_dataframes, group)
+    }
+
+    pub fn add_edges_dataframes_with_groups(
+        &mut self,
+        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
+        groups: impl AsRef<[Group]>,
+    ) -> GraphRecordResult<Vec<EdgeIndex>> {
+        self.add_edges_dataframes_with_groups_impl(edges_dataframes, groups)
     }
 
     pub fn add_group(
@@ -1298,12 +1593,44 @@ impl GraphRecord {
         self.add_node_to_group_impl(group, node_index)
     }
 
+    pub fn add_node_to_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_index: NodeIndex,
+    ) -> GraphRecordResult<()> {
+        self.add_node_to_groups_impl(groups, node_index)
+    }
+
+    pub fn add_nodes_to_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_indices: Vec<NodeIndex>,
+    ) -> GraphRecordResult<()> {
+        self.add_nodes_to_groups_impl(groups, node_indices)
+    }
+
     pub fn add_edge_to_group(
         &mut self,
         group: Group,
         edge_index: EdgeIndex,
     ) -> GraphRecordResult<()> {
         self.add_edge_to_group_impl(group, edge_index)
+    }
+
+    pub fn add_edge_to_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_index: EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        self.add_edge_to_groups_impl(groups, edge_index)
+    }
+
+    pub fn add_edges_to_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_indices: Vec<EdgeIndex>,
+    ) -> GraphRecordResult<()> {
+        self.add_edges_to_groups_impl(groups, edge_indices)
     }
 
     pub fn remove_node_from_group(
@@ -1314,12 +1641,44 @@ impl GraphRecord {
         self.remove_node_from_group_impl(group, node_index)
     }
 
+    pub fn remove_node_from_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_index: &NodeIndex,
+    ) -> GraphRecordResult<()> {
+        self.remove_node_from_groups_impl(groups, node_index)
+    }
+
+    pub fn remove_nodes_from_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        node_indices: &[NodeIndex],
+    ) -> GraphRecordResult<()> {
+        self.remove_nodes_from_groups_impl(groups, node_indices)
+    }
+
     pub fn remove_edge_from_group(
         &mut self,
         group: &Group,
         edge_index: &EdgeIndex,
     ) -> GraphRecordResult<()> {
         self.remove_edge_from_group_impl(group, edge_index)
+    }
+
+    pub fn remove_edge_from_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_index: &EdgeIndex,
+    ) -> GraphRecordResult<()> {
+        self.remove_edge_from_groups_impl(groups, edge_index)
+    }
+
+    pub fn remove_edges_from_groups(
+        &mut self,
+        groups: impl AsRef<[Group]>,
+        edge_indices: &[EdgeIndex],
+    ) -> GraphRecordResult<()> {
+        self.remove_edges_from_groups_impl(groups, edge_indices)
     }
 
     pub fn clear(&mut self) -> GraphRecordResult<()> {
@@ -1331,7 +1690,10 @@ impl GraphRecord {
 
 #[cfg(test)]
 mod test {
-    use super::{Attributes, GraphRecord, GraphRecordAttribute, NodeIndex};
+    use super::{
+        Attributes, EdgeDataFrameInput, GraphRecord, GraphRecordAttribute, NodeDataFrameInput,
+        NodeIndex,
+    };
     use crate::{
         errors::GraphRecordError,
         graphrecord::{
@@ -2351,6 +2713,65 @@ mod test {
     }
 
     #[test]
+    fn test_add_node_to_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), Some(vec!["0".into()]), None)
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), Some(vec!["1".into()]), None)
+            .unwrap();
+
+        graphrecord
+            .add_node_to_groups(&["0".into(), "1".into()], "2".into())
+            .unwrap();
+
+        assert_eq!(2, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
+        assert_eq!(2, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_add_node_to_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), Some(vec!["0".into()]), None)
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), Some(vec!["1".into()]), None)
+            .unwrap();
+
+        assert!(
+            graphrecord
+                .add_node_to_groups(&["0".into(), "1".into()], "50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+
+        assert!(
+            graphrecord
+                .add_node_to_groups(&["0".into(), "1".into()], "0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
+
+        let mut graphrecord = GraphRecord::new();
+
+        graphrecord
+            .add_node("0".into(), HashMap::from([("test".into(), "test".into())]))
+            .unwrap();
+        graphrecord.add_group("group".into(), None, None).unwrap();
+        graphrecord.add_group("group2".into(), None, None).unwrap();
+
+        graphrecord.freeze_schema().unwrap();
+
+        assert!(
+            graphrecord
+                .add_node_to_groups(&["group".into(), "group2".into()], "0".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
+    }
+
+    #[test]
     fn test_add_edge_to_group() {
         let mut graphrecord = create_graphrecord();
 
@@ -2431,6 +2852,70 @@ mod test {
     }
 
     #[test]
+    fn test_add_edge_to_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), None, Some(vec![0]))
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), None, Some(vec![1]))
+            .unwrap();
+
+        graphrecord
+            .add_edge_to_groups(&["0".into(), "1".into()], 2)
+            .unwrap();
+
+        assert_eq!(2, graphrecord.edges_in_group(&"0".into()).unwrap().count());
+        assert_eq!(2, graphrecord.edges_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_add_edge_to_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), None, Some(vec![0]))
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), None, Some(vec![1]))
+            .unwrap();
+
+        assert!(
+            graphrecord
+                .add_edge_to_groups(&["0".into(), "1".into()], 50)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+
+        assert!(
+            graphrecord
+                .add_edge_to_groups(&["0".into(), "1".into()], 0)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
+
+        let mut graphrecord = GraphRecord::new();
+
+        graphrecord.add_node("0".into(), HashMap::new()).unwrap();
+        graphrecord
+            .add_edge(
+                "0".into(),
+                "0".into(),
+                HashMap::from([("test".into(), "test".into())]),
+            )
+            .unwrap();
+        graphrecord.add_group("group".into(), None, None).unwrap();
+        graphrecord.add_group("group2".into(), None, None).unwrap();
+
+        graphrecord.freeze_schema().unwrap();
+
+        assert!(
+            graphrecord
+                .add_edge_to_groups(&["group".into(), "group2".into()], 0)
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
+    }
+
+    #[test]
     fn test_remove_node_from_group() {
         let mut graphrecord = create_graphrecord();
 
@@ -2478,6 +2963,49 @@ mod test {
     }
 
     #[test]
+    fn test_remove_node_from_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), Some(vec!["0".into(), "1".into()]), None)
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), Some(vec!["0".into(), "2".into()]), None)
+            .unwrap();
+
+        graphrecord
+            .remove_node_from_groups(&["0".into(), "1".into()], &"0".into())
+            .unwrap();
+
+        assert_eq!(1, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
+        assert_eq!(1, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_remove_node_from_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), Some(vec!["0".into()]), None)
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), Some(vec!["1".into()]), None)
+            .unwrap();
+
+        assert!(
+            graphrecord
+                .remove_node_from_groups(&["0".into(), "1".into()], &"50".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+
+        assert!(
+            graphrecord
+                .remove_node_from_groups(&["0".into(), "1".into()], &"1".into())
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
+    }
+
+    #[test]
     fn test_remove_edge_from_group() {
         let mut graphrecord = create_graphrecord();
 
@@ -2520,6 +3048,508 @@ mod test {
                 .remove_edge_from_group(&"0".into(), &1)
                 .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
         );
+    }
+
+    #[test]
+    fn test_remove_edge_from_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), None, Some(vec![0, 1]))
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), None, Some(vec![0, 2]))
+            .unwrap();
+
+        graphrecord
+            .remove_edge_from_groups(&["0".into(), "1".into()], &0)
+            .unwrap();
+
+        assert_eq!(1, graphrecord.edges_in_group(&"0".into()).unwrap().count());
+        assert_eq!(1, graphrecord.edges_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_remove_edge_from_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), None, Some(vec![0]))
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), None, Some(vec![1]))
+            .unwrap();
+
+        assert!(
+            graphrecord
+                .remove_edge_from_groups(&["0".into(), "1".into()], &50)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+
+        assert!(
+            graphrecord
+                .remove_edge_from_groups(&["0".into(), "1".into()], &1)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
+    }
+
+    #[test]
+    fn test_add_nodes_to_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), Some(vec!["0".into()]), None)
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), Some(vec!["1".into()]), None)
+            .unwrap();
+
+        graphrecord
+            .add_nodes_to_groups(&["0".into(), "1".into()], vec!["2".into(), "3".into()])
+            .unwrap();
+
+        assert_eq!(3, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
+        assert_eq!(3, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_add_nodes_to_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), Some(vec!["0".into()]), None)
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), Some(vec!["1".into()]), None)
+            .unwrap();
+
+        assert!(
+            graphrecord
+                .add_nodes_to_groups(&["0".into(), "1".into()], vec!["50".into()],)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+
+        assert!(
+            graphrecord
+                .add_nodes_to_groups(&["0".into(), "1".into()], vec!["0".into()],)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
+
+        let mut graphrecord = GraphRecord::new();
+
+        graphrecord
+            .add_node("0".into(), HashMap::from([("test".into(), "test".into())]))
+            .unwrap();
+        graphrecord.add_group("group".into(), None, None).unwrap();
+        graphrecord.add_group("group2".into(), None, None).unwrap();
+
+        graphrecord.freeze_schema().unwrap();
+
+        assert!(
+            graphrecord
+                .add_nodes_to_groups(&["group".into(), "group2".into()], vec!["0".into()],)
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
+    }
+
+    #[test]
+    fn test_add_edges_to_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), None, Some(vec![0]))
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), None, Some(vec![1]))
+            .unwrap();
+
+        graphrecord
+            .add_edges_to_groups(&["0".into(), "1".into()], vec![2, 3])
+            .unwrap();
+
+        assert_eq!(3, graphrecord.edges_in_group(&"0".into()).unwrap().count());
+        assert_eq!(3, graphrecord.edges_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_add_edges_to_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), None, Some(vec![0]))
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), None, Some(vec![1]))
+            .unwrap();
+
+        assert!(
+            graphrecord
+                .add_edges_to_groups(&["0".into(), "1".into()], vec![50])
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+
+        assert!(
+            graphrecord
+                .add_edges_to_groups(&["0".into(), "1".into()], vec![0])
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
+
+        let mut graphrecord = GraphRecord::new();
+
+        graphrecord.add_node("0".into(), HashMap::new()).unwrap();
+        graphrecord
+            .add_edge(
+                "0".into(),
+                "0".into(),
+                HashMap::from([("test".into(), "test".into())]),
+            )
+            .unwrap();
+        graphrecord.add_group("group".into(), None, None).unwrap();
+        graphrecord.add_group("group2".into(), None, None).unwrap();
+
+        graphrecord.freeze_schema().unwrap();
+
+        assert!(
+            graphrecord
+                .add_edges_to_groups(&["group".into(), "group2".into()], vec![0])
+                .is_err_and(|e| matches!(e, GraphRecordError::SchemaError(_)))
+        );
+    }
+
+    #[test]
+    fn test_remove_nodes_from_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group(
+                "0".into(),
+                Some(vec!["0".into(), "1".into(), "2".into()]),
+                None,
+            )
+            .unwrap();
+        graphrecord
+            .add_group(
+                "1".into(),
+                Some(vec!["0".into(), "1".into(), "2".into()]),
+                None,
+            )
+            .unwrap();
+
+        graphrecord
+            .remove_nodes_from_groups(&["0".into(), "1".into()], &["0".into(), "1".into()])
+            .unwrap();
+
+        assert_eq!(1, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
+        assert_eq!(1, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_remove_nodes_from_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), Some(vec!["0".into()]), None)
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), Some(vec!["1".into()]), None)
+            .unwrap();
+
+        assert!(
+            graphrecord
+                .remove_nodes_from_groups(&["0".into(), "1".into()], &["50".into()],)
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+
+        assert!(
+            graphrecord
+                .remove_nodes_from_groups(&["0".into(), "1".into()], &["1".into()],)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
+    }
+
+    #[test]
+    fn test_remove_edges_from_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), None, Some(vec![0, 1, 2]))
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), None, Some(vec![0, 1, 2]))
+            .unwrap();
+
+        graphrecord
+            .remove_edges_from_groups(&["0".into(), "1".into()], &[0, 1])
+            .unwrap();
+
+        assert_eq!(1, graphrecord.edges_in_group(&"0".into()).unwrap().count());
+        assert_eq!(1, graphrecord.edges_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_remove_edges_from_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord
+            .add_group("0".into(), None, Some(vec![0]))
+            .unwrap();
+        graphrecord
+            .add_group("1".into(), None, Some(vec![1]))
+            .unwrap();
+
+        assert!(
+            graphrecord
+                .remove_edges_from_groups(&["0".into(), "1".into()], &[50])
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+
+        assert!(
+            graphrecord
+                .remove_edges_from_groups(&["0".into(), "1".into()], &[1])
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
+    }
+
+    #[test]
+    fn test_add_node_with_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord.add_group("0".into(), None, None).unwrap();
+        graphrecord.add_group("1".into(), None, None).unwrap();
+
+        graphrecord
+            .add_node_with_groups(
+                "4".into(),
+                HashMap::from([("lorem".into(), "ipsum".into())]),
+                &["0".into(), "1".into()],
+            )
+            .unwrap();
+
+        assert_eq!(5, graphrecord.node_count());
+        assert_eq!(1, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
+        assert_eq!(1, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_add_node_with_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord.add_group("0".into(), None, None).unwrap();
+        graphrecord.add_group("1".into(), None, None).unwrap();
+
+        assert!(
+            graphrecord
+                .add_node_with_groups("0".into(), HashMap::new(), &["0".into(), "1".into()],)
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
+    }
+
+    #[test]
+    fn test_add_edge_with_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord.add_group("0".into(), None, None).unwrap();
+        graphrecord.add_group("1".into(), None, None).unwrap();
+
+        let edge_index = graphrecord
+            .add_edge_with_groups(
+                "0".into(),
+                "1".into(),
+                HashMap::from([("sed".into(), "do".into())]),
+                &["0".into(), "1".into()],
+            )
+            .unwrap();
+
+        assert_eq!(5, graphrecord.edge_count());
+        assert_eq!(4, edge_index);
+        assert_eq!(1, graphrecord.edges_in_group(&"0".into()).unwrap().count());
+        assert_eq!(1, graphrecord.edges_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_add_edge_with_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord.add_group("0".into(), None, None).unwrap();
+        graphrecord.add_group("1".into(), None, None).unwrap();
+
+        assert!(
+            graphrecord
+                .add_edge_with_groups(
+                    "50".into(),
+                    "0".into(),
+                    HashMap::new(),
+                    &["0".into(), "1".into()],
+                )
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+
+        assert!(
+            graphrecord
+                .add_edge_with_groups(
+                    "0".into(),
+                    "50".into(),
+                    HashMap::new(),
+                    &["0".into(), "1".into()],
+                )
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+    }
+
+    #[test]
+    fn test_add_nodes_with_groups() {
+        let mut graphrecord = GraphRecord::new();
+
+        graphrecord.add_group("0".into(), None, None).unwrap();
+        graphrecord.add_group("1".into(), None, None).unwrap();
+
+        graphrecord
+            .add_nodes_with_groups(
+                vec![
+                    (
+                        "0".into(),
+                        HashMap::from([("lorem".into(), "ipsum".into())]),
+                    ),
+                    (
+                        "1".into(),
+                        HashMap::from([("amet".into(), "consectetur".into())]),
+                    ),
+                ],
+                &["0".into(), "1".into()],
+            )
+            .unwrap();
+
+        assert_eq!(2, graphrecord.node_count());
+        assert_eq!(2, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
+        assert_eq!(2, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_add_nodes_with_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord.add_group("0".into(), None, None).unwrap();
+        graphrecord.add_group("1".into(), None, None).unwrap();
+
+        assert!(
+            graphrecord
+                .add_nodes_with_groups(
+                    vec![("0".into(), HashMap::new())],
+                    &["0".into(), "1".into()],
+                )
+                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+        );
+    }
+
+    #[test]
+    fn test_add_edges_with_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord.add_group("0".into(), None, None).unwrap();
+        graphrecord.add_group("1".into(), None, None).unwrap();
+
+        let edge_indices = graphrecord
+            .add_edges_with_groups(
+                vec![
+                    (
+                        "0".into(),
+                        "1".into(),
+                        HashMap::from([("sed".into(), "do".into())]),
+                    ),
+                    (
+                        "1".into(),
+                        "0".into(),
+                        HashMap::from([("sed".into(), "do".into())]),
+                    ),
+                ],
+                &["0".into(), "1".into()],
+            )
+            .unwrap();
+
+        assert_eq!(6, graphrecord.edge_count());
+        assert_eq!(vec![4, 5], edge_indices);
+        assert_eq!(2, graphrecord.edges_in_group(&"0".into()).unwrap().count());
+        assert_eq!(2, graphrecord.edges_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_invalid_add_edges_with_groups() {
+        let mut graphrecord = create_graphrecord();
+
+        graphrecord.add_group("0".into(), None, None).unwrap();
+        graphrecord.add_group("1".into(), None, None).unwrap();
+
+        assert!(
+            graphrecord
+                .add_edges_with_groups(
+                    vec![("50".into(), "0".into(), HashMap::new())],
+                    &["0".into(), "1".into()],
+                )
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+
+        assert!(
+            graphrecord
+                .add_edges_with_groups(
+                    vec![("0".into(), "50".into(), HashMap::new())],
+                    &["0".into(), "1".into()],
+                )
+                .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
+        );
+    }
+
+    #[test]
+    fn test_add_nodes_dataframes_with_groups() {
+        let mut graphrecord = GraphRecord::new();
+
+        graphrecord.add_group("0".into(), None, None).unwrap();
+        graphrecord.add_group("1".into(), None, None).unwrap();
+
+        let nodes_dataframe = create_nodes_dataframe().unwrap();
+
+        graphrecord
+            .add_nodes_dataframes_with_groups(
+                vec![NodeDataFrameInput {
+                    dataframe: nodes_dataframe,
+                    index_column: "index".to_string(),
+                }],
+                &["0".into(), "1".into()],
+            )
+            .unwrap();
+
+        assert_eq!(2, graphrecord.node_count());
+        assert_eq!(2, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
+        assert_eq!(2, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
+    }
+
+    #[test]
+    fn test_add_edges_dataframes_with_groups() {
+        let mut graphrecord = GraphRecord::new();
+
+        let nodes = create_nodes();
+
+        graphrecord.add_nodes(nodes).unwrap();
+
+        graphrecord.add_group("0".into(), None, None).unwrap();
+        graphrecord.add_group("1".into(), None, None).unwrap();
+
+        let edges_dataframe = create_edges_dataframe().unwrap();
+
+        let edge_indices = graphrecord
+            .add_edges_dataframes_with_groups(
+                vec![EdgeDataFrameInput {
+                    dataframe: edges_dataframe,
+                    source_index_column: "from".to_string(),
+                    target_index_column: "to".to_string(),
+                }],
+                &["0".into(), "1".into()],
+            )
+            .unwrap();
+
+        assert_eq!(2, graphrecord.edge_count());
+        assert_eq!(2, edge_indices.len());
+        assert_eq!(2, graphrecord.edges_in_group(&"0".into()).unwrap().count());
+        assert_eq!(2, graphrecord.edges_in_group(&"1".into()).unwrap().count());
     }
 
     #[test]
