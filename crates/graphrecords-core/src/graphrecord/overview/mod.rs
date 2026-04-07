@@ -14,7 +14,6 @@ use graphrecords_utils::aliases::GrHashMap;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{
-    cmp::Ordering,
     collections::HashSet,
     fmt::{Display, Formatter},
 };
@@ -165,7 +164,7 @@ impl NodeGroupOverview {
                             })
                             .evaluate()?
                             .map(|(_, value)| value)
-                            .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+                            .sorted_by(GraphRecordValue::total_cmp)
                             .dedup_by(|a, b| a == b)
                             .collect();
 
@@ -234,7 +233,7 @@ impl NodeGroupOverview {
                             .evaluate()
                             .unwrap()
                             .map(|(_, value)| value)
-                            .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+                            .sorted_by(GraphRecordValue::total_cmp)
                             .dedup_by(|a, b| a == b)
                             .count();
 
@@ -334,7 +333,7 @@ impl EdgeGroupOverview {
                             })
                             .evaluate()?
                             .map(|(_, value)| value)
-                            .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+                            .sorted_by(GraphRecordValue::total_cmp)
                             .dedup_by(|a, b| a == b)
                             .collect();
 
@@ -401,7 +400,7 @@ impl EdgeGroupOverview {
                             })
                             .evaluate()?
                             .map(|(_, value)| value)
-                            .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+                            .sorted_by(GraphRecordValue::total_cmp)
                             .dedup_by(|a, b| a == b)
                             .count();
 
