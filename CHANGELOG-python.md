@@ -2,6 +2,13 @@
 
 All notable changes to the Python package will be documented in this file.
 
+## [0.4.1] - 2026-04-07
+
+### Features
+
+- implement hash eq for GraphRecordValue (#51)
+- enable adding nodes and edges to multiple groups at a time (#48)
+
 ## [0.4.0] - 2026-03-16
 
 ### Breaking Changes
