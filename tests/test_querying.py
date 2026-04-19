@@ -20,7 +20,6 @@ from graphrecords.querying import (
     EdgeMultipleAttributesWithIndexGroupOperand,
     EdgeMultipleAttributesWithIndexOperand,
     EdgeMultipleAttributesWithIndexQueryResult,
-    EdgeMultipleAttributesWithoutIndexOperand,
     EdgeMultipleValuesWithIndexGroupOperand,
     EdgeMultipleValuesWithIndexOperand,
     EdgeMultipleValuesWithIndexQueryResult,
@@ -29,8 +28,6 @@ from graphrecords.querying import (
     EdgeOperandGroupDiscriminator,
     EdgeSingleAttributeWithIndexGroupOperand,
     EdgeSingleAttributeWithIndexOperand,
-    EdgeSingleAttributeWithoutIndexGroupOperand,
-    EdgeSingleAttributeWithoutIndexOperand,
     EdgeSingleValueWithIndexGroupOperand,
     EdgeSingleValueWithIndexGroupQueryResult,
     EdgeSingleValueWithIndexOperand,
@@ -50,7 +47,6 @@ from graphrecords.querying import (
     NodeMultipleAttributesWithIndexGroupOperand,
     NodeMultipleAttributesWithIndexOperand,
     NodeMultipleAttributesWithIndexQueryResult,
-    NodeMultipleAttributesWithoutIndexOperand,
     NodeMultipleValuesWithIndexGroupOperand,
     NodeMultipleValuesWithIndexOperand,
     NodeMultipleValuesWithIndexQueryResult,
@@ -59,8 +55,6 @@ from graphrecords.querying import (
     NodeOperandGroupDiscriminator,
     NodeSingleAttributeWithIndexGroupOperand,
     NodeSingleAttributeWithIndexOperand,
-    NodeSingleAttributeWithoutIndexGroupOperand,
-    NodeSingleAttributeWithoutIndexOperand,
     NodeSingleValueWithIndexGroupOperand,
     NodeSingleValueWithIndexOperand,
     NodeSingleValueWithIndexQueryResult,
@@ -70,21 +64,17 @@ from graphrecords.querying import (
     PyEdgeIndexOperand,
     PyEdgeIndicesOperand,
     PyEdgeMultipleAttributesWithIndexOperand,
-    PyEdgeMultipleAttributesWithoutIndexOperand,
     PyEdgeMultipleValuesWithIndexOperand,
     PyEdgeMultipleValuesWithoutIndexOperand,
     PyEdgeSingleAttributeWithIndexOperand,
-    PyEdgeSingleAttributeWithoutIndexOperand,
     PyEdgeSingleValueWithIndexOperand,
     PyEdgeSingleValueWithoutIndexOperand,
     PyNodeIndexOperand,
     PyNodeIndicesOperand,
     PyNodeMultipleAttributesWithIndexOperand,
-    PyNodeMultipleAttributesWithoutIndexOperand,
     PyNodeMultipleValuesWithIndexOperand,
     PyNodeMultipleValuesWithoutIndexOperand,
     PyNodeSingleAttributeWithIndexOperand,
-    PyNodeSingleAttributeWithoutIndexOperand,
     PyNodeSingleValueWithIndexOperand,
     PyNodeSingleValueWithoutIndexOperand,
     _py_edge_index_comparison_operand_from_edge_index_comparison_operand,
@@ -236,7 +226,7 @@ class TestPythonTypesConversion(unittest.TestCase):
 
         type5 = (
             _py_node_indices_comparison_operand_from_node_indices_comparison_operand(
-                [0, "node_index"]
+                ["0", "node_index"]
             )
         )
         type6 = (
@@ -287,34 +277,34 @@ class TestPythonTypesConversion(unittest.TestCase):
         assert isinstance(type9, GraphRecordAttribute)
         assert isinstance(type10, PyNodeSingleAttributeWithIndexOperand)
 
-        cache8: NodeMultipleAttributesWithIndexOperand
+        cache6: NodeMultipleAttributesWithIndexOperand
 
-        def query8(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            nonlocal cache8
-            cache8 = node.attributes().max()
-            return cache8
+        def query6(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            nonlocal cache6
+            cache6 = node.attributes().max()
+            return cache6
 
-        graphrecord.query_nodes(query8)
+        graphrecord.query_nodes(query6)
 
         type15 = _py_multiple_attributes_comparison_operand_from_multiple_attributes_comparison_operand(
-            [0, "attribute_name"]
+            ["0", "attribute_name"]
         )
         type16 = _py_multiple_attributes_comparison_operand_from_multiple_attributes_comparison_operand(
-            cache8  # noqa: F821 # pyright: ignore[reportUnboundVariable]
+            cache6  # noqa: F821 # pyright: ignore[reportUnboundVariable]
         )
 
         assert isinstance(type15, list)
         assert all(isinstance(item, GraphRecordAttribute) for item in type15)
         assert isinstance(type16, PyNodeMultipleAttributesWithIndexOperand)
 
-        cache9: NodeSingleValueWithoutIndexOperand
+        cache7: NodeSingleValueWithoutIndexOperand
 
-        def query9(node: NodeOperand) -> NodeSingleValueWithoutIndexOperand:
-            nonlocal cache9
-            cache9 = node.attribute("age").mean()
-            return cache9
+        def query7(node: NodeOperand) -> NodeSingleValueWithoutIndexOperand:
+            nonlocal cache7
+            cache7 = node.attribute("age").mean()
+            return cache7
 
-        graphrecord.query_nodes(query9)
+        graphrecord.query_nodes(query7)
 
         type17 = (
             _py_single_value_comparison_operand_from_single_value_comparison_operand(
@@ -323,73 +313,34 @@ class TestPythonTypesConversion(unittest.TestCase):
         )
         type18 = (
             _py_single_value_comparison_operand_from_single_value_comparison_operand(
-                cache9  # noqa: F821 # pyright: ignore[reportUnboundVariable]
+                cache7  # noqa: F821 # pyright: ignore[reportUnboundVariable]
             )
         )
 
         assert isinstance(type17, GraphRecordValue)
         assert isinstance(type18, PyNodeSingleValueWithoutIndexOperand)
 
-        cache10: NodeMultipleValuesWithoutIndexOperand
+        cache8: NodeMultipleValuesWithoutIndexOperand
 
-        def query10(
+        def query8(
             node: NodeOperand,
         ) -> NodeMultipleValuesWithoutIndexOperand:
-            nonlocal cache10
-            cache10 = (
+            nonlocal cache8
+            cache8 = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("age"))
                 .attribute("age")
                 .mean()
                 .ungroup()
             )
-            return cache10
+            return cache8
 
-        graphrecord.query_nodes(query10)
+        graphrecord.query_nodes(query8)
 
         type19 = _py_multiple_values_comparison_operand_from_multiple_values_comparison_operand(
-            cache10  # noqa: F821 # pyright: ignore[reportUnboundVariable]
+            cache8  # noqa: F821 # pyright: ignore[reportUnboundVariable]
         )
 
         assert isinstance(type19, PyNodeMultipleValuesWithoutIndexOperand)
-
-        cache11: NodeSingleAttributeWithoutIndexOperand
-
-        def query11(
-            node: NodeOperand,
-        ) -> NodeSingleAttributeWithoutIndexOperand:
-            nonlocal cache11
-            cache11 = node.attributes().count().count()
-            return cache11
-
-        graphrecord.query_nodes(query11)
-
-        type20 = _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-            cache11  # noqa: F821 # pyright: ignore[reportUnboundVariable]
-        )
-
-        assert isinstance(type20, PyNodeSingleAttributeWithoutIndexOperand)
-
-        cache12: NodeMultipleAttributesWithoutIndexOperand
-
-        def query12(
-            node: NodeOperand,
-        ) -> NodeMultipleAttributesWithoutIndexOperand:
-            nonlocal cache12
-            cache12 = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("age"))
-                .attributes()
-                .count()
-                .count()
-                .ungroup()
-            )
-            return cache12
-
-        graphrecord.query_nodes(query12)
-
-        type21 = _py_multiple_attributes_comparison_operand_from_multiple_attributes_comparison_operand(
-            cache12  # noqa: F821 # pyright: ignore[reportUnboundVariable]
-        )
-        assert isinstance(type21, PyNodeMultipleAttributesWithoutIndexOperand)
 
     def test_edge_python_types_conversion(self) -> None:
         graphrecord = simple_example_dataset()
@@ -512,7 +463,7 @@ class TestPythonTypesConversion(unittest.TestCase):
 
         cache8: EdgeMultipleValuesWithoutIndexOperand
 
-        def query10(
+        def query8(
             edge: EdgeOperand,
         ) -> EdgeMultipleValuesWithoutIndexOperand:
             nonlocal cache8
@@ -524,52 +475,13 @@ class TestPythonTypesConversion(unittest.TestCase):
             )
             return cache8
 
-        graphrecord.query_edges(query10)
+        graphrecord.query_edges(query8)
 
         type9 = _py_multiple_values_comparison_operand_from_multiple_values_comparison_operand(
             cache8  # noqa: F821 # pyright: ignore[reportUnboundVariable]
         )
 
         assert isinstance(type9, PyEdgeMultipleValuesWithoutIndexOperand)
-
-        cache9: EdgeSingleAttributeWithoutIndexOperand
-
-        def query11(
-            edge: EdgeOperand,
-        ) -> EdgeSingleAttributeWithoutIndexOperand:
-            nonlocal cache9
-            cache9 = edge.attributes().count().count()
-            return cache9
-
-        graphrecord.query_edges(query11)
-
-        type10 = _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-            cache9  # noqa: F821 # pyright: ignore[reportUnboundVariable]
-        )
-
-        assert isinstance(type10, PyEdgeSingleAttributeWithoutIndexOperand)
-
-        cache10: EdgeMultipleAttributesWithoutIndexOperand
-
-        def query12(
-            edge: EdgeOperand,
-        ) -> EdgeMultipleAttributesWithoutIndexOperand:
-            nonlocal cache10
-            cache10 = (
-                edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
-                .attributes()
-                .count()
-                .count()
-                .ungroup()
-            )
-            return cache10
-
-        graphrecord.query_edges(query12)
-
-        type11 = _py_multiple_attributes_comparison_operand_from_multiple_attributes_comparison_operand(
-            cache10  # noqa: F821 # pyright: ignore[reportUnboundVariable]
-        )
-        assert isinstance(type11, PyEdgeMultipleAttributesWithoutIndexOperand)
 
 
 class TestNodeOperand(unittest.TestCase):
@@ -9462,14 +9374,14 @@ class TestNodeIndicesOperand(unittest.TestCase):
         ]
 
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((0, {}))
-        self.graphrecord.add_nodes((1, {}))
+        self.graphrecord.add_nodes(("0", {}))
+        self.graphrecord.add_nodes(("1", {}))
 
         def query3(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in([0, 1])
+            node.index().is_in(["0", "1"])
             return node.index()
 
-        assert sorted(self.graphrecord.query_nodes(query3)) == [0, 1]
+        assert sorted(self.graphrecord.query_nodes(query3)) == ["0", "1"]
 
         def query4(node: NodeOperand) -> NodeIndicesOperand:
             node.in_group("patient")
@@ -9483,28 +9395,32 @@ class TestNodeIndicesOperand(unittest.TestCase):
         ]
 
         def query5(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().less_than(1)
+            node.index().is_in(["0", "1"])
+            node.index().less_than("1")
             return node.index()
 
-        assert self.graphrecord.query_nodes(query5) == [0]
+        assert self.graphrecord.query_nodes(query5) == ["0"]
 
         def query6(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().less_than_or_equal_to(1)
+            node.index().is_in(["0", "1"])
+            node.index().less_than_or_equal_to("1")
             return node.index()
 
-        assert sorted(self.graphrecord.query_nodes(query6)) == [0, 1]
+        assert sorted(self.graphrecord.query_nodes(query6)) == ["0", "1"]
 
         def query7(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().greater_than(0)
+            node.index().is_in(["0", "1"])
+            node.index().greater_than("0")
             return node.index()
 
-        assert self.graphrecord.query_nodes(query7) == [1]
+        assert self.graphrecord.query_nodes(query7) == ["1"]
 
         def query8(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().greater_than_or_equal_to(0)
+            node.index().is_in(["0", "1"])
+            node.index().greater_than_or_equal_to("0")
             return node.index()
 
-        assert sorted(self.graphrecord.query_nodes(query8)) == [0, 1]
+        assert sorted(self.graphrecord.query_nodes(query8)) == ["0", "1"]
 
         def query9(node: NodeOperand) -> NodeIndicesOperand:
             node.index().starts_with("pat_")
@@ -9537,202 +9453,142 @@ class TestNodeIndicesOperand(unittest.TestCase):
         ]
 
         def query12(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_string()
-            return node.index()
-
-        assert 0 not in self.graphrecord.query_nodes(query12)
-        assert "pat_1" in self.graphrecord.query_nodes(query12)
-
-        def query13(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_int()
-            return node.index()
-
-        assert sorted(self.graphrecord.query_nodes(query13)) == [0, 1]
-
-        def query14(node: NodeOperand) -> NodeIndicesOperand:
             indices = node.index()
-            indices.is_in([0, 1])
+            indices.is_in(["0", "1"])
             indices.is_max()
             return indices
 
-        assert self.graphrecord.query_nodes(query14) == [1]
+        assert self.graphrecord.query_nodes(query12) == ["1"]
 
-        def query15(node: NodeOperand) -> NodeIndicesOperand:
+        def query13(node: NodeOperand) -> NodeIndicesOperand:
             indices = node.index()
-            indices.is_in([0, 1])
+            indices.is_in(["0", "1"])
             indices.is_min()
             return indices
 
-        assert self.graphrecord.query_nodes(query15) == [0]
+        assert self.graphrecord.query_nodes(query13) == ["0"]
 
     def test_node_indices_operand_operations(self) -> None:
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((10, {}))
-        self.graphrecord.add_nodes((11, {}))
+        self.graphrecord.add_nodes(("10", {}))
+        self.graphrecord.add_nodes(("11", {}))
 
         def query1(node: NodeOperand) -> NodeIndexOperand:
             indices = node.index()
-            indices.is_int()
+            indices.is_in(["10", "11"])
             return indices.max()
 
-        assert self.graphrecord.query_nodes(query1) == 11
+        assert self.graphrecord.query_nodes(query1) == "11"
 
         def query2(node: NodeOperand) -> NodeIndexOperand:
             indices = node.index()
-            indices.is_int()
+            indices.is_in(["10", "11"])
             return indices.min()
 
-        assert self.graphrecord.query_nodes(query2) == 10
+        assert self.graphrecord.query_nodes(query2) == "10"
 
-        def query3(node: NodeOperand) -> NodeIndexOperand:
+        def query3(node: NodeOperand) -> NodeSingleValueWithoutIndexOperand:
             return node.index().count()
 
         assert self.graphrecord.query_nodes(query3) == 75
 
         def query4(node: NodeOperand) -> NodeIndexOperand:
             indices = node.index()
-            indices.is_int()
-            return indices.sum()
-
-        assert self.graphrecord.query_nodes(query4) == 21
-
-        def query5(node: NodeOperand) -> NodeIndexOperand:
-            indices = node.index()
-            indices.greater_than(10)
+            indices.is_in(["10", "11"])
+            indices.greater_than("10")
             return indices.random()
 
-        assert self.graphrecord.query_nodes(query5) == 11
+        assert self.graphrecord.query_nodes(query4) == "11"
 
-        def query6(node: NodeOperand) -> NodeIndicesOperand:
+        def query5(node: NodeOperand) -> NodeIndicesOperand:
             indices = node.index()
-            indices.is_int()
-            indices.add(2)
+            indices.is_in(["10", "11"])
+            indices.add("2")
             return indices
 
-        assert sorted(self.graphrecord.query_nodes(query6)) == [12, 13]
-
-        def query7(node: NodeOperand) -> NodeIndicesOperand:
-            indices = node.index()
-            indices.is_int()
-            indices.subtract(2)
-            return indices
-
-        assert sorted(self.graphrecord.query_nodes(query7)) == [8, 9]
-
-        def query8(node: NodeOperand) -> NodeIndicesOperand:
-            indices = node.index()
-            indices.is_int()
-            indices.multiply(2)
-            return indices
-
-        assert sorted(self.graphrecord.query_nodes(query8)) == [20, 22]
-
-        def query9(node: NodeOperand) -> NodeIndicesOperand:
-            indices = node.index()
-            indices.is_int()
-            indices.modulo(2)
-            return indices
-
-        assert sorted(self.graphrecord.query_nodes(query9)) == [0, 1]
-
-        def query10(node: NodeOperand) -> NodeIndicesOperand:
-            indices = node.index()
-            indices.is_int()
-            indices.power(2)
-            return indices
-
-        assert sorted(self.graphrecord.query_nodes(query10)) == [100, 121]
-
-        def query11(node: NodeOperand) -> NodeIndicesOperand:
-            indices = node.index()
-            indices.is_int()
-            indices.subtract(12)
-            indices.absolute()
-            return indices
-
-        assert sorted(self.graphrecord.query_nodes(query11)) == [1, 2]
+        assert sorted(self.graphrecord.query_nodes(query5)) == ["102", "112"]
 
         self.graphrecord.add_nodes((" Hello ", {}))
 
-        def query12(node: NodeOperand) -> NodeIndicesOperand:
+        def query6(node: NodeOperand) -> NodeIndicesOperand:
             indices = node.index()
             indices.contains(" ")
             indices.trim()
             return indices
 
-        assert self.graphrecord.query_nodes(query12) == ["Hello"]
+        assert self.graphrecord.query_nodes(query6) == ["Hello"]
 
-        def query13(node: NodeOperand) -> NodeIndicesOperand:
+        def query7(node: NodeOperand) -> NodeIndicesOperand:
             indices = node.index()
             indices.contains(" ")
             indices.trim_start()
             return indices
 
-        assert self.graphrecord.query_nodes(query13) == ["Hello "]
+        assert self.graphrecord.query_nodes(query7) == ["Hello "]
 
-        def query14(node: NodeOperand) -> NodeIndicesOperand:
+        def query8(node: NodeOperand) -> NodeIndicesOperand:
             indices = node.index()
             indices.contains(" ")
             indices.trim_end()
             return indices
 
-        assert self.graphrecord.query_nodes(query14) == [" Hello"]
+        assert self.graphrecord.query_nodes(query8) == [" Hello"]
 
-        def query15(node: NodeOperand) -> NodeIndicesOperand:
+        def query9(node: NodeOperand) -> NodeIndicesOperand:
             indices = node.index()
             indices.contains(" ")
             indices.slice(0, 3)
             return indices
 
-        assert self.graphrecord.query_nodes(query15) == [" He"]
+        assert self.graphrecord.query_nodes(query9) == [" He"]
 
-        def query16(node: NodeOperand) -> NodeIndicesOperand:
+        def query10(node: NodeOperand) -> NodeIndicesOperand:
             indices = node.index()
             indices.contains(" ")
             indices.lowercase()
             return indices
 
-        assert self.graphrecord.query_nodes(query16) == [" hello "]
+        assert self.graphrecord.query_nodes(query10) == [" hello "]
 
-        def query17(node: NodeOperand) -> NodeIndicesOperand:
+        def query11(node: NodeOperand) -> NodeIndicesOperand:
             indices = node.index()
             indices.contains(" ")
             indices.uppercase()
             return indices
 
-        assert self.graphrecord.query_nodes(query17) == [" HELLO "]
+        assert self.graphrecord.query_nodes(query11) == [" HELLO "]
 
-        def query18(node: NodeOperand) -> NodeIndicesOperand:
+        def query12(node: NodeOperand) -> NodeIndicesOperand:
             node.index().either_or(
                 lambda index: index.equal_to("pat_1"),
                 lambda index: index.equal_to("pat_2"),
             )
             return node.index()
 
-        assert sorted(self.graphrecord.query_nodes(query18)) == ["pat_1", "pat_2"]
+        assert sorted(self.graphrecord.query_nodes(query12)) == ["pat_1", "pat_2"]
 
-        def query19(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().exclude(
-                lambda index: index.is_string(),
-            )
-            return node.index()
-
-        assert sorted(self.graphrecord.query_nodes(query19)) == [10, 11]
-
-        def query20(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_int()
+        def query13(node: NodeOperand) -> NodeIndicesOperand:
+            node.index().is_in(["10", "11"])
             clone = node.index().clone()
-            node.index().add(10)
+            node.index().add("10")
             return clone
 
-        assert sorted(self.graphrecord.query_nodes(query20)) == [10, 11]
+        assert sorted(self.graphrecord.query_nodes(query13)) == ["10", "11"]
+
+        def query14(node: NodeOperand) -> NodeIndicesOperand:
+            indices = node.index()
+            indices.is_in(["10", "11"])
+            indices.exclude(lambda idx: idx.equal_to("10"))
+            return indices
+
+        assert self.graphrecord.query_nodes(query14) == ["11"]
 
 
 class TestNodeIndicesGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes([(2, {"gender": "F"}), (3, {"gender": "M"})])
+        self.graphrecord.add_nodes([("2", {"gender": "F"}), ("3", {"gender": "M"})])
 
     def sort_tuples(
         self,
@@ -9744,7 +9600,7 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
     def test_max(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
             node.has_attribute("gender")
-            node.index().is_string()
+            node.index().contains("pat_")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
@@ -9761,7 +9617,7 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
     def test_min(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
             node.has_attribute("gender")
-            node.index().is_string()
+            node.index().contains("pat_")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
@@ -9776,28 +9632,13 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
         ]
 
     def test_count(self) -> None:
-        def query(node: NodeOperand) -> NodeIndexGroupOperand:
+        def query(node: NodeOperand) -> NodeSingleValueWithoutIndexGroupOperand:
             node.has_attribute("gender")
+            node.index().contains("pat_")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
             return indices.count()
-
-        assert sorted(
-            self.graphrecord.query_nodes(query),
-            key=operator.itemgetter(0),
-        ) == [
-            ("F", 3),
-            ("M", 4),
-        ]
-
-    def test_sum(self) -> None:
-        def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
-            indices = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute("gender")
-            ).index()
-            return indices.sum()
 
         assert sorted(
             self.graphrecord.query_nodes(query),
@@ -9809,55 +9650,22 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
 
     def test_random(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
+            node.index().contains("pat_")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
             return indices.random()
 
-        assert sorted(
+        result = sorted(
             self.graphrecord.query_nodes(query),
             key=operator.itemgetter(0),
-        ) == [
-            ("F", 2),
-            ("M", 3),
-        ]
-
-    def test_is_string(self) -> None:
-        def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().contains("pat_")
-            indices = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute("gender")
-            ).index()
-            indices.is_string()
-            return indices
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_nodes(query)),
-            key=operator.itemgetter(0),
         )
-        assert result == [
-            ("F", ["pat_2", "pat_3"]),
-            ("M", ["pat_1", "pat_4", "pat_5"]),
-        ]
-
-    def test_is_int(self) -> None:
-        def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
-            indices = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute("gender")
-            ).index()
-            indices.is_int()
-            return indices
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_nodes(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [
-            ("F", [2]),
-            ("M", [3]),
-        ]
+        assert len(result) == 2
+        f_group = next(v for k, v in result if k == "F")
+        m_group = next(v for k, v in result if k == "M")
+        assert f_group in {"pat_2", "pat_3"}
+        assert m_group in {"pat_1", "pat_4", "pat_5"}
 
     def test_is_in(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
@@ -9898,7 +9706,6 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
 
     def test_starts_with(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_string()
             node.index().starts_with("pat_")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
@@ -9934,7 +9741,6 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
 
     def test_contains(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_string()
             node.index().contains("at")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
@@ -9989,11 +9795,11 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
 
     def test_greater_than(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
-            indices.greater_than(2)
+            indices.greater_than("2")
             return indices
 
         result = sorted(
@@ -10001,17 +9807,17 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", []),
-            ("M", [3]),
+            ("F", ["pat_2", "pat_3"]),
+            ("M", ["3", "pat_1", "pat_4", "pat_5"]),
         ]
 
     def test_greater_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
-            indices.greater_than_or_equal_to(2)
+            indices.greater_than_or_equal_to("2")
             return indices
 
         result = sorted(
@@ -10019,17 +9825,17 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", [2]),
-            ("M", [3]),
+            ("F", ["2", "pat_2", "pat_3"]),
+            ("M", ["3", "pat_1", "pat_4", "pat_5"]),
         ]
 
     def test_less_than(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
-            indices.less_than(3)
+            indices.less_than("3")
             return indices
 
         result = sorted(
@@ -10037,17 +9843,17 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", [2]),
+            ("F", ["2"]),
             ("M", []),
         ]
 
     def test_less_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
-            indices.less_than_or_equal_to(3)
+            indices.less_than_or_equal_to("3")
             return indices
 
         result = sorted(
@@ -10055,17 +9861,17 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", [2]),
-            ("M", [3]),
+            ("F", ["2"]),
+            ("M", ["3"]),
         ]
 
     def test_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
-            indices.equal_to(2)
+            indices.equal_to("2")
             return indices
 
         result = sorted(
@@ -10073,17 +9879,17 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", [2]),
+            ("F", ["2"]),
             ("M", []),
         ]
 
     def test_not_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
-            indices.not_equal_to(2)
+            indices.not_equal_to("2")
             return indices
 
         result = sorted(
@@ -10091,8 +9897,8 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", []),
-            ("M", [3]),
+            ("F", ["pat_2", "pat_3"]),
+            ("M", ["3", "pat_1", "pat_4", "pat_5"]),
         ]
 
     def test_either_or(self) -> None:
@@ -10152,11 +9958,11 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
 
     def test_add(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
-            indices.add(10)
+            indices.add("10")
             return indices
 
         result = sorted(
@@ -10164,99 +9970,8 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", [12]),
-            ("M", [13]),
-        ]
-
-    def test_subtract(self) -> None:
-        def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
-            indices = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute("gender")
-            ).index()
-            indices.subtract(1)
-            return indices
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_nodes(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [
-            ("F", [1]),
-            ("M", [2]),
-        ]
-
-    def test_multiply(self) -> None:
-        def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
-            indices = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute("gender")
-            ).index()
-            indices.multiply(2)
-            return indices
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_nodes(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [
-            ("F", [4]),
-            ("M", [6]),
-        ]
-
-    def test_modulo(self) -> None:
-        def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
-            indices = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute("gender")
-            ).index()
-            indices.modulo(2)
-            return indices
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_nodes(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [
-            ("F", [0]),
-            ("M", [1]),
-        ]
-
-    def test_power(self) -> None:
-        def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
-            indices = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute("gender")
-            ).index()
-            indices.power(2)
-            return indices
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_nodes(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [
-            ("F", [4]),
-            ("M", [9]),
-        ]
-
-    def test_absolute(self) -> None:
-        def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
-            indices = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute("gender")
-            ).index()
-            indices.subtract(5)
-            indices.absolute()
-            return indices
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_nodes(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [
-            ("F", [3]),
-            ("M", [2]),
+            ("F", ["210", "pat_210", "pat_310"]),
+            ("M", ["310", "pat_110", "pat_410", "pat_510"]),
         ]
 
     def test_trim(self) -> None:
@@ -10363,12 +10078,12 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
 
     def test_clone(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             indices = node.group_by(
                 NodeOperandGroupDiscriminator.Attribute("gender")
             ).index()
             clone = indices.clone()
-            indices.add(100)
+            indices.add("100")
             return clone
 
         result = sorted(
@@ -10376,8 +10091,8 @@ class TestNodeIndicesGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", [2]),
-            ("M", [3]),
+            ("F", ["2", "pat_2", "pat_3"]),
+            ("M", ["3", "pat_1", "pat_4", "pat_5"]),
         ]
 
 
@@ -10419,40 +10134,40 @@ class TestNodeIndexOperand(unittest.TestCase):
         assert self.graphrecord.query_nodes(query4) == "pat_5"
 
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((0, {}))
-        self.graphrecord.add_nodes((1, {}))
+        self.graphrecord.add_nodes(("0", {}))
+        self.graphrecord.add_nodes(("1", {}))
 
         def query5(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             minimum = node.index().min()
-            minimum.less_than(1)
+            minimum.less_than("1")
             return minimum
 
-        assert self.graphrecord.query_nodes(query5) == 0
+        assert self.graphrecord.query_nodes(query5) == "0"
 
         def query6(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             maximum = node.index().max()
-            maximum.less_than_or_equal_to(1)
+            maximum.less_than_or_equal_to("1")
             return maximum
 
-        assert self.graphrecord.query_nodes(query6) == 1
+        assert self.graphrecord.query_nodes(query6) == "1"
 
         def query7(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             maximum = node.index().max()
-            maximum.greater_than(0)
+            maximum.greater_than("0")
             return maximum
 
-        assert self.graphrecord.query_nodes(query7) == 1
+        assert self.graphrecord.query_nodes(query7) == "1"
 
         def query8(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             maximum = node.index().max()
-            maximum.greater_than_or_equal_to(0)
+            maximum.greater_than_or_equal_to("0")
             return maximum
 
-        assert self.graphrecord.query_nodes(query8) == 1
+        assert self.graphrecord.query_nodes(query8) == "1"
 
         def query9(node: NodeOperand) -> NodeIndexOperand:
             node.in_group("patient")
@@ -10480,125 +10195,80 @@ class TestNodeIndexOperand(unittest.TestCase):
 
         def query12(node: NodeOperand) -> NodeIndexOperand:
             node.in_group("patient")
-            maximum = node.index().max()
-            maximum.is_string()
-            return maximum
+            return node.index().max()
 
         assert self.graphrecord.query_nodes(query12) == "pat_5"
 
         def query13(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
-            maximum = node.index().max()
-            maximum.is_int()
-            return maximum
+            node.index().is_in(["0", "1"])
+            return node.index().max()
 
-        assert self.graphrecord.query_nodes(query13) == 1
+        assert self.graphrecord.query_nodes(query13) == "1"
 
     def test_node_index_operand_operations(self) -> None:
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((10, {}))
-        self.graphrecord.add_nodes((11, {}))
+        self.graphrecord.add_nodes(("10", {}))
+        self.graphrecord.add_nodes(("11", {}))
 
         def query1(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["10", "11"])
             maximum = node.index().max()
-            maximum.add(2)
+            maximum.add("2")
             return maximum
 
-        assert self.graphrecord.query_nodes(query1) == 13
-
-        def query2(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
-            maximum = node.index().max()
-            maximum.subtract(2)
-            return maximum
-
-        assert self.graphrecord.query_nodes(query2) == 9
-
-        def query3(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
-            maximum = node.index().max()
-            maximum.multiply(2)
-            return maximum
-
-        assert self.graphrecord.query_nodes(query3) == 22
-
-        def query4(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
-            maximum = node.index().max()
-            maximum.modulo(2)
-            return maximum
-
-        assert self.graphrecord.query_nodes(query4) == 1
-
-        def query5(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
-            maximum = node.index().max()
-            maximum.power(2)
-            return maximum
-
-        assert self.graphrecord.query_nodes(query5) == 121
-
-        def query6(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
-            maximum = node.index().max()
-            maximum.subtract(12)
-            maximum.absolute()
-            return maximum
-
-        assert self.graphrecord.query_nodes(query6) == 1
+        assert self.graphrecord.query_nodes(query1) == "112"
 
         self.graphrecord.add_nodes((" Hello ", {}))
 
-        def query7(node: NodeOperand) -> NodeIndexOperand:
+        def query2(node: NodeOperand) -> NodeIndexOperand:
             node.index().contains(" ")
             maximum = node.index().max()
             maximum.trim()
             return maximum
 
-        assert self.graphrecord.query_nodes(query7) == "Hello"
+        assert self.graphrecord.query_nodes(query2) == "Hello"
 
-        def query8(node: NodeOperand) -> NodeIndexOperand:
+        def query3(node: NodeOperand) -> NodeIndexOperand:
             node.index().contains(" ")
             maximum = node.index().max()
             maximum.trim_start()
             return maximum
 
-        assert self.graphrecord.query_nodes(query8) == "Hello "
+        assert self.graphrecord.query_nodes(query3) == "Hello "
 
-        def query9(node: NodeOperand) -> NodeIndexOperand:
+        def query4(node: NodeOperand) -> NodeIndexOperand:
             node.index().contains(" ")
             maximum = node.index().max()
             maximum.trim_end()
             return maximum
 
-        assert self.graphrecord.query_nodes(query9) == " Hello"
+        assert self.graphrecord.query_nodes(query4) == " Hello"
 
-        def query10(node: NodeOperand) -> NodeIndexOperand:
+        def query5(node: NodeOperand) -> NodeIndexOperand:
             node.index().contains(" ")
             maximum = node.index().max()
             maximum.slice(0, 3)
             return maximum
 
-        assert self.graphrecord.query_nodes(query10) == " He"
+        assert self.graphrecord.query_nodes(query5) == " He"
 
-        def query11(node: NodeOperand) -> NodeIndexOperand:
+        def query6(node: NodeOperand) -> NodeIndexOperand:
             node.index().contains(" ")
             maximum = node.index().max()
             maximum.lowercase()
             return maximum
 
-        assert self.graphrecord.query_nodes(query11) == " hello "
+        assert self.graphrecord.query_nodes(query6) == " hello "
 
-        def query12(node: NodeOperand) -> NodeIndexOperand:
+        def query7(node: NodeOperand) -> NodeIndexOperand:
             node.index().contains(" ")
             maximum = node.index().max()
             maximum.uppercase()
             return maximum
 
-        assert self.graphrecord.query_nodes(query12) == " HELLO "
+        assert self.graphrecord.query_nodes(query7) == " HELLO "
 
-        def query13(node: NodeOperand) -> NodeIndexOperand:
+        def query8(node: NodeOperand) -> NodeIndexOperand:
             node.in_group("patient")
             maximum = node.index().max()
             maximum.either_or(
@@ -10607,44 +10277,42 @@ class TestNodeIndexOperand(unittest.TestCase):
             )
             return maximum
 
-        assert self.graphrecord.query_nodes(query13) == "pat_5"
+        assert self.graphrecord.query_nodes(query8) == "pat_5"
 
-        def query14(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
-            maximum = node.index().max()
-            maximum.exclude(
-                lambda index: index.is_string(),
-            )
-            return maximum
-
-        assert self.graphrecord.query_nodes(query14) == 11
-
-        def query15(node: NodeOperand) -> NodeIndexOperand:
-            node.index().is_int()
+        def query9(node: NodeOperand) -> NodeIndexOperand:
+            node.index().is_in(["10", "11"])
             maximum = node.index().max()
             clone = maximum.clone()
-            maximum.add(10)
+            maximum.add("10")
             return clone
 
-        assert self.graphrecord.query_nodes(query15) == 11
+        assert self.graphrecord.query_nodes(query9) == "11"
+
+        def query10(node: NodeOperand) -> NodeIndexOperand:
+            node.index().is_in(["10", "11"])
+            maximum = node.index().max()
+            maximum.exclude(lambda idx: idx.equal_to("0"))
+            return maximum
+
+        assert self.graphrecord.query_nodes(query10) == "11"
 
 
 class TestNodeIndexGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((5, {"gender": "M"}))
+        self.graphrecord.add_nodes(("5", {"gender": "M"}))
         self.graphrecord.add_nodes((" Hello ", {"gender": "M"}))
 
-    def test_is_string(self) -> None:
+    def test_greater_than(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().contains("pat_")
+            node.has_attribute("gender")
             index = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .index()
                 .max()
             )
-            index.is_string()
+            index.greater_than("4")
             return index
 
         assert sorted(
@@ -10654,154 +10322,125 @@ class TestNodeIndexGroupOperand(unittest.TestCase):
             ("M", "pat_5"),
         ]
 
-    def test_is_int(self) -> None:
-        def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
-            index = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .index()
-                .max()
-            )
-            index.is_int()
-            return index
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
-        ) == [
-            ("M", 5),
-        ]
-
-    def test_greater_than(self) -> None:
-        def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
-            index = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .index()
-                .max()
-            )
-            index.greater_than(4)
-            return index
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
-        ) == [
-            ("M", 5),
-        ]
-
     def test_greater_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             index = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .index()
                 .max()
             )
-            index.greater_than_or_equal_to(5)
+            index.greater_than_or_equal_to("5")
             return index
 
         assert sorted(
             self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
         ) == [
-            ("M", 5),
+            ("F", "pat_3"),
+            ("M", "pat_5"),
         ]
 
     def test_less_than(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             index = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .index()
                 .max()
             )
-            index.less_than(5)
+            index.less_than("5")
             return index
 
         assert sorted(
             self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
         ) == [
+            ("F", None),
             ("M", None),
         ]
 
     def test_less_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             index = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .index()
                 .max()
             )
-            index.less_than_or_equal_to(5)
+            index.less_than_or_equal_to("pat_5")
             return index
 
         assert sorted(
             self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
         ) == [
-            ("M", 5),
+            ("F", "pat_3"),
+            ("M", "pat_5"),
         ]
 
     def test_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             index = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .index()
                 .max()
             )
-            index.equal_to(5)
+            index.equal_to("pat_5")
             return index
 
         assert sorted(
             self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
         ) == [
-            ("M", 5),
+            ("F", None),
+            ("M", "pat_5"),
         ]
 
     def test_not_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             index = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .index()
                 .max()
             )
-            index.not_equal_to(5)
+            index.not_equal_to("pat_5")
             return index
 
         assert sorted(
             self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
-        ) == [("M", None)]
+        ) == [("F", "pat_3"), ("M", None)]
 
     def test_is_in(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             index = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .index()
                 .max()
             )
-            index.is_in([5])
+            index.is_in(["pat_5"])
             return index
 
         assert sorted(
             self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
         ) == [
-            ("M", 5),
+            ("F", None),
+            ("M", "pat_5"),
         ]
 
     def test_is_not_in(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             index = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .index()
                 .max()
             )
-            index.is_not_in([5])
+            index.is_not_in(["pat_5"])
             return index
 
         assert sorted(
             self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
-        ) == [("M", None)]
+        ) == [("F", "pat_3"), ("M", None)]
 
     def test_starts_with(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
@@ -10859,93 +10498,20 @@ class TestNodeIndexGroupOperand(unittest.TestCase):
 
     def test_add(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             index = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .index()
                 .max()
             )
-            index.add(10)
+            index.add("10")
             return index
 
-        assert self.graphrecord.query_nodes(query) == [
-            ("M", 15),
-        ]
-
-    def test_subtract(self) -> None:
-        def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
-            index = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .index()
-                .max()
-            )
-            index.subtract(1)
-            return index
-
-        assert self.graphrecord.query_nodes(query) == [
-            ("M", 4),
-        ]
-
-    def test_multiply(self) -> None:
-        def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
-            index = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .index()
-                .max()
-            )
-            index.multiply(2)
-            return index
-
-        assert self.graphrecord.query_nodes(query) == [
-            ("M", 10),
-        ]
-
-    def test_modulo(self) -> None:
-        def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
-            index = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .index()
-                .max()
-            )
-            index.modulo(2)
-            return index
-
-        assert self.graphrecord.query_nodes(query) == [
-            ("M", 1),
-        ]
-
-    def test_power(self) -> None:
-        def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
-            index = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .index()
-                .max()
-            )
-            index.power(2)
-            return index
-
-        assert self.graphrecord.query_nodes(query) == [
-            ("M", 25),
-        ]
-
-    def test_absolute(self) -> None:
-        def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
-            index = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .index()
-                .max()
-            )
-            index.subtract(10)
-            index.absolute()
-            return index
-
-        assert self.graphrecord.query_nodes(query) == [
-            ("M", 5),
+        assert sorted(
+            self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
+        ) == [
+            ("F", "pat_310"),
+            ("M", "pat_510"),
         ]
 
     def test_trim(self) -> None:
@@ -11106,20 +10672,21 @@ class TestNodeIndexGroupOperand(unittest.TestCase):
 
     def test_clone(self) -> None:
         def query(node: NodeOperand) -> NodeIndexGroupOperand:
-            node.index().is_int()
+            node.has_attribute("gender")
             index = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .index()
                 .max()
             )
             clone = index.clone()
-            index.add(100)
+            index.add("100")
             return clone
 
         assert sorted(
             self.graphrecord.query_nodes(query), key=lambda x: (x[0] is None, x[0])
         ) == [
-            ("M", 5),
+            ("F", "pat_3"),
+            ("M", "pat_5"),
         ]
 
 
@@ -11229,7 +10796,7 @@ class TestEdgeIndicesOperand(unittest.TestCase):
 
         assert self.graphrecord.query_edges(query2) == 10
 
-        def query3(edge: EdgeOperand) -> EdgeIndexOperand:
+        def query3(edge: EdgeOperand) -> EdgeSingleValueWithoutIndexOperand:
             return edge.index().count()
 
         assert self.graphrecord.query_edges(query3) == 160
@@ -11332,7 +10899,7 @@ class TestEdgeIndicesGroupOperand(unittest.TestCase):
         assert self.graphrecord.query_edges(query) == [("pat_1", 0)]
 
     def test_count(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeIndexGroupOperand:
+        def query(edge: EdgeOperand) -> EdgeSingleValueWithoutIndexGroupOperand:
             edge.index().less_than(10)
             indices = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode()).index()
             return indices.count()
@@ -11968,73 +11535,71 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         assert self.graphrecord.query_nodes(query2) == {"pat_1": "age"}
 
-        def query3(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+        def query3(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
             return node.attributes().count()
 
         assert self.graphrecord.query_nodes(query3) == {"pat_1": 2}
 
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((0, {1: "value1", 2: "value2"}))
+        self.graphrecord.add_nodes(("0", {"1": "value1", "2": "value2"}))
 
         def query4(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().equal_to(0)
-            return node.attributes().sum()
-
-        assert self.graphrecord.query_nodes(query4) == {0: 3}
-
-        def query5(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().equal_to(0)
+            node.index().equal_to("0")
             attributes = node.attributes()
-            attributes.equal_to(1)
+            attributes.equal_to("1")
             return attributes.random()
 
-        assert self.graphrecord.query_nodes(query5) == {0: 1}
+        assert self.graphrecord.query_nodes(query4) == {"0": "1"}
+
+        def query5(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("0")
+            return node.attributes()
+
+        result = self.graphrecord.query_nodes(query5)
+        result = {key: sorted(value) for key, value in result.items()}
+        assert result == {"0": ["1", "2"]}
+
+        self.graphrecord.add_nodes(
+            ("new_node", {"1": "value1", "string_attribute": "value2"})
+        )
 
         def query6(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
-            attributes = node.attributes()
-            attributes.is_int()
-            return attributes
+            node.index().equal_to("new_node")
+            return node.attributes()
 
         result = self.graphrecord.query_nodes(query6)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [1, 2]}
-
-        self.graphrecord.add_nodes(
-            ("new_node", {1: "value1", "string_attribute": "value2"})
-        )
+        assert result == {"new_node": ["1", "string_attribute"]}
 
         def query7(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to("new_node")
+            node.index().equal_to("0")
             attributes = node.attributes()
-            attributes.is_string()
+            attributes.is_in(["1"])
             return attributes
 
-        assert self.graphrecord.query_nodes(query7) == {
-            "new_node": ["string_attribute"]
-        }
+        assert self.graphrecord.query_nodes(query7) == {"0": ["1"]}
 
         def query8(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
+            node.index().equal_to("0")
             attributes = node.attributes()
-            attributes.is_in([1])
+            attributes.is_not_in(["1"])
             return attributes
 
-        assert self.graphrecord.query_nodes(query8) == {0: [1]}
+        assert self.graphrecord.query_nodes(query8) == {"0": ["2"]}
 
         def query9(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
+            query_node(node)
             attributes = node.attributes()
-            attributes.is_not_in([1])
+            attributes.starts_with("ag")
             return attributes
 
-        assert self.graphrecord.query_nodes(query9) == {0: [2]}
+        assert self.graphrecord.query_nodes(query9) == {"pat_1": ["age"]}
 
         def query10(node: NodeOperand) -> NodeAttributesTreeOperand:
             query_node(node)
             attributes = node.attributes()
-            attributes.starts_with("ag")
+            attributes.ends_with("ge")
             return attributes
 
         assert self.graphrecord.query_nodes(query10) == {"pat_1": ["age"]}
@@ -12042,242 +11607,183 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
         def query11(node: NodeOperand) -> NodeAttributesTreeOperand:
             query_node(node)
             attributes = node.attributes()
-            attributes.ends_with("ge")
-            return attributes
-
-        assert self.graphrecord.query_nodes(query11) == {"pat_1": ["age"]}
-
-        def query12(node: NodeOperand) -> NodeAttributesTreeOperand:
-            query_node(node)
-            attributes = node.attributes()
             attributes.contains("ge")
             return attributes
 
-        result = self.graphrecord.query_nodes(query12)
+        result = self.graphrecord.query_nodes(query11)
         result = {key: sorted(value) for key, value in result.items()}
         assert result == {"pat_1": ["age", "gender"]}
 
-        def query13(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().is_int()
+        def query12(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("0")
             attributes = node.attributes()
             attributes.is_max()
             return attributes
 
-        assert self.graphrecord.query_nodes(query13) == {0: [2]}
+        assert self.graphrecord.query_nodes(query12) == {"0": ["2"]}
 
-        def query14(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().is_int()
+        def query13(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("0")
             attributes = node.attributes()
             attributes.is_min()
             return attributes
 
-        assert self.graphrecord.query_nodes(query14) == {0: [1]}
+        assert self.graphrecord.query_nodes(query13) == {"0": ["1"]}
+
+        def query14(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("0")
+            attributes = node.attributes()
+            attributes.greater_than("1")
+            return attributes
+
+        assert self.graphrecord.query_nodes(query14) == {"0": ["2"]}
 
         def query15(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().is_int()
+            node.index().equal_to("0")
             attributes = node.attributes()
-            attributes.greater_than(1)
+            attributes.greater_than_or_equal_to("1")
             return attributes
 
-        assert self.graphrecord.query_nodes(query15) == {0: [2]}
+        result = self.graphrecord.query_nodes(query15)
+        result = {key: sorted(value) for key, value in result.items()}
+        assert result == {"0": ["1", "2"]}
 
         def query16(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().is_int()
+            node.index().equal_to("0")
             attributes = node.attributes()
-            attributes.greater_than_or_equal_to(1)
+            attributes.less_than("2")
             return attributes
 
-        result = self.graphrecord.query_nodes(query16)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [1, 2]}
+        assert self.graphrecord.query_nodes(query16) == {"0": ["1"]}
 
         def query17(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().is_int()
+            node.index().equal_to("0")
             attributes = node.attributes()
-            attributes.less_than(2)
+            attributes.less_than_or_equal_to("2")
             return attributes
 
-        assert self.graphrecord.query_nodes(query17) == {0: [1]}
+        result = self.graphrecord.query_nodes(query17)
+        result = {key: sorted(value) for key, value in result.items()}
+        assert result == {"0": ["1", "2"]}
 
         def query18(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().is_int()
+            node.index().equal_to("0")
             attributes = node.attributes()
-            attributes.less_than_or_equal_to(2)
+            attributes.equal_to("1")
             return attributes
 
-        result = self.graphrecord.query_nodes(query18)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [1, 2]}
+        assert self.graphrecord.query_nodes(query18) == {"0": ["1"]}
 
         def query19(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().is_int()
+            node.index().equal_to("0")
             attributes = node.attributes()
-            attributes.equal_to(1)
+            attributes.not_equal_to("1")
             return attributes
 
-        assert self.graphrecord.query_nodes(query19) == {0: [1]}
-
-        def query20(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().is_int()
-            attributes = node.attributes()
-            attributes.not_equal_to(1)
-            return attributes
-
-        assert self.graphrecord.query_nodes(query20) == {0: [2]}
+        assert self.graphrecord.query_nodes(query19) == {"0": ["2"]}
 
     def test_node_attributes_tree_operand_operations(self) -> None:
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((0, {10: "value1", 11: "value2"}))
+        self.graphrecord.add_nodes(("0", {"10": "value1", "11": "value2"}))
 
         def query1(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
+            node.index().equal_to("0")
             attributes = node.attributes()
-            attributes.add(2)
+            attributes.add("2")
             return attributes
 
         result = self.graphrecord.query_nodes(query1)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [12, 13]}
+        assert result == {"0": ["102", "112"]}
+
+        self.graphrecord.add_nodes(("1", {" Hello ": "value1"}))
 
         def query2(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
-            attributes = node.attributes()
-            attributes.subtract(2)
-            return attributes
-
-        result = self.graphrecord.query_nodes(query2)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [8, 9]}
-
-        def query3(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
-            attributes = node.attributes()
-            attributes.multiply(2)
-            return attributes
-
-        result = self.graphrecord.query_nodes(query3)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [20, 22]}
-
-        def query4(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
-            attributes = node.attributes()
-            attributes.modulo(2)
-            return attributes
-
-        result = self.graphrecord.query_nodes(query4)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [0, 1]}
-
-        def query5(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
-            attributes = node.attributes()
-            attributes.power(2)
-            return attributes
-
-        result = self.graphrecord.query_nodes(query5)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [100, 121]}
-
-        def query6(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
-            attributes = node.attributes()
-            attributes.subtract(12)
-            attributes.absolute()
-            return attributes
-
-        result = self.graphrecord.query_nodes(query6)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [1, 2]}
-
-        self.graphrecord.add_nodes((1, {" Hello ": "value1"}))
-
-        def query7(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(1)
+            node.index().equal_to("1")
             attributes = node.attributes()
             attributes.trim()
             return attributes
 
-        assert self.graphrecord.query_nodes(query7) == {1: ["Hello"]}
+        assert self.graphrecord.query_nodes(query2) == {"1": ["Hello"]}
 
-        def query8(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(1)
+        def query3(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("1")
             attributes = node.attributes()
             attributes.trim_start()
             return attributes
 
-        assert self.graphrecord.query_nodes(query8) == {1: ["Hello "]}
+        assert self.graphrecord.query_nodes(query3) == {"1": ["Hello "]}
 
-        def query9(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(1)
+        def query4(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("1")
             attributes = node.attributes()
             attributes.trim_end()
             return attributes
 
-        assert self.graphrecord.query_nodes(query9) == {1: [" Hello"]}
+        assert self.graphrecord.query_nodes(query4) == {"1": [" Hello"]}
 
-        def query10(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(1)
+        def query5(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("1")
             attributes = node.attributes()
             attributes.slice(0, 3)
             return attributes
 
-        assert self.graphrecord.query_nodes(query10) == {1: [" He"]}
+        assert self.graphrecord.query_nodes(query5) == {"1": [" He"]}
 
-        def query11(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(1)
+        def query6(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("1")
             attributes = node.attributes()
             attributes.lowercase()
             return attributes
 
-        assert self.graphrecord.query_nodes(query11) == {1: [" hello "]}
+        assert self.graphrecord.query_nodes(query6) == {"1": [" hello "]}
 
-        def query12(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(1)
+        def query7(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("1")
             attributes = node.attributes()
             attributes.uppercase()
             return attributes
 
-        assert self.graphrecord.query_nodes(query12) == {1: [" HELLO "]}
+        assert self.graphrecord.query_nodes(query7) == {"1": [" HELLO "]}
 
-        def query13(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
+        def query8(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("0")
             attributes = node.attributes()
             attributes.either_or(
                 lambda attribute: attribute.equal_to("not_a_node"),
-                lambda attribute: attribute.contains(0),
+                lambda attribute: attribute.contains("0"),
             )
             return attributes
 
-        assert self.graphrecord.query_nodes(query13) == {0: [10]}
+        assert self.graphrecord.query_nodes(query8) == {"0": ["10"]}
 
-        def query14(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().is_int()
+        def query9(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().is_in(["0", "1"])
             attributes = node.attributes()
             attributes.exclude(
-                lambda attribute: attribute.contains(0),
+                lambda attribute: attribute.contains("0"),
             )
             return attributes
 
-        assert self.graphrecord.query_nodes(query14) == {0: [11], 1: [" Hello "]}
+        assert self.graphrecord.query_nodes(query9) == {"0": ["11"], "1": [" Hello "]}
 
-        def query15(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to(0)
+        def query10(node: NodeOperand) -> NodeAttributesTreeOperand:
+            node.index().equal_to("0")
             attributes = node.attributes()
             clone = attributes.clone()
-            attributes.add(10)
+            attributes.add("10")
             return clone
 
-        result = self.graphrecord.query_nodes(query15)
+        result = self.graphrecord.query_nodes(query10)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [10, 11]}
+        assert result == {"0": ["10", "11"]}
 
 
 class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes(("pat_6", {10: "value1", 11: "value2"}))
+        self.graphrecord.add_nodes(("pat_6", {"10": "value1", "11": "value2"}))
 
     def sort_tuples_tree(
         self,
@@ -12296,6 +11802,16 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         value, nodes_with_attributes = tuple_to_sort
         sorted_nodes = sorted(
             ((k, v) for k, v in nodes_with_attributes.items()),
+            key=operator.itemgetter(0),
+        )
+        return (value, dict(sorted_nodes))
+
+    def sort_tuples_values(
+        self, tuple_to_sort: tuple[GroupKey, NodeMultipleValuesWithIndexQueryResult]
+    ) -> tuple[GroupKey, NodeMultipleValuesWithIndexQueryResult]:
+        value, nodes_with_values = tuple_to_sort
+        sorted_nodes = sorted(
+            ((k, v) for k, v in nodes_with_values.items()),
             key=operator.itemgetter(0),
         )
         return (value, dict(sorted_nodes))
@@ -12339,7 +11855,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         ]
 
     def test_count(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+        def query(node: NodeOperand) -> NodeMultipleValuesWithIndexGroupOperand:
             node.has_attribute("gender")
             return (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
@@ -12348,7 +11864,10 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             )
 
         result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_nodes(query)),
+            (
+                self.sort_tuples_values(item)
+                for item in self.graphrecord.query_nodes(query)
+            ),
             key=operator.itemgetter(0),
         )
 
@@ -12357,74 +11876,17 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ("M", {"pat_1": 2, "pat_4": 2, "pat_5": 2}),
         ]
 
-    def test_sum(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.index().equal_to("pat_6")
-            attributes = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
-            ).attributes()
-            return attributes.sum()
-
-        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_6": 21})]
-
     def test_random(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
             node.index().equal_to("pat_6")
             attributes = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
+                NodeOperandGroupDiscriminator.Attribute("10")
             ).attributes()
             return attributes.random()
 
         assert self.graphrecord.query_nodes(query) in [
-            [("value1", {"pat_6": 10})],
-            [("value1", {"pat_6": 11})],
-        ]
-
-    def test_is_int(self) -> None:
-        def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
-            node.index().equal_to("pat_6")
-            attributes = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
-            ).attributes()
-            attributes.is_int()
-            return attributes
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_nodes(query)
-            ),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {"pat_6": [10, 11]})]
-
-    def test_is_string(self) -> None:
-        def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
-            node.index().starts_with("pat_")
-            attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute("gender")
-            ).attributes()
-            attrs.is_string()
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_nodes(query)
-            ),
-            key=lambda x: (x[0] is None, x[0]),
-        )
-        assert result == [
-            ("F", {"pat_2": ["age", "gender"], "pat_3": ["age", "gender"]}),
-            (
-                "M",
-                {
-                    "pat_1": ["age", "gender"],
-                    "pat_4": ["age", "gender"],
-                    "pat_5": ["age", "gender"],
-                },
-            ),
-            (None, {"pat_6": []}),
+            [("value1", {"pat_6": "10"})],
+            [("value1", {"pat_6": "11"})],
         ]
 
     def test_is_max(self) -> None:
@@ -12510,7 +11972,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         assert result == [
             ("F", {"pat_2": ["gender"], "pat_3": ["gender"]}),
             ("M", {"pat_1": ["gender"], "pat_4": ["gender"], "pat_5": ["gender"]}),
-            (None, {"pat_6": [10, 11]}),
+            (None, {"pat_6": ["10", "11"]}),
         ]
 
     def test_starts_with(self) -> None:
@@ -12583,9 +12045,9 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
             node.index().equal_to("pat_6")
             attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
+                NodeOperandGroupDiscriminator.Attribute("10")
             ).attributes()
-            attrs.greater_than(1)
+            attrs.greater_than("1")
             return attrs
 
         result = sorted(
@@ -12595,15 +12057,15 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10, 11]})]
+        assert result == [("value1", {"pat_6": ["10", "11"]})]
 
     def test_greater_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
             node.index().equal_to("pat_6")
             attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
+                NodeOperandGroupDiscriminator.Attribute("10")
             ).attributes()
-            attrs.greater_than_or_equal_to(11)
+            attrs.greater_than_or_equal_to("11")
             return attrs
 
         result = sorted(
@@ -12613,15 +12075,15 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [11]})]
+        assert result == [("value1", {"pat_6": ["11"]})]
 
     def test_less_than(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
             node.index().equal_to("pat_6")
             attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
+                NodeOperandGroupDiscriminator.Attribute("10")
             ).attributes()
-            attrs.less_than(11)
+            attrs.less_than("11")
             return attrs
 
         result = sorted(
@@ -12631,15 +12093,15 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10]})]
+        assert result == [("value1", {"pat_6": ["10"]})]
 
     def test_less_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
             node.index().equal_to("pat_6")
             attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
+                NodeOperandGroupDiscriminator.Attribute("10")
             ).attributes()
-            attrs.less_than_or_equal_to(11)
+            attrs.less_than_or_equal_to("11")
             return attrs
 
         result = sorted(
@@ -12649,15 +12111,15 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10, 11]})]
+        assert result == [("value1", {"pat_6": ["10", "11"]})]
 
     def test_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
             node.index().equal_to("pat_6")
             attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
+                NodeOperandGroupDiscriminator.Attribute("10")
             ).attributes()
-            attrs.equal_to(10)
+            attrs.equal_to("10")
             return attrs
 
         result = sorted(
@@ -12667,15 +12129,15 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10]})]
+        assert result == [("value1", {"pat_6": ["10"]})]
 
     def test_not_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
             node.index().equal_to("pat_6")
             attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
+                NodeOperandGroupDiscriminator.Attribute("10")
             ).attributes()
-            attrs.not_equal_to(10)
+            attrs.not_equal_to("10")
             return attrs
 
         result = sorted(
@@ -12685,17 +12147,17 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [11]})]
+        assert result == [("value1", {"pat_6": ["11"]})]
 
     def test_either_or(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
             node.index().equal_to("pat_6")
             attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
+                NodeOperandGroupDiscriminator.Attribute("10")
             ).attributes()
             attrs.either_or(
-                lambda attr: attr.equal_to(10),
-                lambda attr: attr.equal_to(11),
+                lambda attr: attr.equal_to("10"),
+                lambda attr: attr.equal_to("11"),
             )
             return attrs
 
@@ -12706,15 +12168,15 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10, 11]})]
+        assert result == [("value1", {"pat_6": ["10", "11"]})]
 
     def test_exclude(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
             node.index().equal_to("pat_6")
             attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
+                NodeOperandGroupDiscriminator.Attribute("10")
             ).attributes()
-            attrs.exclude(lambda attr: attr.equal_to(10))
+            attrs.exclude(lambda attr: attr.equal_to("10"))
             return attrs
 
         result = sorted(
@@ -12724,7 +12186,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [11]})]
+        assert result == [("value1", {"pat_6": ["11"]})]
 
     def test_trim(self) -> None:
         self.graphrecord.add_nodes(("pat_7", {" Hello ": "value"}))
@@ -12846,97 +12308,6 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         )
         assert result == [("value", {"pat_12": [" HELLO "]})]
 
-    def test_subtract(self) -> None:
-        def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
-            node.index().equal_to("pat_6")
-            attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
-            ).attributes()
-            attrs.subtract(9)
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_nodes(query)
-            ),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {"pat_6": [1, 2]})]
-
-    def test_multiply(self) -> None:
-        def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
-            node.index().equal_to("pat_6")
-            attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
-            ).attributes()
-            attrs.multiply(2)
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_nodes(query)
-            ),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {"pat_6": [20, 22]})]
-
-    def test_modulo(self) -> None:
-        def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
-            node.index().equal_to("pat_6")
-            attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
-            ).attributes()
-            attrs.modulo(10)
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_nodes(query)
-            ),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {"pat_6": [0, 1]})]
-
-    def test_power(self) -> None:
-        def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
-            node.index().equal_to("pat_6")
-            attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
-            ).attributes()
-            attrs.power(2)
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_nodes(query)
-            ),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {"pat_6": [100, 121]})]
-
-    def test_absolute(self) -> None:
-        def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
-            node.index().equal_to("pat_6")
-            attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
-            ).attributes()
-            attrs.subtract(11)
-            attrs.absolute()
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_nodes(query)
-            ),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {"pat_6": [0, 1]})]
-
     def test_ungroup(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.has_attribute("gender")
@@ -12965,10 +12336,10 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
             node.index().equal_to("pat_6")
             attrs = node.group_by(
-                NodeOperandGroupDiscriminator.Attribute(10)
+                NodeOperandGroupDiscriminator.Attribute("10")
             ).attributes()
             clone = attrs.clone()
-            attrs.add(10)
+            attrs.add("10")
             return clone
 
         result = sorted(
@@ -12978,7 +12349,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10, 11]})]
+        assert result == [("value1", {"pat_6": ["10", "11"]})]
 
 
 class TestEdgeAttributesTreeOperand(unittest.TestCase):
@@ -12987,10 +12358,10 @@ class TestEdgeAttributesTreeOperand(unittest.TestCase):
         # Available nodes: pat_1, pat_2, pat_3, pat_4, pat_5 (and others from dataset)
         self.graphrecord.unfreeze_schema()
         self.graphrecord.add_edges(
-            [("pat_1", "pat_2", {1: "value1", 2: "value2"})]
+            [("pat_1", "pat_2", {"1": "value1", "2": "value2"})]
         )  # Edge index 160
         self.graphrecord.add_edges(
-            [("pat_1", "pat_3", {10: "v1", 11: "v2"})]
+            [("pat_1", "pat_3", {"10": "v1", "11": "v2"})]
         )  # Edge index 161
         self.graphrecord.add_edges(
             [("pat_2", "pat_4", {" Hello ": "v3"})]
@@ -13015,7 +12386,7 @@ class TestEdgeAttributesTreeOperand(unittest.TestCase):
 
         assert self.graphrecord.query_edges(query2) == {164: "a_attribute"}
 
-        def query3(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
+        def query3(edge: EdgeOperand) -> EdgeMultipleValuesWithIndexOperand:
             query_specific_edge(edge, 164)
             return edge.attributes().count()
 
@@ -13023,65 +12394,65 @@ class TestEdgeAttributesTreeOperand(unittest.TestCase):
 
         def query4(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             query_specific_edge(edge, 160)
-            return edge.attributes().sum()
-
-        assert self.graphrecord.query_edges(query4) == {160: 3}
-
-        def query5(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            query_specific_edge(edge, 160)
             attributes = edge.attributes()
-            attributes.equal_to(1)
+            attributes.equal_to("1")
             return attributes.random()
 
-        assert self.graphrecord.query_edges(query5) == {160: 1}
+        assert self.graphrecord.query_edges(query4) == {160: "1"}
 
-        def query6(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+        def query5(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 160)
-            attributes = edge.attributes()
-            attributes.is_int()
-            return attributes
+            return edge.attributes()
 
-        result = self.graphrecord.query_edges(query6)
+        result = self.graphrecord.query_edges(query5)
         result = {key: sorted(value) for key, value in result.items()}
 
-        assert result == {160: [1, 2]}
+        assert result == {160: ["1", "2"]}
+
+        def query6(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+            query_specific_edge(edge, 163)
+            return edge.attributes()
+
+        assert self.graphrecord.query_edges(query6) == {163: ["string_attribute"]}
 
         def query7(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            query_specific_edge(edge, 163)
+            query_specific_edge(edge, 160)
             attributes = edge.attributes()
-            attributes.is_string()
+            attributes.is_in(["1"])
             return attributes
 
-        assert self.graphrecord.query_edges(query7) == {163: ["string_attribute"]}
+        assert self.graphrecord.query_edges(query7) == {160: ["1"]}
 
         def query8(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 160)
             attributes = edge.attributes()
-            attributes.is_in([1])
+            attributes.is_not_in(["1"])
             return attributes
 
-        assert self.graphrecord.query_edges(query8) == {160: [1]}
+        assert self.graphrecord.query_edges(query8) == {160: ["2"]}
 
         def query9(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            query_specific_edge(edge, 160)
-            attributes = edge.attributes()
-            attributes.is_not_in([1])
-            return attributes
-
-        assert self.graphrecord.query_edges(query9) == {160: [2]}
-
-        def query10(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 164)
             attributes = edge.attributes()
             attributes.starts_with("a_")
             return attributes
 
-        assert self.graphrecord.query_edges(query10) == {164: ["a_attribute"]}
+        assert self.graphrecord.query_edges(query9) == {164: ["a_attribute"]}
+
+        def query10(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+            query_specific_edge(edge, 164)
+            attributes = edge.attributes()
+            attributes.ends_with("attribute")
+            return attributes
+
+        result = self.graphrecord.query_edges(query10)
+        result = {key: sorted(value) for key, value in result.items()}
+        assert result == {164: ["a_attribute", "b_attribute"]}
 
         def query11(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 164)
             attributes = edge.attributes()
-            attributes.ends_with("attribute")
+            attributes.contains("_attribute")
             return attributes
 
         result = self.graphrecord.query_edges(query11)
@@ -13089,226 +12460,161 @@ class TestEdgeAttributesTreeOperand(unittest.TestCase):
         assert result == {164: ["a_attribute", "b_attribute"]}
 
         def query12(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            query_specific_edge(edge, 164)
-            attributes = edge.attributes()
-            attributes.contains("_attribute")
-            return attributes
-
-        result = self.graphrecord.query_edges(query12)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {164: ["a_attribute", "b_attribute"]}
-
-        def query13(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 160)
             attributes = edge.attributes()
             attributes.is_max()
             return attributes
 
-        assert self.graphrecord.query_edges(query13) == {160: [2]}
+        assert self.graphrecord.query_edges(query12) == {160: ["2"]}
 
-        def query14(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+        def query13(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 160)
             attributes = edge.attributes()
             attributes.is_min()
             return attributes
 
-        assert self.graphrecord.query_edges(query14) == {160: [1]}
+        assert self.graphrecord.query_edges(query13) == {160: ["1"]}
+
+        def query14(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+            query_specific_edge(edge, 160)
+            attributes = edge.attributes()
+            attributes.greater_than("1")
+            return attributes
+
+        assert self.graphrecord.query_edges(query14) == {160: ["2"]}
 
         def query15(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 160)
             attributes = edge.attributes()
-            attributes.greater_than(1)
+            attributes.greater_than_or_equal_to("1")
             return attributes
 
-        assert self.graphrecord.query_edges(query15) == {160: [2]}
+        result = self.graphrecord.query_edges(query15)
+        result = {key: sorted(value) for key, value in result.items()}
+        assert result == {160: ["1", "2"]}
 
         def query16(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 160)
             attributes = edge.attributes()
-            attributes.greater_than_or_equal_to(1)
+            attributes.less_than("2")
             return attributes
 
-        result = self.graphrecord.query_edges(query16)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {160: [1, 2]}
+        assert self.graphrecord.query_edges(query16) == {160: ["1"]}
 
         def query17(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 160)
             attributes = edge.attributes()
-            attributes.less_than(2)
+            attributes.less_than_or_equal_to("2")
             return attributes
 
-        assert self.graphrecord.query_edges(query17) == {160: [1]}
+        result = self.graphrecord.query_edges(query17)
+        result = {key: sorted(value) for key, value in result.items()}
+        assert result == {160: ["1", "2"]}
 
         def query18(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 160)
             attributes = edge.attributes()
-            attributes.less_than_or_equal_to(2)
+            attributes.equal_to("1")
             return attributes
 
-        result = self.graphrecord.query_edges(query18)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {160: [1, 2]}
+        assert self.graphrecord.query_edges(query18) == {160: ["1"]}
 
         def query19(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 160)
             attributes = edge.attributes()
-            attributes.equal_to(1)
+            attributes.not_equal_to("1")
             return attributes
 
-        assert self.graphrecord.query_edges(query19) == {160: [1]}
-
-        def query20(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            query_specific_edge(edge, 160)
-            attributes = edge.attributes()
-            attributes.not_equal_to(1)
-            return attributes
-
-        assert self.graphrecord.query_edges(query20) == {160: [2]}
+        assert self.graphrecord.query_edges(query19) == {160: ["2"]}
 
     def test_edge_attributes_tree_operand_operations(self) -> None:
         def query1(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 161)
             attributes = edge.attributes()
-            attributes.add(2)
+            attributes.add("2")
             return attributes
 
         result = self.graphrecord.query_edges(query1)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {161: [12, 13]}
+        assert result == {161: ["102", "112"]}
 
         def query2(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            query_specific_edge(edge, 161)
-            attributes = edge.attributes()
-            attributes.subtract(2)
-            return attributes
-
-        result = self.graphrecord.query_edges(query2)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {161: [8, 9]}
-
-        def query3(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            query_specific_edge(edge, 161)
-            attributes = edge.attributes()
-            attributes.multiply(2)
-            return attributes
-
-        result = self.graphrecord.query_edges(query3)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {161: [20, 22]}
-
-        def query4(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            query_specific_edge(edge, 161)
-            attributes = edge.attributes()
-            attributes.modulo(2)
-            return attributes
-
-        result = self.graphrecord.query_edges(query4)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {161: [0, 1]}
-
-        def query5(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            query_specific_edge(edge, 161)
-            attributes = edge.attributes()
-            attributes.power(2)
-            return attributes
-
-        result = self.graphrecord.query_edges(query5)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {161: [100, 121]}
-
-        def query6(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            query_specific_edge(edge, 161)
-            attributes = edge.attributes()
-            attributes.subtract(12)
-            attributes.absolute()
-            return attributes
-
-        result = self.graphrecord.query_edges(query6)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {161: [1, 2]}
-
-        def query7(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 162)
             attributes = edge.attributes()
             attributes.trim()
             return attributes
 
-        assert self.graphrecord.query_edges(query7) == {162: ["Hello"]}
+        assert self.graphrecord.query_edges(query2) == {162: ["Hello"]}
 
-        def query8(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+        def query3(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 162)
             attributes = edge.attributes()
             attributes.trim_start()
             return attributes
 
-        assert self.graphrecord.query_edges(query8) == {162: ["Hello "]}
+        assert self.graphrecord.query_edges(query3) == {162: ["Hello "]}
 
-        def query9(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+        def query4(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 162)
             attributes = edge.attributes()
             attributes.trim_end()
             return attributes
 
-        assert self.graphrecord.query_edges(query9) == {162: [" Hello"]}
+        assert self.graphrecord.query_edges(query4) == {162: [" Hello"]}
 
-        def query10(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+        def query5(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 162)
             attributes = edge.attributes()
             attributes.slice(0, 3)
             return attributes
 
-        assert self.graphrecord.query_edges(query10) == {162: [" He"]}
+        assert self.graphrecord.query_edges(query5) == {162: [" He"]}
 
-        def query11(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+        def query6(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 162)
             attributes = edge.attributes()
             attributes.lowercase()
             return attributes
 
-        assert self.graphrecord.query_edges(query11) == {162: [" hello "]}
+        assert self.graphrecord.query_edges(query6) == {162: [" hello "]}
 
-        def query12(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+        def query7(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 162)
             attributes = edge.attributes()
             attributes.uppercase()
             return attributes
 
-        assert self.graphrecord.query_edges(query12) == {162: [" HELLO "]}
+        assert self.graphrecord.query_edges(query7) == {162: [" HELLO "]}
 
-        def query13(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+        def query8(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 161)
             attributes = edge.attributes()
             attributes.either_or(
-                lambda attribute: attribute.equal_to(10),
-                lambda attribute: attribute.equal_to(99),
+                lambda attribute: attribute.equal_to("10"),
+                lambda attribute: attribute.equal_to("99"),
             )
             return attributes
 
-        assert self.graphrecord.query_edges(query13) == {161: [10]}
+        assert self.graphrecord.query_edges(query8) == {161: ["10"]}
 
-        def query14(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            edge.index().is_in([161, 162])
-            attributes = edge.attributes()
-            attributes.exclude(
-                lambda attribute: attribute.is_string(),
-            )
-            return attributes
-
-        result = self.graphrecord.query_edges(query14)
-        result = {key: sorted(value) for key, value in result.items()}
-        assert result == {161: [10, 11], 162: []}
-
-        def query15(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+        def query9(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
             query_specific_edge(edge, 161)
             attributes = edge.attributes()
             clone = attributes.clone()
-            attributes.add(10)
+            attributes.add("10")
             return clone
 
-        result = self.graphrecord.query_edges(query15)
+        result = self.graphrecord.query_edges(query9)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {161: [10, 11]}
+        assert result == {161: ["10", "11"]}
+
+        def query10(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
+            query_specific_edge(edge, 161)
+            attributes = edge.attributes()
+            attributes.exclude(lambda attribute: attribute.equal_to("11"))
+            return attributes
+
+        assert self.graphrecord.query_edges(query10) == {161: ["10"]}
 
 
 class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
@@ -13321,8 +12627,8 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
                     "pat_1",
                     "pat_2",
                     {
-                        10: "value1",
-                        11: "value2",
+                        "10": "value1",
+                        "11": "value2",
                     },
                 ),
                 ("pat_1", "pat_2", {" Hello ": "value"}),
@@ -13385,108 +12691,9 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             )
         ]
 
-    def test_subtract(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
-            group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
-            attrs = group.attributes()
-            attrs.subtract(9)
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_edges(query)
-            ),
-            key=lambda x: (x[0] is None, x[0]),
-        )
-        assert result == [("pat_1", {160: [1, 2]})]
-
-    def test_multiply(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
-            group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
-            attrs = group.attributes()
-            attrs.multiply(2)
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_edges(query)
-            ),
-            key=lambda x: (x[0] is None, x[0]),
-        )
-        assert result == [("pat_1", {160: [20, 22]})]
-
-    def test_modulo(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
-            group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
-            attrs = group.attributes()
-            attrs.modulo(10)
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_edges(query)
-            ),
-            key=lambda x: (x[0] is None, x[0]),
-        )
-        assert result == [("pat_1", {160: [0, 1]})]
-
-    def test_power(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
-            group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
-            attrs = group.attributes()
-            attrs.power(2)
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_edges(query)
-            ),
-            key=lambda x: (x[0] is None, x[0]),
-        )
-        assert result == [("pat_1", {160: [100, 121]})]
-
-    def test_absolute(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
-            group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
-            attrs = group.attributes()
-            attrs.subtract(11)
-            attrs.absolute()
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_edges(query)
-            ),
-            key=lambda x: (x[0] is None, x[0]),
-        )
-        assert result == [("pat_1", {160: [0, 1]})]
-
-    def test_sum(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
-            group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
-            attrs = group.attributes()
-            return attrs.sum()
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_edges(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("pat_1", {160: 21})]
-
     def test_random(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
             return attrs.random()
@@ -13496,48 +12703,21 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result in [
-            [("pat_1", {160: 10})],
-            [("pat_1", {160: 11})],
+            [("pat_1", {160: "10"})],
+            [("pat_1", {160: "11"})],
         ]
 
-    def test_is_string(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+    def test_count(self) -> None:
+        def query(edge: EdgeOperand) -> EdgeMultipleValuesWithIndexGroupOperand:
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
-            attrs = group.attributes()
-            attrs.is_string()
-            return attrs
+            return group.attributes().count()
 
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_edges(query)
-            ),
-            key=lambda x: (x[0] is None, x[0]),
-        )
-        # No string attributes, so should be empty lists
-        assert result == [("pat_1", {160: []})]
-
-    def test_is_int(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
-            group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
-            attrs = group.attributes()
-            attrs.is_int()
-            return attrs
-
-        result = sorted(
-            (
-                self.sort_tuples_tree(item)
-                for item in self.graphrecord.query_edges(query)
-            ),
-            key=lambda x: (x[0] is None, x[0]),
-        )
-        assert result == [("pat_1", {160: [10, 11]})]
+        assert self.graphrecord.query_edges(query) == [("pat_1", {160: 2})]
 
     def test_is_max(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
             attrs.is_max()
@@ -13550,11 +12730,11 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [11]})]
+        assert result == [("pat_1", {160: ["11"]})]
 
     def test_is_min(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
             attrs.is_min()
@@ -13567,14 +12747,14 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [10]})]
+        assert result == [("pat_1", {160: ["10"]})]
 
     def test_is_in(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
-            attrs.is_in([10])
+            attrs.is_in(["10"])
             return attrs
 
         result = sorted(
@@ -13584,14 +12764,14 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [10]})]
+        assert result == [("pat_1", {160: ["10"]})]
 
     def test_is_not_in(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
-            attrs.is_not_in([10])
+            attrs.is_not_in(["10"])
             return attrs
 
         result = sorted(
@@ -13601,14 +12781,14 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [11]})]
+        assert result == [("pat_1", {160: ["11"]})]
 
     def test_greater_than(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
-            attrs.greater_than(10)
+            attrs.greater_than("10")
             return attrs
 
         result = sorted(
@@ -13618,14 +12798,14 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [11]})]
+        assert result == [("pat_1", {160: ["11"]})]
 
     def test_greater_than_or_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
-            attrs.greater_than_or_equal_to(11)
+            attrs.greater_than_or_equal_to("11")
             return attrs
 
         result = sorted(
@@ -13635,14 +12815,14 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [11]})]
+        assert result == [("pat_1", {160: ["11"]})]
 
     def test_less_than(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
-            attrs.less_than(11)
+            attrs.less_than("11")
             return attrs
 
         result = sorted(
@@ -13652,14 +12832,14 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [10]})]
+        assert result == [("pat_1", {160: ["10"]})]
 
     def test_less_than_or_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
-            attrs.less_than_or_equal_to(11)
+            attrs.less_than_or_equal_to("11")
             return attrs
 
         result = sorted(
@@ -13669,14 +12849,14 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [10, 11]})]
+        assert result == [("pat_1", {160: ["10", "11"]})]
 
     def test_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
-            attrs.equal_to(10)
+            attrs.equal_to("10")
             return attrs
 
         result = sorted(
@@ -13686,14 +12866,14 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [10]})]
+        assert result == [("pat_1", {160: ["10"]})]
 
     def test_not_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
-            attrs.not_equal_to(10)
+            attrs.not_equal_to("10")
             return attrs
 
         result = sorted(
@@ -13703,7 +12883,7 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [11]})]
+        assert result == [("pat_1", {160: ["11"]})]
 
     def test_trim(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
@@ -13871,12 +13051,12 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
 
     def test_either_or(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
             attrs.either_or(
-                lambda attr: attr.equal_to(10),
-                lambda attr: attr.equal_to(11),
+                lambda attr: attr.equal_to("10"),
+                lambda attr: attr.equal_to("11"),
             )
             return attrs
 
@@ -13887,14 +13067,14 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [10, 11]})]
+        assert result == [("pat_1", {160: ["10", "11"]})]
 
     def test_exclude(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
-            attrs.exclude(lambda attr: attr.equal_to(10))
+            attrs.exclude(lambda attr: attr.equal_to("10"))
             return attrs
 
         result = sorted(
@@ -13904,15 +13084,15 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [11]})]
+        assert result == [("pat_1", {160: ["11"]})]
 
     def test_clone(self) -> None:
         def query(edge: EdgeOperand) -> EdgeAttributesTreeGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             group = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
             attrs = group.attributes()
             clone = attrs.clone()
-            attrs.add(10)
+            attrs.add("10")
             return clone
 
         result = sorted(
@@ -13922,7 +13102,7 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("pat_1", {160: [10, 11]})]
+        assert result == [("pat_1", {160: ["10", "11"]})]
 
 
 class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
@@ -13931,313 +13111,262 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
 
     def test_node_multiple_attributes_operand_comparisons(self) -> None:
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((0, {10: "value1", 11: "value2"}))
-        self.graphrecord.add_nodes((1, {12: "value3", 13: "value4"}))
+        self.graphrecord.add_nodes(("0", {"10": "value1", "11": "value2"}))
+        self.graphrecord.add_nodes(("1", {"12": "value3", "13": "value4"}))
 
         def query1(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             return node.attributes().max().max()
 
-        assert self.graphrecord.query_nodes(query1) == (1, 13)
+        assert self.graphrecord.query_nodes(query1) == ("1", "13")
 
         def query2(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             return node.attributes().min().min()
 
-        assert self.graphrecord.query_nodes(query2) == (0, 10)
+        assert self.graphrecord.query_nodes(query2) == ("0", "10")
 
-        def query3(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.index().is_int()
+        def query3(node: NodeOperand) -> NodeSingleValueWithoutIndexOperand:
+            node.index().is_in(["0", "1"])
             return node.attributes().max().count()
 
         assert self.graphrecord.query_nodes(query3) == 2
 
-        def query4(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.index().is_int()
-            return node.attributes().min().sum()
-
-        assert self.graphrecord.query_nodes(query4) == 22
-
-        def query5(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+        def query4(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
+            node.index().is_in(["0", "1"])
             attributes = node.attributes().max()
-            attributes.equal_to(13)
+            attributes.equal_to("13")
             return attributes.random()
 
-        assert self.graphrecord.query_nodes(query5) == (1, 13)
+        assert self.graphrecord.query_nodes(query4) == ("1", "13")
+
+        def query5(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().is_in(["0", "1"])
+            return node.attributes().max()
+
+        assert self.graphrecord.query_nodes(query5) == {"0": "11", "1": "13"}
 
         def query6(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max()
-            attribute.is_int()
-            return attribute
+            query_node(node)
+            return node.attributes().max()
 
-        assert self.graphrecord.query_nodes(query6) == {0: 11, 1: 13}
+        assert self.graphrecord.query_nodes(query6) == {"pat_1": "gender"}
 
         def query7(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            query_node(node)
-            attribute = node.attributes().max()
-            attribute.is_string()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query7) == {"pat_1": "gender"}
-
-        def query8(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max()
             attribute.is_max()
             return attribute
 
-        assert self.graphrecord.query_nodes(query8) == {1: 13}
+        assert self.graphrecord.query_nodes(query7) == {"1": "13"}
 
-        def query9(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
+        def query8(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().min()
             attribute.is_min()
             return attribute
 
-        assert self.graphrecord.query_nodes(query9) == {0: 10}
+        assert self.graphrecord.query_nodes(query8) == {"0": "10"}
+
+        def query9(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().is_in(["0", "1"])
+            attribute = node.attributes().max()
+            attribute.greater_than("12")
+            return attribute
+
+        assert self.graphrecord.query_nodes(query9) == {"1": "13"}
 
         def query10(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max()
-            attribute.greater_than(12)
+            node.index().is_in(["0", "1"])
+            attribute = node.attributes().min()
+            attribute.greater_than_or_equal_to("10")
             return attribute
 
-        assert self.graphrecord.query_nodes(query10) == {1: 13}
+        assert self.graphrecord.query_nodes(query10) == {"0": "10", "1": "12"}
 
         def query11(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().min()
-            attribute.greater_than_or_equal_to(10)
+            node.index().is_in(["0", "1"])
+            attribute = node.attributes().max()
+            attribute.less_than("12")
             return attribute
 
-        assert self.graphrecord.query_nodes(query11) == {0: 10, 1: 12}
+        assert self.graphrecord.query_nodes(query11) == {"0": "11"}
 
         def query12(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max()
-            attribute.less_than(12)
+            node.index().is_in(["0", "1"])
+            attribute = node.attributes().min()
+            attribute.less_than_or_equal_to("12")
             return attribute
 
-        assert self.graphrecord.query_nodes(query12) == {0: 11}
+        assert self.graphrecord.query_nodes(query12) == {"0": "10", "1": "12"}
 
         def query13(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().min()
-            attribute.less_than_or_equal_to(12)
+            node.index().is_in(["0", "1"])
+            attribute = node.attributes().max()
+            attribute.equal_to("11")
             return attribute
 
-        assert self.graphrecord.query_nodes(query13) == {0: 10, 1: 12}
+        assert self.graphrecord.query_nodes(query13) == {"0": "11"}
 
         def query14(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max()
-            attribute.equal_to(11)
+            attribute.not_equal_to("11")
             return attribute
 
-        assert self.graphrecord.query_nodes(query14) == {0: 11}
+        assert self.graphrecord.query_nodes(query14) == {"1": "13"}
 
         def query15(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max()
-            attribute.not_equal_to(11)
+            attribute.is_in(["11"])
             return attribute
 
-        assert self.graphrecord.query_nodes(query15) == {1: 13}
+        assert self.graphrecord.query_nodes(query15) == {"0": "11"}
 
         def query16(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max()
-            attribute.is_in([11])
+            attribute.is_not_in(["11"])
             return attribute
 
-        assert self.graphrecord.query_nodes(query16) == {0: 11}
+        assert self.graphrecord.query_nodes(query16) == {"1": "13"}
 
         def query17(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max()
-            attribute.is_not_in([11])
+            query_node(node)
+            attribute = node.attributes().min()
+            attribute.starts_with("a")
             return attribute
 
-        assert self.graphrecord.query_nodes(query17) == {1: 13}
+        assert self.graphrecord.query_nodes(query17) == {"pat_1": "age"}
 
         def query18(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             query_node(node)
             attribute = node.attributes().min()
-            attribute.starts_with("a")
+            attribute.ends_with("e")
             return attribute
 
         assert self.graphrecord.query_nodes(query18) == {"pat_1": "age"}
 
         def query19(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             query_node(node)
-            attribute = node.attributes().min()
-            attribute.ends_with("e")
-            return attribute
-
-        assert self.graphrecord.query_nodes(query19) == {"pat_1": "age"}
-
-        def query20(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            query_node(node)
             attribute = node.attributes().max()
             attribute.contains("ge")
             return attribute
 
-        assert self.graphrecord.query_nodes(query20) == {"pat_1": "gender"}
+        assert self.graphrecord.query_nodes(query19) == {"pat_1": "gender"}
 
     def test_node_multiple_attributes_operand_operations(self) -> None:
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((0, {10: "value1", 11: "value2"}))
-        self.graphrecord.add_nodes((1, {12: "value3", 13: "value4"}))
+        self.graphrecord.add_nodes(("0", {"10": "value1", "11": "value2"}))
+        self.graphrecord.add_nodes(("1", {"12": "value3", "13": "value4"}))
 
         def query1(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max()
-            attribute.add(2)
+            attribute.add("2")
             return attribute
 
-        assert self.graphrecord.query_nodes(query1) == {0: 13, 1: 15}
+        assert self.graphrecord.query_nodes(query1) == {"0": "112", "1": "132"}
 
         def query2(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max()
-            attribute.subtract(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query2) == {1: 11, 0: 9}
-
-        def query3(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max()
-            attribute.multiply(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query3) == {0: 22, 1: 26}
-
-        def query4(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max()
-            attribute.modulo(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query4) == {0: 1, 1: 1}
-
-        def query5(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max()
-            attribute.power(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query5) == {0: 121, 1: 169}
-
-        def query6(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max()
-            attribute.subtract(12)
-            attribute.absolute()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query6) == {0: 1, 1: 1}
-
-        def query7(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max()
             attribute.either_or(
-                lambda attribute: attribute.equal_to(13),
-                lambda attribute: attribute.equal_to(12),
+                lambda attribute: attribute.equal_to("13"),
+                lambda attribute: attribute.equal_to("12"),
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query7) == {1: 13}
+        assert self.graphrecord.query_nodes(query2) == {"1": "13"}
 
-        def query8(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_int()
+        def query3(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max()
             attribute.exclude(
-                lambda attribute: attribute.contains(13),
+                lambda attribute: attribute.contains("13"),
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query8) == {0: 11}
+        assert self.graphrecord.query_nodes(query3) == {"0": "11"}
 
-        self.graphrecord.add_nodes((2, {" Hello ": "value1"}))
+        self.graphrecord.add_nodes(("2", {" Hello ": "value1"}))
 
-        def query9(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().equal_to(2)
+        def query4(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().equal_to("2")
             attribute = node.attributes().max()
             attribute.trim()
             return attribute
 
-        assert self.graphrecord.query_nodes(query9) == {2: "Hello"}
+        assert self.graphrecord.query_nodes(query4) == {"2": "Hello"}
 
-        def query10(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().equal_to(2)
+        def query5(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().equal_to("2")
             attribute = node.attributes().max()
             attribute.trim_start()
             return attribute
 
-        assert self.graphrecord.query_nodes(query10) == {2: "Hello "}
+        assert self.graphrecord.query_nodes(query5) == {"2": "Hello "}
 
-        def query11(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().equal_to(2)
+        def query6(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().equal_to("2")
             attribute = node.attributes().max()
             attribute.trim_end()
             return attribute
 
-        assert self.graphrecord.query_nodes(query11) == {2: " Hello"}
+        assert self.graphrecord.query_nodes(query6) == {"2": " Hello"}
 
-        def query12(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().equal_to(2)
+        def query7(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().equal_to("2")
             attribute = node.attributes().max()
             attribute.slice(0, 3)
             return attribute
 
-        assert self.graphrecord.query_nodes(query12) == {2: " He"}
+        assert self.graphrecord.query_nodes(query7) == {"2": " He"}
 
-        def query13(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().equal_to(2)
+        def query8(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().equal_to("2")
             attribute = node.attributes().max()
             attribute.lowercase()
             return attribute
 
-        assert self.graphrecord.query_nodes(query13) == {2: " hello "}
+        assert self.graphrecord.query_nodes(query8) == {"2": " hello "}
 
-        def query14(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().equal_to(2)
+        def query9(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().equal_to("2")
             attribute = node.attributes().max()
             attribute.uppercase()
             return attribute
 
-        assert self.graphrecord.query_nodes(query14) == {2: " HELLO "}
+        assert self.graphrecord.query_nodes(query9) == {"2": " HELLO "}
 
-        def query15(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
-            node.index().is_int()
+        def query10(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
+            node.index().is_in(["0", "1", "2"])
             attribute = node.attributes().max()
             return attribute.to_values()
 
-        assert self.graphrecord.query_nodes(query15) == {
-            0: "value2",
-            1: "value4",
-            2: "value1",
+        assert self.graphrecord.query_nodes(query10) == {
+            "0": "value2",
+            "1": "value4",
+            "2": "value1",
         }
 
-        def query16(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.index().is_in([0, 1])
+        def query11(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max()
             clone = attribute.clone()
-            attribute.add(10)
+            attribute.add("10")
             return clone
 
-        assert self.graphrecord.query_nodes(query16) == {0: 11, 1: 13}
+        assert self.graphrecord.query_nodes(query11) == {"0": "11", "1": "13"}
 
 
 class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes(("pat_6", {10: "value1", 11: "value2"}))
-        self.graphrecord.add_nodes(("pat_7", {10: "value1", 12: "value4"}))
+        self.graphrecord.add_nodes(("pat_6", {"10": "value1", "11": "value2"}))
+        self.graphrecord.add_nodes(("pat_7", {"10": "value1", "12": "value4"}))
         self.graphrecord.add_nodes(("pat_8", {" Hello ": "value"}))
 
     def sort_tuples(
@@ -14252,33 +13381,33 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
 
     def test_max(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             return attrs.max()
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_min(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             return attrs.min()
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_6", 11))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_6", "11"))]
 
     def test_count(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeSingleValueWithoutIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
@@ -14286,161 +13415,45 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
 
         assert self.graphrecord.query_nodes(query) == [("value1", 2)]
 
-    def test_sum(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .min()
-            )
-            return attrs.sum()
-
-        assert self.graphrecord.query_nodes(query) == [("value1", 20)]
-
     def test_random(self) -> None:
-        def query5(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.equal_to(12)
+            attrs.equal_to("12")
             return attrs.random()
 
-        assert self.graphrecord.query_nodes(query5) == [("value1", ("pat_7", 12))]
-
-    def test_is_string(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-            )
-            attrs.is_string()
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [("value", {"pat_8": " Hello "})]
-
-    def test_is_int(self) -> None:
-        def query6(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.is_int()
-            return attrs
-
-        assert self.graphrecord.query_nodes(query6) == [
-            ("value1", {"pat_6": 11, "pat_7": 12})
-        ]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_is_max(self) -> None:
-        def query7(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             attrs.is_max()
             return attrs
 
-        assert self.graphrecord.query_nodes(query7) == [("value1", {"pat_7": 12})]
+        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_7": "12"})]
 
     def test_add(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.add(2)
+            attrs.add("2")
             return attrs
 
         assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 13, "pat_7": 14})
-        ]
-
-    def test_subtract(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.subtract(2)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 9, "pat_7": 10})
-        ]
-
-    def test_multiply(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.multiply(2)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 22, "pat_7": 24})
-        ]
-
-    def test_modulo(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.modulo(2)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 1, "pat_7": 0})
-        ]
-
-    def test_power(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.power(2)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 121, "pat_7": 144})
-        ]
-
-    def test_absolute(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.subtract(12)
-            attrs.absolute()
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 1, "pat_7": 0})
+            ("value1", {"pat_6": "112", "pat_7": "122"})
         ]
 
     def test_trim(self) -> None:
@@ -14523,9 +13536,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
 
     def test_is_min(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .min()
             )
@@ -14537,166 +13550,166 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
 
-        assert result == [("value1", {"pat_6": 10, "pat_7": 10})]
+        assert result == [("value1", {"pat_6": "10", "pat_7": "10"})]
 
     def test_greater_than(self) -> None:
-        def query9(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.greater_than(11)
+            attrs.greater_than("11")
             return attrs
 
-        assert self.graphrecord.query_nodes(query9) == [("value1", {"pat_7": 12})]
+        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_7": "12"})]
 
     def test_greater_than_or_equal_to(self) -> None:
-        def query10(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .min()
             )
-            attrs.greater_than_or_equal_to(10)
+            attrs.greater_than_or_equal_to("10")
             return attrs
 
-        assert self.graphrecord.query_nodes(query10) == [
-            ("value1", {"pat_6": 10, "pat_7": 10})
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", {"pat_6": "10", "pat_7": "10"})
         ]
 
     def test_less_than(self) -> None:
-        def query11(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.less_than(12)
+            attrs.less_than("12")
             return attrs
 
-        assert self.graphrecord.query_nodes(query11) == [("value1", {"pat_6": 11})]
+        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_6": "11"})]
 
     def test_less_than_or_equal_to(self) -> None:
-        def query12(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .min()
             )
-            attrs.less_than_or_equal_to(11)
+            attrs.less_than_or_equal_to("11")
             return attrs
 
-        assert self.graphrecord.query_nodes(query12) == [
-            ("value1", {"pat_6": 10, "pat_7": 10})
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", {"pat_6": "10", "pat_7": "10"})
         ]
 
     def test_equal_to(self) -> None:
-        def query13(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.equal_to(11)
+            attrs.equal_to("11")
             return attrs
 
-        assert self.graphrecord.query_nodes(query13) == [("value1", {"pat_6": 11})]
+        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_6": "11"})]
 
     def test_not_equal_to(self) -> None:
-        def query14(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.not_equal_to(11)
+            attrs.not_equal_to("11")
             return attrs
 
-        assert self.graphrecord.query_nodes(query14) == [("value1", {"pat_7": 12})]
+        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_7": "12"})]
 
     def test_is_in(self) -> None:
-        def query15(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.is_in([11])
+            attrs.is_in(["11"])
             return attrs
 
-        assert self.graphrecord.query_nodes(query15) == [("value1", {"pat_6": 11})]
+        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_6": "11"})]
 
     def test_is_not_in(self) -> None:
-        def query16(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.is_not_in([11])
+            attrs.is_not_in(["11"])
             return attrs
 
-        assert self.graphrecord.query_nodes(query16) == [("value1", {"pat_7": 12})]
+        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_7": "12"})]
 
     def test_starts_with(self) -> None:
-        def query17(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .min()
             )
-            attrs.starts_with(1)
+            attrs.starts_with("1")
             return attrs
 
-        assert self.graphrecord.query_nodes(query17) == [
-            ("value1", {"pat_6": 10, "pat_7": 10})
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", {"pat_6": "10", "pat_7": "10"})
         ]
 
     def test_ends_with(self) -> None:
-        def query18(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .min()
             )
-            attrs.ends_with(0)
+            attrs.ends_with("0")
             return attrs
 
-        assert self.graphrecord.query_nodes(query18) == [
-            ("value1", {"pat_6": 10, "pat_7": 10})
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", {"pat_6": "10", "pat_7": "10"})
         ]
 
     def test_contains(self) -> None:
-        def query19(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.contains(1)
+            attrs.contains("1")
             return attrs
 
-        assert self.graphrecord.query_nodes(query19) == [
-            ("value1", {"pat_6": 11, "pat_7": 12})
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", {"pat_6": "11", "pat_7": "12"})
         ]
 
     def test_to_values(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleValuesWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
@@ -14708,599 +13721,62 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
 
     def test_ungroup(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             return attrs.ungroup()
 
-        assert self.graphrecord.query_nodes(query) == {"pat_6": 11, "pat_7": 12}
+        assert self.graphrecord.query_nodes(query) == {"pat_6": "11", "pat_7": "12"}
 
     def test_either_or(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             attrs.either_or(
-                lambda attr: attr.equal_to(11),
-                lambda attr: attr.equal_to(12),
+                lambda attr: attr.equal_to("11"),
+                lambda attr: attr.equal_to("12"),
             )
             return attrs
 
         assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 11, "pat_7": 12})
+            ("value1", {"pat_6": "11", "pat_7": "12"})
         ]
 
     def test_exclude(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.exclude(lambda attr: attr.equal_to(11))
+            attrs.exclude(lambda attr: attr.equal_to("11"))
             return attrs
 
-        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_7": 12})]
+        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_7": "12"})]
 
     def test_clone(self) -> None:
-        def query20(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
-            node.has_attribute(10)
+        def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
+            node.has_attribute("10")
             attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             clone = attrs.clone()
-            attrs.add(10)
+            attrs.add("10")
             return clone
 
-        assert self.graphrecord.query_nodes(query20) == [
-            ("value1", {"pat_6": 11, "pat_7": 12})
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", {"pat_6": "11", "pat_7": "12"})
         ]
-
-
-class TestNodeMultipleAttributesWithoutIndexOperand(unittest.TestCase):
-    def setUp(self) -> None:
-        self.graphrecord = simple_example_dataset()
-        self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes(("pat_6", {" Hello ": "value1"}))
-        self.graphrecord.add_nodes(("pat_7", {10: "value1", 11: "value2"}))
-        self.graphrecord.add_nodes(("pat_8", {10: "value1", 12: "value4"}))
-
-    def test_max(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            return attrs.max()
-
-        assert self.graphrecord.query_nodes(query) == 3
-
-    def test_min(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            return attrs.min()
-
-        assert self.graphrecord.query_nodes(query) == 2
-
-    def test_count(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            return attrs.count()
-
-        assert self.graphrecord.query_nodes(query) == 2
-
-    def test_sum(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            return attrs.sum()
-
-        assert self.graphrecord.query_nodes(query) == 2
-
-    def test_random(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            return attrs.random()
-
-        assert self.graphrecord.query_nodes(query) in [2, 3]
-
-    def test_is_string(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.is_string()
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [
-            "gendergender",
-            "gendergendergender",
-        ]
-
-    def test_is_int(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.is_int()
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [2, 3]
-
-    def test_is_max(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.is_max()
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [3]
-
-    def test_is_min(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.is_min()
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [2]
-
-    def test_greater_than(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.greater_than(2)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [3]
-
-    def test_greater_than_or_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.greater_than_or_equal_to(2)
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [2, 3]
-
-    def test_less_than(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.less_than(3)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [2]
-
-    def test_less_than_or_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.less_than_or_equal_to(3)
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [2, 3]
-
-    def test_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.equal_to(2)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [2]
-
-    def test_not_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.not_equal_to(2)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [3]
-
-    def test_is_in(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.is_in([2, 3])
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [2, 3]
-
-    def test_is_not_in(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.is_not_in([3])
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [2]
-
-    def test_starts_with(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.starts_with(2)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [2]
-
-    def test_ends_with(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.ends_with(3)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [3]
-
-    def test_contains(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.contains(3)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [3]
-
-    def test_add(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.add(2)
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [4, 5]
-
-    def test_subtract(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.subtract(2)
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [0, 1]
-
-    def test_multiply(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.multiply(2)
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [4, 6]
-
-    def test_modulo(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.modulo(2)
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [0, 1]
-
-    def test_power(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.power(2)
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [4, 9]
-
-    def test_absolute(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.subtract(3)
-            attrs.absolute()
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [0, 1]
-
-    def test_trim(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.trim()
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == ["Hello"]
-
-    def test_trim_start(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.trim_start()
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == ["Hello "]
-
-    def test_trim_end(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.trim_end()
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [" Hello"]
-
-    def test_slice(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.slice(0, 3)
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [" He"]
-
-    def test_lowercase(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.lowercase()
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [" hello "]
-
-    def test_uppercase(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.uppercase()
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [" HELLO "]
-
-    def test_either_or(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.either_or(
-                lambda attr: attr.equal_to(2),
-                lambda attr: attr.equal_to(3),
-            )
-            return attrs
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [2, 3]
-
-    def test_exclude(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            attrs.exclude(lambda attr: attr.equal_to(2))
-            return attrs
-
-        assert self.graphrecord.query_nodes(query) == [3]
-
-    def test_clone(self) -> None:
-        def query(node: NodeOperand) -> NodeMultipleAttributesWithoutIndexOperand:
-            node.has_attribute("gender")
-            attrs = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
-                .attributes()
-                .max()
-                .count()
-                .ungroup()
-            )
-            clone = attrs.clone()
-            attrs.add(2)
-            return clone
-
-        assert sorted(self.graphrecord.query_nodes(query)) == [2, 3]
 
 
 class TestEdgeMultipleAttributesWithIndexOperand(unittest.TestCase):
@@ -15308,8 +13784,12 @@ class TestEdgeMultipleAttributesWithIndexOperand(unittest.TestCase):
         self.graphrecord = simple_example_dataset()
         self.graphrecord.unfreeze_schema()
 
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 11: "value2"})])
-        self.graphrecord.add_edges([("pat_3", "pat_4", {12: "value3", 13: "value4"})])
+        self.graphrecord.add_edges(
+            [("pat_1", "pat_2", {"10": "value1", "11": "value2"})]
+        )
+        self.graphrecord.add_edges(
+            [("pat_3", "pat_4", {"12": "value3", "13": "value4"})]
+        )
         self.graphrecord.add_edges([("pat_5", "pat_1", {" Hello ": "value5"})])
 
     def test_edge_multiple_attributes_operand_comparisons(self) -> None:
@@ -15317,292 +13797,241 @@ class TestEdgeMultipleAttributesWithIndexOperand(unittest.TestCase):
             edge.index().is_in([160, 161])
             return edge.attributes().max().max()
 
-        assert self.graphrecord.query_edges(query1) == (161, 13)
+        assert self.graphrecord.query_edges(query1) == (161, "13")
 
         def query2(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             return edge.attributes().min().min()
 
-        assert self.graphrecord.query_edges(query2) == (160, 10)
+        assert self.graphrecord.query_edges(query2) == (160, "10")
 
-        def query3(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
+        def query3(edge: EdgeOperand) -> EdgeSingleValueWithoutIndexOperand:
             edge.index().is_in([160, 161])
             return edge.attributes().max().count()
 
         assert self.graphrecord.query_edges(query3) == 2
 
-        def query4(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.index().is_in([160, 161])
-            return edge.attributes().min().sum()
-
-        assert self.graphrecord.query_edges(query4) == 22
-
-        def query5(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
+        def query4(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attributes = edge.attributes().max()
-            attributes.equal_to(13)
+            attributes.equal_to("13")
             return attributes.random()
 
-        assert self.graphrecord.query_edges(query5) == (161, 13)
+        assert self.graphrecord.query_edges(query4) == (161, "13")
+
+        def query5(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
+            edge.index().is_in([160, 161])
+            return edge.attributes().max()
+
+        assert self.graphrecord.query_edges(query5) == {160: "11", 161: "13"}
 
         def query6(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max()
-            attribute.is_int()
-            return attribute
+            query_specific_edge(edge, 0)
+            return edge.attributes().max()
 
-        assert self.graphrecord.query_edges(query6) == {160: 11, 161: 13}
+        assert self.graphrecord.query_edges(query6) == {0: "time"}
 
         def query7(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            query_specific_edge(edge, 0)
-            attribute = edge.attributes().max()
-            attribute.is_string()
-            return attribute
-
-        assert self.graphrecord.query_edges(query7) == {0: "time"}
-
-        def query8(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max()
             attribute.is_max()
             return attribute
 
-        assert self.graphrecord.query_edges(query8) == {161: 13}
+        assert self.graphrecord.query_edges(query7) == {161: "13"}
 
-        def query9(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
+        def query8(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().min()
             attribute.is_min()
             return attribute
 
-        assert self.graphrecord.query_edges(query9) == {160: 10}
+        assert self.graphrecord.query_edges(query8) == {160: "10"}
+
+        def query9(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
+            edge.index().is_in([160, 161])
+            attribute = edge.attributes().max()
+            attribute.greater_than("12")
+            return attribute
+
+        assert self.graphrecord.query_edges(query9) == {161: "13"}
 
         def query10(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
-            attribute = edge.attributes().max()
-            attribute.greater_than(12)
+            attribute = edge.attributes().min()
+            attribute.greater_than_or_equal_to("10")
             return attribute
 
-        assert self.graphrecord.query_edges(query10) == {161: 13}
+        assert self.graphrecord.query_edges(query10) == {160: "10", 161: "12"}
 
         def query11(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
-            attribute = edge.attributes().min()
-            attribute.greater_than_or_equal_to(10)
+            attribute = edge.attributes().max()
+            attribute.less_than("12")
             return attribute
 
-        assert self.graphrecord.query_edges(query11) == {160: 10, 161: 12}
+        assert self.graphrecord.query_edges(query11) == {160: "11"}
 
         def query12(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
-            attribute = edge.attributes().max()
-            attribute.less_than(12)
+            attribute = edge.attributes().min()
+            attribute.less_than_or_equal_to("12")
             return attribute
 
-        assert self.graphrecord.query_edges(query12) == {160: 11}
+        assert self.graphrecord.query_edges(query12) == {160: "10", 161: "12"}
 
         def query13(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
-            attribute = edge.attributes().min()
-            attribute.less_than_or_equal_to(12)
+            attribute = edge.attributes().max()
+            attribute.equal_to("11")
             return attribute
 
-        assert self.graphrecord.query_edges(query13) == {160: 10, 161: 12}
+        assert self.graphrecord.query_edges(query13) == {160: "11"}
 
         def query14(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max()
-            attribute.equal_to(11)
+            attribute.not_equal_to("11")
             return attribute
 
-        assert self.graphrecord.query_edges(query14) == {160: 11}
+        assert self.graphrecord.query_edges(query14) == {161: "13"}
 
         def query15(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max()
-            attribute.not_equal_to(11)
+            attribute.is_in(["11", "12"])
             return attribute
 
-        assert self.graphrecord.query_edges(query15) == {161: 13}
+        assert self.graphrecord.query_edges(query15) == {160: "11"}
 
         def query16(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max()
-            attribute.is_in([11, 12])
+            attribute.is_not_in(["11", "12"])
             return attribute
 
-        assert self.graphrecord.query_edges(query16) == {160: 11}
+        assert self.graphrecord.query_edges(query16) == {161: "13"}
 
         def query17(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max()
-            attribute.is_not_in([11, 12])
+            query_specific_edge(edge, 0)
+            attribute = edge.attributes().min()
+            attribute.starts_with("dur")
             return attribute
 
-        assert self.graphrecord.query_edges(query17) == {161: 13}
+        assert self.graphrecord.query_edges(query17) == {0: "duration_days"}
 
         def query18(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             query_specific_edge(edge, 0)
             attribute = edge.attributes().min()
-            attribute.starts_with("dur")
+            attribute.ends_with("ys")
             return attribute
 
         assert self.graphrecord.query_edges(query18) == {0: "duration_days"}
 
         def query19(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             query_specific_edge(edge, 0)
-            attribute = edge.attributes().min()
-            attribute.ends_with("ys")
-            return attribute
-
-        assert self.graphrecord.query_edges(query19) == {0: "duration_days"}
-
-        def query20(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            query_specific_edge(edge, 0)
             attribute = edge.attributes().max()
             attribute.contains("im")
             return attribute
 
-        assert self.graphrecord.query_edges(query20) == {0: "time"}
+        assert self.graphrecord.query_edges(query19) == {0: "time"}
 
     def test_edge_multiple_attributes_operand_operations(self) -> None:
         def query1(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max()
-            attribute.add(2)
+            attribute.add("2")
             return attribute
 
-        assert self.graphrecord.query_edges(query1) == {160: 13, 161: 15}
+        assert self.graphrecord.query_edges(query1) == {160: "112", 161: "132"}
 
         def query2(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max()
-            attribute.subtract(2)
+            attribute.either_or(
+                lambda attr: attr.equal_to("13"),
+                lambda attr: attr.equal_to("10"),
+            )
             return attribute
 
-        assert self.graphrecord.query_edges(query2) == {160: 9, 161: 11}
+        assert self.graphrecord.query_edges(query2) == {161: "13"}
 
         def query3(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max()
-            attribute.multiply(2)
+            attribute.exclude(
+                lambda attr: attr.equal_to("13"),
+            )
             return attribute
 
-        assert self.graphrecord.query_edges(query3) == {160: 22, 161: 26}
+        assert self.graphrecord.query_edges(query3) == {160: "11"}
 
         def query4(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max()
-            attribute.modulo(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query4) == {160: 1, 161: 1}
-
-        def query5(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max()
-            attribute.power(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query5) == {160: 121, 161: 169}
-
-        def query6(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max()
-            attribute.subtract(12)
-            attribute.absolute()
-            return attribute
-
-        assert self.graphrecord.query_edges(query6) == {160: 1, 161: 1}
-
-        def query7(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max()
-            attribute.either_or(
-                lambda attr: attr.equal_to(13),
-                lambda attr: attr.equal_to(10),
-            )
-            return attribute
-
-        assert self.graphrecord.query_edges(query7) == {161: 13}
-
-        def query8(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max()
-            attribute.exclude(
-                lambda attr: attr.equal_to(13),
-            )
-            return attribute
-
-        assert self.graphrecord.query_edges(query8) == {160: 11}
-
-        def query9(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             query_specific_edge(edge, 162)
             attribute = edge.attributes().max()
             attribute.trim()
             return attribute
 
-        assert self.graphrecord.query_edges(query9) == {162: "Hello"}
+        assert self.graphrecord.query_edges(query4) == {162: "Hello"}
 
-        def query10(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
+        def query5(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             query_specific_edge(edge, 162)
             attribute = edge.attributes().max()
             attribute.trim_start()
             return attribute
 
-        assert self.graphrecord.query_edges(query10) == {162: "Hello "}
+        assert self.graphrecord.query_edges(query5) == {162: "Hello "}
 
-        def query11(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
+        def query6(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             query_specific_edge(edge, 162)
             attribute = edge.attributes().max()
             attribute.trim_end()
             return attribute
 
-        assert self.graphrecord.query_edges(query11) == {162: " Hello"}
+        assert self.graphrecord.query_edges(query6) == {162: " Hello"}
 
-        def query12(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
+        def query7(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             query_specific_edge(edge, 162)
             attribute = edge.attributes().max()
             attribute.slice(0, 3)
             return attribute
 
-        assert self.graphrecord.query_edges(query12) == {162: " He"}
+        assert self.graphrecord.query_edges(query7) == {162: " He"}
 
-        def query13(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
+        def query8(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             query_specific_edge(edge, 162)
             attribute = edge.attributes().max()
             attribute.lowercase()
             return attribute
 
-        assert self.graphrecord.query_edges(query13) == {162: " hello "}
+        assert self.graphrecord.query_edges(query8) == {162: " hello "}
 
-        def query14(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
+        def query9(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             query_specific_edge(edge, 162)
             attribute = edge.attributes().max()
             attribute.uppercase()
             return attribute
 
-        assert self.graphrecord.query_edges(query14) == {162: " HELLO "}
+        assert self.graphrecord.query_edges(query9) == {162: " HELLO "}
 
-        def query15(edge: EdgeOperand) -> EdgeMultipleValuesWithIndexOperand:
+        def query10(edge: EdgeOperand) -> EdgeMultipleValuesWithIndexOperand:
             edge.index().is_in([160, 161, 162])
             attribute = edge.attributes().max()
             return attribute.to_values()
 
-        assert self.graphrecord.query_edges(query15) == {
+        assert self.graphrecord.query_edges(query10) == {
             160: "value2",
             161: "value4",
             162: "value5",
         }
 
-        def query16(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
+        def query11(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max()
             clone = attribute.clone()
-            attribute.add(10)
+            attribute.add("10")
             return clone
 
-        assert self.graphrecord.query_edges(query16) == {160: 11, 161: 13}
+        assert self.graphrecord.query_edges(query11) == {160: "11", 161: "13"}
 
 
 class TestEdgeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
@@ -15610,8 +14039,12 @@ class TestEdgeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
         self.graphrecord = simple_example_dataset()
         self.graphrecord.unfreeze_schema()
 
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 11: "value2"})])
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 12: "value4"})])
+        self.graphrecord.add_edges(
+            [("pat_1", "pat_2", {"10": "value1", "11": "value2"})]
+        )
+        self.graphrecord.add_edges(
+            [("pat_1", "pat_2", {"10": "value1", "12": "value4"})]
+        )
         self.graphrecord.add_edges([("pat_1", "pat_2", {" Hello ": "value5"})])
 
     def sort_tuples(
@@ -15636,136 +14069,50 @@ class TestEdgeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
 
     def test_max(self) -> None:
         def query(node: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attrs = (
-                node.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             return attrs.max()
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_min(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             return attrs.min()
 
-        assert self.graphrecord.query_edges(query) == [("value1", (160, 11))]
+        assert self.graphrecord.query_edges(query) == [("value1", (160, "11"))]
 
     def test_add(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.add(2)
+            attrs.add("2")
             return attrs
 
         result = sorted(
             (self.sort_tuples(item) for item in self.graphrecord.query_edges(query)),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {160: 13, 161: 14})]
-
-    def test_subtract(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.subtract(2)
-            return attrs
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_edges(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {160: 9, 161: 10})]
-
-    def test_multiply(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.multiply(2)
-            return attrs
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_edges(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {160: 22, 161: 24})]
-
-    def test_modulo(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.modulo(2)
-            return attrs
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_edges(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {160: 1, 161: 0})]
-
-    def test_power(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.power(2)
-            return attrs
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_edges(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {160: 121, 161: 144})]
-
-    def test_absolute(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.subtract(12)
-            attrs.absolute()
-            return attrs
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_edges(query)),
-            key=operator.itemgetter(0),
-        )
-        assert result == [("value1", {160: 1, 161: 0})]
+        assert result == [("value1", {160: "112", 161: "122"})]
 
     def test_count(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
+        def query(edge: EdgeOperand) -> EdgeSingleValueWithoutIndexGroupOperand:
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
@@ -15773,123 +14120,84 @@ class TestEdgeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
 
         assert self.graphrecord.query_edges(query) == [("value1", 2)]
 
-    def test_sum(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .min()
-            )
-            return attrs.sum()
-
-        assert self.graphrecord.query_edges(query) == [("value1", 20)]
-
     def test_random(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.equal_to(11)
+            attrs.equal_to("11")
             return attrs.random()
 
-        assert self.graphrecord.query_edges(query) == [("value1", (160, 11))]
-
-    def test_is_string(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-            )
-            attrs.is_string()
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [("value5", {162: " Hello "})]
-
-    def test_is_int(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-            )
-            attrs.is_int()
-            return attrs
-
-        result = sorted(
-            (self.sort_tuples(item) for item in self.graphrecord.query_edges(query)),
-            key=operator.itemgetter(0),
-        )
-
-        assert result == [("value1", {160: 11, 161: 12})]
+        assert self.graphrecord.query_edges(query) == [("value1", (160, "11"))]
 
     def test_is_max(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             attrs.is_max()
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {161: 12})]
+        assert self.graphrecord.query_edges(query) == [("value1", {161: "12"})]
 
     def test_is_min(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .min()
             )
             attrs.is_min()
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {160: 10, 161: 10})]
+        assert self.graphrecord.query_edges(query) == [
+            ("value1", {160: "10", 161: "10"})
+        ]
 
     def test_greater_than(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.greater_than(11)
+            attrs.greater_than("11")
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {161: 12})]
+        assert self.graphrecord.query_edges(query) == [("value1", {161: "12"})]
 
     def test_greater_than_or_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .min()
             )
-            attrs.greater_than_or_equal_to(10)
+            attrs.greater_than_or_equal_to("10")
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {160: 10, 161: 10})]
+        assert self.graphrecord.query_edges(query) == [
+            ("value1", {160: "10", 161: "10"})
+        ]
 
     def test_less_than(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.less_than(13)
+            attrs.less_than("13")
             return attrs
 
         result = sorted(
@@ -15897,17 +14205,17 @@ class TestEdgeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
 
-        assert result == [("value1", {160: 11, 161: 12})]
+        assert result == [("value1", {160: "11", 161: "12"})]
 
     def test_less_than_or_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .min()
             )
-            attrs.less_than_or_equal_to(11)
+            attrs.less_than_or_equal_to("11")
             return attrs
 
         result = sorted(
@@ -15915,46 +14223,46 @@ class TestEdgeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
 
-        assert result == [("value1", {160: 10, 161: 10})]
+        assert result == [("value1", {160: "10", 161: "10"})]
 
     def test_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.equal_to(11)
+            attrs.equal_to("11")
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {160: 11})]
+        assert self.graphrecord.query_edges(query) == [("value1", {160: "11"})]
 
     def test_not_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.not_equal_to(11)
+            attrs.not_equal_to("11")
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {161: 12})]
+        assert self.graphrecord.query_edges(query) == [("value1", {161: "12"})]
 
     def test_is_in(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.is_in([11])
+            attrs.is_in(["11"])
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {160: 11})]
+        assert self.graphrecord.query_edges(query) == [("value1", {160: "11"})]
 
     def test_string_operations(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
@@ -16031,61 +14339,67 @@ class TestEdgeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
 
     def test_is_not_in(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.is_not_in([11])
+            attrs.is_not_in(["11"])
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {161: 12})]
+        assert self.graphrecord.query_edges(query) == [("value1", {161: "12"})]
 
     def test_starts_with(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .min()
             )
-            attrs.starts_with(1)
+            attrs.starts_with("1")
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {160: 10, 161: 10})]
+        assert self.graphrecord.query_edges(query) == [
+            ("value1", {160: "10", 161: "10"})
+        ]
 
     def test_ends_with(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .min()
             )
-            attrs.ends_with(0)
+            attrs.ends_with("0")
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {160: 10, 161: 10})]
+        assert self.graphrecord.query_edges(query) == [
+            ("value1", {160: "10", 161: "10"})
+        ]
 
     def test_contains(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.contains(1)
+            attrs.contains("1")
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {160: 11, 161: 12})]
+        assert self.graphrecord.query_edges(query) == [
+            ("value1", {160: "11", 161: "12"})
+        ]
 
     def test_to_values(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleValuesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
@@ -16100,592 +14414,62 @@ class TestEdgeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
 
     def test_ungroup(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             return attrs.ungroup()
 
-        assert self.graphrecord.query_edges(query) == {160: 11, 161: 12}
+        assert self.graphrecord.query_edges(query) == {160: "11", 161: "12"}
 
     def test_either_or(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             attrs.either_or(
-                lambda attr: attr.equal_to(11),
-                lambda attr: attr.equal_to(12),
+                lambda attr: attr.equal_to("11"),
+                lambda attr: attr.equal_to("12"),
             )
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {160: 11, 161: 12})]
+        assert self.graphrecord.query_edges(query) == [
+            ("value1", {160: "11", 161: "12"})
+        ]
 
     def test_exclude(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
-            attrs.exclude(lambda attr: attr.equal_to(11))
+            attrs.exclude(lambda attr: attr.equal_to("11"))
             return attrs
 
-        assert self.graphrecord.query_edges(query) == [("value1", {161: 12})]
+        assert self.graphrecord.query_edges(query) == [("value1", {161: "12"})]
 
     def test_clone(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
             )
             clone = attrs.clone()
-            attrs.add(10)
+            attrs.add("10")
             return clone
 
-        assert self.graphrecord.query_edges(query) == [("value1", {160: 11, 161: 12})]
-
-
-class TestEdgeMultipleAttributesWithoutIndexOperand(unittest.TestCase):
-    def setUp(self) -> None:
-        self.graphrecord = simple_example_dataset()
-        self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 11: "value2"})])
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 12: "value4"})])
-        self.graphrecord.add_edges([("pat_1", "pat_2", {" Hello ": "value5"})])
-
-    def test_max(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            return attrs.max()
-
-        assert self.graphrecord.query_edges(query) == 23
-
-    def test_min(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            return attrs.min()
-
-        assert self.graphrecord.query_edges(query) == 23
-
-    def test_count(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            return attrs.count()
-
-        assert self.graphrecord.query_edges(query) == 1
-
-    def test_sum(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            return attrs.sum()
-
-        assert self.graphrecord.query_edges(query) == 23
-
-    def test_random(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            return attrs.random()
-
-        assert self.graphrecord.query_edges(query) == 23
-
-    def test_is_string(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.is_string()
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [" Hello "]
-
-    def test_is_int(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.is_int()
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [23]
-
-    def test_is_max(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.is_max()
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_is_min(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.is_min()
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_greater_than(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.greater_than(11)
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_greater_than_or_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.greater_than_or_equal_to(11)
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [23]
-
-    def test_less_than(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.less_than(25)
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_less_than_or_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.less_than_or_equal_to(23)
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [23]
-
-    def test_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.equal_to(23)
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_not_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.not_equal_to(22)
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_is_in(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.is_in([23, 12])
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [23]
-
-    def test_is_not_in(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.is_not_in([12])
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_starts_with(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.starts_with(2)
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_ends_with(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.ends_with(3)
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_contains(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.contains(2)
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_add(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.add(2)
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [25]
-
-    def test_subtract(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.subtract(10)
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [13]
-
-    def test_multiply(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.multiply(2)
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [46]
-
-    def test_modulo(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.modulo(2)
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [1]
-
-    def test_power(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.power(2)
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [529]
-
-    def test_absolute(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.subtract(25)
-            attrs.absolute()
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [2]
-
-    def test_trim(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.trim()
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == ["Hello"]
-
-    def test_trim_start(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.trim_start()
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == ["Hello "]
-
-    def test_trim_end(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.trim_end()
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [" Hello"]
-
-    def test_slice(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.slice(0, 3)
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [" He"]
-
-    def test_lowercase(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.lowercase()
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [" hello "]
-
-    def test_uppercase(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.uppercase()
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [" HELLO "]
-
-    def test_either_or(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.either_or(
-                lambda attr: attr.equal_to(23),
-                lambda attr: attr.equal_to(12),
-            )
-            return attrs
-
-        assert sorted(self.graphrecord.query_edges(query)) == [23]
-
-    def test_exclude(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            attrs.exclude(lambda attr: attr.equal_to(11))
-            return attrs
-
-        assert self.graphrecord.query_edges(query) == [23]
-
-    def test_clone(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithoutIndexOperand:
-            edge.has_attribute(10)
-            attrs = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-                .ungroup()
-            )
-            clone = attrs.clone()
-            attrs.add(2)
-            return clone
-
-        assert sorted(self.graphrecord.query_edges(query)) == [23]
+        assert self.graphrecord.query_edges(query) == [
+            ("value1", {160: "11", 161: "12"})
+        ]
 
 
 class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
@@ -16694,88 +14478,84 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
 
     def test_single_attribute_operand_comparisons(self) -> None:
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((0, {10: "value1", 11: "value2"}))
-        self.graphrecord.add_nodes((1, {12: "value3", 13: "value4"}))
+        self.graphrecord.add_nodes(("0", {"10": "value1", "11": "value2"}))
+        self.graphrecord.add_nodes(("1", {"12": "value3", "13": "value4"}))
 
         def query1(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             query_node(node)
-            attribute = node.attributes().max().max()
-            attribute.is_string()
-            return attribute
+            return node.attributes().max().max()
 
         assert self.graphrecord.query_nodes(query1) == ("pat_1", "gender")
 
         def query2(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().min().min()
-            attribute.is_int()
-            return attribute
+            node.index().is_in(["0", "1"])
+            return node.attributes().min().min()
 
-        assert self.graphrecord.query_nodes(query2) == (0, 10)
+        assert self.graphrecord.query_nodes(query2) == ("0", "10")
 
         def query3(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max().max()
-            attribute.greater_than(11)
+            attribute.greater_than("11")
             return attribute
 
-        assert self.graphrecord.query_nodes(query3) == (1, 13)
+        assert self.graphrecord.query_nodes(query3) == ("1", "13")
 
         def query4(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().min().min()
-            attribute.greater_than_or_equal_to(10)
+            attribute.greater_than_or_equal_to("10")
             return attribute
 
-        assert self.graphrecord.query_nodes(query4) == (0, 10)
+        assert self.graphrecord.query_nodes(query4) == ("0", "10")
 
         def query5(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().min().min()
-            attribute.less_than(12)
+            attribute.less_than("12")
             return attribute
 
-        assert self.graphrecord.query_nodes(query5) == (0, 10)
+        assert self.graphrecord.query_nodes(query5) == ("0", "10")
 
         def query6(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().min().min()
-            attribute.less_than_or_equal_to(12)
+            attribute.less_than_or_equal_to("12")
             return attribute
 
-        assert self.graphrecord.query_nodes(query6) == (0, 10)
+        assert self.graphrecord.query_nodes(query6) == ("0", "10")
 
         def query7(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max().max()
-            attribute.equal_to(13)
+            attribute.equal_to("13")
             return attribute
 
-        assert self.graphrecord.query_nodes(query7) == (1, 13)
+        assert self.graphrecord.query_nodes(query7) == ("1", "13")
 
         def query8(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max().max()
-            attribute.not_equal_to(11)
+            attribute.not_equal_to("11")
             return attribute
 
-        assert self.graphrecord.query_nodes(query8) == (1, 13)
+        assert self.graphrecord.query_nodes(query8) == ("1", "13")
 
         def query9(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max().max()
-            attribute.is_in([13])
+            attribute.is_in(["13"])
             return attribute
 
-        assert self.graphrecord.query_nodes(query9) == (1, 13)
+        assert self.graphrecord.query_nodes(query9) == ("1", "13")
 
         def query10(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max().max()
-            attribute.is_not_in([11])
+            attribute.is_not_in(["11"])
             return attribute
 
-        assert self.graphrecord.query_nodes(query10) == (1, 13)
+        assert self.graphrecord.query_nodes(query10) == ("1", "13")
 
         def query11(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             query_node(node)
@@ -16801,373 +14581,233 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
 
         assert self.graphrecord.query_nodes(query13) == ("pat_1", "gender")
 
-        self.graphrecord.add_nodes((2, {" Hello ": "value1"}))
+        self.graphrecord.add_nodes(("2", {" Hello ": "value1"}))
 
         def query14(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().equal_to(2)
+            node.index().equal_to("2")
             attribute = node.attributes().max().max()
             attribute.trim()
             return attribute
 
-        assert self.graphrecord.query_nodes(query14) == (2, "Hello")
+        assert self.graphrecord.query_nodes(query14) == ("2", "Hello")
 
         def query15(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().equal_to(2)
+            node.index().equal_to("2")
             attribute = node.attributes().max().max()
             attribute.trim_start()
             return attribute
 
-        assert self.graphrecord.query_nodes(query15) == (2, "Hello ")
+        assert self.graphrecord.query_nodes(query15) == ("2", "Hello ")
 
         def query16(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().equal_to(2)
+            node.index().equal_to("2")
             attribute = node.attributes().max().max()
             attribute.trim_end()
             return attribute
 
-        assert self.graphrecord.query_nodes(query16) == (2, " Hello")
+        assert self.graphrecord.query_nodes(query16) == ("2", " Hello")
 
         def query17(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().equal_to(2)
+            node.index().equal_to("2")
             attribute = node.attributes().max().max()
             attribute.slice(0, 3)
             return attribute
 
-        assert self.graphrecord.query_nodes(query17) == (2, " He")
+        assert self.graphrecord.query_nodes(query17) == ("2", " He")
 
         def query18(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().equal_to(2)
+            node.index().equal_to("2")
             attribute = node.attributes().max().max()
             attribute.lowercase()
             return attribute
 
-        assert self.graphrecord.query_nodes(query18) == (2, " hello ")
+        assert self.graphrecord.query_nodes(query18) == ("2", " hello ")
 
         def query19(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().equal_to(2)
+            node.index().equal_to("2")
             attribute = node.attributes().max().max()
             attribute.uppercase()
             return attribute
 
-        assert self.graphrecord.query_nodes(query19) == (2, " HELLO ")
+        assert self.graphrecord.query_nodes(query19) == ("2", " HELLO ")
 
     def test_single_attribute_operand_operations(self) -> None:
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes((0, {10: "value1", 11: "value2"}))
-        self.graphrecord.add_nodes((1, {12: "value3", 13: "value4"}))
+        self.graphrecord.add_nodes(("0", {"10": "value1", "11": "value2"}))
+        self.graphrecord.add_nodes(("1", {"12": "value3", "13": "value4"}))
 
         def query1(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max().max()
-            attribute.add(2)
+            attribute.add("2")
             return attribute
 
-        assert self.graphrecord.query_nodes(query1) == (1, 15)
+        assert self.graphrecord.query_nodes(query1) == ("1", "132")
 
         def query2(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max().max()
-            attribute.subtract(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query2) == (1, 11)
-
-        def query3(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().min().min()
-            attribute.multiply(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query3) == (0, 20)
-
-        def query4(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max().max()
-            attribute.modulo(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query4) == (1, 1)
-
-        def query5(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max().max()
-            attribute.power(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query5) == (1, 169)
-
-        def query6(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
-            attribute = node.attributes().max().max()
-            attribute.subtract(14)
-            attribute.absolute()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query6) == (1, 1)
-
-        def query7(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max().max()
             attribute.either_or(
-                lambda attribute: attribute.equal_to(13),
-                lambda attribute: attribute.equal_to(12),
+                lambda attribute: attribute.equal_to("13"),
+                lambda attribute: attribute.equal_to("12"),
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query7) == (1, 13)
+        assert self.graphrecord.query_nodes(query2) == ("1", "13")
 
-        def query8(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+        def query3(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max().max()
             attribute.exclude(
-                lambda attribute: attribute.contains(12),
+                lambda attribute: attribute.contains("12"),
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query8) == (1, 13)
+        assert self.graphrecord.query_nodes(query3) == ("1", "13")
 
-        def query9(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            node.index().is_int()
+        def query4(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
+            node.index().is_in(["0", "1"])
             attribute = node.attributes().max().max()
             clone = attribute.clone()
-            attribute.add(10)
+            attribute.add("10")
             return clone
 
-        assert self.graphrecord.query_nodes(query9) == (1, 13)
+        assert self.graphrecord.query_nodes(query4) == ("1", "13")
 
 
 class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes(("pat_6", {10: "value1", 11: "value2"}))
-        self.graphrecord.add_nodes(("pat_7", {10: "value1", 12: "value2"}))
+        self.graphrecord.add_nodes(("pat_6", {"10": "value1", "11": "value2"}))
+        self.graphrecord.add_nodes(("pat_7", {"10": "value1", "12": "value2"}))
         self.graphrecord.add_nodes(("pat_8", {" Hello ": "value5"}))
-
-    def test_is_string(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.is_string()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", " Hello "))]
-
-    def test_is_int(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.is_int()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
 
     def test_add(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.add(2)
+            attribute.add("2")
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 14))]
-
-    def test_subtract(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.subtract(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 10))]
-
-    def test_multiply(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.multiply(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 24))]
-
-    def test_modulo(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.modulo(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 0))]
-
-    def test_power(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.power(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 144))]
-
-    def test_absolute(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.subtract(13)
-            attribute.absolute()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 1))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "122"))]
 
     def test_greater_than(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.greater_than(11)
+            attribute.greater_than("11")
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_greater_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.greater_than_or_equal_to(12)
+            attribute.greater_than_or_equal_to("12")
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_less_than(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.less_than(13)
+            attribute.less_than("13")
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_less_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.less_than_or_equal_to(12)
+            attribute.less_than_or_equal_to("12")
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.equal_to(12)
+            attribute.equal_to("12")
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_not_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.not_equal_to(11)
+            attribute.not_equal_to("11")
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_is_in(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.is_in([12])
+            attribute.is_in(["12"])
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_is_not_in(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.is_not_in([11])
+            attribute.is_not_in(["11"])
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_starts_with(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17297,779 +14937,76 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
 
     def test_either_or(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
             attribute.either_or(
-                lambda attr: attr.equal_to(12),
-                lambda attr: attr.equal_to(11),
+                lambda attr: attr.equal_to("12"),
+                lambda attr: attr.equal_to("11"),
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_exclude(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
             attribute.exclude(
-                lambda attr: attr.equal_to(11),
+                lambda attr: attr.equal_to("11"),
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
     def test_ungroup(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
             return attribute.ungroup()
 
-        assert self.graphrecord.query_nodes(query) == {"pat_7": 12}
+        assert self.graphrecord.query_nodes(query) == {"pat_7": "12"}
 
     def test_clone(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
-            node.has_attribute(10)
+            node.has_attribute("10")
             attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
+                node.group_by(NodeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
             clone = attribute.clone()
-            attribute.add(2)
+            attribute.add("2")
             return clone
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
-
-
-class TestNodeSingleAttributeWithoutIndexOperand(unittest.TestCase):
-    def setUp(self) -> None:
-        self.graphrecord = simple_example_dataset()
-        self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes(("pat_6", {10: "value1", 11: "value2"}))
-        self.graphrecord.add_nodes(("pat_7", {" Hello ": "value3"}))
-
-    def test_is_int(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.is_int()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-    def test_is_string(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attribute = node.attributes().sum().sum()
-            attribute.is_string()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == " Hello "
-
-    def test_greater_than(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.greater_than(20)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-    def test_greater_than_or_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.greater_than_or_equal_to(21)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-    def test_less_than(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.less_than(21)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) is None
-
-    def test_less_than_or_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.less_than_or_equal_to(21)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-    def test_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.equal_to(21)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-    def test_not_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.not_equal_to(22)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-    def test_is_in(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.is_in([21, 22])
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-    def test_is_not_in(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.is_not_in([22])
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-    def test_add(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.add(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 23
-
-    def test_subtract(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.subtract(1)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 20
-
-    def test_multiply(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.multiply(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 42
-
-    def test_modulo(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.modulo(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 1
-
-    def test_power(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.power(2)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 441
-
-    def test_absolute(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.subtract(23)
-            attribute.absolute()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 2
-
-    def test_starts_with(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attribute = node.attributes().sum().sum()
-            attribute.starts_with(" H")
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == " Hello "
-
-    def test_ends_with(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attribute = node.attributes().sum().sum()
-            attribute.ends_with("o ")
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == " Hello "
-
-    def test_contains(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attribute = node.attributes().sum().sum()
-            attribute.contains("ell")
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == " Hello "
-
-    def test_trim(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attribute = node.attributes().sum().sum()
-            attribute.trim()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == "Hello"
-
-    def test_trim_start(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attribute = node.attributes().sum().sum()
-            attribute.trim_start()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == "Hello "
-
-    def test_trim_end(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attribute = node.attributes().sum().sum()
-            attribute.trim_end()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == " Hello"
-
-    def test_slice(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attribute = node.attributes().sum().sum()
-            attribute.slice(0, 3)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == " He"
-
-    def test_lowercase(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attribute = node.attributes().sum().sum()
-            attribute.lowercase()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == " hello "
-
-    def test_uppercase(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(" Hello ")
-            attribute = node.attributes().sum().sum()
-            attribute.uppercase()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == " HELLO "
-
-    def test_either_or(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.either_or(
-                lambda attr: attr.equal_to(21),
-                lambda attr: attr.equal_to(22),
-            )
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-    def test_exclude(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            attribute.exclude(lambda attr: attr.equal_to(22))
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-    def test_clone(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
-            node.has_attribute(10)
-            attribute = node.attributes().sum().sum()
-            clone = attribute.clone()
-            attribute.add(10)
-            return clone
-
-        assert self.graphrecord.query_nodes(query) == 21
-
-
-class TestNodeSingleAttributeWithoutIndexGroupOperand(unittest.TestCase):
-    def setUp(self) -> None:
-        self.graphrecord = simple_example_dataset()
-        self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_nodes(("pat_6", {10: "value1", 11: "value2"}))
-        self.graphrecord.add_nodes(("pat_7", {10: "value3", 12: "value4"}))
-        self.graphrecord.add_nodes(("pat_8", {" Hello ": "value5"}))
-
-    def test_is_string(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.is_string()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", " Hello ")]
-
-    def test_is_int(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.is_int()
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 11), ("value3", 12)]
-
-    def test_greater_than(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.greater_than(11)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", None), ("value3", 12)]
-
-    def test_greater_than_or_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.greater_than_or_equal_to(12)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", None), ("value3", 12)]
-
-    def test_less_than(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.less_than(12)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 11), ("value3", None)]
-
-    def test_less_than_or_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.less_than_or_equal_to(11)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 11), ("value3", None)]
-
-    def test_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.equal_to(11)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 11), ("value3", None)]
-
-    def test_not_equal_to(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.not_equal_to(12)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 11), ("value3", None)]
-
-    def test_is_in(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.is_in([11, 12])
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 11), ("value3", 12)]
-
-    def test_is_not_in(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.is_not_in([12])
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 11), ("value3", None)]
-
-    def test_add(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.add(2)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 13), ("value3", 14)]
-
-    def test_subtract(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.subtract(2)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 9), ("value3", 10)]
-
-    def test_multiply(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.multiply(2)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 22), ("value3", 24)]
-
-    def test_modulo(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.modulo(2)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 1), ("value3", 0)]
-
-    def test_power(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.power(2)
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 121), ("value3", 144)]
-
-    def test_absolute(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.subtract(12)
-            attribute.absolute()
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 1), ("value3", 0)]
-
-    def test_starts_with(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.starts_with(" H")
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", " Hello ")]
-
-    def test_ends_with(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.ends_with("o ")
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", " Hello ")]
-
-    def test_contains(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.contains("ell")
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", " Hello ")]
-
-    def test_trim(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.trim()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", "Hello")]
-
-    def test_trim_start(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.trim_start()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", "Hello ")]
-
-    def test_trim_end(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.trim_end()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", " Hello")]
-
-    def test_slice(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.slice(0, 3)
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", " He")]
-
-    def test_lowercase(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.lowercase()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", " hello ")]
-
-    def test_uppercase(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(" Hello ")
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.uppercase()
-            return attribute
-
-        assert self.graphrecord.query_nodes(query) == [("value5", " HELLO ")]
-
-    def test_either_or(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.either_or(
-                lambda attr: attr.equal_to(11),
-                lambda attr: attr.equal_to(12),
-            )
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 11), ("value3", 12)]
-
-    def test_exclude(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.exclude(lambda attr: attr.equal_to(12))
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 11), ("value3", None)]
-
-    def test_clone(self) -> None:
-        def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
-            node.has_attribute(10)
-            attribute = (
-                node.group_by(NodeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .sum()
-            )
-            clone = attribute.clone()
-            attribute.add(2)
-            return clone
-
-        assert sorted(
-            self.graphrecord.query_nodes(query), key=operator.itemgetter(0)
-        ) == [("value1", 11), ("value3", 12)]
+        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", "12"))]
 
 
 class TestEdgeSingleAttributeWithIndexOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 11: "value2"})])
-        self.graphrecord.add_edges([("pat_3", "pat_4", {12: "value3", 13: "value4"})])
+        self.graphrecord.add_edges(
+            [("pat_1", "pat_2", {"10": "value1", "11": "value2"})]
+        )
+        self.graphrecord.add_edges(
+            [("pat_3", "pat_4", {"12": "value3", "13": "value4"})]
+        )
         self.graphrecord.add_edges([("pat_5", "pat_1", {" Hello ": "value5"})])
 
     def test_single_attribute_operand_comparisons(self) -> None:
@@ -18077,83 +15014,79 @@ class TestEdgeSingleAttributeWithIndexOperand(unittest.TestCase):
 
         def query1(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             query_specific_edge(edge, 0)
-            attribute = edge.attributes().max().max()
-            attribute.is_string()
-            return attribute
+            return edge.attributes().max().max()
 
         assert self.graphrecord.query_edges(query1) == (0, "time")
 
         def query2(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
-            attribute = edge.attributes().min().min()
-            attribute.is_int()
-            return attribute
+            return edge.attributes().min().min()
 
-        assert self.graphrecord.query_edges(query2) == (160, 10)
+        assert self.graphrecord.query_edges(query2) == (160, "10")
 
         def query3(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max().max()
-            attribute.greater_than(11)
+            attribute.greater_than("11")
             return attribute
 
-        assert self.graphrecord.query_edges(query3) == (161, 13)
+        assert self.graphrecord.query_edges(query3) == (161, "13")
 
         def query4(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().min().min()
-            attribute.greater_than_or_equal_to(10)
+            attribute.greater_than_or_equal_to("10")
             return attribute
 
-        assert self.graphrecord.query_edges(query4) == (160, 10)
+        assert self.graphrecord.query_edges(query4) == (160, "10")
 
         def query5(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().min().min()
-            attribute.less_than(12)
+            attribute.less_than("12")
             return attribute
 
-        assert self.graphrecord.query_edges(query5) == (160, 10)
+        assert self.graphrecord.query_edges(query5) == (160, "10")
 
         def query6(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().min().min()
-            attribute.less_than_or_equal_to(12)
+            attribute.less_than_or_equal_to("12")
             return attribute
 
-        assert self.graphrecord.query_edges(query6) == (160, 10)
+        assert self.graphrecord.query_edges(query6) == (160, "10")
 
         def query7(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max().max()
-            attribute.equal_to(13)
+            attribute.equal_to("13")
             return attribute
 
-        assert self.graphrecord.query_edges(query7) == (161, 13)
+        assert self.graphrecord.query_edges(query7) == (161, "13")
 
         def query8(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max().max()
-            attribute.not_equal_to(11)
+            attribute.not_equal_to("11")
             return attribute
 
-        assert self.graphrecord.query_edges(query8) == (161, 13)
+        assert self.graphrecord.query_edges(query8) == (161, "13")
 
         def query9(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max().max()
-            attribute.is_in([13])
+            attribute.is_in(["13"])
             return attribute
 
-        assert self.graphrecord.query_edges(query9) == (161, 13)
+        assert self.graphrecord.query_edges(query9) == (161, "13")
 
         def query10(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max().max()
-            attribute.is_not_in([11])
+            attribute.is_not_in(["11"])
             return attribute
 
-        assert self.graphrecord.query_edges(query10) == (161, 13)
+        assert self.graphrecord.query_edges(query10) == (161, "13")
 
         def query11(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             query_specific_edge(edge, 0)
@@ -18231,317 +15164,179 @@ class TestEdgeSingleAttributeWithIndexOperand(unittest.TestCase):
         def query1(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max().max()
-            attribute.add(2)
+            attribute.add("2")
             return attribute
 
-        assert self.graphrecord.query_edges(query1) == (161, 15)
+        assert self.graphrecord.query_edges(query1) == (161, "132")
 
         def query2(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max().max()
-            attribute.subtract(2)
+            attribute.either_or(
+                lambda attr: attr.equal_to("13"),
+                lambda attr: attr.equal_to("12"),
+            )
             return attribute
 
-        assert self.graphrecord.query_edges(query2) == (161, 11)
+        assert self.graphrecord.query_edges(query2) == (161, "13")
 
         def query3(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
-            attribute = edge.attributes().min().min()
-            attribute.multiply(2)
+            attribute = edge.attributes().max().max()
+            attribute.exclude(
+                lambda attr: attr.contains("12"),
+            )
             return attribute
 
-        assert self.graphrecord.query_edges(query3) == (160, 20)
+        assert self.graphrecord.query_edges(query3) == (161, "13")
 
         def query4(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
             edge.index().is_in([160, 161])
             attribute = edge.attributes().max().max()
-            attribute.modulo(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query4) == (161, 1)
-
-        def query5(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max().max()
-            attribute.power(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query5) == (161, 169)
-
-        def query6(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max().max()
-            attribute.subtract(14)
-            attribute.absolute()
-            return attribute
-
-        assert self.graphrecord.query_edges(query6) == (161, 1)
-
-        def query7(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max().max()
-            attribute.either_or(
-                lambda attr: attr.equal_to(13),
-                lambda attr: attr.equal_to(12),
-            )
-            return attribute
-
-        assert self.graphrecord.query_edges(query7) == (161, 13)
-
-        def query8(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max().max()
-            attribute.exclude(
-                lambda attr: attr.contains(12),
-            )
-            return attribute
-
-        assert self.graphrecord.query_edges(query8) == (161, 13)
-
-        def query9(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
-            edge.index().is_in([160, 161])
-            attribute = edge.attributes().max().max()
             clone = attribute.clone()
-            attribute.add(10)
+            attribute.add("10")
             return clone
 
-        assert self.graphrecord.query_edges(query9) == (161, 13)
+        assert self.graphrecord.query_edges(query4) == (161, "13")
 
 
 class TestEdgeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
         self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 11: "value2"})])
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 12: "value4"})])
+        self.graphrecord.add_edges(
+            [("pat_1", "pat_2", {"10": "value1", "11": "value2"})]
+        )
+        self.graphrecord.add_edges(
+            [("pat_1", "pat_2", {"10": "value1", "12": "value4"})]
+        )
         self.graphrecord.add_edges([("pat_1", "pat_2", {" Hello ": "value5"})])
-
-    def test_is_string(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.is_string()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", (162, " Hello "))]
-
-    def test_is_int(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.is_int()
-            return attribute
-
-        assert sorted(
-            self.graphrecord.query_edges(query), key=operator.itemgetter(0)
-        ) == [("value1", (161, 12))]
 
     def test_greater_than(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.greater_than(11)
+            attribute.greater_than("11")
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_greater_than_or_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.greater_than_or_equal_to(12)
+            attribute.greater_than_or_equal_to("12")
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_less_than(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.less_than(13)
+            attribute.less_than("13")
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_less_than_or_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.less_than_or_equal_to(12)
+            attribute.less_than_or_equal_to("12")
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.equal_to(12)
+            attribute.equal_to("12")
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_not_equal_to(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.not_equal_to(11)
+            attribute.not_equal_to("11")
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_is_in(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.is_in([12])
+            attribute.is_in(["12"])
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_is_not_in(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.is_not_in([11])
+            attribute.is_not_in(["11"])
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_add(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.add(2)
+            attribute.add("2")
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 14))]
-
-    def test_subtract(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.subtract(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 10))]
-
-    def test_multiply(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.multiply(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 24))]
-
-    def test_modulo(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.modulo(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 0))]
-
-    def test_power(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.power(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 144))]
-
-    def test_absolute(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .max()
-            )
-            attribute.subtract(13)
-            attribute.absolute()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 1))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "122"))]
 
     def test_starts_with(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
@@ -18671,733 +15466,62 @@ class TestEdgeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
 
     def test_either_or(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
             attribute.either_or(
-                lambda attr: attr.equal_to(12),
-                lambda attr: attr.equal_to(11),
+                lambda attr: attr.equal_to("12"),
+                lambda attr: attr.equal_to("11"),
             )
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_exclude(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
-            attribute.exclude(lambda attr: attr.equal_to(11))
+            attribute.exclude(lambda attr: attr.equal_to("11"))
             return attribute
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
     def test_ungroup(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
             return attribute.ungroup()
 
-        assert self.graphrecord.query_edges(query) == {161: 12}
+        assert self.graphrecord.query_edges(query) == {161: "12"}
 
     def test_clone(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexGroupOperand:
-            edge.has_attribute(10)
+            edge.has_attribute("10")
             attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
+                edge.group_by(EdgeOperandGroupDiscriminator.Attribute("10"))
                 .attributes()
                 .max()
                 .max()
             )
             clone = attribute.clone()
-            attribute.add(2)
+            attribute.add("2")
             return clone
 
-        assert self.graphrecord.query_edges(query) == [("value1", (161, 12))]
-
-
-class TestEdgeSingleAttributeWithoutIndexOperand(unittest.TestCase):
-    def setUp(self) -> None:
-        self.graphrecord = simple_example_dataset()
-        self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 11: "value2"})])
-        self.graphrecord.add_edges([("pat_1", "pat_2", {" Hello ": "value5"})])
-
-    def test_is_string(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attribute = edge.attributes().sum().sum()
-            attribute.is_string()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == " Hello "
-
-    def test_is_int(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.is_int()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 21
-
-    def test_greater_than(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.greater_than(5)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 21
-
-    def test_greater_than_or_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.greater_than_or_equal_to(21)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 21
-
-    def test_less_than(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.less_than(20)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) is None
-
-    def test_less_than_or_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.less_than_or_equal_to(21)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 21
-
-    def test_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.equal_to(21)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 21
-
-    def test_not_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.not_equal_to(12)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 21
-
-    def test_is_in(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.is_in([21, 22])
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 21
-
-    def test_is_not_in(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.is_not_in([21])
-            return attribute
-
-        assert self.graphrecord.query_edges(query) is None
-
-    def test_add(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.add(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 23
-
-    def test_subtract(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.subtract(1)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 20
-
-    def test_multiply(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.multiply(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 42
-
-    def test_modulo(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.modulo(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 1
-
-    def test_power(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.power(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 441
-
-    def test_absolute(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.subtract(23)
-            attribute.absolute()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 2
-
-    def test_starts_with(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attribute = edge.attributes().sum().sum()
-            attribute.starts_with(" H")
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == " Hello "
-
-    def test_ends_with(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attribute = edge.attributes().sum().sum()
-            attribute.ends_with("o ")
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == " Hello "
-
-    def test_contains(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attribute = edge.attributes().sum().sum()
-            attribute.contains("ell")
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == " Hello "
-
-    def test_trim(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attribute = edge.attributes().sum().sum()
-            attribute.trim()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == "Hello"
-
-    def test_trim_start(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attribute = edge.attributes().sum().sum()
-            attribute.trim_start()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == "Hello "
-
-    def test_trim_end(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attribute = edge.attributes().sum().sum()
-            attribute.trim_end()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == " Hello"
-
-    def test_slice(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attribute = edge.attributes().sum().sum()
-            attribute.slice(0, 3)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == " He"
-
-    def test_lowercase(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attribute = edge.attributes().sum().sum()
-            attribute.lowercase()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == " hello "
-
-    def test_uppercase(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(" Hello ")
-            attribute = edge.attributes().sum().sum()
-            attribute.uppercase()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == " HELLO "
-
-    def test_either_or(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.either_or(
-                lambda attr: attr.equal_to(21),
-                lambda attr: attr.equal_to(12),
-            )
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 21
-
-    def test_exclude(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            attribute.exclude(lambda attr: attr.equal_to(12))
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == 21
-
-    def test_clone(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexOperand:
-            edge.has_attribute(10)
-            attribute = edge.attributes().sum().sum()
-            clone = attribute.clone()
-            attribute.add(2)
-            return clone
-
-        assert self.graphrecord.query_edges(query) == 21
-
-
-class TestEdgeSingleAttributeWithoutIndexGroupOperand(unittest.TestCase):
-    def setUp(self) -> None:
-        self.graphrecord = simple_example_dataset()
-        self.graphrecord.unfreeze_schema()
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 11: "value2"})])
-        self.graphrecord.add_edges([("pat_1", "pat_2", {10: "value1", 12: "value4"})])
-        self.graphrecord.add_edges([("pat_1", "pat_2", {" Hello ": "value5"})])
-
-    def test_is_string(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.is_string()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", " Hello ")]
-
-    def test_is_int(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.is_int()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_greater_than(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.greater_than(1)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_greater_than_or_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.greater_than_or_equal_to(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_less_than(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.less_than(3)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_less_than_or_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.less_than_or_equal_to(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.equal_to(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_not_equal_to(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.not_equal_to(1)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_is_in(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.is_in([2, 3])
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_is_not_in(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.is_not_in([1])
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_add(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.add(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 4)]
-
-    def test_subtract(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.subtract(1)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 1)]
-
-    def test_multiply(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.multiply(3)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 6)]
-
-    def test_modulo(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.modulo(2)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 0)]
-
-    def test_power(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.power(3)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 8)]
-
-    def test_absolute(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.subtract(5)
-            attribute.absolute()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 3)]
-
-    def test_starts_with(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.starts_with(" H")
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", " Hello ")]
-
-    def test_ends_with(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.ends_with("o ")
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", " Hello ")]
-
-    def test_contains(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.contains("ell")
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", " Hello ")]
-
-    def test_trim(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.trim()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", "Hello")]
-
-    def test_trim_start(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.trim_start()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", "Hello ")]
-
-    def test_trim_end(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.trim_end()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", " Hello")]
-
-    def test_slice(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.slice(0, 3)
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", " He")]
-
-    def test_lowercase(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.lowercase()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", " hello ")]
-
-    def test_uppercase(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(" Hello ")
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(" Hello "))
-                .attributes()
-                .max()
-                .sum()
-            )
-            attribute.uppercase()
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value5", " HELLO ")]
-
-    def test_either_or(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.either_or(
-                lambda attr: attr.equal_to(2),
-                lambda attr: attr.equal_to(1),
-            )
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_exclude(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            attribute.exclude(lambda attr: attr.equal_to(1))
-            return attribute
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
-
-    def test_clone(self) -> None:
-        def query(edge: EdgeOperand) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-            edge.has_attribute(10)
-            attribute = (
-                edge.group_by(EdgeOperandGroupDiscriminator.Attribute(10))
-                .attributes()
-                .max()
-                .count()
-            )
-            clone = attribute.clone()
-            attribute.add(10)
-            return clone
-
-        assert self.graphrecord.query_edges(query) == [("value1", 2)]
+        assert self.graphrecord.query_edges(query) == [("value1", (161, "12"))]
 
 
 if __name__ == "__main__":

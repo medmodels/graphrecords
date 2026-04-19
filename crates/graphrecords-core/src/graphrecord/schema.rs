@@ -1123,29 +1123,32 @@ mod test {
 
     #[test]
     fn test_attribute_schema_kind_error_message() {
-        let index = 0;
+        let node_index = "0";
+        let edge_index: u32 = 0;
         let key = "key";
         let data_type = DataType::Int;
 
         assert_eq!(
-            AttributeSchemaKind::Node(&(index.into())).error_message(&(key.into()), &data_type),
+            AttributeSchemaKind::Node(&(node_index.into()))
+                .error_message(&(key.into()), &data_type),
             "Attribute key of type Int not found on node with index 0"
         );
         assert_eq!(
-            AttributeSchemaKind::Edge(&(index as u32)).error_message(&(key.into()), &data_type),
+            AttributeSchemaKind::Edge(&edge_index).error_message(&(key.into()), &data_type),
             "Attribute key of type Int not found on edge with index 0"
         );
     }
 
     #[test]
     fn test_attribute_schema_kind_error_message_expected() {
-        let index = 0;
+        let node_index = "0";
+        let edge_index: u32 = 0;
         let key = "key";
         let data_type = DataType::Int;
         let expected_data_type = DataType::Float;
 
         assert_eq!(
-            AttributeSchemaKind::Node(&(index.into())).error_message_expected(
+            AttributeSchemaKind::Node(&(node_index.into())).error_message_expected(
                 &(key.into()),
                 &data_type,
                 &expected_data_type
@@ -1153,7 +1156,7 @@ mod test {
             "Attribute key of node with index 0 is of type Int. Expected Float."
         );
         assert_eq!(
-            AttributeSchemaKind::Edge(&(index as u32)).error_message_expected(
+            AttributeSchemaKind::Edge(&edge_index).error_message_expected(
                 &(key.into()),
                 &data_type,
                 &expected_data_type
@@ -1164,15 +1167,16 @@ mod test {
 
     #[test]
     fn test_attribute_schema_kind_error_message_too_many() {
-        let index = 0;
+        let node_index = "0";
+        let edge_index: u32 = 0;
         let attributes = vec!["key1".to_string(), "key2".to_string()];
 
         assert_eq!(
-            AttributeSchemaKind::Node(&(index.into())).error_message_too_many(&attributes),
+            AttributeSchemaKind::Node(&(node_index.into())).error_message_too_many(&attributes),
             "Attributes [key1, key2] of node with index 0 do not exist in schema."
         );
         assert_eq!(
-            AttributeSchemaKind::Edge(&(index as u32)).error_message_too_many(&attributes),
+            AttributeSchemaKind::Edge(&edge_index).error_message_too_many(&attributes),
             "Attributes [key1, key2] of edge with index 0 do not exist in schema."
         );
     }
@@ -1231,7 +1235,7 @@ mod test {
 
         assert!(
             attribute_schema
-                .validate(&attributes, &AttributeSchemaKind::Node(&0.into()))
+                .validate(&attributes, &AttributeSchemaKind::Node(&"0".into()))
                 .is_ok()
         );
 
@@ -1241,7 +1245,7 @@ mod test {
 
         assert!(
             attribute_schema
-                .validate(&attributes, &AttributeSchemaKind::Node(&0.into()))
+                .validate(&attributes, &AttributeSchemaKind::Node(&"0".into()))
                 .is_err_and(|error| { matches!(error, crate::errors::GraphError::SchemaError(_)) })
         );
 
@@ -1255,7 +1259,7 @@ mod test {
 
         assert!(
             attribute_schema
-                .validate(&attributes, &AttributeSchemaKind::Node(&0.into()))
+                .validate(&attributes, &AttributeSchemaKind::Node(&"0".into()))
                 .is_err_and(|error| { matches!(error, crate::errors::GraphError::SchemaError(_)) })
         );
     }
@@ -1403,7 +1407,7 @@ mod test {
             .into_iter()
             .collect();
 
-        assert!(group_schema.validate_node(&0.into(), &attributes).is_ok());
+        assert!(group_schema.validate_node(&"0".into(), &attributes).is_ok());
 
         let attributes: Attributes = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
             .into_iter()
@@ -1411,7 +1415,7 @@ mod test {
 
         assert!(
             group_schema
-                .validate_node(&0.into(), &attributes)
+                .validate_node(&"0".into(), &attributes)
                 .is_err_and(|error| { matches!(error, crate::errors::GraphError::SchemaError(_)) })
         );
     }
@@ -1579,15 +1583,15 @@ mod test {
     fn test_schema_infer() {
         let mut graphrecord = GraphRecord::new();
         graphrecord
-            .add_node(0.into(), Attributes::from([("key1".into(), 0.into())]))
+            .add_node("0".into(), Attributes::from([("key1".into(), 0.into())]))
             .unwrap();
         graphrecord
-            .add_node(1.into(), Attributes::from([("key2".into(), 0.0.into())]))
+            .add_node("1".into(), Attributes::from([("key2".into(), 0.0.into())]))
             .unwrap();
         graphrecord
             .add_edge(
-                0.into(),
-                1.into(),
+                "0".into(),
+                "1".into(),
                 Attributes::from([("key3".into(), true.into())]),
             )
             .unwrap();
@@ -1598,7 +1602,11 @@ mod test {
         assert_eq!(schema.ungrouped().edges().len(), 1);
 
         graphrecord
-            .add_group("test".into(), Some(vec![0.into(), 1.into()]), Some(vec![0]))
+            .add_group(
+                "test".into(),
+                Some(vec!["0".into(), "1".into()]),
+                Some(vec![0]),
+            )
             .unwrap();
 
         let schema = Schema::infer(&graphrecord);
@@ -1661,12 +1669,12 @@ mod test {
             .unwrap();
 
         let attributes = Attributes::from([("key1".into(), 0.into())]);
-        assert!(schema.validate_node(&0.into(), &attributes, None).is_ok());
+        assert!(schema.validate_node(&"0".into(), &attributes, None).is_ok());
 
         let invalid_attributes = Attributes::from([("key1".into(), "invalid".into())]);
         assert!(
             schema
-                .validate_node(&0.into(), &invalid_attributes, None)
+                .validate_node(&"0".into(), &invalid_attributes, None)
                 .is_err()
         );
     }

@@ -16,47 +16,47 @@ from graphrecords.querying import (
 def create_graphrecord() -> GraphRecord:
     return GraphRecord.from_tuples(
         [
-            (0, {"foo": "bar", "bar": "foo", "lorem": "ipsum"}),
-            (1, {"foo": "bar", "bar": "foo"}),
-            (2, {"foo": "bar", "bar": "foo"}),
-            (3, {"foo": "bar", "bar": "test"}),
+            ("0", {"foo": "bar", "bar": "foo", "lorem": "ipsum"}),
+            ("1", {"foo": "bar", "bar": "foo"}),
+            ("2", {"foo": "bar", "bar": "foo"}),
+            ("3", {"foo": "bar", "bar": "test"}),
         ],
         [
-            (0, 1, {"foo": "bar", "bar": "foo", "lorem": "ipsum"}),
-            (1, 2, {"foo": "bar", "bar": "foo"}),
-            (2, 3, {"foo": "bar", "bar": "foo"}),
-            (3, 0, {"foo": "bar", "bar": "test"}),
+            ("0", "1", {"foo": "bar", "bar": "foo", "lorem": "ipsum"}),
+            ("1", "2", {"foo": "bar", "bar": "foo"}),
+            ("2", "3", {"foo": "bar", "bar": "foo"}),
+            ("3", "0", {"foo": "bar", "bar": "test"}),
         ],
     )
 
 
 def node_greater_than_or_equal_two(node: NodeOperand) -> NodeIndicesOperand:
-    node.index().greater_than_or_equal_to(2)
+    node.index().greater_than_or_equal_to("2")
 
     return node.index()
 
 
 def node_max(node: NodeOperand) -> NodeIndexOperand:
-    node.index().greater_than(2)
+    node.index().greater_than("2")
 
     return node.index().max()
 
 
 def node_max_greater_than_3(node: NodeOperand) -> NodeIndexOperand:
     max_index = node.index().max()
-    max_index.greater_than(3)
+    max_index.greater_than("3")
 
     return max_index
 
 
 def node_greater_than_three(node: NodeOperand) -> NodeIndicesOperand:
-    node.index().greater_than(3)
+    node.index().greater_than("3")
 
     return node.index()
 
 
 def node_less_than_two(node: NodeOperand) -> NodeIndicesOperand:
-    node.index().less_than(2)
+    node.index().less_than("2")
 
     return node.index()
 
@@ -96,79 +96,83 @@ class TestIndexers(unittest.TestCase):
     def test_node_getitem(self) -> None:
         graphrecord = create_graphrecord()
 
-        assert graphrecord.node[0] == {"foo": "bar", "bar": "foo", "lorem": "ipsum"}
+        assert graphrecord.node["0"] == {"foo": "bar", "bar": "foo", "lorem": "ipsum"}
 
         # Accessing a non-existing node should fail
         with pytest.raises(IndexError):
-            graphrecord.node[50]
+            graphrecord.node["50"]
 
-        assert graphrecord.node[0, "foo"] == "bar"
-
-        # Accessing a non-existing key should fail
-        with pytest.raises(KeyError):
-            graphrecord.node[0, "test"]
-
-        assert graphrecord.node[0, ["foo", "bar"]] == {"foo": "bar", "bar": "foo"}
+        assert graphrecord.node["0", "foo"] == "bar"
 
         # Accessing a non-existing key should fail
         with pytest.raises(KeyError):
-            graphrecord.node[0, ["foo", "test"]]
+            graphrecord.node["0", "test"]
 
-        assert graphrecord.node[0, :] == {"foo": "bar", "bar": "foo", "lorem": "ipsum"}
+        assert graphrecord.node["0", ["foo", "bar"]] == {"foo": "bar", "bar": "foo"}
+
+        # Accessing a non-existing key should fail
+        with pytest.raises(KeyError):
+            graphrecord.node["0", ["foo", "test"]]
+
+        assert graphrecord.node["0", :] == {
+            "foo": "bar",
+            "bar": "foo",
+            "lorem": "ipsum",
+        }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[0, 1:]
+            graphrecord.node["0", 1:]
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[0, :1]
+            graphrecord.node["0", :1]
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[0, ::1]
+            graphrecord.node["0", ::1]
 
-        assert graphrecord.node[[0, 1]] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
+        assert graphrecord.node[["0", "1"]] == {
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
         }
 
         with pytest.raises(IndexError):
-            graphrecord.node[[0, 50]]
+            graphrecord.node[["0", "50"]]
 
-        assert graphrecord.node[[0, 1], "foo"] == {0: "bar", 1: "bar"}
+        assert graphrecord.node[["0", "1"], "foo"] == {"0": "bar", "1": "bar"}
 
         # Accessing a non-existing key should fail
         with pytest.raises(KeyError):
-            graphrecord.node[[0, 1], "test"]
+            graphrecord.node[["0", "1"], "test"]
 
         # Accessing a key that doesn't exist in all nodes should fail
         with pytest.raises(KeyError):
-            graphrecord.node[[0, 1], "lorem"]
+            graphrecord.node[["0", "1"], "lorem"]
 
-        assert graphrecord.node[[0, 1], ["foo", "bar"]] == {
-            0: {"foo": "bar", "bar": "foo"},
-            1: {"foo": "bar", "bar": "foo"},
+        assert graphrecord.node[["0", "1"], ["foo", "bar"]] == {
+            "0": {"foo": "bar", "bar": "foo"},
+            "1": {"foo": "bar", "bar": "foo"},
         }
 
         # Accessing a non-existing key should fail
         with pytest.raises(KeyError):
-            graphrecord.node[[0, 1], ["foo", "test"]]
+            graphrecord.node[["0", "1"], ["foo", "test"]]
 
         # Accessing a key that doesn't exist in all nodes should fail
         with pytest.raises(KeyError):
-            graphrecord.node[[0, 1], ["foo", "lorem"]]
+            graphrecord.node[["0", "1"], ["foo", "lorem"]]
 
-        assert graphrecord.node[[0, 1], :] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
+        assert graphrecord.node[["0", "1"], :] == {
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[[0, 1], 1:]
+            graphrecord.node[["0", "1"], 1:]
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[[0, 1], :1]
+            graphrecord.node[["0", "1"], :1]
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[[0, 1], ::1]
+            graphrecord.node[["0", "1"], ::1]
 
         assert graphrecord.node[node_greater_than_or_equal_two] == {
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
         assert graphrecord.node[node_max] == {"foo": "bar", "bar": "test"}
 
@@ -180,8 +184,8 @@ class TestIndexers(unittest.TestCase):
             graphrecord.node[node_max_greater_than_3]
 
         assert graphrecord.node[node_greater_than_or_equal_two, "foo"] == {
-            2: "bar",
-            3: "bar",
+            "2": "bar",
+            "3": "bar",
         }
 
         assert graphrecord.node[node_max, "foo"] == "bar"
@@ -196,8 +200,8 @@ class TestIndexers(unittest.TestCase):
             graphrecord.node[node_greater_than_or_equal_two, "test"]
 
         assert graphrecord.node[node_greater_than_or_equal_two, ["foo", "bar"]] == {
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         assert graphrecord.node[node_max, ["foo", "bar"]] == {
@@ -217,8 +221,8 @@ class TestIndexers(unittest.TestCase):
             graphrecord.node[node_less_than_two, ["foo", "lorem"]]
 
         assert graphrecord.node[node_greater_than_or_equal_two, :] == {
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
         assert graphrecord.node[node_max, :] == {"foo": "bar", "bar": "test"}
 
@@ -233,10 +237,10 @@ class TestIndexers(unittest.TestCase):
             graphrecord.node[node_greater_than_or_equal_two, ::1]
 
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
@@ -246,7 +250,12 @@ class TestIndexers(unittest.TestCase):
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
             graphrecord.node[::1]
 
-        assert graphrecord.node[:, "foo"] == {0: "bar", 1: "bar", 2: "bar", 3: "bar"}
+        assert graphrecord.node[:, "foo"] == {
+            "0": "bar",
+            "1": "bar",
+            "2": "bar",
+            "3": "bar",
+        }
 
         # Accessing a non-existing key should fail
         with pytest.raises(KeyError):
@@ -260,10 +269,10 @@ class TestIndexers(unittest.TestCase):
             graphrecord.node[::1, "foo"]
 
         assert graphrecord.node[:, ["foo", "bar"]] == {
-            0: {"foo": "bar", "bar": "foo"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         # Accessing a non-existing key should fail
@@ -282,10 +291,10 @@ class TestIndexers(unittest.TestCase):
             graphrecord.node[::1, ["foo", "bar"]]
 
         assert graphrecord.node[:, :] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
@@ -305,21 +314,21 @@ class TestIndexers(unittest.TestCase):
         # Updating existing attributes
 
         graphrecord = create_graphrecord()
-        graphrecord.node[0] = {"foo": "bar", "bar": "test"}
+        graphrecord.node["0"] = {"foo": "bar", "bar": "test"}
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "test"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "test"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
-        graphrecord.node[[0, 1]] = {"foo": "bar", "bar": "test"}
+        graphrecord.node[["0", "1"]] = {"foo": "bar", "bar": "test"}
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "test"},
-            1: {"foo": "bar", "bar": "test"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "test"},
+            "1": {"foo": "bar", "bar": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
@@ -328,28 +337,28 @@ class TestIndexers(unittest.TestCase):
             "bar": "test2",
         }
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "test", "bar": "test2"},
-            3: {"foo": "test", "bar": "test2"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "test", "bar": "test2"},
+            "3": {"foo": "test", "bar": "test2"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_max] = {"foo": "test", "bar": "test2"}
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "test", "bar": "test2"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "test", "bar": "test2"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_max_greater_than_3] = {"foo": "test", "bar": "test2"}
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
@@ -358,92 +367,92 @@ class TestIndexers(unittest.TestCase):
         graphrecord = create_graphrecord()
         graphrecord.node[:] = {"foo": "bar", "bar": "test"}
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "test"},
-            1: {"foo": "bar", "bar": "test"},
-            2: {"foo": "bar", "bar": "test"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "test"},
+            "1": {"foo": "bar", "bar": "test"},
+            "2": {"foo": "bar", "bar": "test"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         # Updating a non-existing node should fail
         with pytest.raises(IndexError):
-            graphrecord.node[50] = {"foo": "bar", "test": "test"}
+            graphrecord.node["50"] = {"foo": "bar", "test": "test"}
 
         graphrecord = create_graphrecord()
-        graphrecord.node[0, "foo"] = "test"
+        graphrecord.node["0", "foo"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "test", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "test", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
-        graphrecord.node[0, ["foo", "bar"]] = "test"
+        graphrecord.node["0", ["foo", "bar"]] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "test", "bar": "test", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "test", "bar": "test", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
-        graphrecord.node[0, :] = "test"
+        graphrecord.node["0", :] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "test", "bar": "test", "lorem": "test"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "test", "bar": "test", "lorem": "test"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[0, 1:] = "test"
+            graphrecord.node["0", 1:] = "test"
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[0, :1] = "test"
+            graphrecord.node["0", :1] = "test"
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[0, ::1] = "test"
+            graphrecord.node["0", ::1] = "test"
 
         graphrecord = create_graphrecord()
-        graphrecord.node[[0, 1], "foo"] = "test"
+        graphrecord.node[["0", "1"], "foo"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "test", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "test", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
-        }
-
-        graphrecord = create_graphrecord()
-        graphrecord.node[[0, 1], ["foo", "bar"]] = "test"
-        assert graphrecord.node[:] == {
-            0: {"foo": "test", "bar": "test", "lorem": "ipsum"},
-            1: {"foo": "test", "bar": "test"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "test", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "test", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
-        graphrecord.node[[0, 1], :] = "test"
+        graphrecord.node[["0", "1"], ["foo", "bar"]] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "test", "bar": "test", "lorem": "test"},
-            1: {"foo": "test", "bar": "test"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "test", "bar": "test", "lorem": "ipsum"},
+            "1": {"foo": "test", "bar": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
+        }
+
+        graphrecord = create_graphrecord()
+        graphrecord.node[["0", "1"], :] = "test"
+        assert graphrecord.node[:] == {
+            "0": {"foo": "test", "bar": "test", "lorem": "test"},
+            "1": {"foo": "test", "bar": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[[0, 1], 1:] = "test"
+            graphrecord.node[["0", "1"], 1:] = "test"
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[[0, 1], :1] = "test"
+            graphrecord.node[["0", "1"], :1] = "test"
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            graphrecord.node[[0, 1], ::1] = "test"
+            graphrecord.node[["0", "1"], ::1] = "test"
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_greater_than_or_equal_two] = {"foo": "bar", "bar": "test"}
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "test"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "test"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
@@ -453,81 +462,81 @@ class TestIndexers(unittest.TestCase):
         graphrecord = create_graphrecord()
         graphrecord.node[node_greater_than_or_equal_two, "foo"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "test", "bar": "foo"},
-            3: {"foo": "test", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "test", "bar": "foo"},
+            "3": {"foo": "test", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_max, "foo"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "test", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "test", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_max_greater_than_3, "foo"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_greater_than_or_equal_two, ["foo", "bar"]] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "test", "bar": "test"},
-            3: {"foo": "test", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "test", "bar": "test"},
+            "3": {"foo": "test", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_max, ["foo", "bar"]] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "test", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "test", "bar": "test"},
         }
 
         graphrecord.node[node_max_greater_than_3, ["foo", "bar"]] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "test", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "test", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_greater_than_or_equal_two, :] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "test", "bar": "test"},
-            3: {"foo": "test", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "test", "bar": "test"},
+            "3": {"foo": "test", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_max, :] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "test", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "test", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_max_greater_than_3, :] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
@@ -540,10 +549,10 @@ class TestIndexers(unittest.TestCase):
         graphrecord = create_graphrecord()
         graphrecord.node[:, "foo"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "test", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "test", "bar": "foo"},
-            2: {"foo": "test", "bar": "foo"},
-            3: {"foo": "test", "bar": "test"},
+            "0": {"foo": "test", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "test", "bar": "foo"},
+            "2": {"foo": "test", "bar": "foo"},
+            "3": {"foo": "test", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
@@ -556,10 +565,10 @@ class TestIndexers(unittest.TestCase):
         graphrecord = create_graphrecord()
         graphrecord.node[:, ["foo", "bar"]] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "test", "bar": "test", "lorem": "ipsum"},
-            1: {"foo": "test", "bar": "test"},
-            2: {"foo": "test", "bar": "test"},
-            3: {"foo": "test", "bar": "test"},
+            "0": {"foo": "test", "bar": "test", "lorem": "ipsum"},
+            "1": {"foo": "test", "bar": "test"},
+            "2": {"foo": "test", "bar": "test"},
+            "3": {"foo": "test", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
@@ -572,10 +581,10 @@ class TestIndexers(unittest.TestCase):
         graphrecord = create_graphrecord()
         graphrecord.node[:, :] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "test", "bar": "test", "lorem": "test"},
-            1: {"foo": "test", "bar": "test"},
-            2: {"foo": "test", "bar": "test"},
-            3: {"foo": "test", "bar": "test"},
+            "0": {"foo": "test", "bar": "test", "lorem": "test"},
+            "1": {"foo": "test", "bar": "test"},
+            "2": {"foo": "test", "bar": "test"},
+            "3": {"foo": "test", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
@@ -594,290 +603,290 @@ class TestIndexers(unittest.TestCase):
         # Adding new attributes
 
         graphrecord = create_graphrecord()
-        graphrecord.node[0, "test"] = "test"
+        graphrecord.node["0", "test"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum", "test": "test"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum", "test": "test"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
-        graphrecord.node[0, ["test", "test2"]] = "test"
+        graphrecord.node["0", ["test", "test2"]] = "test"
         assert graphrecord.node[:] == {
-            0: {
+            "0": {
                 "foo": "bar",
                 "bar": "foo",
                 "lorem": "ipsum",
                 "test": "test",
                 "test2": "test",
             },
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
-        graphrecord.node[[0, 1], "test"] = "test"
+        graphrecord.node[["0", "1"], "test"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum", "test": "test"},
-            1: {"foo": "bar", "bar": "foo", "test": "test"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum", "test": "test"},
+            "1": {"foo": "bar", "bar": "foo", "test": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
-        graphrecord.node[[0, 1], ["test", "test2"]] = "test"
+        graphrecord.node[["0", "1"], ["test", "test2"]] = "test"
         assert graphrecord.node[:] == {
-            0: {
+            "0": {
                 "foo": "bar",
                 "bar": "foo",
                 "lorem": "ipsum",
                 "test": "test",
                 "test2": "test",
             },
-            1: {"foo": "bar", "bar": "foo", "test": "test", "test2": "test"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "1": {"foo": "bar", "bar": "foo", "test": "test", "test2": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_greater_than_or_equal_two, "test"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo", "test": "test"},
-            3: {"foo": "bar", "bar": "test", "test": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo", "test": "test"},
+            "3": {"foo": "bar", "bar": "test", "test": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_greater_than_or_equal_two, ["test", "test2"]] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo", "test": "test", "test2": "test"},
-            3: {"foo": "bar", "bar": "test", "test": "test", "test2": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo", "test": "test", "test2": "test"},
+            "3": {"foo": "bar", "bar": "test", "test": "test", "test2": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[:, "test"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum", "test": "test"},
-            1: {"foo": "bar", "bar": "foo", "test": "test"},
-            2: {"foo": "bar", "bar": "foo", "test": "test"},
-            3: {"foo": "bar", "bar": "test", "test": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum", "test": "test"},
+            "1": {"foo": "bar", "bar": "foo", "test": "test"},
+            "2": {"foo": "bar", "bar": "foo", "test": "test"},
+            "3": {"foo": "bar", "bar": "test", "test": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[:, ["test", "test2"]] = "test"
         assert graphrecord.node[:] == {
-            0: {
+            "0": {
                 "foo": "bar",
                 "bar": "foo",
                 "lorem": "ipsum",
                 "test": "test",
                 "test2": "test",
             },
-            1: {"foo": "bar", "bar": "foo", "test": "test", "test2": "test"},
-            2: {"foo": "bar", "bar": "foo", "test": "test", "test2": "test"},
-            3: {"foo": "bar", "bar": "test", "test": "test", "test2": "test"},
+            "1": {"foo": "bar", "bar": "foo", "test": "test", "test2": "test"},
+            "2": {"foo": "bar", "bar": "foo", "test": "test", "test2": "test"},
+            "3": {"foo": "bar", "bar": "test", "test": "test", "test2": "test"},
         }
 
         # Adding and updating attributes
 
         graphrecord = create_graphrecord()
-        graphrecord.node[[0, 1], "lorem"] = "test"
+        graphrecord.node[["0", "1"], "lorem"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "test"},
-            1: {"foo": "bar", "bar": "foo", "lorem": "test"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "test"},
+            "1": {"foo": "bar", "bar": "foo", "lorem": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
-        graphrecord.node[[0, 1], ["lorem", "test"]] = "test"
+        graphrecord.node[["0", "1"], ["lorem", "test"]] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
-            1: {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
+            "1": {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_less_than_two, "lorem"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "test"},
-            1: {"foo": "bar", "bar": "foo", "lorem": "test"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "test"},
+            "1": {"foo": "bar", "bar": "foo", "lorem": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[node_less_than_two, ["lorem", "test"]] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
-            1: {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
+            "1": {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[:, "lorem"] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "test"},
-            1: {"foo": "bar", "bar": "foo", "lorem": "test"},
-            2: {"foo": "bar", "bar": "foo", "lorem": "test"},
-            3: {"foo": "bar", "bar": "test", "lorem": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "test"},
+            "1": {"foo": "bar", "bar": "foo", "lorem": "test"},
+            "2": {"foo": "bar", "bar": "foo", "lorem": "test"},
+            "3": {"foo": "bar", "bar": "test", "lorem": "test"},
         }
 
         graphrecord = create_graphrecord()
         graphrecord.node[:, ["lorem", "test"]] = "test"
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
-            1: {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
-            2: {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
-            3: {"foo": "bar", "bar": "test", "lorem": "test", "test": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
+            "1": {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
+            "2": {"foo": "bar", "bar": "foo", "lorem": "test", "test": "test"},
+            "3": {"foo": "bar", "bar": "test", "lorem": "test", "test": "test"},
         }
 
     def test_node_delitem(self) -> None:
         graphrecord = create_graphrecord()
-        del graphrecord.node[0, "foo"]
+        del graphrecord.node["0", "foo"]
         assert graphrecord.node[:] == {
-            0: {"bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         # Removing from a non-existing node should fail
         with pytest.raises(IndexError):
-            del graphrecord.node[50, "foo"]
+            del graphrecord.node["50", "foo"]
 
         graphrecord = create_graphrecord()
         # Removing a non-existing key should fail
         with pytest.raises(KeyError):
-            del graphrecord.node[0, "test"]
+            del graphrecord.node["0", "test"]
 
         graphrecord = create_graphrecord()
-        del graphrecord.node[0, ["foo", "bar"]]
+        del graphrecord.node["0", ["foo", "bar"]]
         assert graphrecord.node[:] == {
-            0: {"lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         # Removing a non-existing key should fail
         with pytest.raises(KeyError):
-            del graphrecord.node[0, ["foo", "test"]]
+            del graphrecord.node["0", ["foo", "test"]]
 
         graphrecord = create_graphrecord()
-        del graphrecord.node[0, :]
+        del graphrecord.node["0", :]
         assert graphrecord.node[:] == {
-            0: {},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            del graphrecord.node[0, 1:]
+            del graphrecord.node["0", 1:]
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            del graphrecord.node[0, :1]
+            del graphrecord.node["0", :1]
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            del graphrecord.node[0, ::1]
+            del graphrecord.node["0", ::1]
 
         graphrecord = create_graphrecord()
-        del graphrecord.node[[0, 1], "foo"]
+        del graphrecord.node[["0", "1"], "foo"]
         assert graphrecord.node[:] == {
-            0: {"bar": "foo", "lorem": "ipsum"},
-            1: {"bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"bar": "foo", "lorem": "ipsum"},
+            "1": {"bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         # Removing from a non-existing node should fail
         with pytest.raises(IndexError):
-            del graphrecord.node[[0, 50], "foo"]
+            del graphrecord.node[["0", "50"], "foo"]
 
         graphrecord = create_graphrecord()
         # Removing a non-existing key should fail
         with pytest.raises(KeyError):
-            del graphrecord.node[[0, 1], "test"]
+            del graphrecord.node[["0", "1"], "test"]
 
         graphrecord = create_graphrecord()
-        del graphrecord.node[[0, 1], ["foo", "bar"]]
+        del graphrecord.node[["0", "1"], ["foo", "bar"]]
         assert graphrecord.node[:] == {
-            0: {"lorem": "ipsum"},
-            1: {},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"lorem": "ipsum"},
+            "1": {},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         # Removing a non-existing key should fail
         with pytest.raises(KeyError):
-            del graphrecord.node[[0, 1], ["foo", "test"]]
+            del graphrecord.node[["0", "1"], ["foo", "test"]]
 
         graphrecord = create_graphrecord()
         # Removing a key that doesn't exist in all nodes should fail
         with pytest.raises(KeyError):
-            del graphrecord.node[[0, 1], ["foo", "lorem"]]
+            del graphrecord.node[["0", "1"], ["foo", "lorem"]]
 
         graphrecord = create_graphrecord()
-        del graphrecord.node[[0, 1], :]
+        del graphrecord.node[["0", "1"], :]
         assert graphrecord.node[:] == {
-            0: {},
-            1: {},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {},
+            "1": {},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            del graphrecord.node[[0, 1], 1:]
+            del graphrecord.node[["0", "1"], 1:]
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            del graphrecord.node[[0, 1], :1]
+            del graphrecord.node[["0", "1"], :1]
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
-            del graphrecord.node[[0, 1], ::1]
+            del graphrecord.node[["0", "1"], ::1]
 
         graphrecord = create_graphrecord()
         del graphrecord.node[node_greater_than_or_equal_two, "foo"]
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"bar": "foo"},
-            3: {"bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"bar": "foo"},
+            "3": {"bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         del graphrecord.node[node_max, "foo"]
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         del graphrecord.node[node_max_greater_than_3, "foo"]
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
         # Empty query should not fail
         del graphrecord.node[node_greater_than_three, "foo"]
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
@@ -888,28 +897,28 @@ class TestIndexers(unittest.TestCase):
         graphrecord = create_graphrecord()
         del graphrecord.node[node_greater_than_or_equal_two, ["foo", "bar"]]
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {},
-            3: {},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {},
+            "3": {},
         }
 
         graphrecord = create_graphrecord()
         del graphrecord.node[node_max, ["foo", "bar"]]
         assert graphrecord.node[:] == {
-            1: {"foo": "bar", "bar": "foo"},
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {},
+            "1": {"foo": "bar", "bar": "foo"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {},
         }
 
         graphrecord = create_graphrecord()
         del graphrecord.node[node_max_greater_than_3, ["foo", "bar"]]
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         graphrecord = create_graphrecord()
@@ -925,28 +934,28 @@ class TestIndexers(unittest.TestCase):
         graphrecord = create_graphrecord()
         del graphrecord.node[node_greater_than_or_equal_two, :]
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {},
-            3: {},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {},
+            "3": {},
         }
 
         graphrecord = create_graphrecord()
         del graphrecord.node[node_max, :]
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {},
         }
 
         graphrecord = create_graphrecord()
         del graphrecord.node[node_max_greater_than_3, :]
         assert graphrecord.node[:] == {
-            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
-            1: {"foo": "bar", "bar": "foo"},
-            2: {"foo": "bar", "bar": "foo"},
-            3: {"foo": "bar", "bar": "test"},
+            "0": {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            "1": {"foo": "bar", "bar": "foo"},
+            "2": {"foo": "bar", "bar": "foo"},
+            "3": {"foo": "bar", "bar": "test"},
         }
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
@@ -959,10 +968,10 @@ class TestIndexers(unittest.TestCase):
         graphrecord = create_graphrecord()
         del graphrecord.node[:, "foo"]
         assert graphrecord.node[:] == {
-            0: {"bar": "foo", "lorem": "ipsum"},
-            1: {"bar": "foo"},
-            2: {"bar": "foo"},
-            3: {"bar": "test"},
+            "0": {"bar": "foo", "lorem": "ipsum"},
+            "1": {"bar": "foo"},
+            "2": {"bar": "foo"},
+            "3": {"bar": "test"},
         }
 
         graphrecord = create_graphrecord()
@@ -979,7 +988,12 @@ class TestIndexers(unittest.TestCase):
 
         graphrecord = create_graphrecord()
         del graphrecord.node[:, ["foo", "bar"]]
-        assert graphrecord.node[:] == {0: {"lorem": "ipsum"}, 1: {}, 2: {}, 3: {}}
+        assert graphrecord.node[:] == {
+            "0": {"lorem": "ipsum"},
+            "1": {},
+            "2": {},
+            "3": {},
+        }
 
         graphrecord = create_graphrecord()
         # Removing a non-existing key should fail
@@ -1000,7 +1014,7 @@ class TestIndexers(unittest.TestCase):
 
         graphrecord = create_graphrecord()
         del graphrecord.node[:, :]
-        assert graphrecord.node[:] == {0: {}, 1: {}, 2: {}, 3: {}}
+        assert graphrecord.node[:] == {"0": {}, "1": {}, "2": {}, "3": {}}
 
         with pytest.raises(ValueError, match="Invalid slice, only ':' is allowed"):
             del graphrecord.node[1:, :]

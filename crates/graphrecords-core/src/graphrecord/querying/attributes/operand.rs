@@ -23,12 +23,15 @@ use crate::{
                 },
             },
             operand_traits::{
-                Abs, Add, Contains, Count, EitherOr, EndsWith, EqualTo, Exclude, GreaterThan,
-                GreaterThanOrEqualTo, IsIn, IsInt, IsMax, IsMin, IsNotIn, IsString, LessThan,
-                LessThanOrEqualTo, Lowercase, Max, Min, Mod, Mul, NotEqualTo, Pow, Random, Slice,
-                StartsWith, Sub, Sum, ToValues, Trim, TrimEnd, TrimStart, Uppercase,
+                Add, Contains, Count, EitherOr, EndsWith, EqualTo, Exclude, GreaterThan,
+                GreaterThanOrEqualTo, IsIn, IsMax, IsMin, IsNotIn, LessThan, LessThanOrEqualTo,
+                Lowercase, Max, Min, NotEqualTo, Random, Slice, StartsWith, ToValues, Trim,
+                TrimEnd, TrimStart, Uppercase,
             },
-            values::{MultipleValuesWithIndexContext, MultipleValuesWithIndexOperand},
+            values::{
+                MultipleValuesWithIndexContext, MultipleValuesWithIndexOperand,
+                SingleValueWithoutIndexContext, SingleValueWithoutIndexOperand,
+            },
         },
     },
 };
@@ -385,38 +388,15 @@ impl<O: RootOperand> Min for AttributesTreeOperand<O> {
 }
 
 impl<O: RootOperand> Count for AttributesTreeOperand<O> {
-    type ReturnOperand = MultipleAttributesWithIndexOperand<O>;
+    type ReturnOperand = MultipleValuesWithIndexOperand<O>;
 
     fn count(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<Self::ReturnOperand>::new(
-            MultipleAttributesWithIndexContext::AttributesTree {
-                operand: self.deep_clone(),
-                kind: MultipleKind::Count,
-            },
+            MultipleValuesWithIndexContext::AttributesTreeOperand(self.deep_clone()),
         );
 
         self.operations
-            .push(AttributesTreeOperation::AttributesOperation {
-                operand: operand.clone(),
-            });
-
-        operand
-    }
-}
-
-impl<O: RootOperand> Sum for AttributesTreeOperand<O> {
-    type ReturnOperand = MultipleAttributesWithIndexOperand<O>;
-
-    fn sum(&mut self) -> Wrapper<Self::ReturnOperand> {
-        let operand = Wrapper::<Self::ReturnOperand>::new(
-            MultipleAttributesWithIndexContext::AttributesTree {
-                operand: self.deep_clone(),
-                kind: MultipleKind::Sum,
-            },
-        );
-
-        self.operations
-            .push(AttributesTreeOperation::AttributesOperation {
+            .push(AttributesTreeOperation::CountOperation {
                 operand: operand.clone(),
             });
 
@@ -599,63 +579,6 @@ impl<O: RootOperand> Add for AttributesTreeOperand<O> {
     }
 }
 
-impl<O: RootOperand> Sub for AttributesTreeOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn sub<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(AttributesTreeOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Sub,
-            });
-    }
-}
-
-impl<O: RootOperand> Mul for AttributesTreeOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn mul<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(AttributesTreeOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mul,
-            });
-    }
-}
-
-impl<O: RootOperand> Pow for AttributesTreeOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn pow<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(AttributesTreeOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Pow,
-            });
-    }
-}
-
-impl<O: RootOperand> Mod for AttributesTreeOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn r#mod<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(AttributesTreeOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mod,
-            });
-    }
-}
-
-impl<O: RootOperand> Abs for AttributesTreeOperand<O> {
-    fn abs(&mut self) {
-        self.operations
-            .push(AttributesTreeOperation::UnaryArithmeticOperation {
-                kind: UnaryArithmeticKind::Abs,
-            });
-    }
-}
-
 impl<O: RootOperand> Trim for AttributesTreeOperand<O> {
     fn trim(&mut self) {
         self.operations
@@ -705,18 +628,6 @@ impl<O: RootOperand> Slice for AttributesTreeOperand<O> {
     fn slice(&mut self, start: usize, end: usize) {
         self.operations
             .push(AttributesTreeOperation::Slice(start..end));
-    }
-}
-
-impl<O: RootOperand> IsString for AttributesTreeOperand<O> {
-    fn is_string(&mut self) {
-        self.operations.push(AttributesTreeOperation::IsString);
-    }
-}
-
-impl<O: RootOperand> IsInt for AttributesTreeOperand<O> {
-    fn is_int(&mut self) {
-        self.operations.push(AttributesTreeOperation::IsInt);
     }
 }
 
@@ -892,42 +803,17 @@ impl<O: RootOperand> Min for MultipleAttributesWithIndexOperand<O> {
 }
 
 impl<O: RootOperand> Count for MultipleAttributesWithIndexOperand<O> {
-    type ReturnOperand = SingleAttributeWithoutIndexOperand<O>;
+    type ReturnOperand = SingleValueWithoutIndexOperand<O>;
 
     fn count(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleAttributeWithoutIndexContext::MultipleAttributesWithIndexOperand(
-                self.deep_clone(),
-            ),
-            SingleKindWithoutIndex::Count,
+            SingleValueWithoutIndexContext::MultipleAttributesWithIndexOperand(self.deep_clone()),
         );
 
-        self.operations.push(
-            MultipleAttributesWithIndexOperation::AttributeWithoutIndexOperation {
+        self.operations
+            .push(MultipleAttributesWithIndexOperation::CountOperation {
                 operand: operand.clone(),
-            },
-        );
-
-        operand
-    }
-}
-
-impl<O: RootOperand> Sum for MultipleAttributesWithIndexOperand<O> {
-    type ReturnOperand = SingleAttributeWithoutIndexOperand<O>;
-
-    fn sum(&mut self) -> Wrapper<Self::ReturnOperand> {
-        let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleAttributeWithoutIndexContext::MultipleAttributesWithIndexOperand(
-                self.deep_clone(),
-            ),
-            SingleKindWithoutIndex::Sum,
-        );
-
-        self.operations.push(
-            MultipleAttributesWithIndexOperation::AttributeWithoutIndexOperation {
-                operand: operand.clone(),
-            },
-        );
+            });
 
         operand
     }
@@ -1106,68 +992,6 @@ impl<O: RootOperand> Add for MultipleAttributesWithIndexOperand<O> {
     }
 }
 
-impl<O: RootOperand> Sub for MultipleAttributesWithIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn sub<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            MultipleAttributesWithIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Sub,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Mul for MultipleAttributesWithIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn mul<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            MultipleAttributesWithIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mul,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Pow for MultipleAttributesWithIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn pow<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            MultipleAttributesWithIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Pow,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Mod for MultipleAttributesWithIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn r#mod<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            MultipleAttributesWithIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mod,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Abs for MultipleAttributesWithIndexOperand<O> {
-    fn abs(&mut self) {
-        self.operations.push(
-            MultipleAttributesWithIndexOperation::UnaryArithmeticOperation {
-                kind: UnaryArithmeticKind::Abs,
-            },
-        );
-    }
-}
-
 impl<O: RootOperand> Trim for MultipleAttributesWithIndexOperand<O> {
     fn trim(&mut self) {
         self.operations.push(
@@ -1239,20 +1063,6 @@ impl<O: RootOperand> Slice for MultipleAttributesWithIndexOperand<O> {
     fn slice(&mut self, start: usize, end: usize) {
         self.operations
             .push(MultipleAttributesWithIndexOperation::Slice(start..end));
-    }
-}
-
-impl<O: RootOperand> IsString for MultipleAttributesWithIndexOperand<O> {
-    fn is_string(&mut self) {
-        self.operations
-            .push(MultipleAttributesWithIndexOperation::IsString);
-    }
-}
-
-impl<O: RootOperand> IsInt for MultipleAttributesWithIndexOperand<O> {
-    fn is_int(&mut self) {
-        self.operations
-            .push(MultipleAttributesWithIndexOperation::IsInt);
     }
 }
 
@@ -1427,42 +1237,19 @@ impl<O: RootOperand> Min for MultipleAttributesWithoutIndexOperand<O> {
 }
 
 impl<O: RootOperand> Count for MultipleAttributesWithoutIndexOperand<O> {
-    type ReturnOperand = SingleAttributeWithoutIndexOperand<O>;
+    type ReturnOperand = SingleValueWithoutIndexOperand<O>;
 
     fn count(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleAttributeWithoutIndexContext::MultipleAttributesWithoutIndexOperand(
+            SingleValueWithoutIndexContext::MultipleAttributesWithoutIndexOperand(
                 self.deep_clone(),
             ),
-            SingleKindWithoutIndex::Count,
         );
 
-        self.operations.push(
-            MultipleAttributesWithoutIndexOperation::AttributeOperation {
+        self.operations
+            .push(MultipleAttributesWithoutIndexOperation::CountOperation {
                 operand: operand.clone(),
-            },
-        );
-
-        operand
-    }
-}
-
-impl<O: RootOperand> Sum for MultipleAttributesWithoutIndexOperand<O> {
-    type ReturnOperand = SingleAttributeWithoutIndexOperand<O>;
-
-    fn sum(&mut self) -> Wrapper<Self::ReturnOperand> {
-        let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleAttributeWithoutIndexContext::MultipleAttributesWithoutIndexOperand(
-                self.deep_clone(),
-            ),
-            SingleKindWithoutIndex::Sum,
-        );
-
-        self.operations.push(
-            MultipleAttributesWithoutIndexOperation::AttributeOperation {
-                operand: operand.clone(),
-            },
-        );
+            });
 
         operand
     }
@@ -1645,68 +1432,6 @@ impl<O: RootOperand> Add for MultipleAttributesWithoutIndexOperand<O> {
     }
 }
 
-impl<O: RootOperand> Sub for MultipleAttributesWithoutIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn sub<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            MultipleAttributesWithoutIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Sub,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Mul for MultipleAttributesWithoutIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn mul<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            MultipleAttributesWithoutIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mul,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Pow for MultipleAttributesWithoutIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn pow<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            MultipleAttributesWithoutIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Pow,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Mod for MultipleAttributesWithoutIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn r#mod<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            MultipleAttributesWithoutIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mod,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Abs for MultipleAttributesWithoutIndexOperand<O> {
-    fn abs(&mut self) {
-        self.operations.push(
-            MultipleAttributesWithoutIndexOperation::UnaryArithmeticOperation {
-                kind: UnaryArithmeticKind::Abs,
-            },
-        );
-    }
-}
-
 impl<O: RootOperand> Trim for MultipleAttributesWithoutIndexOperand<O> {
     fn trim(&mut self) {
         self.operations.push(
@@ -1761,20 +1486,6 @@ impl<O: RootOperand> Slice for MultipleAttributesWithoutIndexOperand<O> {
     fn slice(&mut self, start: usize, end: usize) {
         self.operations
             .push(MultipleAttributesWithoutIndexOperation::Slice(start..end));
-    }
-}
-
-impl<O: RootOperand> IsString for MultipleAttributesWithoutIndexOperand<O> {
-    fn is_string(&mut self) {
-        self.operations
-            .push(MultipleAttributesWithoutIndexOperation::IsString);
-    }
-}
-
-impl<O: RootOperand> IsInt for MultipleAttributesWithoutIndexOperand<O> {
-    fn is_int(&mut self) {
-        self.operations
-            .push(MultipleAttributesWithoutIndexOperation::IsInt);
     }
 }
 
@@ -2089,68 +1800,6 @@ impl<O: RootOperand> Add for SingleAttributeWithIndexOperand<O> {
     }
 }
 
-impl<O: RootOperand> Sub for SingleAttributeWithIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn sub<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            SingleAttributeWithIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Sub,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Mul for SingleAttributeWithIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn mul<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            SingleAttributeWithIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mul,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Pow for SingleAttributeWithIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn pow<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            SingleAttributeWithIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Pow,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Mod for SingleAttributeWithIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn r#mod<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            SingleAttributeWithIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mod,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Abs for SingleAttributeWithIndexOperand<O> {
-    fn abs(&mut self) {
-        self.operations.push(
-            SingleAttributeWithIndexOperation::UnaryArithmeticOperation {
-                kind: UnaryArithmeticKind::Abs,
-            },
-        );
-    }
-}
-
 impl<O: RootOperand> Trim for SingleAttributeWithIndexOperand<O> {
     fn trim(&mut self) {
         self.operations.push(
@@ -2205,20 +1854,6 @@ impl<O: RootOperand> Slice for SingleAttributeWithIndexOperand<O> {
     fn slice(&mut self, start: usize, end: usize) {
         self.operations
             .push(SingleAttributeWithIndexOperation::Slice(start..end));
-    }
-}
-
-impl<O: RootOperand> IsString for SingleAttributeWithIndexOperand<O> {
-    fn is_string(&mut self) {
-        self.operations
-            .push(SingleAttributeWithIndexOperation::IsString);
-    }
-}
-
-impl<O: RootOperand> IsInt for SingleAttributeWithIndexOperand<O> {
-    fn is_int(&mut self) {
-        self.operations
-            .push(SingleAttributeWithIndexOperation::IsInt);
     }
 }
 
@@ -2366,12 +2001,6 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a> for SingleAttributeWithoutInd
             }
             SingleKindWithoutIndex::Min => {
                 MultipleAttributesWithoutIndexOperation::<O>::get_min(attributes)?
-            }
-            SingleKindWithoutIndex::Count => Some(
-                MultipleAttributesWithoutIndexOperation::<O>::get_count(attributes),
-            ),
-            SingleKindWithoutIndex::Sum => {
-                MultipleAttributesWithoutIndexOperation::<O>::get_sum(attributes)?
             }
             SingleKindWithoutIndex::Random => {
                 MultipleAttributesWithoutIndexOperation::<O>::get_random(attributes)
@@ -2538,68 +2167,6 @@ impl<O: RootOperand> Add for SingleAttributeWithoutIndexOperand<O> {
     }
 }
 
-impl<O: RootOperand> Sub for SingleAttributeWithoutIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn sub<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            SingleAttributeWithoutIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Sub,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Mul for SingleAttributeWithoutIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn mul<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            SingleAttributeWithoutIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mul,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Pow for SingleAttributeWithoutIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn pow<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            SingleAttributeWithoutIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Pow,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Mod for SingleAttributeWithoutIndexOperand<O> {
-    type ComparisonOperand = SingleAttributeComparisonOperand;
-
-    fn r#mod<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations.push(
-            SingleAttributeWithoutIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mod,
-            },
-        );
-    }
-}
-
-impl<O: RootOperand> Abs for SingleAttributeWithoutIndexOperand<O> {
-    fn abs(&mut self) {
-        self.operations.push(
-            SingleAttributeWithoutIndexOperation::UnaryArithmeticOperation {
-                kind: UnaryArithmeticKind::Abs,
-            },
-        );
-    }
-}
-
 impl<O: RootOperand> Trim for SingleAttributeWithoutIndexOperand<O> {
     fn trim(&mut self) {
         self.operations.push(
@@ -2654,20 +2221,6 @@ impl<O: RootOperand> Slice for SingleAttributeWithoutIndexOperand<O> {
     fn slice(&mut self, start: usize, end: usize) {
         self.operations
             .push(SingleAttributeWithoutIndexOperation::Slice(start..end));
-    }
-}
-
-impl<O: RootOperand> IsString for SingleAttributeWithoutIndexOperand<O> {
-    fn is_string(&mut self) {
-        self.operations
-            .push(SingleAttributeWithoutIndexOperation::IsString);
-    }
-}
-
-impl<O: RootOperand> IsInt for SingleAttributeWithoutIndexOperand<O> {
-    fn is_int(&mut self) {
-        self.operations
-            .push(SingleAttributeWithoutIndexOperation::IsInt);
     }
 }
 

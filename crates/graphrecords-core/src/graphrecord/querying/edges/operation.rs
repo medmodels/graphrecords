@@ -18,7 +18,10 @@ use crate::{
             group_by::{GroupOperand, PartitionGroups},
             nodes::NodeOperand,
             tee_grouped_iterator,
-            values::{MultipleValuesWithIndexContext, MultipleValuesWithIndexOperand},
+            values::{
+                MultipleValuesWithIndexContext, MultipleValuesWithIndexOperand,
+                SingleValueWithoutIndexOperand,
+            },
             wrapper::{CardinalityWrapper, MatchMode, Wrapper},
         },
     },
@@ -746,6 +749,9 @@ pub enum EdgeIndicesOperation {
     EdgeIndexOperation {
         operand: Wrapper<EdgeIndexOperand>,
     },
+    CountOperation {
+        operand: Wrapper<SingleValueWithoutIndexOperand<EdgeOperand>>,
+    },
     EdgeIndexComparisonOperation {
         operand: EdgeIndexComparisonOperand,
         kind: SingleComparisonKind,
@@ -779,6 +785,9 @@ impl DeepClone for EdgeIndicesOperation {
     fn deep_clone(&self) -> Self {
         match self {
             Self::EdgeIndexOperation { operand } => Self::EdgeIndexOperation {
+                operand: operand.deep_clone(),
+            },
+            Self::CountOperation { operand } => Self::CountOperation {
                 operand: operand.deep_clone(),
             },
             Self::EdgeIndexComparisonOperation { operand, kind } => {
@@ -823,6 +832,9 @@ impl EdgeIndicesOperation {
             Self::EdgeIndexOperation { operand } => {
                 Self::evaluate_edge_index_operation(graphrecord, indices, operand)?
             }
+            Self::CountOperation { operand } => {
+                Self::evaluate_count_operation(graphrecord, indices, operand)?
+            }
             Self::EdgeIndexComparisonOperation { operand, kind } => {
                 Self::evaluate_edge_index_comparison_operation(graphrecord, indices, operand, kind)?
             }
@@ -857,11 +869,6 @@ impl EdgeIndicesOperation {
         indices.min()
     }
     #[inline]
-    pub(crate) fn get_count(indices: impl Iterator<Item = EdgeIndex>) -> EdgeIndex {
-        indices.count() as EdgeIndex
-    }
-
-    #[inline]
     pub(crate) fn get_sum(indices: impl Iterator<Item = EdgeIndex>) -> EdgeIndex {
         indices.sum()
     }
@@ -884,12 +891,27 @@ impl EdgeIndicesOperation {
         let index = match kind {
             SingleKind::Max => Self::get_max(indices_1),
             SingleKind::Min => Self::get_min(indices_1),
-            SingleKind::Count => Some(Self::get_count(indices_1)),
             SingleKind::Sum => Some(Self::get_sum(indices_1)),
             SingleKind::Random => Self::get_random(indices_1),
         };
 
         Ok(match operand.evaluate_forward(graphrecord, index)? {
+            Some(_) => Box::new(indices_2.into_iter()),
+            None => Box::new(std::iter::empty()),
+        })
+    }
+
+    #[inline]
+    fn evaluate_count_operation<'a>(
+        graphrecord: &GraphRecord,
+        indices: impl Iterator<Item = EdgeIndex> + 'a,
+        operand: &Wrapper<SingleValueWithoutIndexOperand<EdgeOperand>>,
+    ) -> GraphRecordResult<BoxedIterator<'a, EdgeIndex>> {
+        let (indices_1, indices_2) = Itertools::tee(indices);
+
+        let count = GraphRecordValue::from(indices_1.count() as i64);
+
+        Ok(match operand.evaluate_forward(graphrecord, Some(count))? {
             Some(_) => Box::new(indices_2.into_iter()),
             None => Box::new(std::iter::empty()),
         })
@@ -1055,6 +1077,11 @@ impl EdgeIndicesOperation {
             Self::EdgeIndexOperation { operand } => Box::new(
                 Self::evaluate_edge_index_operation_grouped(graphrecord, edge_indices, operand)?,
             ),
+            Self::CountOperation { operand } => Box::new(Self::evaluate_count_operation_grouped(
+                graphrecord,
+                edge_indices,
+                operand,
+            )?),
             Self::EdgeIndexComparisonOperation { operand, kind } => Box::new(
                 edge_indices
                     .map(move |(key, edge_indices)| {
@@ -1162,7 +1189,6 @@ impl EdgeIndicesOperation {
                     match kind {
                         SingleKind::Max => Self::get_max(edge_indices),
                         SingleKind::Min => Self::get_min(edge_indices),
-                        SingleKind::Count => Some(Self::get_count(edge_indices)),
                         SingleKind::Sum => Some(Self::get_sum(edge_indices)),
                         SingleKind::Random => Self::get_random(edge_indices),
                     },
@@ -1186,6 +1212,36 @@ impl EdgeIndicesOperation {
                 None => (key, Box::new(std::iter::empty()) as BoxedIterator<_>),
             },
         )))
+    }
+
+    #[allow(clippy::type_complexity)]
+    #[inline]
+    fn evaluate_count_operation_grouped<'a>(
+        graphrecord: &'a GraphRecord,
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>,
+        operand: &Wrapper<SingleValueWithoutIndexOperand<EdgeOperand>>,
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>> {
+        let (edge_indices_1, edge_indices_2) = tee_grouped_iterator(edge_indices);
+        let mut edge_indices_2: Vec<_> = edge_indices_2.collect();
+
+        let values = edge_indices_1.map(|(key, edge_indices)| {
+            let count = GraphRecordValue::from(edge_indices.count() as i64);
+            (key, Some(count))
+        });
+
+        let values = operand.evaluate_forward_grouped(graphrecord, Box::new(values))?;
+
+        Ok(Box::new(values.map(move |(key, value)| match value {
+            Some(_) => {
+                let position = edge_indices_2
+                    .iter()
+                    .position(|(k, _)| k == &key)
+                    .expect("Entry must exist");
+
+                edge_indices_2.remove(position)
+            }
+            None => (key, Box::new(std::iter::empty()) as BoxedIterator<_>),
+        })))
     }
 
     #[inline]

@@ -1,11 +1,17 @@
 use std::ops::Deref;
 
-use crate::graphrecord::{
-    attribute::PyGraphRecordAttribute,
-    errors::PyGraphRecordError,
-    querying::values::{
-        PyEdgeMultipleValuesWithIndexGroupOperand, PyEdgeMultipleValuesWithIndexOperand,
-        PyNodeMultipleValuesWithIndexGroupOperand, PyNodeMultipleValuesWithIndexOperand,
+use crate::{
+    graphrecord::{
+        attribute::PyGraphRecordAttribute,
+        errors::PyGraphRecordError,
+        querying::values::{
+            PyEdgeMultipleValuesWithIndexGroupOperand, PyEdgeMultipleValuesWithIndexOperand,
+            PyNodeMultipleValuesWithIndexGroupOperand, PyNodeMultipleValuesWithIndexOperand,
+        },
+    },
+    prelude::{
+        PyEdgeSingleValueWithoutIndexGroupOperand, PyEdgeSingleValueWithoutIndexOperand,
+        PyNodeSingleValueWithoutIndexGroupOperand, PyNodeSingleValueWithoutIndexOperand,
     },
 };
 use graphrecords_core::{
@@ -149,7 +155,7 @@ impl FromPyObject<'_, '_> for PyMultipleAttributesComparisonOperand {
 }
 
 macro_rules! implement_attributes_tree_operand {
-    ($name:ident, $generic:ty, $multiple_attributes_operand:ty) => {
+    ($name:ident, $generic:ty, $multiple_attributes_operand:ty, $multiple_values_operand:ty) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
@@ -185,12 +191,8 @@ macro_rules! implement_attributes_tree_operand {
                 self.0.min().into()
             }
 
-            pub fn count(&self) -> $multiple_attributes_operand {
+            pub fn count(&self) -> $multiple_values_operand {
                 self.0.count().into()
-            }
-
-            pub fn sum(&self) -> $multiple_attributes_operand {
-                self.0.sum().into()
             }
 
             pub fn random(&self) -> $multiple_attributes_operand {
@@ -245,26 +247,6 @@ macro_rules! implement_attributes_tree_operand {
                 self.0.add(attribute);
             }
 
-            pub fn sub(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.sub(attribute);
-            }
-
-            pub fn mul(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.mul(attribute);
-            }
-
-            pub fn pow(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.pow(attribute);
-            }
-
-            pub fn r#mod(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.r#mod(attribute);
-            }
-
-            pub fn abs(&self) {
-                self.0.abs();
-            }
-
             pub fn trim(&self) {
                 self.0.trim();
             }
@@ -287,14 +269,6 @@ macro_rules! implement_attributes_tree_operand {
 
             pub fn slice(&self, start: usize, end: usize) {
                 self.0.slice(start, end);
-            }
-
-            pub fn is_string(&self) {
-                self.0.is_string();
-            }
-
-            pub fn is_int(&self) {
-                self.0.is_int();
             }
 
             pub fn is_max(&self) {
@@ -337,16 +311,18 @@ macro_rules! implement_attributes_tree_operand {
 implement_attributes_tree_operand!(
     PyNodeAttributesTreeOperand,
     NodeOperand,
-    PyNodeMultipleAttributesWithIndexOperand
+    PyNodeMultipleAttributesWithIndexOperand,
+    PyNodeMultipleValuesWithIndexOperand
 );
 implement_attributes_tree_operand!(
     PyEdgeAttributesTreeOperand,
     EdgeOperand,
-    PyEdgeMultipleAttributesWithIndexOperand
+    PyEdgeMultipleAttributesWithIndexOperand,
+    PyEdgeMultipleValuesWithIndexOperand
 );
 
 macro_rules! implement_attributes_tree_group_operand {
-    ($name:ident, $ungrouped_name:ident, $generic:ty, $multiple_attributes_operand:ty) => {
+    ($name:ident, $ungrouped_name:ident, $generic:ty, $multiple_attributes_operand:ty, $multiple_values_operand:ty) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
@@ -382,12 +358,8 @@ macro_rules! implement_attributes_tree_group_operand {
                 self.0.min().into()
             }
 
-            pub fn count(&self) -> $multiple_attributes_operand {
+            pub fn count(&self) -> $multiple_values_operand {
                 self.0.count().into()
-            }
-
-            pub fn sum(&self) -> $multiple_attributes_operand {
-                self.0.sum().into()
             }
 
             pub fn random(&self) -> $multiple_attributes_operand {
@@ -442,26 +414,6 @@ macro_rules! implement_attributes_tree_group_operand {
                 self.0.add(attribute);
             }
 
-            pub fn sub(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.sub(attribute);
-            }
-
-            pub fn mul(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.mul(attribute);
-            }
-
-            pub fn pow(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.pow(attribute);
-            }
-
-            pub fn r#mod(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.r#mod(attribute);
-            }
-
-            pub fn abs(&self) {
-                self.0.abs();
-            }
-
             pub fn trim(&self) {
                 self.0.trim();
             }
@@ -484,14 +436,6 @@ macro_rules! implement_attributes_tree_group_operand {
 
             pub fn slice(&self, start: usize, end: usize) {
                 self.0.slice(start, end);
-            }
-
-            pub fn is_string(&self) {
-                self.0.is_string();
-            }
-
-            pub fn is_int(&self) {
-                self.0.is_int();
             }
 
             pub fn is_max(&self) {
@@ -539,17 +483,19 @@ implement_attributes_tree_group_operand!(
     PyNodeAttributesTreeGroupOperand,
     PyNodeAttributesTreeOperand,
     NodeOperand,
-    PyNodeMultipleAttributesWithIndexGroupOperand
+    PyNodeMultipleAttributesWithIndexGroupOperand,
+    PyNodeMultipleValuesWithIndexGroupOperand
 );
 implement_attributes_tree_group_operand!(
     PyEdgeAttributesTreeGroupOperand,
     PyEdgeAttributesTreeOperand,
     EdgeOperand,
-    PyEdgeMultipleAttributesWithIndexGroupOperand
+    PyEdgeMultipleAttributesWithIndexGroupOperand,
+    PyEdgeMultipleValuesWithIndexGroupOperand
 );
 
 macro_rules! implement_multiple_attributes_operand {
-    ($name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty) => {
+    ($name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty, $py_single_value_without_index_operand:ty) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
@@ -585,12 +531,8 @@ macro_rules! implement_multiple_attributes_operand {
                 self.0.min().into()
             }
 
-            pub fn count(&self) -> $py_single_attribute_without_index_operand {
+            pub fn count(&self) -> $py_single_value_without_index_operand {
                 self.0.count().into()
-            }
-
-            pub fn sum(&self) -> $py_single_attribute_without_index_operand {
-                self.0.sum().into()
             }
 
             pub fn random(&self) -> $py_single_attribute_with_index_operand {
@@ -645,26 +587,6 @@ macro_rules! implement_multiple_attributes_operand {
                 self.0.add(attribute);
             }
 
-            pub fn sub(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.sub(attribute);
-            }
-
-            pub fn mul(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.mul(attribute);
-            }
-
-            pub fn pow(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.pow(attribute);
-            }
-
-            pub fn r#mod(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.r#mod(attribute);
-            }
-
-            pub fn abs(&self) {
-                self.0.abs();
-            }
-
             pub fn trim(&self) {
                 self.0.trim();
             }
@@ -687,14 +609,6 @@ macro_rules! implement_multiple_attributes_operand {
 
             pub fn slice(&self, start: usize, end: usize) {
                 self.0.slice(start, end);
-            }
-
-            pub fn is_string(&self) {
-                self.0.is_string();
-            }
-
-            pub fn is_int(&self) {
-                self.0.is_int();
             }
 
             pub fn is_max(&self) {
@@ -732,7 +646,7 @@ macro_rules! implement_multiple_attributes_operand {
             }
         }
     };
-    ($name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty, $py_multiple_values_operand:ty) => {
+    ($name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty, $py_single_value_without_index_operand:ty, $py_multiple_values_operand:ty) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
@@ -768,12 +682,8 @@ macro_rules! implement_multiple_attributes_operand {
                 self.0.min().into()
             }
 
-            pub fn count(&self) -> $py_single_attribute_without_index_operand {
+            pub fn count(&self) -> $py_single_value_without_index_operand {
                 self.0.count().into()
-            }
-
-            pub fn sum(&self) -> $py_single_attribute_without_index_operand {
-                self.0.sum().into()
             }
 
             pub fn random(&self) -> $py_single_attribute_with_index_operand {
@@ -828,26 +738,6 @@ macro_rules! implement_multiple_attributes_operand {
                 self.0.add(attribute);
             }
 
-            pub fn sub(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.sub(attribute);
-            }
-
-            pub fn mul(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.mul(attribute);
-            }
-
-            pub fn pow(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.pow(attribute);
-            }
-
-            pub fn r#mod(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.r#mod(attribute);
-            }
-
-            pub fn abs(&self) {
-                self.0.abs();
-            }
-
             pub fn trim(&self) {
                 self.0.trim();
             }
@@ -874,14 +764,6 @@ macro_rules! implement_multiple_attributes_operand {
 
             pub fn slice(&self, start: usize, end: usize) {
                 self.0.slice(start, end);
-            }
-
-            pub fn is_string(&self) {
-                self.0.is_string();
-            }
-
-            pub fn is_int(&self) {
-                self.0.is_int();
             }
 
             pub fn is_max(&self) {
@@ -927,6 +809,7 @@ implement_multiple_attributes_operand!(
     NodeOperand,
     PyNodeSingleAttributeWithIndexOperand,
     PyNodeSingleAttributeWithoutIndexOperand,
+    PyNodeSingleValueWithoutIndexOperand,
     PyNodeMultipleValuesWithIndexOperand
 );
 implement_multiple_attributes_operand!(
@@ -934,7 +817,8 @@ implement_multiple_attributes_operand!(
     MultipleAttributesWithoutIndexOperand,
     NodeOperand,
     PyNodeSingleAttributeWithoutIndexOperand,
-    PyNodeSingleAttributeWithoutIndexOperand
+    PyNodeSingleAttributeWithoutIndexOperand,
+    PyNodeSingleValueWithoutIndexOperand
 );
 implement_multiple_attributes_operand!(
     PyEdgeMultipleAttributesWithIndexOperand,
@@ -942,6 +826,7 @@ implement_multiple_attributes_operand!(
     EdgeOperand,
     PyEdgeSingleAttributeWithIndexOperand,
     PyEdgeSingleAttributeWithoutIndexOperand,
+    PyEdgeSingleValueWithoutIndexOperand,
     PyEdgeMultipleValuesWithIndexOperand
 );
 implement_multiple_attributes_operand!(
@@ -949,11 +834,12 @@ implement_multiple_attributes_operand!(
     MultipleAttributesWithoutIndexOperand,
     EdgeOperand,
     PyEdgeSingleAttributeWithoutIndexOperand,
-    PyEdgeSingleAttributeWithoutIndexOperand
+    PyEdgeSingleAttributeWithoutIndexOperand,
+    PyEdgeSingleValueWithoutIndexOperand
 );
 
 macro_rules! implement_multiple_attributes_grouped_operand {
-    ($name:ident, $ungrouped_name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty, $py_multiple_values_operand:ty) => {
+    ($name:ident, $ungrouped_name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty, $py_single_value_without_index_operand:ty, $py_multiple_values_operand:ty) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
@@ -989,12 +875,8 @@ macro_rules! implement_multiple_attributes_grouped_operand {
                 self.0.min().into()
             }
 
-            pub fn count(&self) -> $py_single_attribute_without_index_operand {
+            pub fn count(&self) -> $py_single_value_without_index_operand {
                 self.0.count().into()
-            }
-
-            pub fn sum(&self) -> $py_single_attribute_without_index_operand {
-                self.0.sum().into()
             }
 
             pub fn random(&self) -> $py_single_attribute_with_index_operand {
@@ -1049,26 +931,6 @@ macro_rules! implement_multiple_attributes_grouped_operand {
                 self.0.add(attribute);
             }
 
-            pub fn sub(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.sub(attribute);
-            }
-
-            pub fn mul(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.mul(attribute);
-            }
-
-            pub fn pow(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.pow(attribute);
-            }
-
-            pub fn r#mod(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.r#mod(attribute);
-            }
-
-            pub fn abs(&self) {
-                self.0.abs();
-            }
-
             pub fn trim(&self) {
                 self.0.trim();
             }
@@ -1095,14 +957,6 @@ macro_rules! implement_multiple_attributes_grouped_operand {
 
             pub fn slice(&self, start: usize, end: usize) {
                 self.0.slice(start, end);
-            }
-
-            pub fn is_string(&self) {
-                self.0.is_string();
-            }
-
-            pub fn is_int(&self) {
-                self.0.is_int();
             }
 
             pub fn is_max(&self) {
@@ -1153,6 +1007,7 @@ implement_multiple_attributes_grouped_operand!(
     NodeOperand,
     PyNodeSingleAttributeWithIndexGroupOperand,
     PyNodeSingleAttributeWithoutIndexGroupOperand,
+    PyNodeSingleValueWithoutIndexGroupOperand,
     PyNodeMultipleValuesWithIndexGroupOperand
 );
 implement_multiple_attributes_grouped_operand!(
@@ -1162,6 +1017,7 @@ implement_multiple_attributes_grouped_operand!(
     EdgeOperand,
     PyEdgeSingleAttributeWithIndexGroupOperand,
     PyEdgeSingleAttributeWithoutIndexGroupOperand,
+    PyEdgeSingleValueWithoutIndexGroupOperand,
     PyEdgeMultipleValuesWithIndexGroupOperand
 );
 
@@ -1242,26 +1098,6 @@ macro_rules! implement_single_attribute_operand {
                 self.0.add(attribute);
             }
 
-            pub fn sub(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.sub(attribute);
-            }
-
-            pub fn mul(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.mul(attribute);
-            }
-
-            pub fn pow(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.pow(attribute);
-            }
-
-            pub fn r#mod(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.r#mod(attribute);
-            }
-
-            pub fn abs(&self) {
-                self.0.abs();
-            }
-
             pub fn trim(&self) {
                 self.0.trim();
             }
@@ -1284,14 +1120,6 @@ macro_rules! implement_single_attribute_operand {
 
             pub fn slice(&self, start: usize, end: usize) {
                 self.0.slice(start, end);
-            }
-
-            pub fn is_string(&self) {
-                self.0.is_string();
-            }
-
-            pub fn is_int(&self) {
-                self.0.is_int();
             }
 
             pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {
@@ -1421,26 +1249,6 @@ macro_rules! implement_single_attribute_grouped_operand {
                 self.0.add(attribute);
             }
 
-            pub fn sub(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.sub(attribute);
-            }
-
-            pub fn mul(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.mul(attribute);
-            }
-
-            pub fn pow(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.pow(attribute);
-            }
-
-            pub fn r#mod(&self, attribute: PySingleAttributeComparisonOperand) {
-                self.0.r#mod(attribute);
-            }
-
-            pub fn abs(&self) {
-                self.0.abs();
-            }
-
             pub fn trim(&self) {
                 self.0.trim();
             }
@@ -1463,14 +1271,6 @@ macro_rules! implement_single_attribute_grouped_operand {
 
             pub fn slice(&self, start: usize, end: usize) {
                 self.0.slice(start, end);
-            }
-
-            pub fn is_string(&self) {
-                self.0.is_string();
-            }
-
-            pub fn is_int(&self) {
-                self.0.is_int();
             }
 
             pub fn either_or(&self, either: &Bound<'_, PyFunction>, or: &Bound<'_, PyFunction>) {

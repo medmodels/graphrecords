@@ -176,6 +176,8 @@ exclude_also = [
     'msg = "Should never be reached"',
     "raise NotImplementedError",
     "@(abc\\.)?abstractmethod",
+    "class (Node|Edge)(SingleAttribute|MultipleAttributes)WithoutIndex(Group)?Operand:",
+    "isinstance\\(.*, (Node|Edge)(SingleAttribute|MultipleAttributes)WithoutIndex(Group)?Operand\\)",
 ]
 
 [tool.uv]

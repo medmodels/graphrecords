@@ -64,9 +64,7 @@ impl<'py> IntoPyObject<'py> for PyGraphRecordAttribute {
     type Error = PyErr;
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-        match self.0 {
-            GraphRecordAttribute::String(value) => value.into_bound_py_any(py),
-            GraphRecordAttribute::Int(value) => value.into_bound_py_any(py),
-        }
+        let s: &str = &self.0;
+        s.into_bound_py_any(py)
     }
 }

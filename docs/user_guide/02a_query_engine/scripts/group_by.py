@@ -3,10 +3,10 @@ import pandas as pd
 
 import graphrecords as gr
 from graphrecords.querying import (
-    EdgeIndexGroupOperand,
     EdgeMultipleValuesWithIndexGroupOperand,
     EdgeOperand,
     EdgeOperandGroupDiscriminator,
+    EdgeSingleValueWithoutIndexGroupOperand,
     NodeMultipleValuesWithIndexGroupOperand,
     NodeOperand,
     NodeOperandGroupDiscriminator,
@@ -92,7 +92,9 @@ def query_edge_group_by_source_node(
 graphrecord.query_edges(query_edge_group_by_source_node)
 
 
-def query_edge_group_by_count_edges(edge: EdgeOperand) -> EdgeIndexGroupOperand:
+def query_edge_group_by_count_edges(
+    edge: EdgeOperand,
+) -> EdgeSingleValueWithoutIndexGroupOperand:
     grouped_edges = edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
 
     return grouped_edges.index().count()

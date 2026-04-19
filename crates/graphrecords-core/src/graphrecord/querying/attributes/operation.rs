@@ -12,8 +12,8 @@ use crate::{
     graphrecord::{
         GraphRecordAttribute, GraphRecordValue, Wrapper,
         datatypes::{
-            Abs, Contains, DataType, EndsWith, Lowercase, Mod, Pow, Slice, StartsWith, Trim,
-            TrimEnd, TrimStart, Uppercase,
+            Contains, DataType, EndsWith, Lowercase, Slice, StartsWith, Trim, TrimEnd, TrimStart,
+            Uppercase,
         },
         querying::{
             BoxedIterator, DeepClone, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
@@ -23,7 +23,7 @@ use crate::{
                 MultipleKind, SingleKindWithoutIndex, operand::SingleAttributeWithoutIndexOperand,
             },
             tee_grouped_iterator,
-            values::MultipleValuesWithIndexOperand,
+            values::{MultipleValuesWithIndexOperand, SingleValueWithoutIndexOperand},
         },
     },
 };
@@ -33,7 +33,7 @@ use rand::{rng, seq::IteratorRandom};
 use std::{
     cmp::Ordering,
     collections::HashMap,
-    ops::{Add, Mul, Range, Sub},
+    ops::{Add, Range},
 };
 
 #[derive(Debug, Clone)]
@@ -57,10 +57,11 @@ pub enum AttributesTreeOperation<O: RootOperand> {
         kind: UnaryArithmeticKind,
     },
 
-    Slice(Range<usize>),
+    CountOperation {
+        operand: Wrapper<MultipleValuesWithIndexOperand<O>>,
+    },
 
-    IsString,
-    IsInt,
+    Slice(Range<usize>),
 
     IsMax,
     IsMin,
@@ -103,9 +104,10 @@ impl<O: RootOperand> DeepClone for AttributesTreeOperation<O> {
             Self::UnaryArithmeticOperation { kind } => {
                 Self::UnaryArithmeticOperation { kind: kind.clone() }
             }
+            Self::CountOperation { operand } => Self::CountOperation {
+                operand: operand.deep_clone(),
+            },
             Self::Slice(range) => Self::Slice(range.clone()),
-            Self::IsString => Self::IsString,
-            Self::IsInt => Self::IsInt,
             Self::IsMax => Self::IsMax,
             Self::IsMin => Self::IsMin,
             Self::EitherOr { either, or } => Self::EitherOr {
@@ -159,9 +161,12 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
             Self::UnaryArithmeticOperation { kind } => Box::new(
                 Self::evaluate_unary_arithmetic_operation(attributes, kind.clone()),
             ),
+            Self::CountOperation { operand } => Box::new(Self::evaluate_count_operation(
+                graphrecord,
+                attributes,
+                operand,
+            )?),
             Self::Slice(range) => Box::new(Self::evaluate_slice(attributes, range.clone())),
-            Self::IsString => Box::new(Self::evaluate_is_string(attributes)),
-            Self::IsInt => Box::new(Self::evaluate_is_int(attributes)),
             Self::IsMax => Box::new(Self::evaluate_is_max(attributes)?),
             Self::IsMin => Box::new(Self::evaluate_is_min(attributes)?),
             Self::EitherOr { either, or } => {
@@ -241,41 +246,11 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     #[inline]
     pub(crate) fn get_count<'a>(
         attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>
+    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordValue)>
     where
         O: 'a,
     {
-        attributes
-            .map(|(index, attribute)| (index, GraphRecordAttribute::Int(attribute.len() as i64)))
-    }
-
-    #[inline]
-    pub(crate) fn get_sum<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>>
-    where
-        O: 'a,
-    {
-        Ok(attributes.map(|(index, attributes)| {
-            let mut attributes = attributes.into_iter();
-
-            let first_attribute = attributes.next().ok_or_else(||GraphRecordError::QueryError(
-                "No attributes to compare".to_string(),
-            ))?;
-
-            let attribute = attributes.try_fold(first_attribute, |sum, attribute| {
-                let first_dtype = DataType::from(&sum);
-                let second_dtype = DataType::from(&attribute);
-
-                sum.add(attribute).map_err(|_| {
-                    GraphRecordError::QueryError(format!(
-                        "Cannot add attributes of data types {first_dtype} and {second_dtype}. Consider narrowing down the attributes using .is_string() or .is_int()"
-                    ))
-                })
-            })?;
-
-            Ok((index, attribute))
-        }).collect::<GraphRecordResult<Vec<_>>>()?.into_iter())
+        attributes.map(|(index, attribute)| (index, GraphRecordValue::from(attribute.len() as i64)))
     }
 
     #[inline]
@@ -323,8 +298,6 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         let multiple_operand_attributes: BoxedIterator<_> = match kind {
             MultipleKind::Max => Box::new(Self::get_max(attributes_1)?),
             MultipleKind::Min => Box::new(Self::get_min(attributes_1)?),
-            MultipleKind::Count => Box::new(Self::get_count(attributes_1)),
-            MultipleKind::Sum => Box::new(Self::get_sum(attributes_1)?),
             MultipleKind::Random => Box::new(Self::get_random(attributes_1)?),
         };
 
@@ -488,7 +461,7 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     #[inline]
     fn evaluate_binary_arithmetic_operation<'a, I: 'a>(
         graphrecord: &GraphRecord,
-        attributes: impl Iterator<Item = (I, Vec<GraphRecordAttribute>)>,
+        attributes: impl Iterator<Item = (I, Vec<GraphRecordAttribute>)> + 'a,
         operand: &SingleAttributeComparisonOperand,
         kind: &BinaryArithmeticKind,
     ) -> GraphRecordResult<BoxedIterator<'a, (I, Vec<GraphRecordAttribute>)>> {
@@ -496,61 +469,19 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
             .evaluate_backward(graphrecord)?
             .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
-        let attributes: Box<
-            dyn Iterator<Item = GraphRecordResult<(I, Vec<GraphRecordAttribute>)>>,
-        > = match kind {
+        let attributes = match kind {
             BinaryArithmeticKind::Add => Box::new(attributes.map(move |(index, attributes)| {
-                Ok((
+                (
                     index,
                     attributes
                         .into_iter()
                         .map(|attribute| attribute.add(arithmetic_attribute.clone()))
-                        .collect::<GraphRecordResult<Vec<_>>>()?,
-                ))
-            })),
-            BinaryArithmeticKind::Sub => Box::new(attributes.map(move |(index, attributes)| {
-                Ok((
-                    index,
-                    attributes
-                        .into_iter()
-                        .map(|attribute| attribute.sub(arithmetic_attribute.clone()))
-                        .collect::<GraphRecordResult<Vec<_>>>()?,
-                ))
-            })),
-            BinaryArithmeticKind::Mul => Box::new(attributes.map(move |(index, attributes)| {
-                Ok((
-                    index,
-                    attributes
-                        .into_iter()
-                        .map(|attribute| attribute.mul(arithmetic_attribute.clone()))
-                        .collect::<GraphRecordResult<Vec<_>>>()?,
-                ))
-            })),
-            BinaryArithmeticKind::Pow => Box::new(attributes.map(move |(index, attributes)| {
-                Ok((
-                    index,
-                    attributes
-                        .into_iter()
-                        .map(|attribute| attribute.pow(arithmetic_attribute.clone()))
-                        .collect::<GraphRecordResult<Vec<_>>>()?,
-                ))
-            })),
-            BinaryArithmeticKind::Mod => Box::new(attributes.map(move |(index, attributes)| {
-                Ok((
-                    index,
-                    attributes
-                        .into_iter()
-                        .map(|attribute| attribute.r#mod(arithmetic_attribute.clone()))
-                        .collect::<GraphRecordResult<Vec<_>>>()?,
-                ))
+                        .collect::<Vec<_>>(),
+                )
             })),
         };
 
-        Ok(Box::new(
-            attributes
-                .collect::<GraphRecordResult<Vec<_>>>()?
-                .into_iter(),
-        ))
+        Ok(Box::new(attributes))
     }
 
     #[inline]
@@ -567,7 +498,6 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
                 attributes
                     .into_iter()
                     .map(|attribute| match kind {
-                        UnaryArithmeticKind::Abs => attribute.abs(),
                         UnaryArithmeticKind::Trim => attribute.trim(),
                         UnaryArithmeticKind::TrimStart => attribute.trim_start(),
                         UnaryArithmeticKind::TrimEnd => attribute.trim_end(),
@@ -577,6 +507,30 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
                     .collect(),
             )
         })
+    }
+
+    #[inline]
+    fn evaluate_count_operation<'a, T>(
+        graphrecord: &'a GraphRecord,
+        attributes: T,
+        operand: &Wrapper<MultipleValuesWithIndexOperand<O>>,
+    ) -> GraphRecordResult<
+        impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a + use<'a, O, T>,
+    >
+    where
+        O: 'a,
+        T: Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a,
+    {
+        let (attributes_1, attributes_2) = Itertools::tee(attributes);
+
+        let multiple_operand_values: BoxedIterator<_> = Box::new(Self::get_count(attributes_1));
+
+        let result = operand.evaluate_forward(graphrecord, multiple_operand_values)?;
+
+        let mut attributes: GrHashMap<_, _> = attributes_2.into_iter().collect();
+
+        Ok(result
+            .map(move |(index, _)| (index, attributes.remove(&index).expect("Index must exist"))))
     }
 
     #[inline]
@@ -593,42 +547,6 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
                 attributes
                     .into_iter()
                     .map(|attribute| attribute.slice(range.clone()))
-                    .collect(),
-            )
-        })
-    }
-
-    #[inline]
-    fn evaluate_is_string<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>
-    where
-        O: 'a,
-    {
-        attributes.map(|(index, attribute)| {
-            (
-                index,
-                attribute
-                    .into_iter()
-                    .filter(|attribute| matches!(attribute, GraphRecordAttribute::String(_)))
-                    .collect(),
-            )
-        })
-    }
-
-    #[inline]
-    fn evaluate_is_int<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>
-    where
-        O: 'a,
-    {
-        attributes.map(|(index, attribute)| {
-            (
-                index,
-                attribute
-                    .into_iter()
-                    .filter(|attribute| matches!(attribute, GraphRecordAttribute::Int(_)))
                     .collect(),
             )
         })
@@ -818,6 +736,9 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
                     )
                 }))
             }
+            Self::CountOperation { operand } => {
+                Self::evaluate_count_operation_grouped(graphrecord, attributes, operand)?
+            }
             Self::Slice(range) => {
                 let range = range.clone();
 
@@ -829,18 +750,6 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
                     )
                 }))
             }
-            Self::IsString => Box::new(attributes.map(move |(key, attributes)| {
-                (
-                    key,
-                    Box::new(Self::evaluate_is_string(attributes)) as BoxedIterator<_>,
-                )
-            })),
-            Self::IsInt => Box::new(attributes.map(move |(key, attributes)| {
-                (
-                    key,
-                    Box::new(Self::evaluate_is_int(attributes)) as BoxedIterator<_>,
-                )
-            })),
             Self::IsMax => Box::new(
                 attributes
                     .map(move |(key, attributes)| {
@@ -921,8 +830,6 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
                 let attributes: BoxedIterator<_> = match kind {
                     MultipleKind::Max => Box::new(Self::get_max(attributes)?),
                     MultipleKind::Min => Box::new(Self::get_min(attributes)?),
-                    MultipleKind::Count => Box::new(Self::get_count(attributes)),
-                    MultipleKind::Sum => Box::new(Self::get_sum(attributes)?),
                     MultipleKind::Random => Box::new(Self::get_random(attributes)?),
                 };
 
@@ -934,6 +841,55 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
             operand.evaluate_forward_grouped(graphrecord, Box::new(attributes_1.into_iter()))?;
 
         let attributes = attibutes_1.map(move |(key, attributes_1)| {
+            let attributes_position = attributes_2
+                .iter()
+                .position(|(k, _)| k == &key)
+                .expect("Entry must exist");
+
+            let mut attributes_2 = attributes_2
+                .remove(attributes_position)
+                .1
+                .collect::<HashMap<_, _>>();
+
+            let attributes: BoxedIterator<_> = Box::new(attributes_1.map(move |(index, _)| {
+                (
+                    index,
+                    attributes_2.remove(&index).expect("Attribute must exist"),
+                )
+            }));
+
+            (key, attributes)
+        });
+
+        Ok(Box::new(attributes))
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn evaluate_count_operation_grouped<'a>(
+        graphrecord: &'a GraphRecord,
+        attributes: GroupedIterator<
+            'a,
+            BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>,
+        >,
+        operand: &Wrapper<MultipleValuesWithIndexOperand<O>>,
+    ) -> GraphRecordResult<
+        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>>,
+    >
+    where
+        O: 'a,
+    {
+        let (attributes_1, attributes_2) = tee_grouped_iterator(attributes);
+        let mut attributes_2: Vec<_> = attributes_2.collect();
+
+        let values = attributes_1.map(|(key, attributes)| {
+            let values: BoxedIterator<_> = Box::new(Self::get_count(attributes));
+
+            (key, values)
+        });
+
+        let values = operand.evaluate_forward_grouped(graphrecord, Box::new(values))?;
+
+        let attributes = values.map(move |(key, attributes_1)| {
             let attributes_position = attributes_2
                 .iter()
                 .position(|(k, _)| k == &key)
@@ -1079,14 +1035,15 @@ pub enum MultipleAttributesWithIndexOperation<O: RootOperand> {
         kind: UnaryArithmeticKind,
     },
 
+    CountOperation {
+        operand: Wrapper<SingleValueWithoutIndexOperand<O>>,
+    },
+
     ToValues {
         operand: Wrapper<MultipleValuesWithIndexOperand<O>>,
     },
 
     Slice(Range<usize>),
-
-    IsString,
-    IsInt,
 
     IsMax,
     IsMin,
@@ -1134,12 +1091,13 @@ impl<O: RootOperand> DeepClone for MultipleAttributesWithIndexOperation<O> {
             Self::UnaryArithmeticOperation { kind } => {
                 Self::UnaryArithmeticOperation { kind: kind.clone() }
             }
+            Self::CountOperation { operand } => Self::CountOperation {
+                operand: operand.deep_clone(),
+            },
             Self::ToValues { operand } => Self::ToValues {
                 operand: operand.deep_clone(),
             },
             Self::Slice(range) => Self::Slice(range.clone()),
-            Self::IsString => Self::IsString,
-            Self::IsInt => Self::IsInt,
             Self::IsMax => Self::IsMax,
             Self::IsMin => Self::IsMin,
             Self::EitherOr { either, or } => Self::EitherOr {
@@ -1194,12 +1152,13 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
             Self::UnaryArithmeticOperation { kind } => Box::new(
                 Self::evaluate_unary_arithmetic_operation(attributes, kind.clone()),
             ),
+            Self::CountOperation { operand } => {
+                Self::evaluate_count_operation(graphrecord, attributes, operand)?
+            }
             Self::ToValues { operand } => {
                 Box::new(Self::evaluate_to_values(graphrecord, attributes, operand)?)
             }
             Self::Slice(range) => Box::new(Self::evaluate_slice(attributes, range.clone())),
-            Self::IsString => Box::new(Self::evaluate_is_string(attributes)),
-            Self::IsInt => Box::new(Self::evaluate_is_int(attributes)),
             Self::IsMax => Box::new(Self::evaluate_is_max(attributes)?),
             Self::IsMin => Box::new(Self::evaluate_is_min(attributes)?),
             Self::EitherOr { either, or } => {
@@ -1319,12 +1278,6 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
             SingleKindWithoutIndex::Min => {
                 MultipleAttributesWithoutIndexOperation::<O>::get_min(attributes_1)?
             }
-            SingleKindWithoutIndex::Count => Some(
-                MultipleAttributesWithoutIndexOperation::<O>::get_count(attributes_1),
-            ),
-            SingleKindWithoutIndex::Sum => {
-                MultipleAttributesWithoutIndexOperation::<O>::get_sum(attributes_1)?
-            }
             SingleKindWithoutIndex::Random => {
                 MultipleAttributesWithoutIndexOperation::<O>::get_random(attributes_1)
             }
@@ -1434,31 +1387,12 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
             .evaluate_backward(graphrecord)?
             .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
-        let attributes = attributes
-            .map(move |(t, attribute)| {
-                match kind {
-                    BinaryArithmeticKind::Add => attribute.add(arithmetic_attribute.clone()),
-                    BinaryArithmeticKind::Sub => attribute.sub(arithmetic_attribute.clone()),
-                    BinaryArithmeticKind::Mul => {
-                        attribute.mul(arithmetic_attribute.clone())
-                    }
-                    BinaryArithmeticKind::Pow => {
-                        attribute.pow(arithmetic_attribute.clone())
-                    }
-                    BinaryArithmeticKind::Mod => {
-                        attribute.r#mod(arithmetic_attribute.clone())
-                    }
-                }
-                .map_err(|_| {
-                    GraphRecordError::QueryError(format!(
-                        "Failed arithmetic operation {kind}. Consider narrowing down the attributes using .is_int() or .is_float()",
-                    ))
-                }).map(|result| (t, result))
-            });
+        let attributes = match kind {
+            BinaryArithmeticKind::Add => attributes
+                .map(move |(t, attribute)| (t, attribute.add(arithmetic_attribute.clone()))),
+        };
 
-        Ok(attributes
-            .collect::<GraphRecordResult<Vec<_>>>()?
-            .into_iter())
+        Ok(attributes)
     }
 
     #[inline]
@@ -1471,7 +1405,6 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     {
         attributes.map(move |(t, attribute)| {
             let attribute = match kind {
-                UnaryArithmeticKind::Abs => attribute.abs(),
                 UnaryArithmeticKind::Trim => attribute.trim(),
                 UnaryArithmeticKind::TrimStart => attribute.trim_start(),
                 UnaryArithmeticKind::TrimEnd => attribute.trim_end(),
@@ -1479,6 +1412,26 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
                 UnaryArithmeticKind::Uppercase => attribute.uppercase(),
             };
             (t, attribute)
+        })
+    }
+
+    #[inline]
+    fn evaluate_count_operation<'a>(
+        graphrecord: &'a GraphRecord,
+        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
+        operand: &Wrapper<SingleValueWithoutIndexOperand<O>>,
+    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>
+    where
+        O: 'a,
+    {
+        let (attributes_1, attributes_2) = Itertools::tee(attributes);
+        let attributes_1 = attributes_1.map(|(_, attribute)| attribute);
+
+        let value = MultipleAttributesWithoutIndexOperation::<O>::get_count(attributes_1);
+
+        Ok(match operand.evaluate_forward(graphrecord, Some(value))? {
+            Some(_) => Box::new(attributes_2),
+            None => Box::new(std::iter::empty()),
         })
     }
 
@@ -1543,26 +1496,6 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
         O: 'a,
     {
         attributes.map(move |(t, attribute)| (t, attribute.slice(range.clone())))
-    }
-
-    #[inline]
-    fn evaluate_is_string<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>
-    where
-        O: 'a,
-    {
-        attributes.filter(|(_, attribute)| matches!(attribute, GraphRecordAttribute::String(_)))
-    }
-
-    #[inline]
-    fn evaluate_is_int<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>
-    where
-        O: 'a,
-    {
-        attributes.filter(|(_, attribute)| matches!(attribute, GraphRecordAttribute::Int(_)))
     }
 
     #[inline]
@@ -1737,6 +1670,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
                     )
                 }))
             }
+            Self::CountOperation { operand } => {
+                Self::evaluate_count_operation_grouped(graphrecord, attributes, operand)?
+            }
             Self::ToValues { operand } => Box::new(Self::evaluate_to_values_grouped(
                 graphrecord,
                 attributes,
@@ -1753,18 +1689,6 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
                     )
                 }))
             }
-            Self::IsString => Box::new(attributes.map(move |(key, attributes)| {
-                (
-                    key,
-                    Box::new(Self::evaluate_is_string(attributes)) as BoxedIterator<_>,
-                )
-            })),
-            Self::IsInt => Box::new(attributes.map(move |(key, attributes)| {
-                (
-                    key,
-                    Box::new(Self::evaluate_is_int(attributes)) as BoxedIterator<_>,
-                )
-            })),
             Self::IsMax => Box::new(
                 attributes
                     .map(move |(key, attributes)| {
@@ -1890,12 +1814,6 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
                     SingleKindWithoutIndex::Min => {
                         MultipleAttributesWithoutIndexOperation::<O>::get_min(attributes)?
                     }
-                    SingleKindWithoutIndex::Count => Some(
-                        MultipleAttributesWithoutIndexOperation::<O>::get_count(attributes),
-                    ),
-                    SingleKindWithoutIndex::Sum => {
-                        MultipleAttributesWithoutIndexOperation::<O>::get_sum(attributes)?
-                    }
                     SingleKindWithoutIndex::Random => {
                         MultipleAttributesWithoutIndexOperation::<O>::get_random(attributes)
                     }
@@ -1907,6 +1825,46 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
 
         let attributes_1 =
             operand.evaluate_forward_grouped(graphrecord, Box::new(attributes_1.into_iter()))?;
+
+        Ok(Box::new(attributes_1.map(
+            move |(key, attribute)| match attribute {
+                Some(_) => {
+                    let attributes_position = attributes_2
+                        .iter()
+                        .position(|(k, _)| k == &key)
+                        .expect("Entry must exist");
+
+                    attributes_2.remove(attributes_position)
+                }
+                None => (key, Box::new(std::iter::empty()) as BoxedIterator<_>),
+            },
+        )))
+    }
+
+    #[allow(clippy::type_complexity)]
+    #[inline]
+    fn evaluate_count_operation_grouped<'a>(
+        graphrecord: &'a GraphRecord,
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
+        operand: &Wrapper<SingleValueWithoutIndexOperand<O>>,
+    ) -> GraphRecordResult<
+        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
+    >
+    where
+        O: 'a,
+    {
+        let (attributes_1, attributes_2) = tee_grouped_iterator(attributes);
+        let mut attributes_2: Vec<_> = attributes_2.collect();
+
+        let values = attributes_1.map(|(key, attributes)| {
+            let attributes = attributes.map(|(_, attribute)| attribute);
+
+            let value = MultipleAttributesWithoutIndexOperation::<O>::get_count(attributes);
+
+            (key, Some(value))
+        });
+
+        let attributes_1 = operand.evaluate_forward_grouped(graphrecord, Box::new(values))?;
 
         Ok(Box::new(attributes_1.map(
             move |(key, attribute)| match attribute {
@@ -2069,10 +2027,11 @@ pub enum MultipleAttributesWithoutIndexOperation<O: RootOperand> {
         kind: UnaryArithmeticKind,
     },
 
-    Slice(Range<usize>),
+    CountOperation {
+        operand: Wrapper<SingleValueWithoutIndexOperand<O>>,
+    },
 
-    IsString,
-    IsInt,
+    Slice(Range<usize>),
 
     IsMax,
     IsMin,
@@ -2111,9 +2070,10 @@ impl<O: RootOperand> DeepClone for MultipleAttributesWithoutIndexOperation<O> {
             Self::UnaryArithmeticOperation { kind } => {
                 Self::UnaryArithmeticOperation { kind: kind.clone() }
             }
+            Self::CountOperation { operand } => Self::CountOperation {
+                operand: operand.deep_clone(),
+            },
             Self::Slice(range) => Self::Slice(range.clone()),
-            Self::IsString => Self::IsString,
-            Self::IsInt => Self::IsInt,
             Self::IsMax => Self::IsMax,
             Self::IsMin => Self::IsMin,
             Self::EitherOr { either, or } => Self::EitherOr {
@@ -2162,13 +2122,10 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
             Self::UnaryArithmeticOperation { kind } => Box::new(
                 Self::evaluate_unary_arithmetic_operation(attributes, kind.clone()),
             ),
+            Self::CountOperation { operand } => {
+                Self::evaluate_count_operation(graphrecord, attributes, operand)?
+            }
             Self::Slice(range) => Box::new(Self::evaluate_slice(attributes, range.clone())),
-            Self::IsString => Box::new(
-                attributes.filter(|attribute| matches!(attribute, GraphRecordAttribute::String(_))),
-            ),
-            Self::IsInt => Box::new(
-                attributes.filter(|attribute| matches!(attribute, GraphRecordAttribute::Int(_))),
-            ),
             Self::IsMax => {
                 let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
@@ -2257,33 +2214,8 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
     #[inline]
     pub(crate) fn get_count(
         attributes: impl Iterator<Item = GraphRecordAttribute>,
-    ) -> GraphRecordAttribute {
-        GraphRecordAttribute::Int(attributes.count() as i64)
-    }
-
-    #[inline]
-    // 🥊💥
-    pub(crate) fn get_sum(
-        mut attributes: impl Iterator<Item = GraphRecordAttribute>,
-    ) -> GraphRecordResult<Option<GraphRecordAttribute>> {
-        let first_attribute = attributes.next();
-
-        let Some(first_attribute) = first_attribute else {
-            return Ok(None);
-        };
-
-        let sum = attributes.try_fold(first_attribute, |sum, attribute| {
-            let first_dtype = DataType::from(&sum);
-            let second_dtype = DataType::from(&attribute);
-
-            sum.add(attribute).map_err(|_| {
-                GraphRecordError::QueryError(format!(
-                    "Cannot add attributes of data types {first_dtype} and {second_dtype}. Consider narrowing down the attributes using .is_string() or .is_int()"
-                ))
-            })
-        })?;
-
-        Ok(Some(sum))
+    ) -> GraphRecordValue {
+        GraphRecordValue::from(attributes.count() as i64)
     }
 
     #[inline]
@@ -2306,8 +2238,6 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
         let attribute = match kind {
             SingleKindWithoutIndex::Max => Self::get_max(attributes_1)?,
             SingleKindWithoutIndex::Min => Self::get_min(attributes_1)?,
-            SingleKindWithoutIndex::Count => Some(Self::get_count(attributes_1)),
-            SingleKindWithoutIndex::Sum => Self::get_sum(attributes_1)?,
             SingleKindWithoutIndex::Random => Self::get_random(attributes_1),
         };
 
@@ -2415,31 +2345,13 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
             .evaluate_backward(graphrecord)?
             .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
-        let attributes = attributes
-            .map(move |attribute| {
-                match kind {
-                    BinaryArithmeticKind::Add => attribute.add(arithmetic_attribute.clone()),
-                    BinaryArithmeticKind::Sub => attribute.sub(arithmetic_attribute.clone()),
-                    BinaryArithmeticKind::Mul => {
-                        attribute.mul(arithmetic_attribute.clone())
-                    }
-                    BinaryArithmeticKind::Pow => {
-                        attribute.pow(arithmetic_attribute.clone())
-                    }
-                    BinaryArithmeticKind::Mod => {
-                        attribute.r#mod(arithmetic_attribute.clone())
-                    }
-                }
-                .map_err(|_| {
-                    GraphRecordError::QueryError(format!(
-                        "Failed arithmetic operation {kind}. Consider narrowing down the attributes using .is_int() or .is_float()",
-                    ))
-                })
-            });
+        let attributes = match kind {
+            BinaryArithmeticKind::Add => {
+                attributes.map(move |attribute| attribute.add(arithmetic_attribute.clone()))
+            }
+        };
 
-        Ok(attributes
-            .collect::<GraphRecordResult<Vec<_>>>()?
-            .into_iter())
+        Ok(attributes)
     }
 
     #[inline]
@@ -2452,12 +2364,27 @@ impl<O: RootOperand> MultipleAttributesWithoutIndexOperation<O> {
         T: Iterator<Item = GraphRecordAttribute>,
     {
         attributes.map(move |attribute| match kind {
-            UnaryArithmeticKind::Abs => attribute.abs(),
             UnaryArithmeticKind::Trim => attribute.trim(),
             UnaryArithmeticKind::TrimStart => attribute.trim_start(),
             UnaryArithmeticKind::TrimEnd => attribute.trim_end(),
             UnaryArithmeticKind::Lowercase => attribute.lowercase(),
             UnaryArithmeticKind::Uppercase => attribute.uppercase(),
+        })
+    }
+
+    #[inline]
+    fn evaluate_count_operation<'a>(
+        graphrecord: &'a GraphRecord,
+        attributes: impl Iterator<Item = GraphRecordAttribute> + 'a,
+        operand: &Wrapper<SingleValueWithoutIndexOperand<O>>,
+    ) -> GraphRecordResult<BoxedIterator<'a, GraphRecordAttribute>> {
+        let (attributes_1, attributes_2) = Itertools::tee(attributes);
+
+        let value = Self::get_count(attributes_1);
+
+        Ok(match operand.evaluate_forward(graphrecord, Some(value))? {
+            Some(_) => Box::new(attributes_2),
+            None => Box::new(std::iter::empty()),
         })
     }
 
@@ -2529,9 +2456,6 @@ pub enum SingleAttributeWithIndexOperation<O: RootOperand> {
 
     Slice(Range<usize>),
 
-    IsString,
-    IsInt,
-
     EitherOr {
         either: Wrapper<SingleAttributeWithIndexOperand<O>>,
         or: Wrapper<SingleAttributeWithIndexOperand<O>>,
@@ -2568,8 +2492,6 @@ impl<O: RootOperand> DeepClone for SingleAttributeWithIndexOperation<O> {
                 Self::UnaryArithmeticOperation { kind: kind.clone() }
             }
             Self::Slice(range) => Self::Slice(range.clone()),
-            Self::IsString => Self::IsString,
-            Self::IsInt => Self::IsInt,
             Self::EitherOr { either, or } => Self::EitherOr {
                 either: either.deep_clone(),
                 or: or.deep_clone(),
@@ -2621,8 +2543,6 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
                 Some(Self::evaluate_unary_arithmetic_operation(attribute, kind))
             }
             Self::Slice(range) => Some(Self::evaluate_slice(attribute, range)),
-            Self::IsString => Self::evaluate_is_string(attribute),
-            Self::IsInt => Self::evaluate_is_int(attribute),
             Self::EitherOr { either, or } => {
                 Self::evaluate_either_or(graphrecord, attribute, either, or)?
             }
@@ -2699,11 +2619,7 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
             .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         Ok(Some(match kind {
-            BinaryArithmeticKind::Add => (attribute.0, attribute.1.add(arithmetic_attribute)?),
-            BinaryArithmeticKind::Sub => (attribute.0, attribute.1.sub(arithmetic_attribute)?),
-            BinaryArithmeticKind::Mul => (attribute.0, attribute.1.mul(arithmetic_attribute)?),
-            BinaryArithmeticKind::Pow => (attribute.0, attribute.1.pow(arithmetic_attribute)?),
-            BinaryArithmeticKind::Mod => (attribute.0, attribute.1.r#mod(arithmetic_attribute)?),
+            BinaryArithmeticKind::Add => (attribute.0, attribute.1.add(arithmetic_attribute)),
         }))
     }
 
@@ -2713,7 +2629,6 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
         kind: &UnaryArithmeticKind,
     ) -> (&'a O::Index, GraphRecordAttribute) {
         match kind {
-            UnaryArithmeticKind::Abs => (attribute.0, attribute.1.abs()),
             UnaryArithmeticKind::Trim => (attribute.0, attribute.1.trim()),
             UnaryArithmeticKind::TrimStart => (attribute.0, attribute.1.trim_start()),
             UnaryArithmeticKind::TrimEnd => (attribute.0, attribute.1.trim_end()),
@@ -2728,26 +2643,6 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
         range: &Range<usize>,
     ) -> (&'a O::Index, GraphRecordAttribute) {
         (attribute.0, attribute.1.slice(range.clone()))
-    }
-
-    #[inline]
-    fn evaluate_is_string(
-        attribute: (&O::Index, GraphRecordAttribute),
-    ) -> Option<(&O::Index, GraphRecordAttribute)> {
-        match attribute.1 {
-            GraphRecordAttribute::String(_) => Some(attribute),
-            GraphRecordAttribute::Int(_) => None,
-        }
-    }
-
-    #[inline]
-    fn evaluate_is_int(
-        attribute: (&O::Index, GraphRecordAttribute),
-    ) -> Option<(&O::Index, GraphRecordAttribute)> {
-        match attribute.1 {
-            GraphRecordAttribute::Int(_) => Some(attribute),
-            GraphRecordAttribute::String(_) => None,
-        }
     }
 
     #[inline]
@@ -2867,20 +2762,6 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
                     (key, Some(Self::evaluate_slice(attribute, &range)))
                 }))
             }
-            Self::IsString => Box::new(attributes.map(move |(key, attribute)| {
-                let Some(attribute) = attribute else {
-                    return (key, None);
-                };
-
-                (key, Self::evaluate_is_string(attribute))
-            })),
-            Self::IsInt => Box::new(attributes.map(move |(key, attribute)| {
-                let Some(attribute) = attribute else {
-                    return (key, None);
-                };
-
-                (key, Self::evaluate_is_int(attribute))
-            })),
             Self::EitherOr { either, or } => {
                 Self::evaluate_either_or_grouped(graphrecord, attributes, either, or)?
             }
@@ -3000,9 +2881,6 @@ pub enum SingleAttributeWithoutIndexOperation<O: RootOperand> {
 
     Slice(Range<usize>),
 
-    IsString,
-    IsInt,
-
     EitherOr {
         either: Wrapper<SingleAttributeWithoutIndexOperand<O>>,
         or: Wrapper<SingleAttributeWithoutIndexOperand<O>>,
@@ -3039,8 +2917,6 @@ impl<O: RootOperand> DeepClone for SingleAttributeWithoutIndexOperation<O> {
                 Self::UnaryArithmeticOperation { kind: kind.clone() }
             }
             Self::Slice(range) => Self::Slice(range.clone()),
-            Self::IsString => Self::IsString,
-            Self::IsInt => Self::IsInt,
             Self::EitherOr { either, or } => Self::EitherOr {
                 either: either.deep_clone(),
                 or: or.deep_clone(),
@@ -3092,8 +2968,6 @@ impl<O: RootOperand> SingleAttributeWithoutIndexOperation<O> {
                 Some(Self::evaluate_unary_arithmetic_operation(attribute, kind))
             }
             Self::Slice(range) => Some(Self::evaluate_slice(attribute, range)),
-            Self::IsString => Self::evaluate_is_string(attribute),
-            Self::IsInt => Self::evaluate_is_int(attribute),
             Self::EitherOr { either, or } => {
                 Self::evaluate_either_or(graphrecord, attribute, either, or)?
             }
@@ -3170,11 +3044,7 @@ impl<O: RootOperand> SingleAttributeWithoutIndexOperation<O> {
             .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
 
         Ok(Some(match kind {
-            BinaryArithmeticKind::Add => attribute.add(arithmetic_attribute)?,
-            BinaryArithmeticKind::Sub => attribute.sub(arithmetic_attribute)?,
-            BinaryArithmeticKind::Mul => attribute.mul(arithmetic_attribute)?,
-            BinaryArithmeticKind::Pow => attribute.pow(arithmetic_attribute)?,
-            BinaryArithmeticKind::Mod => attribute.r#mod(arithmetic_attribute)?,
+            BinaryArithmeticKind::Add => attribute.add(arithmetic_attribute),
         }))
     }
 
@@ -3184,7 +3054,6 @@ impl<O: RootOperand> SingleAttributeWithoutIndexOperation<O> {
         kind: &UnaryArithmeticKind,
     ) -> GraphRecordAttribute {
         match kind {
-            UnaryArithmeticKind::Abs => attribute.abs(),
             UnaryArithmeticKind::Trim => attribute.trim(),
             UnaryArithmeticKind::TrimStart => attribute.trim_start(),
             UnaryArithmeticKind::TrimEnd => attribute.trim_end(),
@@ -3199,22 +3068,6 @@ impl<O: RootOperand> SingleAttributeWithoutIndexOperation<O> {
         range: &Range<usize>,
     ) -> GraphRecordAttribute {
         attribute.slice(range.clone())
-    }
-
-    #[inline]
-    fn evaluate_is_string(attribute: GraphRecordAttribute) -> Option<GraphRecordAttribute> {
-        match attribute {
-            GraphRecordAttribute::String(_) => Some(attribute),
-            GraphRecordAttribute::Int(_) => None,
-        }
-    }
-
-    #[inline]
-    fn evaluate_is_int(attribute: GraphRecordAttribute) -> Option<GraphRecordAttribute> {
-        match attribute {
-            GraphRecordAttribute::Int(_) => Some(attribute),
-            GraphRecordAttribute::String(_) => None,
-        }
     }
 
     #[inline]
@@ -3334,20 +3187,6 @@ impl<O: RootOperand> SingleAttributeWithoutIndexOperation<O> {
                     (key, Some(Self::evaluate_slice(attribute, &range)))
                 }))
             }
-            Self::IsString => Box::new(attributes.map(move |(key, attribute)| {
-                let Some(attribute) = attribute else {
-                    return (key, None);
-                };
-
-                (key, Self::evaluate_is_string(attribute))
-            })),
-            Self::IsInt => Box::new(attributes.map(move |(key, attribute)| {
-                let Some(attribute) = attribute else {
-                    return (key, None);
-                };
-
-                (key, Self::evaluate_is_int(attribute))
-            })),
             Self::EitherOr { either, or } => {
                 Self::evaluate_either_or_grouped(graphrecord, attributes, either, or)?
             }

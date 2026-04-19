@@ -94,12 +94,6 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a>
                     MultipleKind::Min => {
                         Box::new(AttributesTreeOperation::<O>::get_min(partition)?)
                     }
-                    MultipleKind::Count => {
-                        Box::new(AttributesTreeOperation::<O>::get_count(partition))
-                    }
-                    MultipleKind::Sum => {
-                        Box::new(AttributesTreeOperation::<O>::get_sum(partition)?)
-                    }
                     MultipleKind::Random => {
                         Box::new(AttributesTreeOperation::<O>::get_random(partition)?)
                     }
@@ -215,12 +209,6 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a>
                     }
                     SingleKindWithoutIndex::Min => {
                         MultipleAttributesWithoutIndexOperation::<O>::get_min(partition)?
-                    }
-                    SingleKindWithoutIndex::Count => Some(
-                        MultipleAttributesWithoutIndexOperation::<O>::get_count(partition),
-                    ),
-                    SingleKindWithoutIndex::Sum => {
-                        MultipleAttributesWithoutIndexOperation::<O>::get_sum(partition)?
                     }
                     SingleKindWithoutIndex::Random => {
                         MultipleAttributesWithoutIndexOperation::<O>::get_random(partition)

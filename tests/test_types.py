@@ -31,7 +31,7 @@ from graphrecords.types import (
 class TestTypeAssertions(unittest.TestCase):
     def test_is_graphrecord_attribute(self) -> None:
         assert is_graphrecord_attribute("test")
-        assert is_graphrecord_attribute(123)
+        assert not is_graphrecord_attribute(123)
         assert not is_graphrecord_attribute(12.34)
         assert not is_graphrecord_attribute(None)
 
@@ -47,13 +47,13 @@ class TestTypeAssertions(unittest.TestCase):
 
     def test_is_node_index(self) -> None:
         assert is_node_index("node")
-        assert is_node_index(123)
+        assert not is_node_index(123)
         assert not is_node_index(12.34)
 
     def test_is_node_index_list(self) -> None:
         assert is_node_index_list(["node1", "node2"])
-        assert is_node_index_list([123, 456])
-        assert is_node_index_list(["node1", 123])
+        assert not is_node_index_list([123, 456])
+        assert not is_node_index_list(["node1", 123])
         assert not is_node_index_list("invalid")
         assert not is_node_index_list([123, 12.34])
 
@@ -70,7 +70,7 @@ class TestTypeAssertions(unittest.TestCase):
 
     def test_is_group(self) -> None:
         assert is_group("group")
-        assert is_group(123)
+        assert not is_group(123)
         assert not is_group(12.34)
 
     def test_is_attributes(self) -> None:

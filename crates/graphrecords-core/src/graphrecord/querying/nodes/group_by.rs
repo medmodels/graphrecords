@@ -3,9 +3,10 @@ use crate::{
     GraphRecord,
     errors::GraphRecordResult,
     graphrecord::querying::{
-        DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
+        CountableOperand, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
+        GroupedIterator,
         edges::EdgeOperand,
-        group_by::{GroupBy, GroupOperand, GroupedOperand, PartitionGroups, Ungroup},
+        group_by::{GroupBy, GroupKey, GroupOperand, GroupedOperand, PartitionGroups, Ungroup},
         nodes::{NodeIndexOperand, NodeIndicesOperand, NodeIndicesOperandContext},
         wrapper::Wrapper,
     },
@@ -87,6 +88,22 @@ impl<'a> EvaluateForward<'a> for GroupOperand<NodeOperand> {
 
 impl GroupedOperand for NodeIndicesOperand {
     type Context = GroupOperand<NodeOperand>;
+}
+
+impl CountableOperand for NodeIndicesOperand {
+    fn count(&self, graphrecord: &GraphRecord) -> GraphRecordResult<i64> {
+        Ok(self.evaluate_backward(graphrecord)?.count() as i64)
+    }
+
+    fn count_per_partition<'a>(
+        group: &GroupOperand<Self>,
+        graphrecord: &'a GraphRecord,
+    ) -> GraphRecordResult<Vec<(GroupKey<'a>, i64)>> {
+        Ok(group
+            .evaluate_backward(graphrecord)?
+            .map(|(key, partition)| (key, partition.count() as i64))
+            .collect())
+    }
 }
 
 impl<'a> EvaluateBackward<'a> for GroupOperand<NodeIndicesOperand> {

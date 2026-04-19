@@ -2362,15 +2362,15 @@ mod test {
 
         let mut graphrecord = GraphRecord::new();
 
-        graphrecord.add_node(0.into(), HashMap::new()).unwrap();
+        graphrecord.add_node("0".into(), HashMap::new()).unwrap();
         graphrecord
-            .add_edge(0.into(), 0.into(), HashMap::new())
+            .add_edge("0".into(), "0".into(), HashMap::new())
             .unwrap();
 
         assert_eq!(1, graphrecord.node_count());
         assert_eq!(1, graphrecord.edge_count());
 
-        assert!(graphrecord.remove_node(&0.into()).is_ok());
+        assert!(graphrecord.remove_node(&"0".into()).is_ok());
 
         assert_eq!(0, graphrecord.node_count());
         assert_eq!(0, graphrecord.edge_count());

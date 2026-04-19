@@ -352,8 +352,10 @@ impl<O: RootOperand> Mean for MultipleValuesWithIndexOperand<O> {
 
     fn mean(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Mean,
+            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Mean,
+            },
         );
 
         self.operations.push(
@@ -371,8 +373,10 @@ impl<O: RootOperand> Median for MultipleValuesWithIndexOperand<O> {
 
     fn median(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Median,
+            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Median,
+            },
         );
 
         self.operations.push(
@@ -390,8 +394,10 @@ impl<O: RootOperand> Mode for MultipleValuesWithIndexOperand<O> {
 
     fn mode(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Mode,
+            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Mode,
+            },
         );
 
         self.operations.push(
@@ -409,8 +415,10 @@ impl<O: RootOperand> Std for MultipleValuesWithIndexOperand<O> {
 
     fn std(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Std,
+            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Std,
+            },
         );
 
         self.operations.push(
@@ -428,8 +436,10 @@ impl<O: RootOperand> Var for MultipleValuesWithIndexOperand<O> {
 
     fn var(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Var,
+            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Var,
+            },
         );
 
         self.operations.push(
@@ -447,8 +457,10 @@ impl<O: RootOperand> Count for MultipleValuesWithIndexOperand<O> {
 
     fn count(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Count,
+            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Count,
+            },
         );
 
         self.operations.push(
@@ -466,8 +478,10 @@ impl<O: RootOperand> Sum for MultipleValuesWithIndexOperand<O> {
 
     fn sum(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<Self::ReturnOperand>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Sum,
+            SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Sum,
+            },
         );
 
         self.operations.push(
@@ -994,8 +1008,10 @@ impl<O: RootOperand> Max for MultipleValuesWithoutIndexOperand<O> {
 
     fn max(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Max,
+            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Max,
+            },
         );
 
         self.operations
@@ -1012,8 +1028,10 @@ impl<O: RootOperand> Min for MultipleValuesWithoutIndexOperand<O> {
 
     fn min(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Min,
+            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Min,
+            },
         );
 
         self.operations
@@ -1030,8 +1048,10 @@ impl<O: RootOperand> Mean for MultipleValuesWithoutIndexOperand<O> {
 
     fn mean(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Mean,
+            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Mean,
+            },
         );
 
         self.operations
@@ -1048,8 +1068,10 @@ impl<O: RootOperand> Median for MultipleValuesWithoutIndexOperand<O> {
 
     fn median(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Median,
+            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Median,
+            },
         );
 
         self.operations
@@ -1066,8 +1088,10 @@ impl<O: RootOperand> Mode for MultipleValuesWithoutIndexOperand<O> {
 
     fn mode(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Mode,
+            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Mode,
+            },
         );
 
         self.operations
@@ -1084,8 +1108,10 @@ impl<O: RootOperand> Std for MultipleValuesWithoutIndexOperand<O> {
 
     fn std(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Std,
+            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Std,
+            },
         );
 
         self.operations
@@ -1102,8 +1128,10 @@ impl<O: RootOperand> Var for MultipleValuesWithoutIndexOperand<O> {
 
     fn var(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Var,
+            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Var,
+            },
         );
 
         self.operations
@@ -1120,8 +1148,10 @@ impl<O: RootOperand> Count for MultipleValuesWithoutIndexOperand<O> {
 
     fn count(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Count,
+            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Count,
+            },
         );
 
         self.operations
@@ -1138,8 +1168,10 @@ impl<O: RootOperand> Sum for MultipleValuesWithoutIndexOperand<O> {
 
     fn sum(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Sum,
+            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Sum,
+            },
         );
 
         self.operations
@@ -1156,8 +1188,10 @@ impl<O: RootOperand> Random for MultipleValuesWithoutIndexOperand<O> {
 
     fn random(&mut self) -> Wrapper<Self::ReturnOperand> {
         let operand = Wrapper::<SingleValueWithoutIndexOperand<O>>::new(
-            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand(self.deep_clone()),
-            SingleKindWithoutIndex::Random,
+            SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+                operand: self.deep_clone(),
+                kind: SingleKindWithoutIndex::Random,
+            },
         );
 
         self.operations
@@ -2129,8 +2163,7 @@ pub type EdgeSingleValueWithoutIndexOperand = SingleValueWithoutIndexOperand<Edg
 
 #[derive(Debug, Clone)]
 pub struct SingleValueWithoutIndexOperand<O: RootOperand> {
-    context: SingleValueWithoutIndexContext<O>,
-    pub(crate) kind: SingleKindWithoutIndex,
+    pub(crate) context: SingleValueWithoutIndexContext<O>,
     operations: Vec<SingleValueWithoutIndexOperation<O>>,
 }
 
@@ -2138,7 +2171,6 @@ impl<O: RootOperand> DeepClone for SingleValueWithoutIndexOperand<O> {
     fn deep_clone(&self) -> Self {
         Self {
             context: self.context.deep_clone(),
-            kind: self.kind.clone(),
             operations: self.operations.iter().map(DeepClone::deep_clone).collect(),
         }
     }
@@ -2180,40 +2212,7 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a> for SingleValueWithoutIndexOp
         &self,
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<Self::ReturnValue> {
-        let values = self.context.get_values(graphrecord)?;
-
-        let value = match self.kind {
-            SingleKindWithoutIndex::Max => {
-                MultipleValuesWithoutIndexOperation::<O>::get_max(values)?
-            }
-            SingleKindWithoutIndex::Min => {
-                MultipleValuesWithoutIndexOperation::<O>::get_min(values)?
-            }
-            SingleKindWithoutIndex::Mean => {
-                MultipleValuesWithoutIndexOperation::<O>::get_mean(values)?
-            }
-            SingleKindWithoutIndex::Median => {
-                MultipleValuesWithoutIndexOperation::<O>::get_median(values)?
-            }
-            SingleKindWithoutIndex::Mode => {
-                MultipleValuesWithoutIndexOperation::<O>::get_mode(values)
-            }
-            SingleKindWithoutIndex::Std => {
-                MultipleValuesWithoutIndexOperation::<O>::get_std(values)?
-            }
-            SingleKindWithoutIndex::Var => {
-                MultipleValuesWithoutIndexOperation::<O>::get_var(values)?
-            }
-            SingleKindWithoutIndex::Count => {
-                Some(MultipleValuesWithoutIndexOperation::<O>::get_count(values))
-            }
-            SingleKindWithoutIndex::Sum => {
-                MultipleValuesWithoutIndexOperation::<O>::get_sum(values)?
-            }
-            SingleKindWithoutIndex::Random => {
-                MultipleValuesWithoutIndexOperation::<O>::get_random(values)
-            }
-        };
+        let value = self.context.get_value(graphrecord)?;
 
         self.evaluate_forward(graphrecord, value)
     }
@@ -2594,8 +2593,8 @@ impl<O: RootOperand> EitherOr for SingleValueWithoutIndexOperand<O> {
         EQ: FnOnce(&mut Wrapper<Self::QueryOperand>),
         OQ: FnOnce(&mut Wrapper<Self::QueryOperand>),
     {
-        let mut either_operand = Wrapper::<Self>::new(self.context.clone(), self.kind.clone());
-        let mut or_operand = Wrapper::<Self>::new(self.context.clone(), self.kind.clone());
+        let mut either_operand = Wrapper::<Self>::new(self.context.clone());
+        let mut or_operand = Wrapper::<Self>::new(self.context.clone());
 
         either_query(&mut either_operand);
         or_query(&mut or_operand);
@@ -2615,7 +2614,7 @@ impl<O: RootOperand> Exclude for SingleValueWithoutIndexOperand<O> {
     where
         Q: FnOnce(&mut Wrapper<Self::QueryOperand>),
     {
-        let mut operand = Wrapper::<Self>::new(self.context.clone(), self.kind.clone());
+        let mut operand = Wrapper::<Self>::new(self.context.clone());
 
         query(&mut operand);
 
@@ -2625,13 +2624,9 @@ impl<O: RootOperand> Exclude for SingleValueWithoutIndexOperand<O> {
 }
 
 impl<O: RootOperand> SingleValueWithoutIndexOperand<O> {
-    pub(crate) const fn new(
-        context: SingleValueWithoutIndexContext<O>,
-        kind: SingleKindWithoutIndex,
-    ) -> Self {
+    pub(crate) const fn new(context: SingleValueWithoutIndexContext<O>) -> Self {
         Self {
             context,
-            kind,
             operations: Vec::new(),
         }
     }
@@ -2646,11 +2641,8 @@ impl<O: RootOperand> SingleValueWithoutIndexOperand<O> {
 }
 
 impl<O: RootOperand> Wrapper<SingleValueWithoutIndexOperand<O>> {
-    pub(crate) fn new(
-        context: SingleValueWithoutIndexContext<O>,
-        kind: SingleKindWithoutIndex,
-    ) -> Self {
-        SingleValueWithoutIndexOperand::new(context, kind).into()
+    pub(crate) fn new(context: SingleValueWithoutIndexContext<O>) -> Self {
+        SingleValueWithoutIndexOperand::new(context).into()
     }
 
     pub(crate) fn push_merge_operation(

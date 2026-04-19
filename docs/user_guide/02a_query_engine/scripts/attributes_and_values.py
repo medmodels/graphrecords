@@ -6,7 +6,6 @@ import graphrecords as gr
 from graphrecords.querying import (
     NodeAttributesTreeOperand,
     NodeIndicesOperand,
-    NodeMultipleAttributesWithIndexOperand,
     NodeMultipleValuesWithIndexOperand,
     NodeOperand,
     NodeSingleValueWithIndexOperand,
@@ -68,7 +67,7 @@ graphrecord.query_nodes(query_node_attribute_names)
 
 def query_node_attributes_count(
     node: NodeOperand,
-) -> NodeMultipleAttributesWithIndexOperand:
+) -> NodeMultipleValuesWithIndexOperand:
     node.in_group("user")
     attributes = node.attributes()
 

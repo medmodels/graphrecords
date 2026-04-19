@@ -393,7 +393,7 @@ def _py_single_attribute_comparison_operand_from_single_attribute_comparison_ope
         single_attribute_comparison_operand, NodeSingleAttributeWithIndexOperand
     ):
         return single_attribute_comparison_operand._single_attribute_operand
-    if isinstance(
+    if isinstance(  # pragma: no cover
         single_attribute_comparison_operand, NodeSingleAttributeWithoutIndexOperand
     ):
         return single_attribute_comparison_operand._single_attribute_operand
@@ -401,7 +401,7 @@ def _py_single_attribute_comparison_operand_from_single_attribute_comparison_ope
         single_attribute_comparison_operand, EdgeSingleAttributeWithIndexOperand
     ):
         return single_attribute_comparison_operand._single_attribute_operand
-    if isinstance(
+    if isinstance(  # pragma: no cover
         single_attribute_comparison_operand, EdgeSingleAttributeWithoutIndexOperand
     ):
         return single_attribute_comparison_operand._single_attribute_operand
@@ -421,7 +421,7 @@ def _py_multiple_attributes_comparison_operand_from_multiple_attributes_comparis
         multiple_attributes_comparison_operand, NodeMultipleAttributesWithIndexOperand
     ):
         return multiple_attributes_comparison_operand._multiple_attributes_operand
-    if isinstance(
+    if isinstance(  # pragma: no cover
         multiple_attributes_comparison_operand,
         NodeMultipleAttributesWithoutIndexOperand,
     ):
@@ -430,7 +430,7 @@ def _py_multiple_attributes_comparison_operand_from_multiple_attributes_comparis
         multiple_attributes_comparison_operand, EdgeMultipleAttributesWithIndexOperand
     ):
         return multiple_attributes_comparison_operand._multiple_attributes_operand
-    if isinstance(
+    if isinstance(  # pragma: no cover
         multiple_attributes_comparison_operand,
         EdgeMultipleAttributesWithoutIndexOperand,
     ):
@@ -4238,18 +4238,9 @@ class NodeAttributesTreeOperand:
             )
         )
 
-    def count(self) -> NodeMultipleAttributesWithIndexOperand:
-        return (
-            NodeMultipleAttributesWithIndexOperand._from_py_multiple_attributes_operand(
-                self._attributes_tree_operand.count()
-            )
-        )
-
-    def sum(self) -> NodeMultipleAttributesWithIndexOperand:
-        return (
-            NodeMultipleAttributesWithIndexOperand._from_py_multiple_attributes_operand(
-                self._attributes_tree_operand.sum()
-            )
+    def count(self) -> NodeMultipleValuesWithIndexOperand:
+        return NodeMultipleValuesWithIndexOperand._from_py_multiple_values_operand(
+            self._attributes_tree_operand.count()
         )
 
     def random(self) -> NodeMultipleAttributesWithIndexOperand:
@@ -4258,12 +4249,6 @@ class NodeAttributesTreeOperand:
                 self._attributes_tree_operand.random()
             )
         )
-
-    def is_string(self) -> None:
-        self._attributes_tree_operand.is_string()
-
-    def is_int(self) -> None:
-        self._attributes_tree_operand.is_int()
 
     def is_max(self) -> None:
         self._attributes_tree_operand.is_max()
@@ -4358,37 +4343,6 @@ class NodeAttributesTreeOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._attributes_tree_operand.abs()
 
     def trim(self) -> None:
         self._attributes_tree_operand.trim()
@@ -4456,26 +4410,15 @@ class NodeAttributesTreeGroupOperand:
             self._attributes_tree_operand.min()
         )
 
-    def count(self) -> NodeMultipleAttributesWithIndexGroupOperand:
-        return NodeMultipleAttributesWithIndexGroupOperand._from_py_multiple_attributes_operand(
+    def count(self) -> NodeMultipleValuesWithIndexGroupOperand:
+        return NodeMultipleValuesWithIndexGroupOperand._from_py_multiple_values_operand(
             self._attributes_tree_operand.count()
-        )
-
-    def sum(self) -> NodeMultipleAttributesWithIndexGroupOperand:
-        return NodeMultipleAttributesWithIndexGroupOperand._from_py_multiple_attributes_operand(
-            self._attributes_tree_operand.sum()
         )
 
     def random(self) -> NodeMultipleAttributesWithIndexGroupOperand:
         return NodeMultipleAttributesWithIndexGroupOperand._from_py_multiple_attributes_operand(
             self._attributes_tree_operand.random()
         )
-
-    def is_string(self) -> None:
-        self._attributes_tree_operand.is_string()
-
-    def is_int(self) -> None:
-        self._attributes_tree_operand.is_int()
 
     def is_max(self) -> None:
         self._attributes_tree_operand.is_max()
@@ -4570,37 +4513,6 @@ class NodeAttributesTreeGroupOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._attributes_tree_operand.abs()
 
     def trim(self) -> None:
         self._attributes_tree_operand.trim()
@@ -4677,18 +4589,9 @@ class EdgeAttributesTreeOperand:
             )
         )
 
-    def count(self) -> EdgeMultipleAttributesWithIndexOperand:
-        return (
-            EdgeMultipleAttributesWithIndexOperand._from_py_multiple_attributes_operand(
-                self._attributes_tree_operand.count()
-            )
-        )
-
-    def sum(self) -> EdgeMultipleAttributesWithIndexOperand:
-        return (
-            EdgeMultipleAttributesWithIndexOperand._from_py_multiple_attributes_operand(
-                self._attributes_tree_operand.sum()
-            )
+    def count(self) -> EdgeMultipleValuesWithIndexOperand:
+        return EdgeMultipleValuesWithIndexOperand._from_py_multiple_values_operand(
+            self._attributes_tree_operand.count()
         )
 
     def random(self) -> EdgeMultipleAttributesWithIndexOperand:
@@ -4697,12 +4600,6 @@ class EdgeAttributesTreeOperand:
                 self._attributes_tree_operand.random()
             )
         )
-
-    def is_string(self) -> None:
-        self._attributes_tree_operand.is_string()
-
-    def is_int(self) -> None:
-        self._attributes_tree_operand.is_int()
 
     def is_max(self) -> None:
         self._attributes_tree_operand.is_max()
@@ -4797,37 +4694,6 @@ class EdgeAttributesTreeOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._attributes_tree_operand.abs()
 
     def trim(self) -> None:
         self._attributes_tree_operand.trim()
@@ -4895,26 +4761,15 @@ class EdgeAttributesTreeGroupOperand:
             self._attributes_tree_operand.min()
         )
 
-    def count(self) -> EdgeMultipleAttributesWithIndexGroupOperand:
-        return EdgeMultipleAttributesWithIndexGroupOperand._from_py_multiple_attributes_operand(
+    def count(self) -> EdgeMultipleValuesWithIndexGroupOperand:
+        return EdgeMultipleValuesWithIndexGroupOperand._from_py_multiple_values_operand(
             self._attributes_tree_operand.count()
-        )
-
-    def sum(self) -> EdgeMultipleAttributesWithIndexGroupOperand:
-        return EdgeMultipleAttributesWithIndexGroupOperand._from_py_multiple_attributes_operand(
-            self._attributes_tree_operand.sum()
         )
 
     def random(self) -> EdgeMultipleAttributesWithIndexGroupOperand:
         return EdgeMultipleAttributesWithIndexGroupOperand._from_py_multiple_attributes_operand(
             self._attributes_tree_operand.random()
         )
-
-    def is_string(self) -> None:
-        self._attributes_tree_operand.is_string()
-
-    def is_int(self) -> None:
-        self._attributes_tree_operand.is_int()
 
     def is_max(self) -> None:
         self._attributes_tree_operand.is_max()
@@ -5009,37 +4864,6 @@ class EdgeAttributesTreeGroupOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._attributes_tree_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._attributes_tree_operand.abs()
 
     def trim(self) -> None:
         self._attributes_tree_operand.trim()
@@ -5112,26 +4936,15 @@ class NodeMultipleAttributesWithIndexOperand:
             self._multiple_attributes_operand.min()
         )
 
-    def count(self) -> NodeSingleAttributeWithoutIndexOperand:
-        return NodeSingleAttributeWithoutIndexOperand._from_py_single_attribute_operand(
+    def count(self) -> NodeSingleValueWithoutIndexOperand:
+        return NodeSingleValueWithoutIndexOperand._from_py_single_value_operand(
             self._multiple_attributes_operand.count()
-        )
-
-    def sum(self) -> NodeSingleAttributeWithoutIndexOperand:
-        return NodeSingleAttributeWithoutIndexOperand._from_py_single_attribute_operand(
-            self._multiple_attributes_operand.sum()
         )
 
     def random(self) -> NodeSingleAttributeWithIndexOperand:
         return NodeSingleAttributeWithIndexOperand._from_py_single_attribute_operand(
             self._multiple_attributes_operand.random()
         )
-
-    def is_string(self) -> None:
-        self._multiple_attributes_operand.is_string()
-
-    def is_int(self) -> None:
-        self._multiple_attributes_operand.is_int()
 
     def is_max(self) -> None:
         self._multiple_attributes_operand.is_max()
@@ -5226,37 +5039,6 @@ class NodeMultipleAttributesWithIndexOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._multiple_attributes_operand.abs()
 
     def trim(self) -> None:
         self._multiple_attributes_operand.trim()
@@ -5345,14 +5127,9 @@ class NodeMultipleAttributesWithIndexGroupOperand:
             )
         )
 
-    def count(self) -> NodeSingleAttributeWithoutIndexGroupOperand:
-        return NodeSingleAttributeWithoutIndexGroupOperand._from_py_single_attribute_operand(
+    def count(self) -> NodeSingleValueWithoutIndexGroupOperand:
+        return NodeSingleValueWithoutIndexGroupOperand._from_py_single_value_operand(
             self._multiple_attributes_operand.count()
-        )
-
-    def sum(self) -> NodeSingleAttributeWithoutIndexGroupOperand:
-        return NodeSingleAttributeWithoutIndexGroupOperand._from_py_single_attribute_operand(
-            self._multiple_attributes_operand.sum()
         )
 
     def random(self) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -5361,12 +5138,6 @@ class NodeMultipleAttributesWithIndexGroupOperand:
                 self._multiple_attributes_operand.random()
             )
         )
-
-    def is_string(self) -> None:
-        self._multiple_attributes_operand.is_string()
-
-    def is_int(self) -> None:
-        self._multiple_attributes_operand.is_int()
 
     def is_max(self) -> None:
         self._multiple_attributes_operand.is_max()
@@ -5461,37 +5232,6 @@ class NodeMultipleAttributesWithIndexGroupOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._multiple_attributes_operand.abs()
 
     def trim(self) -> None:
         self._multiple_attributes_operand.trim()
@@ -5582,26 +5322,15 @@ class NodeMultipleAttributesWithoutIndexOperand:
             self._multiple_attributes_operand.min()
         )
 
-    def count(self) -> NodeSingleAttributeWithoutIndexOperand:
-        return NodeSingleAttributeWithoutIndexOperand._from_py_single_attribute_operand(
+    def count(self) -> NodeSingleValueWithoutIndexOperand:
+        return NodeSingleValueWithoutIndexOperand._from_py_single_value_operand(
             self._multiple_attributes_operand.count()
-        )
-
-    def sum(self) -> NodeSingleAttributeWithoutIndexOperand:
-        return NodeSingleAttributeWithoutIndexOperand._from_py_single_attribute_operand(
-            self._multiple_attributes_operand.sum()
         )
 
     def random(self) -> NodeSingleAttributeWithoutIndexOperand:
         return NodeSingleAttributeWithoutIndexOperand._from_py_single_attribute_operand(
             self._multiple_attributes_operand.random()
         )
-
-    def is_string(self) -> None:
-        self._multiple_attributes_operand.is_string()
-
-    def is_int(self) -> None:
-        self._multiple_attributes_operand.is_int()
 
     def is_max(self) -> None:
         self._multiple_attributes_operand.is_max()
@@ -5696,37 +5425,6 @@ class NodeMultipleAttributesWithoutIndexOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._multiple_attributes_operand.abs()
 
     def trim(self) -> None:
         self._multiple_attributes_operand.trim()
@@ -5804,26 +5502,15 @@ class EdgeMultipleAttributesWithIndexOperand:
             self._multiple_attributes_operand.min()
         )
 
-    def count(self) -> EdgeSingleAttributeWithoutIndexOperand:
-        return EdgeSingleAttributeWithoutIndexOperand._from_py_single_attribute_operand(
+    def count(self) -> EdgeSingleValueWithoutIndexOperand:
+        return EdgeSingleValueWithoutIndexOperand._from_py_single_value_operand(
             self._multiple_attributes_operand.count()
-        )
-
-    def sum(self) -> EdgeSingleAttributeWithoutIndexOperand:
-        return EdgeSingleAttributeWithoutIndexOperand._from_py_single_attribute_operand(
-            self._multiple_attributes_operand.sum()
         )
 
     def random(self) -> EdgeSingleAttributeWithIndexOperand:
         return EdgeSingleAttributeWithIndexOperand._from_py_single_attribute_operand(
             self._multiple_attributes_operand.random()
         )
-
-    def is_string(self) -> None:
-        self._multiple_attributes_operand.is_string()
-
-    def is_int(self) -> None:
-        self._multiple_attributes_operand.is_int()
 
     def is_max(self) -> None:
         self._multiple_attributes_operand.is_max()
@@ -5918,37 +5605,6 @@ class EdgeMultipleAttributesWithIndexOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._multiple_attributes_operand.abs()
 
     def trim(self) -> None:
         self._multiple_attributes_operand.trim()
@@ -6037,14 +5693,9 @@ class EdgeMultipleAttributesWithIndexGroupOperand:
             )
         )
 
-    def count(self) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-        return EdgeSingleAttributeWithoutIndexGroupOperand._from_py_single_attribute_operand(
+    def count(self) -> EdgeSingleValueWithoutIndexGroupOperand:
+        return EdgeSingleValueWithoutIndexGroupOperand._from_py_single_value_operand(
             self._multiple_attributes_operand.count()
-        )
-
-    def sum(self) -> EdgeSingleAttributeWithoutIndexGroupOperand:
-        return EdgeSingleAttributeWithoutIndexGroupOperand._from_py_single_attribute_operand(
-            self._multiple_attributes_operand.sum()
         )
 
     def random(self) -> EdgeSingleAttributeWithIndexGroupOperand:
@@ -6053,12 +5704,6 @@ class EdgeMultipleAttributesWithIndexGroupOperand:
                 self._multiple_attributes_operand.random()
             )
         )
-
-    def is_string(self) -> None:
-        self._multiple_attributes_operand.is_string()
-
-    def is_int(self) -> None:
-        self._multiple_attributes_operand.is_int()
 
     def is_max(self) -> None:
         self._multiple_attributes_operand.is_max()
@@ -6153,37 +5798,6 @@ class EdgeMultipleAttributesWithIndexGroupOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._multiple_attributes_operand.abs()
 
     def trim(self) -> None:
         self._multiple_attributes_operand.trim()
@@ -6274,26 +5888,15 @@ class EdgeMultipleAttributesWithoutIndexOperand:
             self._multiple_attributes_operand.min()
         )
 
-    def count(self) -> EdgeSingleAttributeWithoutIndexOperand:
-        return EdgeSingleAttributeWithoutIndexOperand._from_py_single_attribute_operand(
+    def count(self) -> EdgeSingleValueWithoutIndexOperand:
+        return EdgeSingleValueWithoutIndexOperand._from_py_single_value_operand(
             self._multiple_attributes_operand.count()
-        )
-
-    def sum(self) -> EdgeSingleAttributeWithoutIndexOperand:
-        return EdgeSingleAttributeWithoutIndexOperand._from_py_single_attribute_operand(
-            self._multiple_attributes_operand.sum()
         )
 
     def random(self) -> EdgeSingleAttributeWithoutIndexOperand:
         return EdgeSingleAttributeWithoutIndexOperand._from_py_single_attribute_operand(
             self._multiple_attributes_operand.random()
         )
-
-    def is_string(self) -> None:
-        self._multiple_attributes_operand.is_string()
-
-    def is_int(self) -> None:
-        self._multiple_attributes_operand.is_int()
 
     def is_max(self) -> None:
         self._multiple_attributes_operand.is_max()
@@ -6389,37 +5992,6 @@ class EdgeMultipleAttributesWithoutIndexOperand:
             )
         )
 
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._multiple_attributes_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._multiple_attributes_operand.abs()
-
     def trim(self) -> None:
         self._multiple_attributes_operand.trim()
 
@@ -6486,12 +6058,6 @@ class EdgeMultipleAttributesWithoutIndexOperand:
 class NodeSingleAttributeWithIndexOperand:
     _single_attribute_operand: PyNodeSingleAttributeWithIndexOperand
 
-    def is_string(self) -> None:
-        self._single_attribute_operand.is_string()
-
-    def is_int(self) -> None:
-        self._single_attribute_operand.is_int()
-
     def greater_than(self, attribute: SingleAttributeComparisonOperand) -> None:
         self._single_attribute_operand.greater_than(
             _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
@@ -6579,37 +6145,6 @@ class NodeSingleAttributeWithIndexOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._single_attribute_operand.abs()
 
     def trim(self) -> None:
         self._single_attribute_operand.trim()
@@ -6675,12 +6210,6 @@ class NodeSingleAttributeWithIndexOperand:
 class NodeSingleAttributeWithIndexGroupOperand:
     _single_attribute_operand: PyNodeSingleAttributeWithIndexGroupOperand
 
-    def is_string(self) -> None:
-        self._single_attribute_operand.is_string()
-
-    def is_int(self) -> None:
-        self._single_attribute_operand.is_int()
-
     def greater_than(self, attribute: SingleAttributeComparisonOperand) -> None:
         self._single_attribute_operand.greater_than(
             _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
@@ -6768,37 +6297,6 @@ class NodeSingleAttributeWithIndexGroupOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._single_attribute_operand.abs()
 
     def trim(self) -> None:
         self._single_attribute_operand.trim()
@@ -6873,12 +6371,6 @@ class NodeSingleAttributeWithIndexGroupOperand:
 class NodeSingleAttributeWithoutIndexOperand:
     _single_attribute_operand: PyNodeSingleAttributeWithoutIndexOperand
 
-    def is_string(self) -> None:
-        self._single_attribute_operand.is_string()
-
-    def is_int(self) -> None:
-        self._single_attribute_operand.is_int()
-
     def greater_than(self, attribute: SingleAttributeComparisonOperand) -> None:
         self._single_attribute_operand.greater_than(
             _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
@@ -6966,37 +6458,6 @@ class NodeSingleAttributeWithoutIndexOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._single_attribute_operand.abs()
 
     def trim(self) -> None:
         self._single_attribute_operand.trim()
@@ -7062,12 +6523,6 @@ class NodeSingleAttributeWithoutIndexOperand:
 class NodeSingleAttributeWithoutIndexGroupOperand:
     _single_attribute_operand: PyNodeSingleAttributeWithoutIndexGroupOperand
 
-    def is_string(self) -> None:
-        self._single_attribute_operand.is_string()
-
-    def is_int(self) -> None:
-        self._single_attribute_operand.is_int()
-
     def greater_than(self, attribute: SingleAttributeComparisonOperand) -> None:
         self._single_attribute_operand.greater_than(
             _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
@@ -7155,37 +6610,6 @@ class NodeSingleAttributeWithoutIndexGroupOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._single_attribute_operand.abs()
 
     def trim(self) -> None:
         self._single_attribute_operand.trim()
@@ -7256,12 +6680,6 @@ class NodeSingleAttributeWithoutIndexGroupOperand:
 class EdgeSingleAttributeWithIndexOperand:
     _single_attribute_operand: PyEdgeSingleAttributeWithIndexOperand
 
-    def is_string(self) -> None:
-        self._single_attribute_operand.is_string()
-
-    def is_int(self) -> None:
-        self._single_attribute_operand.is_int()
-
     def greater_than(self, attribute: SingleAttributeComparisonOperand) -> None:
         self._single_attribute_operand.greater_than(
             _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
@@ -7349,37 +6767,6 @@ class EdgeSingleAttributeWithIndexOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._single_attribute_operand.abs()
 
     def trim(self) -> None:
         self._single_attribute_operand.trim()
@@ -7445,12 +6832,6 @@ class EdgeSingleAttributeWithIndexOperand:
 class EdgeSingleAttributeWithIndexGroupOperand:
     _single_attribute_operand: PyEdgeSingleAttributeWithIndexGroupOperand
 
-    def is_string(self) -> None:
-        self._single_attribute_operand.is_string()
-
-    def is_int(self) -> None:
-        self._single_attribute_operand.is_int()
-
     def greater_than(self, attribute: SingleAttributeComparisonOperand) -> None:
         self._single_attribute_operand.greater_than(
             _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
@@ -7538,37 +6919,6 @@ class EdgeSingleAttributeWithIndexGroupOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._single_attribute_operand.abs()
 
     def trim(self) -> None:
         self._single_attribute_operand.trim()
@@ -7643,12 +6993,6 @@ class EdgeSingleAttributeWithIndexGroupOperand:
 class EdgeSingleAttributeWithoutIndexOperand:
     _single_attribute_operand: PyEdgeSingleAttributeWithoutIndexOperand
 
-    def is_string(self) -> None:
-        self._single_attribute_operand.is_string()
-
-    def is_int(self) -> None:
-        self._single_attribute_operand.is_int()
-
     def greater_than(self, attribute: SingleAttributeComparisonOperand) -> None:
         self._single_attribute_operand.greater_than(
             _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
@@ -7736,37 +7080,6 @@ class EdgeSingleAttributeWithoutIndexOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._single_attribute_operand.abs()
 
     def trim(self) -> None:
         self._single_attribute_operand.trim()
@@ -7832,12 +7145,6 @@ class EdgeSingleAttributeWithoutIndexOperand:
 class EdgeSingleAttributeWithoutIndexGroupOperand:
     _single_attribute_operand: PyEdgeSingleAttributeWithoutIndexGroupOperand
 
-    def is_string(self) -> None:
-        self._single_attribute_operand.is_string()
-
-    def is_int(self) -> None:
-        self._single_attribute_operand.is_int()
-
     def greater_than(self, attribute: SingleAttributeComparisonOperand) -> None:
         self._single_attribute_operand.greater_than(
             _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
@@ -7925,37 +7232,6 @@ class EdgeSingleAttributeWithoutIndexGroupOperand:
                 attribute
             )
         )
-
-    def subtract(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.sub(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def multiply(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mul(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def modulo(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.mod(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def power(self, attribute: SingleAttributeArithmeticOperand) -> None:
-        self._single_attribute_operand.pow(
-            _py_single_attribute_comparison_operand_from_single_attribute_comparison_operand(
-                attribute
-            )
-        )
-
-    def absolute(self) -> None:
-        self._single_attribute_operand.abs()
 
     def trim(self) -> None:
         self._single_attribute_operand.trim()
@@ -8036,26 +7312,15 @@ class NodeIndicesOperand:
             self._node_indices_operand.min()
         )
 
-    def count(self) -> NodeIndexOperand:
-        return NodeIndexOperand._from_py_node_index_operand(
+    def count(self) -> NodeSingleValueWithoutIndexOperand:
+        return NodeSingleValueWithoutIndexOperand._from_py_single_value_operand(
             self._node_indices_operand.count()
-        )
-
-    def sum(self) -> NodeIndexOperand:
-        return NodeIndexOperand._from_py_node_index_operand(
-            self._node_indices_operand.sum()
         )
 
     def random(self) -> NodeIndexOperand:
         return NodeIndexOperand._from_py_node_index_operand(
             self._node_indices_operand.random()
         )
-
-    def is_string(self) -> None:
-        self._node_indices_operand.is_string()
-
-    def is_int(self) -> None:
-        self._node_indices_operand.is_int()
 
     def is_max(self) -> None:
         self._node_indices_operand.is_max()
@@ -8126,29 +7391,6 @@ class NodeIndicesOperand:
         self._node_indices_operand.add(
             _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
         )
-
-    def subtract(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_indices_operand.sub(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def multiply(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_indices_operand.mul(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def modulo(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_indices_operand.mod(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def power(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_indices_operand.pow(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def absolute(self) -> None:
-        self._node_indices_operand.abs()
 
     def trim(self) -> None:
         self._node_indices_operand.trim()
@@ -8216,26 +7458,15 @@ class NodeIndicesGroupOperand:
             self._node_indices_operand.min()
         )
 
-    def count(self) -> NodeIndexGroupOperand:
-        return NodeIndexGroupOperand._from_py_node_index_operand(
+    def count(self) -> NodeSingleValueWithoutIndexGroupOperand:
+        return NodeSingleValueWithoutIndexGroupOperand._from_py_single_value_operand(
             self._node_indices_operand.count()
-        )
-
-    def sum(self) -> NodeIndexGroupOperand:
-        return NodeIndexGroupOperand._from_py_node_index_operand(
-            self._node_indices_operand.sum()
         )
 
     def random(self) -> NodeIndexGroupOperand:
         return NodeIndexGroupOperand._from_py_node_index_operand(
             self._node_indices_operand.random()
         )
-
-    def is_string(self) -> None:
-        self._node_indices_operand.is_string()
-
-    def is_int(self) -> None:
-        self._node_indices_operand.is_int()
 
     def is_max(self) -> None:
         self._node_indices_operand.is_max()
@@ -8307,29 +7538,6 @@ class NodeIndicesGroupOperand:
             _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
         )
 
-    def subtract(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_indices_operand.sub(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def multiply(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_indices_operand.mul(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def modulo(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_indices_operand.mod(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def power(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_indices_operand.pow(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def absolute(self) -> None:
-        self._node_indices_operand.abs()
-
     def trim(self) -> None:
         self._node_indices_operand.trim()
 
@@ -8391,12 +7599,6 @@ class NodeIndicesGroupOperand:
 class NodeIndexOperand:
     _node_index_operand: PyNodeIndexOperand
 
-    def is_string(self) -> None:
-        self._node_index_operand.is_string()
-
-    def is_int(self) -> None:
-        self._node_index_operand.is_int()
-
     def greater_than(self, index: NodeIndexComparisonOperand) -> None:
         self._node_index_operand.greater_than(
             _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
@@ -8460,29 +7662,6 @@ class NodeIndexOperand:
         self._node_index_operand.add(
             _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
         )
-
-    def subtract(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_index_operand.sub(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def multiply(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_index_operand.mul(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def modulo(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_index_operand.mod(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def power(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_index_operand.pow(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def absolute(self) -> None:
-        self._node_index_operand.abs()
 
     def trim(self) -> None:
         self._node_index_operand.trim()
@@ -8540,12 +7719,6 @@ class NodeIndexOperand:
 class NodeIndexGroupOperand:
     _node_index_operand: PyNodeIndexGroupOperand
 
-    def is_string(self) -> None:
-        self._node_index_operand.is_string()
-
-    def is_int(self) -> None:
-        self._node_index_operand.is_int()
-
     def greater_than(self, index: NodeIndexComparisonOperand) -> None:
         self._node_index_operand.greater_than(
             _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
@@ -8609,29 +7782,6 @@ class NodeIndexGroupOperand:
         self._node_index_operand.add(
             _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
         )
-
-    def subtract(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_index_operand.sub(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def multiply(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_index_operand.mul(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def modulo(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_index_operand.mod(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def power(self, index: NodeIndexArithmeticOperand) -> None:
-        self._node_index_operand.pow(
-            _py_node_index_comparison_operand_from_node_index_comparison_operand(index)
-        )
-
-    def absolute(self) -> None:
-        self._node_index_operand.abs()
 
     def trim(self) -> None:
         self._node_index_operand.trim()
@@ -8704,8 +7854,8 @@ class EdgeIndicesOperand:
             self._edge_indices_operand.min()
         )
 
-    def count(self) -> EdgeIndexOperand:
-        return EdgeIndexOperand._from_py_edge_index_operand(
+    def count(self) -> EdgeSingleValueWithoutIndexOperand:
+        return EdgeSingleValueWithoutIndexOperand._from_py_single_value_operand(
             self._edge_indices_operand.count()
         )
 
@@ -8857,8 +8007,8 @@ class EdgeIndicesGroupOperand:
             self._edge_indices_operand.min()
         )
 
-    def count(self) -> EdgeIndexGroupOperand:
-        return EdgeIndexGroupOperand._from_py_edge_index_operand(
+    def count(self) -> EdgeSingleValueWithoutIndexGroupOperand:
+        return EdgeSingleValueWithoutIndexGroupOperand._from_py_single_value_operand(
             self._edge_indices_operand.count()
         )
 
