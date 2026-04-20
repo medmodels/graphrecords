@@ -12,10 +12,7 @@ use crate::{
     errors::GraphRecordResult,
     graphrecord::{
         Attributes, EdgeIndex, GraphRecordAttribute, NodeIndex,
-        querying::{
-            BoxedIterator, DeepClone, RootOperand, attributes::operation::AttributesTreeOperation,
-            group_by::GroupOperand,
-        },
+        querying::{BoxedIterator, DeepClone, RootOperand, group_by::GroupOperand},
     },
 };
 pub use operand::{
@@ -29,7 +26,8 @@ pub use operand::{
     SingleAttributeWithIndexOperand, SingleAttributeWithoutIndexOperand,
 };
 pub use operation::{
-    MultipleAttributesWithIndexOperation, MultipleAttributesWithoutIndexOperation,
+    AttributesTreeOperation, MultipleAttributesWithIndexOperation,
+    MultipleAttributesWithoutIndexOperation,
 };
 use std::fmt::Display;
 
@@ -103,12 +101,6 @@ impl<O: RootOperand> MultipleAttributesWithIndexContext<O> {
                     }
                     MultipleKind::Min => {
                         Box::new(AttributesTreeOperation::<O>::get_min(attributes)?)
-                    }
-                    MultipleKind::Count => {
-                        Box::new(AttributesTreeOperation::<O>::get_count(attributes))
-                    }
-                    MultipleKind::Sum => {
-                        Box::new(AttributesTreeOperation::<O>::get_sum(attributes)?)
                     }
                     MultipleKind::Random => {
                         Box::new(AttributesTreeOperation::<O>::get_random(attributes)?)
@@ -213,8 +205,6 @@ pub enum SingleKindWithIndex {
 pub enum SingleKindWithoutIndex {
     Max,
     Min,
-    Count,
-    Sum,
     Random,
 }
 
@@ -222,8 +212,6 @@ pub enum SingleKindWithoutIndex {
 pub enum MultipleKind {
     Max,
     Min,
-    Count,
-    Sum,
     Random,
 }
 
@@ -249,27 +237,18 @@ pub enum MultipleComparisonKind {
 #[derive(Debug, Clone)]
 pub enum BinaryArithmeticKind {
     Add,
-    Sub,
-    Mul,
-    Pow,
-    Mod,
 }
 
 impl Display for BinaryArithmeticKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Add => write!(f, "add"),
-            Self::Sub => write!(f, "sub"),
-            Self::Mul => write!(f, "mul"),
-            Self::Pow => write!(f, "pow"),
-            Self::Mod => write!(f, "mod"),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum UnaryArithmeticKind {
-    Abs,
     Trim,
     TrimStart,
     TrimEnd,

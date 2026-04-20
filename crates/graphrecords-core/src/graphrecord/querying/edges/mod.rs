@@ -96,7 +96,6 @@ impl<'a> EvaluateBackward<'a> for EdgeIndicesOperandContext {
 pub enum SingleKind {
     Max,
     Min,
-    Count,
     Sum,
     Random,
 }

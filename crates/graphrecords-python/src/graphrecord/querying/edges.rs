@@ -8,7 +8,10 @@ use crate::graphrecord::{
     querying::{
         attributes::PyEdgeAttributesTreeGroupOperand,
         nodes::PyNodeGroupOperand,
-        values::{PyEdgeMultipleValuesWithIndexGroupOperand, PyEdgeMultipleValuesWithIndexOperand},
+        values::{
+            PyEdgeMultipleValuesWithIndexGroupOperand, PyEdgeMultipleValuesWithIndexOperand,
+            PyEdgeSingleValueWithoutIndexGroupOperand, PyEdgeSingleValueWithoutIndexOperand,
+        },
     },
 };
 use graphrecords_core::{
@@ -327,7 +330,7 @@ impl PyEdgeIndicesOperand {
         self.0.min().into()
     }
 
-    pub fn count(&self) -> PyEdgeIndexOperand {
+    pub fn count(&self) -> PyEdgeSingleValueWithoutIndexOperand {
         self.0.count().into()
     }
 
@@ -479,7 +482,7 @@ impl PyEdgeIndicesGroupOperand {
         self.0.min().into()
     }
 
-    pub fn count(&self) -> PyEdgeIndexGroupOperand {
+    pub fn count(&self) -> PyEdgeSingleValueWithoutIndexGroupOperand {
         self.0.count().into()
     }
 

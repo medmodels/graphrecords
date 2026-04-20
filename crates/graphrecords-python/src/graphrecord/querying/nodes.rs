@@ -9,7 +9,10 @@ use crate::graphrecord::{
     querying::{
         attributes::PyNodeAttributesTreeGroupOperand,
         edges::PyEdgeGroupOperand,
-        values::{PyNodeMultipleValuesWithIndexGroupOperand, PyNodeMultipleValuesWithIndexOperand},
+        values::{
+            PyNodeMultipleValuesWithIndexGroupOperand, PyNodeMultipleValuesWithIndexOperand,
+            PyNodeSingleValueWithoutIndexGroupOperand, PyNodeSingleValueWithoutIndexOperand,
+        },
     },
 };
 use graphrecords_core::{
@@ -352,12 +355,8 @@ impl PyNodeIndicesOperand {
         self.0.min().into()
     }
 
-    pub fn count(&self) -> PyNodeIndexOperand {
+    pub fn count(&self) -> PyNodeSingleValueWithoutIndexOperand {
         self.0.count().into()
-    }
-
-    pub fn sum(&self) -> PyNodeIndexOperand {
-        self.0.sum().into()
     }
 
     pub fn random(&self) -> PyNodeIndexOperand {
@@ -412,26 +411,6 @@ impl PyNodeIndicesOperand {
         self.0.add(index);
     }
 
-    pub fn sub(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.sub(index);
-    }
-
-    pub fn mul(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.mul(index);
-    }
-
-    pub fn pow(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.pow(index);
-    }
-
-    pub fn r#mod(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.r#mod(index);
-    }
-
-    pub fn abs(&self) {
-        self.0.abs();
-    }
-
     pub fn trim(&self) {
         self.0.trim();
     }
@@ -454,14 +433,6 @@ impl PyNodeIndicesOperand {
 
     pub fn slice(&self, start: usize, end: usize) {
         self.0.slice(start, end);
-    }
-
-    pub fn is_string(&self) {
-        self.0.is_string();
-    }
-
-    pub fn is_int(&self) {
-        self.0.is_int();
     }
 
     pub fn is_max(&self) {
@@ -540,12 +511,8 @@ impl PyNodeIndicesGroupOperand {
         self.0.min().into()
     }
 
-    pub fn count(&self) -> PyNodeIndexGroupOperand {
+    pub fn count(&self) -> PyNodeSingleValueWithoutIndexGroupOperand {
         self.0.count().into()
-    }
-
-    pub fn sum(&self) -> PyNodeIndexGroupOperand {
-        self.0.sum().into()
     }
 
     pub fn random(&self) -> PyNodeIndexGroupOperand {
@@ -600,26 +567,6 @@ impl PyNodeIndicesGroupOperand {
         self.0.add(index);
     }
 
-    pub fn sub(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.sub(index);
-    }
-
-    pub fn mul(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.mul(index);
-    }
-
-    pub fn pow(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.pow(index);
-    }
-
-    pub fn r#mod(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.r#mod(index);
-    }
-
-    pub fn abs(&self) {
-        self.0.abs();
-    }
-
     pub fn trim(&self) {
         self.0.trim();
     }
@@ -642,14 +589,6 @@ impl PyNodeIndicesGroupOperand {
 
     pub fn slice(&self, start: usize, end: usize) {
         self.0.slice(start, end);
-    }
-
-    pub fn is_string(&self) {
-        self.0.is_string();
-    }
-
-    pub fn is_int(&self) {
-        self.0.is_int();
     }
 
     pub fn is_max(&self) {
@@ -772,26 +711,6 @@ impl PyNodeIndexOperand {
         self.0.add(index);
     }
 
-    pub fn sub(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.sub(index);
-    }
-
-    pub fn mul(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.mul(index);
-    }
-
-    pub fn pow(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.pow(index);
-    }
-
-    pub fn r#mod(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.r#mod(index);
-    }
-
-    pub fn abs(&self) {
-        self.0.abs();
-    }
-
     pub fn trim(&self) {
         self.0.trim();
     }
@@ -814,14 +733,6 @@ impl PyNodeIndexOperand {
 
     pub fn slice(&self, start: usize, end: usize) {
         self.0.slice(start, end);
-    }
-
-    pub fn is_string(&self) {
-        self.0.is_string();
-    }
-
-    pub fn is_int(&self) {
-        self.0.is_int();
     }
 
     /// # Panics
@@ -932,26 +843,6 @@ impl PyNodeIndexGroupOperand {
         self.0.add(index);
     }
 
-    pub fn sub(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.sub(index);
-    }
-
-    pub fn mul(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.mul(index);
-    }
-
-    pub fn pow(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.pow(index);
-    }
-
-    pub fn r#mod(&self, index: PyNodeIndexComparisonOperand) {
-        self.0.r#mod(index);
-    }
-
-    pub fn abs(&self) {
-        self.0.abs();
-    }
-
     pub fn trim(&self) {
         self.0.trim();
     }
@@ -974,14 +865,6 @@ impl PyNodeIndexGroupOperand {
 
     pub fn slice(&self, start: usize, end: usize) {
         self.0.slice(start, end);
-    }
-
-    pub fn is_string(&self) {
-        self.0.is_string();
-    }
-
-    pub fn is_int(&self) {
-        self.0.is_int();
     }
 
     /// # Panics

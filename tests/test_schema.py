@@ -189,15 +189,15 @@ class TestGroupSchema(unittest.TestCase):
 class TestSchema(unittest.TestCase):
     def test_infer(self) -> None:
         graphrecord = gr.GraphRecord()
-        graphrecord.add_nodes([(0, {"key1": 0}), (1, {"key2": 0.0})])
-        graphrecord.add_edges((0, 1, {"key3": True}))
+        graphrecord.add_nodes([("0", {"key1": 0}), ("1", {"key2": 0.0})])
+        graphrecord.add_edges(("0", "1", {"key3": True}))
 
         schema = gr.Schema.infer(graphrecord)
 
         assert len(schema.ungrouped.nodes) == 2
         assert len(schema.ungrouped.edges) == 1
 
-        graphrecord.add_group("test", [0, 1], [0])
+        graphrecord.add_group("test", ["0", "1"], [0])
 
         schema = gr.Schema.infer(graphrecord)
 

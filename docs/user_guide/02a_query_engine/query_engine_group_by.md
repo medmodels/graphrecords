@@ -95,6 +95,6 @@ The full code examples for this chapter can be found here:
 ```{literalinclude} scripts/group_by.py
 ---
 language: python
-lines: 2-101
+lines: 2-103
 ---
 ```

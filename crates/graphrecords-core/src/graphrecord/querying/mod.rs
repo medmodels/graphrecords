@@ -96,6 +96,7 @@ pub trait RootOperand:
 {
     type Index: Index;
     type Discriminator: Debug + Clone + DeepClone;
+    type IndicesOperand: Debug + Clone + DeepClone + GroupedOperand + CountableOperand;
 
     fn _evaluate_forward<'a>(
         &self,
@@ -315,6 +316,15 @@ pub trait ReduceInput<'a>: EvaluateForward<'a> {
         &self,
         values: <Self::Context as EvaluateBackward<'a>>::ReturnValue,
     ) -> GraphRecordResult<<Self as EvaluateForward<'a>>::InputValue>;
+}
+
+pub trait CountableOperand: GroupedOperand + Sized {
+    fn count(&self, graphrecord: &GraphRecord) -> GraphRecordResult<i64>;
+
+    fn count_per_partition<'a>(
+        group: &GroupOperand<Self>,
+        graphrecord: &'a GraphRecord,
+    ) -> GraphRecordResult<Vec<(GroupKey<'a>, i64)>>;
 }
 
 impl<'a, O> Wrapper<O> {

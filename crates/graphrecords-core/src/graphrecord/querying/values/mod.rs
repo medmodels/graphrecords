@@ -13,9 +13,18 @@ use crate::{
     GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
-        EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex, querying::DeepClone,
+        EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex,
+        querying::{
+            CountableOperand, DeepClone,
+            attributes::{
+                AttributesTreeOperand, AttributesTreeOperation,
+                MultipleAttributesWithoutIndexOperand,
+            },
+            values::operation::MultipleValuesWithoutIndexOperation,
+        },
     },
 };
+pub use group_by::SingleValueWithoutIndexOperandContext;
 pub use operand::{
     EdgeMultipleValuesWithIndexOperand, EdgeMultipleValuesWithoutIndexOperand,
     EdgeSingleValueWithIndexOperand, EdgeSingleValueWithoutIndexOperand,
@@ -30,6 +39,7 @@ use std::fmt::Display;
 #[derive(Debug, Clone)]
 pub enum MultipleValuesWithIndexContext<O: RootOperand> {
     Operand((O, GraphRecordAttribute)),
+    AttributesTreeOperand(AttributesTreeOperand<O>),
     MultipleAttributesOperand(MultipleAttributesWithIndexOperand<O>),
     SingleValueWithIndexGroupByOperand(GroupOperand<SingleValueWithIndexOperand<O>>),
     MultipleValuesWithIndexGroupByOperand(GroupOperand<MultipleValuesWithIndexOperand<O>>),
@@ -46,6 +56,11 @@ impl<O: RootOperand> MultipleValuesWithIndexContext<O> {
         let values: BoxedIterator<_> = match self {
             Self::Operand((operand, attribute)) => {
                 Box::new(operand.get_values(graphrecord, attribute.clone())?)
+            }
+            Self::AttributesTreeOperand(operand) => {
+                let attributes = operand.evaluate_backward(graphrecord)?;
+
+                Box::new(AttributesTreeOperation::<O>::get_count(attributes))
             }
             Self::MultipleAttributesOperand(operand) => {
                 let attributes = operand.evaluate_backward(graphrecord)?;
@@ -98,39 +113,133 @@ impl<O: RootOperand> MultipleValuesWithoutIndexContext<O> {
 
 #[derive(Debug, Clone)]
 pub enum SingleValueWithoutIndexContext<O: RootOperand> {
-    MultipleValuesWithIndexOperand(MultipleValuesWithIndexOperand<O>),
-    MultipleValuesWithoutIndexOperand(MultipleValuesWithoutIndexOperand<O>),
+    MultipleValuesWithIndexOperand {
+        operand: MultipleValuesWithIndexOperand<O>,
+        kind: SingleKindWithoutIndex,
+    },
+    MultipleValuesWithoutIndexOperand {
+        operand: MultipleValuesWithoutIndexOperand<O>,
+        kind: SingleKindWithoutIndex,
+    },
+    MultipleAttributesWithIndexOperand(MultipleAttributesWithIndexOperand<O>),
+    MultipleAttributesWithoutIndexOperand(MultipleAttributesWithoutIndexOperand<O>),
+    IndicesOperand(<O as RootOperand>::IndicesOperand),
 }
 
 impl<O: RootOperand> DeepClone for SingleValueWithoutIndexContext<O> {
     fn deep_clone(&self) -> Self {
         match self {
-            Self::MultipleValuesWithIndexOperand(operand) => {
-                Self::MultipleValuesWithIndexOperand(operand.deep_clone())
+            Self::MultipleValuesWithIndexOperand { operand, kind } => {
+                Self::MultipleValuesWithIndexOperand {
+                    operand: operand.deep_clone(),
+                    kind: kind.clone(),
+                }
             }
-            Self::MultipleValuesWithoutIndexOperand(operand) => {
-                Self::MultipleValuesWithoutIndexOperand(operand.deep_clone())
+            Self::MultipleValuesWithoutIndexOperand { operand, kind } => {
+                Self::MultipleValuesWithoutIndexOperand {
+                    operand: operand.deep_clone(),
+                    kind: kind.clone(),
+                }
             }
+            Self::MultipleAttributesWithIndexOperand(operand) => {
+                Self::MultipleAttributesWithIndexOperand(operand.deep_clone())
+            }
+            Self::MultipleAttributesWithoutIndexOperand(operand) => {
+                Self::MultipleAttributesWithoutIndexOperand(operand.deep_clone())
+            }
+            Self::IndicesOperand(operand) => Self::IndicesOperand(operand.deep_clone()),
         }
     }
 }
 
 impl<O: RootOperand> SingleValueWithoutIndexContext<O> {
-    pub(crate) fn get_values<'a>(
+    pub(crate) fn get_value(
         &self,
-        graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, GraphRecordValue>>
-    where
-        O: 'a,
-    {
+        graphrecord: &GraphRecord,
+    ) -> GraphRecordResult<Option<GraphRecordValue>> {
         Ok(match self {
-            Self::MultipleValuesWithIndexOperand(operand) => Box::new(
-                operand
+            Self::MultipleValuesWithIndexOperand { operand, kind } => {
+                let values = operand
                     .evaluate_backward(graphrecord)?
-                    .map(|(_, value)| value),
-            ),
-            Self::MultipleValuesWithoutIndexOperand(operand) => {
-                Box::new(operand.evaluate_backward(graphrecord)?)
+                    .map(|(_, value)| value);
+
+                match kind {
+                    SingleKindWithoutIndex::Max => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_max(values)?
+                    }
+                    SingleKindWithoutIndex::Min => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_min(values)?
+                    }
+                    SingleKindWithoutIndex::Mean => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_mean(values)?
+                    }
+                    SingleKindWithoutIndex::Median => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_median(values)?
+                    }
+                    SingleKindWithoutIndex::Mode => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_mode(values)
+                    }
+                    SingleKindWithoutIndex::Std => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_std(values)?
+                    }
+                    SingleKindWithoutIndex::Var => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_var(values)?
+                    }
+                    SingleKindWithoutIndex::Count => {
+                        Some(MultipleValuesWithoutIndexOperation::<O>::get_count(values))
+                    }
+                    SingleKindWithoutIndex::Sum => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_sum(values)?
+                    }
+                    SingleKindWithoutIndex::Random => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_random(values)
+                    }
+                }
+            }
+            Self::MultipleValuesWithoutIndexOperand { operand, kind } => {
+                let values = operand.evaluate_backward(graphrecord)?;
+
+                match kind {
+                    SingleKindWithoutIndex::Max => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_max(values)?
+                    }
+                    SingleKindWithoutIndex::Min => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_min(values)?
+                    }
+                    SingleKindWithoutIndex::Mean => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_mean(values)?
+                    }
+                    SingleKindWithoutIndex::Median => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_median(values)?
+                    }
+                    SingleKindWithoutIndex::Mode => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_mode(values)
+                    }
+                    SingleKindWithoutIndex::Std => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_std(values)?
+                    }
+                    SingleKindWithoutIndex::Var => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_var(values)?
+                    }
+                    SingleKindWithoutIndex::Count => {
+                        Some(MultipleValuesWithoutIndexOperation::<O>::get_count(values))
+                    }
+                    SingleKindWithoutIndex::Sum => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_sum(values)?
+                    }
+                    SingleKindWithoutIndex::Random => {
+                        MultipleValuesWithoutIndexOperation::<O>::get_random(values)
+                    }
+                }
+            }
+            Self::MultipleAttributesWithIndexOperand(operand) => Some(GraphRecordValue::from(
+                operand.evaluate_backward(graphrecord)?.count() as i64,
+            )),
+            Self::MultipleAttributesWithoutIndexOperand(operand) => Some(GraphRecordValue::from(
+                operand.evaluate_backward(graphrecord)?.count() as i64,
+            )),
+            Self::IndicesOperand(operand) => {
+                Some(GraphRecordValue::from(operand.count(graphrecord)?))
             }
         })
     }

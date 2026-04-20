@@ -622,15 +622,17 @@ mod test {
 
         let mut graph = Graph::new();
 
-        graph.add_node(0.into(), HashMap::new()).unwrap();
-        graph.add_edge(0.into(), 0.into(), HashMap::new()).unwrap();
+        graph.add_node("0".into(), HashMap::new()).unwrap();
+        graph
+            .add_edge("0".into(), "0".into(), HashMap::new())
+            .unwrap();
 
         assert_eq!(1, graph.node_count());
         assert_eq!(1, graph.edge_count());
 
         assert!(
             graph
-                .remove_node(&0.into(), &mut GroupMapping::default())
+                .remove_node(&"0".into(), &mut GroupMapping::default())
                 .is_ok()
         );
 
@@ -674,7 +676,7 @@ mod test {
     #[test]
     fn test_invalid_add_edge() {
         let mut graph = Graph::new();
-        graph.add_node(0.into(), HashMap::new()).unwrap();
+        graph.add_node("0".into(), HashMap::new()).unwrap();
 
         // Adding an edge pointing to a non-existing node should fail
         assert!(

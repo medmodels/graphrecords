@@ -19,7 +19,7 @@ use crate::{
             BoxedIterator, DeepClone, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
             RootOperand, tee_grouped_iterator,
             values::{
-                SingleKindWithoutIndex,
+                SingleKindWithoutIndex, SingleValueWithoutIndexContext,
                 operand::{MultipleValuesWithoutIndexOperand, SingleValueWithoutIndexOperand},
             },
         },
@@ -313,7 +313,13 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
         let (values_1, values_2) = Itertools::tee(values);
         let values_1 = values_1.map(|(_, value)| value);
 
-        let kind = &operand.0.read().kind;
+        let SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand {
+            operand: _,
+            ref kind,
+        } = operand.0.read().context
+        else {
+            unreachable!()
+        };
 
         let value = match kind {
             SingleKindWithoutIndex::Max => {
@@ -890,7 +896,13 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
         let (values_1, values_2) = tee_grouped_iterator(values);
         let mut values_2: Vec<_> = values_2.collect();
 
-        let kind = &operand.0.read().kind;
+        let SingleValueWithoutIndexContext::MultipleValuesWithIndexOperand {
+            operand: _,
+            ref kind,
+        } = operand.0.read().context
+        else {
+            unreachable!()
+        };
 
         let values_1: Vec<_> = values_1
             .map(|(key, values)| {
@@ -1468,7 +1480,13 @@ impl<O: RootOperand> MultipleValuesWithoutIndexOperation<O> {
     ) -> GraphRecordResult<BoxedIterator<'a, GraphRecordValue>> {
         let (values_1, values_2) = Itertools::tee(values);
 
-        let kind = &operand.0.read().kind;
+        let SingleValueWithoutIndexContext::MultipleValuesWithoutIndexOperand {
+            operand: _,
+            ref kind,
+        } = operand.0.read().context
+        else {
+            unreachable!()
+        };
 
         let value = match kind {
             SingleKindWithoutIndex::Max => Self::get_max(values_1)?,

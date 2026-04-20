@@ -104,8 +104,6 @@ impl<'a> EvaluateBackward<'a> for NodeIndicesOperandContext {
 pub enum SingleKind {
     Max,
     Min,
-    Count,
-    Sum,
     Random,
 }
 
@@ -131,27 +129,18 @@ pub enum MultipleComparisonKind {
 #[derive(Debug, Clone)]
 pub enum BinaryArithmeticKind {
     Add,
-    Sub,
-    Mul,
-    Pow,
-    Mod,
 }
 
 impl Display for BinaryArithmeticKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Add => write!(f, "add"),
-            Self::Sub => write!(f, "sub"),
-            Self::Mul => write!(f, "mul"),
-            Self::Pow => write!(f, "pow"),
-            Self::Mod => write!(f, "mod"),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum UnaryArithmeticKind {
-    Abs,
     Trim,
     TrimStart,
     TrimEnd,

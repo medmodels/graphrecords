@@ -31,12 +31,10 @@ if TYPE_CHECKING:
 
 
 #: A type alias for attributes of a GraphRecord.
-GraphRecordAttribute: TypeAlias = Union[str, int]
+GraphRecordAttribute: TypeAlias = str
 
 #: A type alias for a list of GraphRecord attributes.
-GraphRecordAttributeInputList: TypeAlias = Union[
-    List[str], List[int], List[GraphRecordAttribute]
-]
+GraphRecordAttributeInputList: TypeAlias = List[str]
 
 #: A type alias for the value of a GraphRecord attribute.
 GraphRecordValue: TypeAlias = Union[str, int, float, bool, datetime, timedelta, None]
@@ -66,31 +64,13 @@ GroupInputList: TypeAlias = GraphRecordAttributeInputList
 Attributes: TypeAlias = Dict[GraphRecordAttribute, GraphRecordValue]
 
 #: A type alias for input attributes.
-AttributesInput: TypeAlias = Union[
-    Mapping[GraphRecordAttribute, GraphRecordValue],
-    Mapping[str, GraphRecordValue],
-    Mapping[int, GraphRecordValue],
-]
+AttributesInput: TypeAlias = Mapping[str, GraphRecordValue]
 
 #: A type alias for a node tuple.
-NodeTuple: TypeAlias = Union[
-    Tuple[str, AttributesInput],
-    Tuple[int, AttributesInput],
-    Tuple[NodeIndex, AttributesInput],
-]
+NodeTuple: TypeAlias = Tuple[str, AttributesInput]
 
 #: A type alias for an edge tuple.
-EdgeTuple: TypeAlias = Union[
-    Tuple[str, str, AttributesInput],
-    Tuple[str, int, AttributesInput],
-    Tuple[str, NodeIndex, AttributesInput],
-    Tuple[int, str, AttributesInput],
-    Tuple[int, int, AttributesInput],
-    Tuple[int, NodeIndex, AttributesInput],
-    Tuple[NodeIndex, str, AttributesInput],
-    Tuple[NodeIndex, int, AttributesInput],
-    Tuple[NodeIndex, NodeIndex, AttributesInput],
-]
+EdgeTuple: TypeAlias = Tuple[str, str, AttributesInput]
 
 #: A type alias for input to a Polars DataFrame for nodes.
 PolarsNodeDataFrameInput: TypeAlias = Tuple[pl.DataFrame, str]
@@ -254,7 +234,7 @@ def is_graphrecord_attribute(value: object) -> TypeIs[GraphRecordAttribute]:
         TypeIs[GraphRecordAttribute]: True if the value is a GraphRecord attribute,
             otherwise False.
     """
-    return isinstance(value, (str, int)) and not isinstance(value, bool)
+    return isinstance(value, str)
 
 
 def is_graphrecord_value(value: object) -> TypeIs[GraphRecordValue]:

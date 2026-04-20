@@ -77,15 +77,8 @@ impl<'a> TryFrom<AnyValue<'a>> for GraphRecordAttribute {
 
     fn try_from(value: AnyValue<'a>) -> Result<Self, Self::Error> {
         match value {
-            AnyValue::String(value) => Ok(Self::String(value.into())),
-            AnyValue::StringOwned(value) => Ok(Self::String((*value).into())),
-            AnyValue::Int8(value) => Ok(Self::Int(value.into())),
-            AnyValue::Int16(value) => Ok(Self::Int(value.into())),
-            AnyValue::Int32(value) => Ok(Self::Int(value.into())),
-            AnyValue::Int64(value) => Ok(Self::Int(value)),
-            AnyValue::UInt8(value) => Ok(Self::Int(value.into())),
-            AnyValue::UInt16(value) => Ok(Self::Int(value.into())),
-            AnyValue::UInt32(value) => Ok(Self::Int(value.into())),
+            AnyValue::String(value) => Ok(Self::from(value)),
+            AnyValue::StringOwned(value) => Ok(Self::from(value.as_str())),
             _ => Err(GraphRecordError::ConversionError(format!(
                 "Cannot convert {value} into GraphRecordAttribute"
             ))),
@@ -117,10 +110,7 @@ impl From<GraphRecordValue> for AnyValue<'_> {
 
 impl From<GraphRecordAttribute> for AnyValue<'_> {
     fn from(value: GraphRecordAttribute) -> Self {
-        match value {
-            GraphRecordAttribute::String(value) => AnyValue::StringOwned(value.into()),
-            GraphRecordAttribute::Int(value) => AnyValue::Int64(value),
-        }
+        AnyValue::StringOwned(value.to_string().into())
     }
 }
 
@@ -276,7 +266,7 @@ impl DataFramesGroupExport {
             .map(|attribute_name| ((*attribute_name).clone(), Vec::new()))
             .collect();
 
-        let node_index_attribute = GraphRecordAttribute::String("node_index".into());
+        let node_index_attribute = GraphRecordAttribute::from("node_index");
 
         if node_columns.contains_key(&node_index_attribute) {
             return Err(GraphRecordError::ConversionError(
@@ -342,9 +332,9 @@ impl DataFramesGroupExport {
             .map(|attribute_name| ((*attribute_name).clone(), Vec::new()))
             .collect();
 
-        let edge_index_attribute = GraphRecordAttribute::String("edge_index".into());
-        let source_node_index_attribute = GraphRecordAttribute::String("source_node_index".into());
-        let target_node_index_attribute = GraphRecordAttribute::String("target_node_index".into());
+        let edge_index_attribute = GraphRecordAttribute::from("edge_index");
+        let source_node_index_attribute = GraphRecordAttribute::from("source_node_index");
+        let target_node_index_attribute = GraphRecordAttribute::from("target_node_index");
 
         if edge_columns.contains_key(&edge_index_attribute) {
             return Err(GraphRecordError::ConversionError(

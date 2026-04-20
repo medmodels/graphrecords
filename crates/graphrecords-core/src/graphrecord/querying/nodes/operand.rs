@@ -19,13 +19,15 @@ use crate::{
                 group_by::{self, NodeOperandGroupDiscriminator},
             },
             operand_traits::{
-                Abs, Add, Attribute, Attributes, Contains, Count, Edges, EitherOr, EndsWith,
-                EqualTo, Exclude, GreaterThan, GreaterThanOrEqualTo, HasAttribute, InGroup, Index,
-                IsIn, IsInt, IsMax, IsMin, IsNotIn, IsString, LessThan, LessThanOrEqualTo,
-                Lowercase, Max, Min, Mod, Mul, Neighbors, NotEqualTo, Pow, Random, Slice,
-                StartsWith, Sub, Sum, Trim, TrimEnd, TrimStart, Uppercase,
+                Add, Attribute, Attributes, Contains, Count, Edges, EitherOr, EndsWith, EqualTo,
+                Exclude, GreaterThan, GreaterThanOrEqualTo, HasAttribute, InGroup, Index, IsIn,
+                IsMax, IsMin, IsNotIn, LessThan, LessThanOrEqualTo, Lowercase, Max, Min, Neighbors,
+                NotEqualTo, Random, Slice, StartsWith, Trim, TrimEnd, TrimStart, Uppercase,
             },
-            values::{self, MultipleValuesWithIndexOperand},
+            values::{
+                self, MultipleValuesWithIndexOperand, SingleValueWithoutIndexContext,
+                SingleValueWithoutIndexOperand,
+            },
             wrapper::{CardinalityWrapper, Wrapper},
         },
     },
@@ -51,6 +53,7 @@ impl DeepClone for NodeOperand {
 impl RootOperand for NodeOperand {
     type Index = NodeIndex;
     type Discriminator = NodeOperandGroupDiscriminator;
+    type IndicesOperand = NodeIndicesOperand;
 
     fn _evaluate_forward<'a>(
         &self,
@@ -647,30 +650,16 @@ impl Min for NodeIndicesOperand {
 }
 
 impl Count for NodeIndicesOperand {
-    type ReturnOperand = NodeIndexOperand;
+    type ReturnOperand = SingleValueWithoutIndexOperand<NodeOperand>;
 
     fn count(&mut self) -> Wrapper<Self::ReturnOperand> {
-        let operand = Wrapper::<Self::ReturnOperand>::new(self.deep_clone(), SingleKind::Count);
+        let operand = Wrapper::<Self::ReturnOperand>::new(
+            SingleValueWithoutIndexContext::IndicesOperand(self.deep_clone()),
+        );
 
-        self.operations
-            .push(NodeIndicesOperation::NodeIndexOperation {
-                operand: operand.clone(),
-            });
-
-        operand
-    }
-}
-
-impl Sum for NodeIndicesOperand {
-    type ReturnOperand = NodeIndexOperand;
-
-    fn sum(&mut self) -> Wrapper<Self::ReturnOperand> {
-        let operand = Wrapper::<Self::ReturnOperand>::new(self.deep_clone(), SingleKind::Sum);
-
-        self.operations
-            .push(NodeIndicesOperation::NodeIndexOperation {
-                operand: operand.clone(),
-            });
+        self.operations.push(NodeIndicesOperation::CountOperation {
+            operand: operand.clone(),
+        });
 
         operand
     }
@@ -835,63 +824,6 @@ impl Add for NodeIndicesOperand {
     }
 }
 
-impl Sub for NodeIndicesOperand {
-    type ComparisonOperand = NodeIndexComparisonOperand;
-
-    fn sub<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(NodeIndicesOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Sub,
-            });
-    }
-}
-
-impl Mul for NodeIndicesOperand {
-    type ComparisonOperand = NodeIndexComparisonOperand;
-
-    fn mul<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(NodeIndicesOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mul,
-            });
-    }
-}
-
-impl Pow for NodeIndicesOperand {
-    type ComparisonOperand = NodeIndexComparisonOperand;
-
-    fn pow<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(NodeIndicesOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Pow,
-            });
-    }
-}
-
-impl Mod for NodeIndicesOperand {
-    type ComparisonOperand = NodeIndexComparisonOperand;
-
-    fn r#mod<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(NodeIndicesOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mod,
-            });
-    }
-}
-
-impl Abs for NodeIndicesOperand {
-    fn abs(&mut self) {
-        self.operations
-            .push(NodeIndicesOperation::UnaryArithmeticOperation {
-                kind: UnaryArithmeticKind::Abs,
-            });
-    }
-}
-
 impl Trim for NodeIndicesOperand {
     fn trim(&mut self) {
         self.operations
@@ -941,18 +873,6 @@ impl Slice for NodeIndicesOperand {
     fn slice(&mut self, start: usize, end: usize) {
         self.operations
             .push(NodeIndicesOperation::Slice(start..end));
-    }
-}
-
-impl IsString for NodeIndicesOperand {
-    fn is_string(&mut self) {
-        self.operations.push(NodeIndicesOperation::IsString);
-    }
-}
-
-impl IsInt for NodeIndicesOperand {
-    fn is_int(&mut self) {
-        self.operations.push(NodeIndicesOperation::IsInt);
     }
 }
 
@@ -1103,8 +1023,6 @@ impl<'a> ReduceInput<'a> for NodeIndexOperand {
         Ok(match self.kind {
             SingleKind::Max => NodeIndicesOperation::get_max(node_indices)?,
             SingleKind::Min => NodeIndicesOperation::get_min(node_indices)?,
-            SingleKind::Count => Some(NodeIndicesOperation::get_count(node_indices)),
-            SingleKind::Sum => NodeIndicesOperation::get_sum(node_indices)?,
             SingleKind::Random => NodeIndicesOperation::get_random(node_indices),
         })
     }
@@ -1254,63 +1172,6 @@ impl Add for NodeIndexOperand {
     }
 }
 
-impl Sub for NodeIndexOperand {
-    type ComparisonOperand = NodeIndexComparisonOperand;
-
-    fn sub<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(NodeIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Sub,
-            });
-    }
-}
-
-impl Mul for NodeIndexOperand {
-    type ComparisonOperand = NodeIndexComparisonOperand;
-
-    fn mul<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(NodeIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mul,
-            });
-    }
-}
-
-impl Pow for NodeIndexOperand {
-    type ComparisonOperand = NodeIndexComparisonOperand;
-
-    fn pow<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(NodeIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Pow,
-            });
-    }
-}
-
-impl Mod for NodeIndexOperand {
-    type ComparisonOperand = NodeIndexComparisonOperand;
-
-    fn r#mod<V: Into<Self::ComparisonOperand>>(&mut self, value: V) {
-        self.operations
-            .push(NodeIndexOperation::BinaryArithmeticOperation {
-                operand: value.into(),
-                kind: BinaryArithmeticKind::Mod,
-            });
-    }
-}
-
-impl Abs for NodeIndexOperand {
-    fn abs(&mut self) {
-        self.operations
-            .push(NodeIndexOperation::UnaryArithmeticOperation {
-                kind: UnaryArithmeticKind::Abs,
-            });
-    }
-}
-
 impl Trim for NodeIndexOperand {
     fn trim(&mut self) {
         self.operations
@@ -1359,18 +1220,6 @@ impl Uppercase for NodeIndexOperand {
 impl Slice for NodeIndexOperand {
     fn slice(&mut self, start: usize, end: usize) {
         self.operations.push(NodeIndexOperation::Slice(start..end));
-    }
-}
-
-impl IsString for NodeIndexOperand {
-    fn is_string(&mut self) {
-        self.operations.push(NodeIndexOperation::IsString);
-    }
-}
-
-impl IsInt for NodeIndexOperand {
-    fn is_int(&mut self) {
-        self.operations.push(NodeIndexOperation::IsInt);
     }
 }
 

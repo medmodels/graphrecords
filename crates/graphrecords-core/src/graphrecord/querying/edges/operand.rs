@@ -21,7 +21,10 @@ use crate::{
                 IsMin, IsNotIn, LessThan, LessThanOrEqualTo, Max, Min, Mod, Mul, NotEqualTo, Pow,
                 Random, SourceNode, StartsWith, Sub, Sum, TargetNode,
             },
-            values::{self, MultipleValuesWithIndexOperand},
+            values::{
+                self, MultipleValuesWithIndexOperand, SingleValueWithoutIndexContext,
+                SingleValueWithoutIndexOperand,
+            },
             wrapper::{CardinalityWrapper, Wrapper},
         },
     },
@@ -55,6 +58,7 @@ impl DeepClone for EdgeOperand {
 impl RootOperand for EdgeOperand {
     type Index = EdgeIndex;
     type Discriminator = EdgeOperandGroupDiscriminator;
+    type IndicesOperand = EdgeIndicesOperand;
 
     fn _evaluate_forward<'a>(
         &self,
@@ -657,15 +661,16 @@ impl Min for EdgeIndicesOperand {
 }
 
 impl Count for EdgeIndicesOperand {
-    type ReturnOperand = EdgeIndexOperand;
+    type ReturnOperand = SingleValueWithoutIndexOperand<EdgeOperand>;
 
     fn count(&mut self) -> Wrapper<Self::ReturnOperand> {
-        let operand = Wrapper::<Self::ReturnOperand>::new(self.deep_clone(), SingleKind::Count);
+        let operand = Wrapper::<Self::ReturnOperand>::new(
+            SingleValueWithoutIndexContext::IndicesOperand(self.deep_clone()),
+        );
 
-        self.operations
-            .push(EdgeIndicesOperation::EdgeIndexOperation {
-                operand: operand.clone(),
-            });
+        self.operations.push(EdgeIndicesOperation::CountOperation {
+            operand: operand.clone(),
+        });
 
         operand
     }
@@ -1040,7 +1045,6 @@ impl<'a> ReduceInput<'a> for EdgeIndexOperand {
         Ok(match self.kind {
             SingleKind::Max => EdgeIndicesOperation::get_max(edge_indices),
             SingleKind::Min => EdgeIndicesOperation::get_min(edge_indices),
-            SingleKind::Count => Some(EdgeIndicesOperation::get_count(edge_indices)),
             SingleKind::Sum => Some(EdgeIndicesOperation::get_sum(edge_indices)),
             SingleKind::Random => EdgeIndicesOperation::get_random(edge_indices),
         })

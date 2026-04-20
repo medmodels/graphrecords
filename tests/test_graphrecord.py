@@ -960,12 +960,12 @@ class TestGraphRecord(unittest.TestCase):
         assert graphrecord.node_count() == 3
         assert attributes == {}
 
-        graphrecord = GraphRecord.from_tuples(nodes=[(0, {})], edges=[(0, 0, {})])
+        graphrecord = GraphRecord.from_tuples(nodes=[("0", {})], edges=[("0", "0", {})])
 
         assert graphrecord.node_count() == 1
         assert graphrecord.edge_count() == 1
 
-        graphrecord.remove_nodes(0)
+        graphrecord.remove_nodes("0")
 
         assert graphrecord.node_count() == 0
         assert graphrecord.edge_count() == 0
@@ -1831,7 +1831,7 @@ class TestGraphRecord(unittest.TestCase):
 
         def query3(node: NodeOperand) -> NodeIndexOperand:
             max_index = node.index().max()
-            max_index.greater_than(10)
+            max_index.greater_than("999")
 
             return max_index
 
@@ -2196,7 +2196,7 @@ class TestGraphRecord(unittest.TestCase):
 
         def query3(node: NodeOperand) -> NodeIndexOperand:
             max_index = node.index().max()
-            max_index.greater_than(10)
+            max_index.greater_than("999")
 
             return max_index
 
@@ -2523,7 +2523,7 @@ class TestGraphRecord(unittest.TestCase):
 
         def query3(node: NodeOperand) -> NodeIndexOperand:
             max_index = node.index().max()
-            max_index.greater_than(10)
+            max_index.greater_than("999")
 
             return max_index
 

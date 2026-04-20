@@ -55,20 +55,14 @@ impl From<&GraphRecordValue> for DataType {
 }
 
 impl From<GraphRecordAttribute> for DataType {
-    fn from(value: GraphRecordAttribute) -> Self {
-        match value {
-            GraphRecordAttribute::String(_) => Self::String,
-            GraphRecordAttribute::Int(_) => Self::Int,
-        }
+    fn from(_: GraphRecordAttribute) -> Self {
+        Self::String
     }
 }
 
 impl From<&GraphRecordAttribute> for DataType {
-    fn from(value: &GraphRecordAttribute) -> Self {
-        match value {
-            GraphRecordAttribute::String(_) => Self::String,
-            GraphRecordAttribute::Int(_) => Self::Int,
-        }
+    fn from(_: &GraphRecordAttribute) -> Self {
+        Self::String
     }
 }
 
