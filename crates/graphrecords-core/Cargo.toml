@@ -28,6 +28,7 @@ typetag = { workspace = true, optional = true }
 plugins = []
 connectors = []
 serde = ["dep:serde", "dep:typetag"]
+safe-handles = []
 
 [lints]
 workspace = true

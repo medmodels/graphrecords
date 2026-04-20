@@ -165,7 +165,10 @@ pub fn dataframe_to_nodes(
                     .map(|(column, column_name)| {
                         Ok((
                             column_name.as_str().into(),
-                            column.next().expect("msg").try_into()?,
+                            column
+                                .next()
+                                .expect("Should have as many iterations as rows")
+                                .try_into()?,
                         ))
                     })
                     .collect::<GraphRecordResult<_>>()?,
@@ -367,6 +370,9 @@ impl DataFramesGroupExport {
         edge_columns.insert(target_node_index_attribute.clone(), Vec::new());
 
         for (edge_index, edge_endpoints, attributes) in group_edge_attributes {
+            let source_node_index = edge_endpoints.0.clone();
+            let target_node_index = edge_endpoints.1.clone();
+
             edge_columns
                 .get_mut(&edge_index_attribute)
                 .expect("Attribute must exist in columns")
@@ -374,11 +380,11 @@ impl DataFramesGroupExport {
             edge_columns
                 .get_mut(&source_node_index_attribute)
                 .expect("Attribute must exist in columns")
-                .push(edge_endpoints.0.clone().into());
+                .push(source_node_index.into());
             edge_columns
                 .get_mut(&target_node_index_attribute)
                 .expect("Attribute must exist in columns")
-                .push(edge_endpoints.1.clone().into());
+                .push(target_node_index.into());
 
             for attribute_name in &edge_attributes {
                 let attribute_value = attributes

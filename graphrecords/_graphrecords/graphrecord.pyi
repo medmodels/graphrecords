@@ -5,6 +5,8 @@ from graphrecords._graphrecords.querying import PyEdgeOperand, PyNodeOperand
 from graphrecords._graphrecords.schema import PySchema
 from graphrecords.querying import PyQueryReturnOperand, QueryResult
 from graphrecords.types import (
+    AttributeHandle,
+    AttributeLookup,
     Attributes,
     AttributesInput,
     EdgeIndex,
@@ -13,9 +15,13 @@ from graphrecords.types import (
     GraphRecordAttribute,
     GraphRecordValue,
     Group,
-    GroupInputList,
+    GroupHandle,
+    GroupLookup,
+    GroupLookupInputList,
+    NodeHandle,
     NodeIndex,
-    NodeIndexInputList,
+    NodeLookup,
+    NodeLookupInputList,
     NodeTuple,
     PluginName,
     PolarsDataFramesExport,
@@ -71,71 +77,105 @@ class PyGraphRecord:
     def set_schema(self, schema: PySchema, bypass_plugins: bool = False) -> None: ...
     def freeze_schema(self, bypass_plugins: bool = False) -> None: ...
     def unfreeze_schema(self, bypass_plugins: bool = False) -> None: ...
-    def node(self, node_index: NodeIndexInputList) -> Dict[NodeIndex, Attributes]: ...
+    def node(self, node_index: NodeLookupInputList) -> Dict[NodeLookup, Attributes]: ...
     def edge(self, edge_index: EdgeIndexInputList) -> Dict[EdgeIndex, Attributes]: ...
     def outgoing_edges(
-        self, node_index: NodeIndexInputList
-    ) -> Dict[NodeIndex, List[EdgeIndex]]: ...
+        self, node_index: NodeLookupInputList
+    ) -> Dict[NodeLookup, List[EdgeIndex]]: ...
     def incoming_edges(
-        self, node_index: NodeIndexInputList
-    ) -> Dict[NodeIndex, List[EdgeIndex]]: ...
+        self, node_index: NodeLookupInputList
+    ) -> Dict[NodeLookup, List[EdgeIndex]]: ...
     def edge_endpoints(
         self, edge_index: EdgeIndexInputList
     ) -> Dict[EdgeIndex, tuple[NodeIndex, NodeIndex]]: ...
+    def edge_endpoint_handles(
+        self, edge_index: EdgeIndexInputList
+    ) -> Dict[EdgeIndex, tuple[NodeHandle, NodeHandle]]: ...
     def edges_connecting(
         self,
-        source_node_indices: NodeIndexInputList,
-        target_node_indices: NodeIndexInputList,
+        source_node_indices: NodeLookupInputList,
+        target_node_indices: NodeLookupInputList,
     ) -> List[EdgeIndex]: ...
     def edges_connecting_undirected(
         self,
-        source_node_indices: NodeIndexInputList,
-        target_node_indices: NodeIndexInputList,
+        source_node_indices: NodeLookupInputList,
+        target_node_indices: NodeLookupInputList,
     ) -> List[EdgeIndex]: ...
     def remove_nodes(
-        self, node_index: NodeIndexInputList, bypass_plugins: bool = False
-    ) -> Dict[NodeIndex, Attributes]: ...
+        self, node_index: NodeLookupInputList, bypass_plugins: bool = False
+    ) -> Dict[NodeLookup, Attributes]: ...
     def replace_node_attributes(
-        self, node_index: NodeIndexInputList, attributes: AttributesInput
+        self, node_index: NodeLookupInputList, attributes: AttributesInput
     ) -> None: ...
     def update_node_attribute(
         self,
-        node_index: NodeIndexInputList,
-        attribute: GraphRecordAttribute,
+        node_index: NodeLookupInputList,
+        attribute: AttributeLookup,
         value: GraphRecordValue,
     ) -> None: ...
     def remove_node_attribute(
-        self, node_index: NodeIndexInputList, attribute: GraphRecordAttribute
+        self, node_index: NodeLookupInputList, attribute: AttributeLookup
     ) -> None: ...
+    def add_node(
+        self,
+        node_index: NodeIndex,
+        attributes: AttributesInput,
+        bypass_plugins: bool = False,
+    ) -> NodeHandle: ...
+    def add_node_with_group(
+        self,
+        node_index: NodeIndex,
+        attributes: AttributesInput,
+        group: GroupLookup,
+        bypass_plugins: bool = False,
+    ) -> NodeHandle: ...
+    def add_edge(
+        self,
+        source_node_index: NodeLookup,
+        target_node_index: NodeLookup,
+        attributes: AttributesInput,
+        bypass_plugins: bool = False,
+    ) -> EdgeIndex: ...
+    def add_edge_with_group(
+        self,
+        source_node_index: NodeLookup,
+        target_node_index: NodeLookup,
+        attributes: AttributesInput,
+        group: GroupLookup,
+        bypass_plugins: bool = False,
+    ) -> EdgeIndex: ...
     def add_nodes(
         self, nodes: Sequence[NodeTuple], bypass_plugins: bool = False
-    ) -> None: ...
+    ) -> List[NodeHandle]: ...
     def add_nodes_with_group(
-        self, nodes: Sequence[NodeTuple], group: Group, bypass_plugins: bool = False
-    ) -> None: ...
+        self,
+        nodes: Sequence[NodeTuple],
+        group: GroupLookup,
+        bypass_plugins: bool = False,
+    ) -> List[NodeHandle]: ...
     def add_nodes_with_groups(
         self,
         nodes: Sequence[NodeTuple],
-        groups: GroupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
-    ) -> None: ...
+    ) -> List[NodeHandle]: ...
     def add_nodes_dataframes(
         self,
         nodes_dataframe: List[PolarsNodeDataFrameInput],
         bypass_plugins: bool = False,
-    ) -> None: ...
+    ) -> List[NodeHandle]: ...
     def add_nodes_dataframes_with_group(
         self,
         nodes_dataframe: List[PolarsNodeDataFrameInput],
-        group: Group,
+        group: GroupLookup,
         bypass_plugins: bool = False,
-    ) -> None: ...
+    ) -> List[NodeHandle]: ...
     def add_nodes_dataframes_with_groups(
         self,
         nodes_dataframe: List[PolarsNodeDataFrameInput],
-        groups: GroupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
-    ) -> None: ...
+    ) -> List[NodeHandle]: ...
     def remove_edges(
         self, edge_index: EdgeIndexInputList, bypass_plugins: bool = False
     ) -> Dict[EdgeIndex, Attributes]: ...
@@ -145,22 +185,25 @@ class PyGraphRecord:
     def update_edge_attribute(
         self,
         edge_index: EdgeIndexInputList,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeLookup,
         value: GraphRecordValue,
     ) -> None: ...
     def remove_edge_attribute(
-        self, edge_index: EdgeIndexInputList, attribute: GraphRecordAttribute
+        self, edge_index: EdgeIndexInputList, attribute: AttributeLookup
     ) -> None: ...
     def add_edges(
         self, edges: Sequence[EdgeTuple], bypass_plugins: bool = False
     ) -> List[EdgeIndex]: ...
     def add_edges_with_group(
-        self, edges: Sequence[EdgeTuple], group: Group, bypass_plugins: bool = False
+        self,
+        edges: Sequence[EdgeTuple],
+        group: GroupLookup,
+        bypass_plugins: bool = False,
     ) -> List[EdgeIndex]: ...
     def add_edges_with_groups(
         self,
         edges: Sequence[EdgeTuple],
-        groups: GroupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> List[EdgeIndex]: ...
     def add_edges_dataframes(
@@ -171,125 +214,172 @@ class PyGraphRecord:
     def add_edges_dataframes_with_group(
         self,
         edges_dataframe: List[PolarsEdgeDataFrameInput],
-        group: Group,
+        group: GroupLookup,
         bypass_plugins: bool = False,
     ) -> List[EdgeIndex]: ...
     def add_edges_dataframes_with_groups(
         self,
         edges_dataframe: List[PolarsEdgeDataFrameInput],
-        groups: GroupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> List[EdgeIndex]: ...
     def add_group(
         self,
         group: Group,
-        node_indices_to_add: Optional[NodeIndexInputList],
+        node_indices_to_add: Optional[NodeLookupInputList],
         edge_indices_to_add: Optional[EdgeIndexInputList],
         bypass_plugins: bool = False,
     ) -> None: ...
     def remove_groups(
-        self, group: GroupInputList, bypass_plugins: bool = False
+        self, group: GroupLookupInputList, bypass_plugins: bool = False
     ) -> None: ...
     def add_nodes_to_group(
-        self, group: Group, node_index: NodeIndexInputList, bypass_plugins: bool = False
+        self,
+        group: GroupLookup,
+        node_index: NodeLookupInputList,
+        bypass_plugins: bool = False,
     ) -> None: ...
     def add_node_to_groups(
         self,
-        node_index: NodeIndex,
-        groups: GroupInputList,
+        node_index: NodeLookup,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> None: ...
     def add_nodes_to_groups(
         self,
-        node_indices: NodeIndexInputList,
-        groups: GroupInputList,
+        node_indices: NodeLookupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> None: ...
     def add_edges_to_group(
-        self, group: Group, edge_index: EdgeIndexInputList, bypass_plugins: bool = False
+        self,
+        group: GroupLookup,
+        edge_index: EdgeIndexInputList,
+        bypass_plugins: bool = False,
     ) -> None: ...
     def add_edge_to_groups(
         self,
         edge_index: EdgeIndex,
-        groups: GroupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> None: ...
     def add_edges_to_groups(
         self,
         edge_indices: EdgeIndexInputList,
-        groups: GroupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> None: ...
     def remove_nodes_from_group(
-        self, group: Group, node_index: NodeIndexInputList, bypass_plugins: bool = False
+        self,
+        group: GroupLookup,
+        node_index: NodeLookupInputList,
+        bypass_plugins: bool = False,
     ) -> None: ...
     def remove_node_from_groups(
         self,
-        node_index: NodeIndex,
-        groups: GroupInputList,
+        node_index: NodeLookup,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> None: ...
     def remove_nodes_from_groups(
         self,
-        node_indices: NodeIndexInputList,
-        groups: GroupInputList,
+        node_indices: NodeLookupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> None: ...
     def remove_edges_from_group(
-        self, group: Group, edge_index: EdgeIndexInputList, bypass_plugins: bool = False
+        self,
+        group: GroupLookup,
+        edge_index: EdgeIndexInputList,
+        bypass_plugins: bool = False,
     ) -> None: ...
     def remove_edge_from_groups(
         self,
         edge_index: EdgeIndex,
-        groups: GroupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> None: ...
     def remove_edges_from_groups(
         self,
         edge_indices: EdgeIndexInputList,
-        groups: GroupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> None: ...
     def add_node_with_groups(
         self,
         node_index: NodeIndex,
         attributes: AttributesInput,
-        groups: GroupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
-    ) -> None: ...
+    ) -> NodeHandle: ...
     def add_edge_with_groups(
         self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
+        source_node_index: NodeLookup,
+        target_node_index: NodeLookup,
         attributes: AttributesInput,
-        groups: GroupInputList,
+        groups: GroupLookupInputList,
         bypass_plugins: bool = False,
     ) -> EdgeIndex: ...
-    def nodes_in_group(self, group: GroupInputList) -> Dict[Group, List[NodeIndex]]: ...
+    def nodes_in_group(
+        self, group: GroupLookupInputList
+    ) -> Dict[GroupLookup, List[NodeIndex]]: ...
     def ungrouped_nodes(self) -> List[NodeIndex]: ...
-    def edges_in_group(self, group: GroupInputList) -> Dict[Group, List[EdgeIndex]]: ...
+    def edges_in_group(
+        self, group: GroupLookupInputList
+    ) -> Dict[GroupLookup, List[EdgeIndex]]: ...
     def ungrouped_edges(self) -> List[EdgeIndex]: ...
     def groups_of_node(
-        self, node_index: NodeIndexInputList
-    ) -> Dict[NodeIndex, List[Group]]: ...
+        self, node_index: NodeLookupInputList
+    ) -> Dict[NodeLookup, List[Group]]: ...
     def groups_of_edge(
         self, edge_index: EdgeIndexInputList
     ) -> Dict[EdgeIndex, List[Group]]: ...
+    def node_handles(self) -> List[NodeHandle]: ...
+    def group_handles(self) -> List[GroupHandle]: ...
+    def node_handles_in_group(
+        self, group: GroupLookupInputList
+    ) -> Dict[GroupLookup, List[NodeHandle]]: ...
+    def ungrouped_node_handles(self) -> List[NodeHandle]: ...
+    def group_handles_of_node(
+        self, node_index: NodeLookupInputList
+    ) -> Dict[NodeLookup, List[GroupHandle]]: ...
+    def group_handles_of_edge(
+        self, edge_index: EdgeIndexInputList
+    ) -> Dict[EdgeIndex, List[GroupHandle]]: ...
     def node_count(self) -> int: ...
     def edge_count(self) -> int: ...
     def group_count(self) -> int: ...
-    def contains_node(self, node_index: NodeIndex) -> bool: ...
+    def contains_node(self, node_index: NodeLookup) -> bool: ...
     def contains_edge(self, edge_index: EdgeIndex) -> bool: ...
-    def contains_group(self, group: Group) -> bool: ...
-    def neighbors_outgoing(
-        self, node_indices: NodeIndexInputList
-    ) -> Dict[NodeIndex, List[NodeIndex]]: ...
-    def neighbors_incoming(
-        self, node_indices: NodeIndexInputList
-    ) -> Dict[NodeIndex, List[NodeIndex]]: ...
-    def neighbors_undirected(
-        self, node_indices: NodeIndexInputList
-    ) -> Dict[NodeIndex, List[NodeIndex]]: ...
+    def contains_group(self, group: GroupLookup) -> bool: ...
+    def outgoing_neighbors(
+        self, node_indices: NodeLookupInputList
+    ) -> Dict[NodeLookup, List[NodeIndex]]: ...
+    def incoming_neighbors(
+        self, node_indices: NodeLookupInputList
+    ) -> Dict[NodeLookup, List[NodeIndex]]: ...
+    def neighbors(
+        self, node_indices: NodeLookupInputList
+    ) -> Dict[NodeLookup, List[NodeIndex]]: ...
+    def outgoing_neighbor_handles(
+        self, node_indices: NodeLookupInputList
+    ) -> Dict[NodeLookup, List[NodeHandle]]: ...
+    def incoming_neighbor_handles(
+        self, node_indices: NodeLookupInputList
+    ) -> Dict[NodeLookup, List[NodeHandle]]: ...
+    def neighbor_handles(
+        self, node_indices: NodeLookupInputList
+    ) -> Dict[NodeLookup, List[NodeHandle]]: ...
+    def node_handle(self, node_index: NodeIndex) -> Optional[NodeHandle]: ...
+    def group_handle(self, group: Group) -> Optional[GroupHandle]: ...
+    def attribute_handle(
+        self, name: GraphRecordAttribute
+    ) -> Optional[AttributeHandle]: ...
+    def resolve_node_handle(self, handle: NodeHandle) -> NodeIndex: ...
+    def resolve_group_handle(self, handle: GroupHandle) -> Group: ...
+    def resolve_attribute_handle(
+        self, handle: AttributeHandle
+    ) -> GraphRecordAttribute: ...
     def clear(self, bypass_plugins: bool = False) -> None: ...
     def query_nodes(
         self, query: Callable[[PyNodeOperand], PyQueryReturnOperand]
@@ -300,5 +390,5 @@ class PyGraphRecord:
     def clone(self) -> PyGraphRecord: ...
     def overview(self, truncate_details: Optional[int]) -> PyOverview: ...
     def group_overview(
-        self, group: Group, truncate_details: Optional[int]
+        self, group: GroupLookup, truncate_details: Optional[int]
     ) -> PyGroupOverview: ...

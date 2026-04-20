@@ -9,6 +9,16 @@ pub mod _graphrecords {
     }
 
     #[pymodule]
+    pub mod handle {
+        #[pymodule_export]
+        use crate::prelude::PyAttributeHandle;
+        #[pymodule_export]
+        use crate::prelude::PyGroupHandle;
+        #[pymodule_export]
+        use crate::prelude::PyNodeHandle;
+    }
+
+    #[pymodule]
     pub mod datatype {
         #[pymodule_export]
         use crate::prelude::PyAny;
@@ -322,6 +332,7 @@ pub mod _graphrecords {
 
         for submodule_name in [
             "graphrecord",
+            "handle",
             "datatype",
             "schema",
             "querying",

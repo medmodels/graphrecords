@@ -12,13 +12,13 @@ from graphrecords.types import (
     GraphRecordAttribute,
     GraphRecordAttributeInputList,
     GraphRecordValue,
-    NodeIndex,
-    NodeIndexInputList,
+    NodeLookup,
+    NodeLookupInputList,
     is_attributes,
     is_edge_index,
     is_graphrecord_attribute,
     is_graphrecord_value,
-    is_node_index,
+    is_node_lookup,
 )
 
 if TYPE_CHECKING:
@@ -48,10 +48,10 @@ class NodeIndexer:
     def __getitem__(
         self,
         key: Union[
-            NodeIndex,
+            NodeLookup,
             NodeIndexQuery,
             Tuple[
-                Union[NodeIndex, NodeIndexQuery],
+                Union[NodeLookup, NodeIndexQuery],
                 Union[GraphRecordAttributeInputList, slice],
             ],
         ],
@@ -59,43 +59,43 @@ class NodeIndexer:
 
     @overload
     def __getitem__(
-        self, key: Tuple[Union[NodeIndex, NodeIndexQuery], GraphRecordAttribute]
+        self, key: Tuple[Union[NodeLookup, NodeIndexQuery], GraphRecordAttribute]
     ) -> GraphRecordValue: ...
 
     @overload
     def __getitem__(
         self,
         key: Union[
-            NodeIndexInputList,
+            NodeLookupInputList,
             NodeIndicesQuery,
             slice,
             Tuple[
-                Union[NodeIndexInputList, NodeIndicesQuery, slice],
+                Union[NodeLookupInputList, NodeIndicesQuery, slice],
                 Union[GraphRecordAttributeInputList, slice],
             ],
         ],
-    ) -> Dict[NodeIndex, Attributes]: ...
+    ) -> Dict[NodeLookup, Attributes]: ...
 
     @overload
     def __getitem__(
         self,
         key: Tuple[
-            Union[NodeIndexInputList, NodeIndicesQuery, slice], GraphRecordAttribute
+            Union[NodeLookupInputList, NodeIndicesQuery, slice], GraphRecordAttribute
         ],
-    ) -> Dict[NodeIndex, GraphRecordValue]: ...
+    ) -> Dict[NodeLookup, GraphRecordValue]: ...
 
     def __getitem__(  # noqa: C901
         self,
         key: Union[
-            NodeIndex,
-            NodeIndexInputList,
+            NodeLookup,
+            NodeLookupInputList,
             NodeIndexQuery,
             NodeIndicesQuery,
             slice,
             Tuple[
                 Union[
-                    NodeIndex,
-                    NodeIndexInputList,
+                    NodeLookup,
+                    NodeLookupInputList,
                     NodeIndexQuery,
                     NodeIndicesQuery,
                     slice,
@@ -106,24 +106,24 @@ class NodeIndexer:
     ) -> Union[
         GraphRecordValue,
         Attributes,
-        Dict[NodeIndex, Attributes],
-        Dict[NodeIndex, GraphRecordValue],
+        Dict[NodeLookup, Attributes],
+        Dict[NodeLookup, GraphRecordValue],
     ]:
         """Gets the node attributes for the specified key.
 
         Args:
-            key (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice, Tuple[Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
+            key (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery, slice, Tuple[Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
                 The nodes to get attributes for.
 
         Returns:
-            Union[GraphRecordValue, Attributes, Dict[NodeIndex, Attributes], Dict[NodeIndex, GraphRecordValue]]:
+            Union[GraphRecordValue, Attributes, Dict[NodeLookup, Attributes], Dict[NodeLookup, GraphRecordValue]]:
                 The node attributes to be extracted.
 
         Raises:
             ValueError: If the key is a slice, but not ":" is provided.
             IndexError: If the query returned no results.
         """  # noqa: W505
-        if is_node_index(key):
+        if is_node_lookup(key):
             return self._graphrecord._graphrecord.node([key])[key]
 
         if isinstance(key, list):
@@ -149,7 +149,7 @@ class NodeIndexer:
 
         index_selection, attribute_selection = key
 
-        if is_node_index(index_selection) and is_graphrecord_attribute(
+        if is_node_lookup(index_selection) and is_graphrecord_attribute(
             attribute_selection
         ):
             return self._graphrecord._graphrecord.node([index_selection])[
@@ -194,7 +194,7 @@ class NodeIndexer:
 
             return {x: attributes[x][attribute_selection] for x in attributes}
 
-        if is_node_index(index_selection) and isinstance(attribute_selection, list):
+        if is_node_lookup(index_selection) and isinstance(attribute_selection, list):
             return {
                 x: self._graphrecord._graphrecord.node([index_selection])[
                     index_selection
@@ -249,7 +249,7 @@ class NodeIndexer:
                 for x in attributes
             }
 
-        if is_node_index(index_selection) and isinstance(attribute_selection, slice):
+        if is_node_lookup(index_selection) and isinstance(attribute_selection, slice):
             if (
                 attribute_selection.start is not None
                 or attribute_selection.stop is not None
@@ -317,7 +317,7 @@ class NodeIndexer:
     def __setitem__(
         self,
         key: Union[
-            NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice
+            NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery, slice
         ],
         value: AttributesInput,
     ) -> None: ...
@@ -327,7 +327,7 @@ class NodeIndexer:
         self,
         key: Tuple[
             Union[
-                NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice
+                NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery, slice
             ],
             Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice],
         ],
@@ -337,15 +337,15 @@ class NodeIndexer:
     def __setitem__(  # noqa: C901
         self,
         key: Union[
-            NodeIndex,
-            NodeIndexInputList,
+            NodeLookup,
+            NodeLookupInputList,
             NodeIndexQuery,
             NodeIndicesQuery,
             slice,
             Tuple[
                 Union[
-                    NodeIndex,
-                    NodeIndexInputList,
+                    NodeLookup,
+                    NodeLookupInputList,
                     NodeIndexQuery,
                     NodeIndicesQuery,
                     slice,
@@ -358,7 +358,7 @@ class NodeIndexer:
         """Sets the specified node attributes.
 
         Args:
-            key (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice, Tuple[Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
+            key (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery, slice, Tuple[Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
                 The nodes to set attributes for.
             value (Union[AttributesInput, GraphRecordValue]): The values to set.
 
@@ -366,7 +366,7 @@ class NodeIndexer:
             ValueError: If there is a wrong value type or the key is a slice, but no ":"
                 is provided.
         """  # noqa: W505
-        if is_node_index(key):
+        if is_node_lookup(key):
             if not is_attributes(value):
                 msg = "Should never be reached"
                 raise NotImplementedError(msg)
@@ -413,7 +413,7 @@ class NodeIndexer:
 
         index_selection, attribute_selection = key
 
-        if is_node_index(index_selection) and is_graphrecord_attribute(
+        if is_node_lookup(index_selection) and is_graphrecord_attribute(
             attribute_selection
         ):
             if not is_graphrecord_value(value):
@@ -476,7 +476,7 @@ class NodeIndexer:
                 value,
             )
 
-        if is_node_index(index_selection) and isinstance(attribute_selection, list):
+        if is_node_lookup(index_selection) and isinstance(attribute_selection, list):
             if not is_graphrecord_value(value):
                 msg = "Should never be reached"
                 raise NotImplementedError(msg)
@@ -544,7 +544,7 @@ class NodeIndexer:
 
             return None
 
-        if is_node_index(index_selection) and isinstance(attribute_selection, slice):
+        if is_node_lookup(index_selection) and isinstance(attribute_selection, slice):
             if (
                 attribute_selection.start is not None
                 or attribute_selection.stop is not None
@@ -667,7 +667,7 @@ class NodeIndexer:
         self,
         key: Tuple[
             Union[
-                NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice
+                NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery, slice
             ],
             Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice],
         ],
@@ -675,7 +675,7 @@ class NodeIndexer:
         """Deletes the specified node attributes.
 
         Args:
-            key (Tuple[Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
+            key (Tuple[Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
                 The key to delete.
 
         Raises:
@@ -683,7 +683,7 @@ class NodeIndexer:
         """  # noqa: W505
         index_selection, attribute_selection = key
 
-        if is_node_index(index_selection) and is_graphrecord_attribute(
+        if is_node_lookup(index_selection) and is_graphrecord_attribute(
             attribute_selection
         ):
             return self._graphrecord._graphrecord.remove_node_attribute(
@@ -729,7 +729,7 @@ class NodeIndexer:
                 attribute_selection,
             )
 
-        if is_node_index(index_selection) and isinstance(attribute_selection, list):
+        if is_node_lookup(index_selection) and isinstance(attribute_selection, list):
             for attribute in attribute_selection:
                 self._graphrecord._graphrecord.remove_node_attribute(
                     [index_selection], attribute
@@ -779,7 +779,7 @@ class NodeIndexer:
 
             return None
 
-        if is_node_index(index_selection) and isinstance(attribute_selection, slice):
+        if is_node_lookup(index_selection) and isinstance(attribute_selection, slice):
             if (
                 attribute_selection.start is not None
                 or attribute_selection.stop is not None

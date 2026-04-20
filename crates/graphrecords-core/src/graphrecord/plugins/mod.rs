@@ -3,7 +3,7 @@ mod graphrecord;
 use crate::{
     GraphRecord,
     errors::GraphRecordResult,
-    graphrecord::{EdgeDataFrameInput, NodeDataFrameInput},
+    graphrecord::{EdgeDataFrameInput, GroupHandle, NodeDataFrameInput, NodeHandle},
     prelude::{Attributes, EdgeIndex, Group, NodeIndex, Schema},
 };
 pub use graphrecord::PluginName;
@@ -29,36 +29,36 @@ pub struct PostAddNodeContext {
 pub struct PreAddNodeWithGroupContext {
     pub node_index: NodeIndex,
     pub attributes: Attributes,
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodeWithGroupContext {
     pub node_index: NodeIndex,
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddNodeWithGroupsContext {
     pub node_index: NodeIndex,
     pub attributes: Attributes,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodeWithGroupsContext {
     pub node_index: NodeIndex,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreRemoveNodeContext {
-    pub node_index: NodeIndex,
+    pub node_handle: NodeHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostRemoveNodeContext {
-    pub node_index: NodeIndex,
+    pub node_handle: NodeHandle,
 }
 
 #[derive(Debug, Clone)]
@@ -74,25 +74,25 @@ pub struct PostAddNodesContext {
 #[derive(Debug, Clone)]
 pub struct PreAddNodesWithGroupContext {
     pub nodes: Vec<(NodeIndex, Attributes)>,
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodesWithGroupContext {
     pub nodes: Vec<(NodeIndex, Attributes)>,
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddNodesWithGroupsContext {
     pub nodes: Vec<(NodeIndex, Attributes)>,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodesWithGroupsContext {
     pub nodes: Vec<(NodeIndex, Attributes)>,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
@@ -108,31 +108,31 @@ pub struct PostAddNodesDataframesContext {
 #[derive(Debug, Clone)]
 pub struct PreAddNodesDataframesWithGroupContext {
     pub nodes_dataframes: Vec<NodeDataFrameInput>,
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodesDataframesWithGroupContext {
     pub nodes_dataframes: Vec<NodeDataFrameInput>,
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddNodesDataframesWithGroupsContext {
     pub nodes_dataframes: Vec<NodeDataFrameInput>,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodesDataframesWithGroupsContext {
     pub nodes_dataframes: Vec<NodeDataFrameInput>,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgeContext {
-    pub source_node_index: NodeIndex,
-    pub target_node_index: NodeIndex,
+    pub source_node_handle: NodeHandle,
+    pub target_node_handle: NodeHandle,
     pub attributes: Attributes,
 }
 
@@ -143,29 +143,30 @@ pub struct PostAddEdgeContext {
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgeWithGroupContext {
-    pub source_node_index: NodeIndex,
-    pub target_node_index: NodeIndex,
+    pub source_node_handle: NodeHandle,
+    pub target_node_handle: NodeHandle,
     pub attributes: Attributes,
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddEdgeWithGroupContext {
     pub edge_index: EdgeIndex,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgeWithGroupsContext {
-    pub source_node_index: NodeIndex,
-    pub target_node_index: NodeIndex,
+    pub source_node_handle: NodeHandle,
+    pub target_node_handle: NodeHandle,
     pub attributes: Attributes,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddEdgeWithGroupsContext {
     pub edge_index: EdgeIndex,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
@@ -180,7 +181,7 @@ pub struct PostRemoveEdgeContext {
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgesContext {
-    pub edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+    pub edges: Vec<(NodeHandle, NodeHandle, Attributes)>,
 }
 
 #[derive(Debug, Clone)]
@@ -190,25 +191,26 @@ pub struct PostAddEdgesContext {
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgesWithGroupContext {
-    pub edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
-    pub group: Group,
+    pub edges: Vec<(NodeHandle, NodeHandle, Attributes)>,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddEdgesWithGroupContext {
     pub edge_indices: Vec<EdgeIndex>,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgesWithGroupsContext {
-    pub edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
-    pub groups: Vec<Group>,
+    pub edges: Vec<(NodeHandle, NodeHandle, Attributes)>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddEdgesWithGroupsContext {
     pub edge_indices: Vec<EdgeIndex>,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
@@ -224,192 +226,192 @@ pub struct PostAddEdgesDataframesContext {
 #[derive(Debug, Clone)]
 pub struct PreAddEdgesDataframesWithGroupContext {
     pub edges_dataframes: Vec<EdgeDataFrameInput>,
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddEdgesDataframesWithGroupContext {
     pub edges_dataframes: Vec<EdgeDataFrameInput>,
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgesDataframesWithGroupsContext {
     pub edges_dataframes: Vec<EdgeDataFrameInput>,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddEdgesDataframesWithGroupsContext {
     pub edges_dataframes: Vec<EdgeDataFrameInput>,
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddGroupContext {
     pub group: Group,
-    pub node_indices: Option<Vec<NodeIndex>>,
+    pub node_handles: Option<Vec<NodeHandle>>,
     pub edge_indices: Option<Vec<EdgeIndex>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddGroupContext {
     pub group: Group,
-    pub node_indices: Option<Vec<NodeIndex>>,
+    pub node_handles: Option<Vec<NodeHandle>>,
     pub edge_indices: Option<Vec<EdgeIndex>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreRemoveGroupContext {
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostRemoveGroupContext {
-    pub group: Group,
+    pub group_handle: GroupHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddNodeToGroupContext {
-    pub group: Group,
-    pub node_index: NodeIndex,
+    pub group_handle: GroupHandle,
+    pub node_handle: NodeHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodeToGroupContext {
-    pub group: Group,
-    pub node_index: NodeIndex,
+    pub group_handle: GroupHandle,
+    pub node_handle: NodeHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddNodeToGroupsContext {
-    pub groups: Vec<Group>,
-    pub node_index: NodeIndex,
+    pub group_handles: Vec<GroupHandle>,
+    pub node_handle: NodeHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodeToGroupsContext {
-    pub groups: Vec<Group>,
-    pub node_index: NodeIndex,
+    pub group_handles: Vec<GroupHandle>,
+    pub node_handle: NodeHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddNodesToGroupsContext {
-    pub groups: Vec<Group>,
-    pub node_indices: Vec<NodeIndex>,
+    pub group_handles: Vec<GroupHandle>,
+    pub node_handles: Vec<NodeHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodesToGroupsContext {
-    pub groups: Vec<Group>,
-    pub node_indices: Vec<NodeIndex>,
+    pub group_handles: Vec<GroupHandle>,
+    pub node_handles: Vec<NodeHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgeToGroupContext {
-    pub group: Group,
+    pub group_handle: GroupHandle,
     pub edge_index: EdgeIndex,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddEdgeToGroupContext {
-    pub group: Group,
+    pub group_handle: GroupHandle,
     pub edge_index: EdgeIndex,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgeToGroupsContext {
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
     pub edge_index: EdgeIndex,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddEdgeToGroupsContext {
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
     pub edge_index: EdgeIndex,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgesToGroupsContext {
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
     pub edge_indices: Vec<EdgeIndex>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddEdgesToGroupsContext {
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
     pub edge_indices: Vec<EdgeIndex>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreRemoveNodeFromGroupContext {
-    pub group: Group,
-    pub node_index: NodeIndex,
+    pub group_handle: GroupHandle,
+    pub node_handle: NodeHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostRemoveNodeFromGroupContext {
-    pub group: Group,
-    pub node_index: NodeIndex,
+    pub group_handle: GroupHandle,
+    pub node_handle: NodeHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreRemoveNodeFromGroupsContext {
-    pub groups: Vec<Group>,
-    pub node_index: NodeIndex,
+    pub group_handles: Vec<GroupHandle>,
+    pub node_handle: NodeHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostRemoveNodeFromGroupsContext {
-    pub groups: Vec<Group>,
-    pub node_index: NodeIndex,
+    pub group_handles: Vec<GroupHandle>,
+    pub node_handle: NodeHandle,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreRemoveNodesFromGroupsContext {
-    pub groups: Vec<Group>,
-    pub node_indices: Vec<NodeIndex>,
+    pub group_handles: Vec<GroupHandle>,
+    pub node_handles: Vec<NodeHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostRemoveNodesFromGroupsContext {
-    pub groups: Vec<Group>,
-    pub node_indices: Vec<NodeIndex>,
+    pub group_handles: Vec<GroupHandle>,
+    pub node_handles: Vec<NodeHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreRemoveEdgeFromGroupContext {
-    pub group: Group,
+    pub group_handle: GroupHandle,
     pub edge_index: EdgeIndex,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostRemoveEdgeFromGroupContext {
-    pub group: Group,
+    pub group_handle: GroupHandle,
     pub edge_index: EdgeIndex,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreRemoveEdgeFromGroupsContext {
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
     pub edge_index: EdgeIndex,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostRemoveEdgeFromGroupsContext {
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
     pub edge_index: EdgeIndex,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreRemoveEdgesFromGroupsContext {
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
     pub edge_indices: Vec<EdgeIndex>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostRemoveEdgesFromGroupsContext {
-    pub groups: Vec<Group>,
+    pub group_handles: Vec<GroupHandle>,
     pub edge_indices: Vec<EdgeIndex>,
 }
 

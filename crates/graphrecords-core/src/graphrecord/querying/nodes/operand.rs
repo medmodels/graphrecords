@@ -87,18 +87,16 @@ impl RootOperand for NodeOperand {
                 match direction {
                     EdgeDirection::Incoming => Box::new(node_indices.flat_map(move |node_index| {
                         graphrecord
-                            .neighbors_incoming(node_index)
+                            .incoming_neighbors(node_index)
                             .expect("Node must exist")
                     })),
                     EdgeDirection::Outgoing => Box::new(node_indices.flat_map(move |node_index| {
                         graphrecord
-                            .neighbors_outgoing(node_index)
+                            .outgoing_neighbors(node_index)
                             .expect("Node must exist")
                     })),
                     EdgeDirection::Both => Box::new(node_indices.flat_map(move |node_index| {
-                        graphrecord
-                            .neighbors_undirected(node_index)
-                            .expect("Node must exist")
+                        graphrecord.neighbors(node_index).expect("Node must exist")
                     })),
                 }
             }
@@ -108,7 +106,7 @@ impl RootOperand for NodeOperand {
                 Box::new(edge_indices.map(move |edge_index| {
                     graphrecord
                         .edge_endpoints(edge_index)
-                        .expect("Node must exist")
+                        .expect("Edge must exist")
                         .0
                 }))
             }
@@ -118,7 +116,7 @@ impl RootOperand for NodeOperand {
                 Box::new(edge_indices.map(move |edge_index| {
                     graphrecord
                         .edge_endpoints(edge_index)
-                        .expect("Node must exist")
+                        .expect("Edge must exist")
                         .1
                 }))
             }
@@ -154,33 +152,31 @@ impl RootOperand for NodeOperand {
 
                 let indices: Vec<_> = partitions
                     .map(|(key, partition)| {
-                        let reducued_partition: BoxedIterator<_> = match direction {
+                        let reduced_partition: BoxedIterator<_> = match direction {
                             EdgeDirection::Incoming => {
                                 Box::new(partition.flat_map(move |node_index| {
                                     graphrecord
-                                        .neighbors_incoming(node_index)
+                                        .incoming_neighbors(node_index)
                                         .expect("Node must exist")
                                 }))
                             }
                             EdgeDirection::Outgoing => {
                                 Box::new(partition.flat_map(move |node_index| {
                                     graphrecord
-                                        .neighbors_outgoing(node_index)
+                                        .outgoing_neighbors(node_index)
                                         .expect("Node must exist")
                                 }))
                             }
                             EdgeDirection::Both => {
                                 Box::new(partition.flat_map(move |node_index| {
-                                    graphrecord
-                                        .neighbors_undirected(node_index)
-                                        .expect("Node must exist")
+                                    graphrecord.neighbors(node_index).expect("Node must exist")
                                 }))
                             }
                         };
 
                         let partition = group_operand
                             .operand
-                            .evaluate_forward(graphrecord, reducued_partition)?;
+                            .evaluate_forward(graphrecord, reduced_partition)?;
 
                         Ok((key, partition))
                     })
@@ -198,7 +194,7 @@ impl RootOperand for NodeOperand {
                                 let reduced_partition = partition.map(move |edge_index| {
                                     graphrecord
                                         .edge_endpoints(edge_index)
-                                        .expect("Node must exist")
+                                        .expect("Edge must exist")
                                         .0
                                 });
 
@@ -218,7 +214,7 @@ impl RootOperand for NodeOperand {
                                 let reduced_partition = partition.map(move |edge_index| {
                                     graphrecord
                                         .edge_endpoints(edge_index)
-                                        .expect("Node must exist")
+                                        .expect("Edge must exist")
                                         .1
                                 });
 

@@ -509,6 +509,34 @@ class RecordingPlugin(Plugin):
 
 
 class TestContextConstruction(unittest.TestCase):
+    def setUp(self) -> None:
+        graphrecord = GraphRecord()
+        graphrecord.add_group("g")
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
+        graphrecord.add_group("g2")
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+
+        node_handle_a = graphrecord.node_handle("a")
+        node_handle_b = graphrecord.node_handle("b")
+        group_handle_g = graphrecord.group_handle("g")
+        group_handle_g0 = graphrecord.group_handle("g0")
+        group_handle_g1 = graphrecord.group_handle("g1")
+        group_handle_g2 = graphrecord.group_handle("g2")
+        assert node_handle_a is not None
+        assert node_handle_b is not None
+        assert group_handle_g is not None
+        assert group_handle_g0 is not None
+        assert group_handle_g1 is not None
+        assert group_handle_g2 is not None
+
+        self.node_handle_a = node_handle_a
+        self.node_handle_b = node_handle_b
+        self.group_handle_g = group_handle_g
+        self.group_handle_g0 = group_handle_g0
+        self.group_handle_g1 = group_handle_g1
+        self.group_handle_g2 = group_handle_g2
+
     def test_pre_set_schema_context(self) -> None:
         context = PreSetSchemaContext(Schema())
 
@@ -526,40 +554,44 @@ class TestContextConstruction(unittest.TestCase):
         assert context.node_index == "a"
 
     def test_pre_add_node_with_group_context(self) -> None:
-        context = PreAddNodeWithGroupContext("a", {"x": 1}, "g")
+        context = PreAddNodeWithGroupContext("a", {"x": 1}, self.group_handle_g)
 
         assert context.node_index == "a"
         assert context.attributes == {"x": 1}
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_post_add_node_with_group_context(self) -> None:
-        context = PostAddNodeWithGroupContext("a", "g")
+        context = PostAddNodeWithGroupContext("a", self.group_handle_g)
 
         assert context.node_index == "a"
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_pre_add_node_with_groups_context(self) -> None:
-        context = PreAddNodeWithGroupsContext("a", {"x": 1}, ["g0", "g1"])
+        context = PreAddNodeWithGroupsContext(
+            "a", {"x": 1}, [self.group_handle_g0, self.group_handle_g1]
+        )
 
         assert context.node_index == "a"
         assert context.attributes == {"x": 1}
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_post_add_node_with_groups_context(self) -> None:
-        context = PostAddNodeWithGroupsContext("a", ["g0", "g1"])
+        context = PostAddNodeWithGroupsContext(
+            "a", [self.group_handle_g0, self.group_handle_g1]
+        )
 
         assert context.node_index == "a"
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_pre_remove_node_context(self) -> None:
-        context = PreRemoveNodeContext("a")
+        context = PreRemoveNodeContext(self.node_handle_a)
 
-        assert context.node_index == "a"
+        assert context.node_handle == self.node_handle_a
 
     def test_post_remove_node_context(self) -> None:
-        context = PostRemoveNodeContext("a")
+        context = PostRemoveNodeContext(self.node_handle_a)
 
-        assert context.node_index == "a"
+        assert context.node_handle == self.node_handle_a
 
     def test_pre_add_nodes_context(self) -> None:
         context = PreAddNodesContext([("a", {"x": 1})])
@@ -572,28 +604,32 @@ class TestContextConstruction(unittest.TestCase):
         assert context.nodes == [("a", {"x": 1})]
 
     def test_pre_add_nodes_with_group_context(self) -> None:
-        context = PreAddNodesWithGroupContext([("a", {"x": 1})], "g")
+        context = PreAddNodesWithGroupContext([("a", {"x": 1})], self.group_handle_g)
 
         assert context.nodes == [("a", {"x": 1})]
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_post_add_nodes_with_group_context(self) -> None:
-        context = PostAddNodesWithGroupContext([("a", {"x": 1})], "g")
+        context = PostAddNodesWithGroupContext([("a", {"x": 1})], self.group_handle_g)
 
         assert context.nodes == [("a", {"x": 1})]
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_pre_add_nodes_with_groups_context(self) -> None:
-        context = PreAddNodesWithGroupsContext([("a", {"x": 1})], ["g0", "g1"])
+        context = PreAddNodesWithGroupsContext(
+            [("a", {"x": 1})], [self.group_handle_g0, self.group_handle_g1]
+        )
 
         assert context.nodes == [("a", {"x": 1})]
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_post_add_nodes_with_groups_context(self) -> None:
-        context = PostAddNodesWithGroupsContext([("a", {"x": 1})], ["g0", "g1"])
+        context = PostAddNodesWithGroupsContext(
+            [("a", {"x": 1})], [self.group_handle_g0, self.group_handle_g1]
+        )
 
         assert context.nodes == [("a", {"x": 1})]
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_pre_add_nodes_dataframes_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
@@ -609,41 +645,45 @@ class TestContextConstruction(unittest.TestCase):
 
     def test_pre_add_nodes_dataframes_with_group_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
-        context = PreAddNodesDataframesWithGroupContext([(dataframe, "idx")], "g")
+        context = PreAddNodesDataframesWithGroupContext(
+            [(dataframe, "idx")], self.group_handle_g
+        )
 
         assert len(context.nodes_dataframes) == 1
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_post_add_nodes_dataframes_with_group_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
-        context = PostAddNodesDataframesWithGroupContext([(dataframe, "idx")], "g")
+        context = PostAddNodesDataframesWithGroupContext(
+            [(dataframe, "idx")], self.group_handle_g
+        )
 
         assert len(context.nodes_dataframes) == 1
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_pre_add_nodes_dataframes_with_groups_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
         context = PreAddNodesDataframesWithGroupsContext(
-            [(dataframe, "idx")], ["g0", "g1"]
+            [(dataframe, "idx")], [self.group_handle_g0, self.group_handle_g1]
         )
 
         assert len(context.nodes_dataframes) == 1
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_post_add_nodes_dataframes_with_groups_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
         context = PostAddNodesDataframesWithGroupsContext(
-            [(dataframe, "idx")], ["g0", "g1"]
+            [(dataframe, "idx")], [self.group_handle_g0, self.group_handle_g1]
         )
 
         assert len(context.nodes_dataframes) == 1
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_pre_add_edge_context(self) -> None:
-        context = PreAddEdgeContext("a", "b", {"w": 1})
+        context = PreAddEdgeContext(self.node_handle_a, self.node_handle_b, {"w": 1})
 
-        assert context.source_node_index == "a"
-        assert context.target_node_index == "b"
+        assert context.source_node_handle == self.node_handle_a
+        assert context.target_node_handle == self.node_handle_b
         assert context.attributes == {"w": 1}
 
     def test_post_add_edge_context(self) -> None:
@@ -652,31 +692,41 @@ class TestContextConstruction(unittest.TestCase):
         assert context.edge_index == 0
 
     def test_pre_add_edge_with_group_context(self) -> None:
-        context = PreAddEdgeWithGroupContext("a", "b", {"w": 1}, "g")
+        context = PreAddEdgeWithGroupContext(
+            self.node_handle_a, self.node_handle_b, {"w": 1}, self.group_handle_g
+        )
 
-        assert context.source_node_index == "a"
-        assert context.target_node_index == "b"
+        assert context.source_node_handle == self.node_handle_a
+        assert context.target_node_handle == self.node_handle_b
         assert context.attributes == {"w": 1}
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_post_add_edge_with_group_context(self) -> None:
-        context = PostAddEdgeWithGroupContext(0)
+        context = PostAddEdgeWithGroupContext(0, self.group_handle_g)
 
         assert context.edge_index == 0
+        assert context.group_handle == self.group_handle_g
 
     def test_pre_add_edge_with_groups_context(self) -> None:
-        context = PreAddEdgeWithGroupsContext("a", "b", {"x": 1}, ["g0", "g1"])
+        context = PreAddEdgeWithGroupsContext(
+            self.node_handle_a,
+            self.node_handle_b,
+            {"x": 1},
+            [self.group_handle_g0, self.group_handle_g1],
+        )
 
-        assert context.source_node_index == "a"
-        assert context.target_node_index == "b"
+        assert context.source_node_handle == self.node_handle_a
+        assert context.target_node_handle == self.node_handle_b
         assert context.attributes == {"x": 1}
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_post_add_edge_with_groups_context(self) -> None:
-        context = PostAddEdgeWithGroupsContext(0, ["g0", "g1"])
+        context = PostAddEdgeWithGroupsContext(
+            0, [self.group_handle_g0, self.group_handle_g1]
+        )
 
         assert context.edge_index == 0
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_pre_remove_edge_context(self) -> None:
         context = PreRemoveEdgeContext(0)
@@ -689,9 +739,11 @@ class TestContextConstruction(unittest.TestCase):
         assert context.edge_index == 0
 
     def test_pre_add_edges_context(self) -> None:
-        context = PreAddEdgesContext([("a", "b", {"w": 1})])
+        context = PreAddEdgesContext(
+            [(self.node_handle_a, self.node_handle_b, {"w": 1})]
+        )
 
-        assert context.edges == [("a", "b", {"w": 1})]
+        assert context.edges == [(self.node_handle_a, self.node_handle_b, {"w": 1})]
 
     def test_post_add_edges_context(self) -> None:
         context = PostAddEdgesContext([0])
@@ -699,27 +751,35 @@ class TestContextConstruction(unittest.TestCase):
         assert context.edge_indices == [0]
 
     def test_pre_add_edges_with_group_context(self) -> None:
-        context = PreAddEdgesWithGroupContext([("a", "b", {})], "g")
+        context = PreAddEdgesWithGroupContext(
+            [(self.node_handle_a, self.node_handle_b, {})], self.group_handle_g
+        )
 
-        assert context.edges == [("a", "b", {})]
-        assert context.group == "g"
+        assert context.edges == [(self.node_handle_a, self.node_handle_b, {})]
+        assert context.group_handle == self.group_handle_g
 
     def test_post_add_edges_with_group_context(self) -> None:
-        context = PostAddEdgesWithGroupContext([0])
+        context = PostAddEdgesWithGroupContext([0], self.group_handle_g)
 
         assert context.edge_indices == [0]
+        assert context.group_handle == self.group_handle_g
 
     def test_pre_add_edges_with_groups_context(self) -> None:
-        context = PreAddEdgesWithGroupsContext([("a", "b", {})], ["g0", "g1"])
+        context = PreAddEdgesWithGroupsContext(
+            [(self.node_handle_a, self.node_handle_b, {})],
+            [self.group_handle_g0, self.group_handle_g1],
+        )
 
-        assert context.edges == [("a", "b", {})]
-        assert context.groups == ["g0", "g1"]
+        assert context.edges == [(self.node_handle_a, self.node_handle_b, {})]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_post_add_edges_with_groups_context(self) -> None:
-        context = PostAddEdgesWithGroupsContext([0], ["g0", "g1"])
+        context = PostAddEdgesWithGroupsContext(
+            [0], [self.group_handle_g0, self.group_handle_g1]
+        )
 
         assert context.edge_indices == [0]
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_pre_add_edges_dataframes_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
@@ -736,223 +796,289 @@ class TestContextConstruction(unittest.TestCase):
     def test_pre_add_edges_dataframes_with_group_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
         context = PreAddEdgesDataframesWithGroupContext(
-            [(dataframe, "src", "tgt")], "g"
+            [(dataframe, "src", "tgt")], self.group_handle_g
         )
 
         assert len(context.edges_dataframes) == 1
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_post_add_edges_dataframes_with_group_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
         context = PostAddEdgesDataframesWithGroupContext(
-            [(dataframe, "src", "tgt")], "g"
+            [(dataframe, "src", "tgt")], self.group_handle_g
         )
 
         assert len(context.edges_dataframes) == 1
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_pre_add_edges_dataframes_with_groups_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
         context = PreAddEdgesDataframesWithGroupsContext(
-            [(dataframe, "src", "tgt")], ["g0", "g1"]
+            [(dataframe, "src", "tgt")], [self.group_handle_g0, self.group_handle_g1]
         )
 
         assert len(context.edges_dataframes) == 1
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_post_add_edges_dataframes_with_groups_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
         context = PostAddEdgesDataframesWithGroupsContext(
-            [(dataframe, "src", "tgt")], ["g0", "g1"]
+            [(dataframe, "src", "tgt")], [self.group_handle_g0, self.group_handle_g1]
         )
 
         assert len(context.edges_dataframes) == 1
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
 
     def test_pre_add_group_context(self) -> None:
-        context = PreAddGroupContext("g", ["a"], [0])
+        context = PreAddGroupContext("g", [self.node_handle_a], [0])
 
         assert context.group == "g"
-        assert context.node_indices == ["a"]
+        assert context.node_handles == [self.node_handle_a]
         assert context.edge_indices == [0]
 
     def test_pre_add_group_context_none_optionals(self) -> None:
         context = PreAddGroupContext("g", None, None)
 
         assert context.group == "g"
-        assert context.node_indices is None
+        assert context.node_handles is None
         assert context.edge_indices is None
 
     def test_post_add_group_context(self) -> None:
-        context = PostAddGroupContext("g", ["a"], [0])
+        context = PostAddGroupContext("g", [self.node_handle_a], [0])
 
         assert context.group == "g"
-        assert context.node_indices == ["a"]
+        assert context.node_handles == [self.node_handle_a]
         assert context.edge_indices == [0]
 
     def test_post_add_group_context_none_optionals(self) -> None:
         context = PostAddGroupContext("g", None, None)
 
         assert context.group == "g"
-        assert context.node_indices is None
+        assert context.node_handles is None
         assert context.edge_indices is None
 
     def test_pre_remove_group_context(self) -> None:
-        context = PreRemoveGroupContext("g")
+        context = PreRemoveGroupContext(self.group_handle_g)
 
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_post_remove_group_context(self) -> None:
-        context = PostRemoveGroupContext("g")
+        context = PostRemoveGroupContext(self.group_handle_g)
 
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
 
     def test_pre_add_node_to_group_context(self) -> None:
-        context = PreAddNodeToGroupContext("g", "a")
+        context = PreAddNodeToGroupContext(self.group_handle_g, self.node_handle_a)
 
-        assert context.group == "g"
-        assert context.node_index == "a"
+        assert context.group_handle == self.group_handle_g
+        assert context.node_handle == self.node_handle_a
 
     def test_post_add_node_to_group_context(self) -> None:
-        context = PostAddNodeToGroupContext("g", "a")
+        context = PostAddNodeToGroupContext(self.group_handle_g, self.node_handle_a)
 
-        assert context.group == "g"
-        assert context.node_index == "a"
+        assert context.group_handle == self.group_handle_g
+        assert context.node_handle == self.node_handle_a
 
     def test_pre_add_node_to_groups_context(self) -> None:
-        context = PreAddNodeToGroupsContext(["g1", "g2"], "a")
+        context = PreAddNodeToGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+        )
 
-        assert context.groups == ["g1", "g2"]
-        assert context.node_index == "a"
+        assert context.group_handles == [self.group_handle_g1, self.group_handle_g2]
+        assert context.node_handle == self.node_handle_a
 
     def test_post_add_node_to_groups_context(self) -> None:
-        context = PostAddNodeToGroupsContext(["g1", "g2"], "a")
+        context = PostAddNodeToGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+        )
 
-        assert context.groups == ["g1", "g2"]
-        assert context.node_index == "a"
+        assert context.group_handles == [self.group_handle_g1, self.group_handle_g2]
+        assert context.node_handle == self.node_handle_a
 
     def test_pre_add_nodes_to_groups_context(self) -> None:
-        context = PreAddNodesToGroupsContext(["g0", "g1"], ["a", "b"])
+        context = PreAddNodesToGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1],
+            [self.node_handle_a, self.node_handle_b],
+        )
 
-        assert context.groups == ["g0", "g1"]
-        assert context.node_indices == ["a", "b"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
+        assert context.node_handles == [self.node_handle_a, self.node_handle_b]
 
     def test_post_add_nodes_to_groups_context(self) -> None:
-        context = PostAddNodesToGroupsContext(["g0", "g1"], ["a", "b"])
+        context = PostAddNodesToGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1],
+            [self.node_handle_a, self.node_handle_b],
+        )
 
-        assert context.groups == ["g0", "g1"]
-        assert context.node_indices == ["a", "b"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
+        assert context.node_handles == [self.node_handle_a, self.node_handle_b]
 
     def test_pre_add_edge_to_group_context(self) -> None:
-        context = PreAddEdgeToGroupContext("g", 0)
+        context = PreAddEdgeToGroupContext(self.group_handle_g, 0)
 
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
         assert context.edge_index == 0
 
     def test_post_add_edge_to_group_context(self) -> None:
-        context = PostAddEdgeToGroupContext("g", 0)
+        context = PostAddEdgeToGroupContext(self.group_handle_g, 0)
 
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
         assert context.edge_index == 0
 
     def test_pre_add_edge_to_groups_context(self) -> None:
-        context = PreAddEdgeToGroupsContext(["g1", "g2"], 0)
+        context = PreAddEdgeToGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], 0
+        )
 
-        assert context.groups == ["g1", "g2"]
+        assert context.group_handles == [self.group_handle_g1, self.group_handle_g2]
         assert context.edge_index == 0
 
     def test_post_add_edge_to_groups_context(self) -> None:
-        context = PostAddEdgeToGroupsContext(["g1", "g2"], 0)
+        context = PostAddEdgeToGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], 0
+        )
 
-        assert context.groups == ["g1", "g2"]
+        assert context.group_handles == [self.group_handle_g1, self.group_handle_g2]
         assert context.edge_index == 0
 
     def test_pre_add_edges_to_groups_context(self) -> None:
-        context = PreAddEdgesToGroupsContext(["g0", "g1"], [0, 1])
+        context = PreAddEdgesToGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1], [0, 1]
+        )
 
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
         assert context.edge_indices == [0, 1]
 
     def test_post_add_edges_to_groups_context(self) -> None:
-        context = PostAddEdgesToGroupsContext(["g0", "g1"], [0, 1])
+        context = PostAddEdgesToGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1], [0, 1]
+        )
 
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
         assert context.edge_indices == [0, 1]
 
     def test_pre_remove_node_from_group_context(self) -> None:
-        context = PreRemoveNodeFromGroupContext("g", "a")
+        context = PreRemoveNodeFromGroupContext(self.group_handle_g, self.node_handle_a)
 
-        assert context.group == "g"
-        assert context.node_index == "a"
+        assert context.group_handle == self.group_handle_g
+        assert context.node_handle == self.node_handle_a
 
     def test_post_remove_node_from_group_context(self) -> None:
-        context = PostRemoveNodeFromGroupContext("g", "a")
+        context = PostRemoveNodeFromGroupContext(
+            self.group_handle_g, self.node_handle_a
+        )
 
-        assert context.group == "g"
-        assert context.node_index == "a"
+        assert context.group_handle == self.group_handle_g
+        assert context.node_handle == self.node_handle_a
 
     def test_pre_remove_node_from_groups_context(self) -> None:
-        context = PreRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+        context = PreRemoveNodeFromGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+        )
 
-        assert context.groups == ["g1", "g2"]
-        assert context.node_index == "a"
+        assert context.group_handles == [self.group_handle_g1, self.group_handle_g2]
+        assert context.node_handle == self.node_handle_a
 
     def test_post_remove_node_from_groups_context(self) -> None:
-        context = PostRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+        context = PostRemoveNodeFromGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+        )
 
-        assert context.groups == ["g1", "g2"]
-        assert context.node_index == "a"
+        assert context.group_handles == [self.group_handle_g1, self.group_handle_g2]
+        assert context.node_handle == self.node_handle_a
 
     def test_pre_remove_nodes_from_groups_context(self) -> None:
-        context = PreRemoveNodesFromGroupsContext(["g0", "g1"], ["a", "b"])
+        context = PreRemoveNodesFromGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1],
+            [self.node_handle_a, self.node_handle_b],
+        )
 
-        assert context.groups == ["g0", "g1"]
-        assert context.node_indices == ["a", "b"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
+        assert context.node_handles == [self.node_handle_a, self.node_handle_b]
 
     def test_post_remove_nodes_from_groups_context(self) -> None:
-        context = PostRemoveNodesFromGroupsContext(["g0", "g1"], ["a", "b"])
+        context = PostRemoveNodesFromGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1],
+            [self.node_handle_a, self.node_handle_b],
+        )
 
-        assert context.groups == ["g0", "g1"]
-        assert context.node_indices == ["a", "b"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
+        assert context.node_handles == [self.node_handle_a, self.node_handle_b]
 
     def test_pre_remove_edge_from_group_context(self) -> None:
-        context = PreRemoveEdgeFromGroupContext("g", 0)
+        context = PreRemoveEdgeFromGroupContext(self.group_handle_g, 0)
 
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
         assert context.edge_index == 0
 
     def test_post_remove_edge_from_group_context(self) -> None:
-        context = PostRemoveEdgeFromGroupContext("g", 0)
+        context = PostRemoveEdgeFromGroupContext(self.group_handle_g, 0)
 
-        assert context.group == "g"
+        assert context.group_handle == self.group_handle_g
         assert context.edge_index == 0
 
     def test_pre_remove_edge_from_groups_context(self) -> None:
-        context = PreRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+        context = PreRemoveEdgeFromGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], 0
+        )
 
-        assert context.groups == ["g1", "g2"]
+        assert context.group_handles == [self.group_handle_g1, self.group_handle_g2]
         assert context.edge_index == 0
 
     def test_post_remove_edge_from_groups_context(self) -> None:
-        context = PostRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+        context = PostRemoveEdgeFromGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], 0
+        )
 
-        assert context.groups == ["g1", "g2"]
+        assert context.group_handles == [self.group_handle_g1, self.group_handle_g2]
         assert context.edge_index == 0
 
     def test_pre_remove_edges_from_groups_context(self) -> None:
-        context = PreRemoveEdgesFromGroupsContext(["g0", "g1"], [0, 1])
+        context = PreRemoveEdgesFromGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1], [0, 1]
+        )
 
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
         assert context.edge_indices == [0, 1]
 
     def test_post_remove_edges_from_groups_context(self) -> None:
-        context = PostRemoveEdgesFromGroupsContext(["g0", "g1"], [0, 1])
+        context = PostRemoveEdgesFromGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1], [0, 1]
+        )
 
-        assert context.groups == ["g0", "g1"]
+        assert context.group_handles == [self.group_handle_g0, self.group_handle_g1]
         assert context.edge_indices == [0, 1]
 
 
 class TestContextFromPyContext(unittest.TestCase):
+    def setUp(self) -> None:
+        graphrecord = GraphRecord()
+        graphrecord.add_group("g")
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
+        graphrecord.add_group("g2")
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+
+        node_handle_a = graphrecord.node_handle("a")
+        node_handle_b = graphrecord.node_handle("b")
+        group_handle_g = graphrecord.group_handle("g")
+        group_handle_g0 = graphrecord.group_handle("g0")
+        group_handle_g1 = graphrecord.group_handle("g1")
+        group_handle_g2 = graphrecord.group_handle("g2")
+        assert node_handle_a is not None
+        assert node_handle_b is not None
+        assert group_handle_g is not None
+        assert group_handle_g0 is not None
+        assert group_handle_g1 is not None
+        assert group_handle_g2 is not None
+
+        self.node_handle_a = node_handle_a
+        self.node_handle_b = node_handle_b
+        self.group_handle_g = group_handle_g
+        self.group_handle_g0 = group_handle_g0
+        self.group_handle_g1 = group_handle_g1
+        self.group_handle_g2 = group_handle_g2
+
     def test_pre_set_schema_from_py_context(self) -> None:
         original = PreSetSchemaContext(Schema())
 
@@ -978,7 +1104,7 @@ class TestContextFromPyContext(unittest.TestCase):
         assert reconstructed.node_index == "a"
 
     def test_pre_add_node_with_group_from_py_context(self) -> None:
-        original = PreAddNodeWithGroupContext("a", {"x": 1}, "g")
+        original = PreAddNodeWithGroupContext("a", {"x": 1}, self.group_handle_g)
 
         reconstructed = PreAddNodeWithGroupContext._from_py_context(
             original._py_context
@@ -986,20 +1112,22 @@ class TestContextFromPyContext(unittest.TestCase):
 
         assert reconstructed.node_index == "a"
         assert reconstructed.attributes == {"x": 1}
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_post_add_node_with_group_from_py_context(self) -> None:
-        original = PostAddNodeWithGroupContext("a", "g")
+        original = PostAddNodeWithGroupContext("a", self.group_handle_g)
 
         reconstructed = PostAddNodeWithGroupContext._from_py_context(
             original._py_context
         )
 
         assert reconstructed.node_index == "a"
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_pre_add_node_with_groups_from_py_context(self) -> None:
-        original = PreAddNodeWithGroupsContext("a", {"x": 1}, ["g0", "g1"])
+        original = PreAddNodeWithGroupsContext(
+            "a", {"x": 1}, [self.group_handle_g0, self.group_handle_g1]
+        )
 
         reconstructed = PreAddNodeWithGroupsContext._from_py_context(
             original._py_context
@@ -1007,31 +1135,39 @@ class TestContextFromPyContext(unittest.TestCase):
 
         assert reconstructed.node_index == "a"
         assert reconstructed.attributes == {"x": 1}
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_post_add_node_with_groups_from_py_context(self) -> None:
-        original = PostAddNodeWithGroupsContext("a", ["g0", "g1"])
+        original = PostAddNodeWithGroupsContext(
+            "a", [self.group_handle_g0, self.group_handle_g1]
+        )
 
         reconstructed = PostAddNodeWithGroupsContext._from_py_context(
             original._py_context
         )
 
         assert reconstructed.node_index == "a"
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_pre_remove_node_from_py_context(self) -> None:
-        original = PreRemoveNodeContext("a")
+        original = PreRemoveNodeContext(self.node_handle_a)
 
         reconstructed = PreRemoveNodeContext._from_py_context(original._py_context)
 
-        assert reconstructed.node_index == "a"
+        assert reconstructed.node_handle == self.node_handle_a
 
     def test_post_remove_node_from_py_context(self) -> None:
-        original = PostRemoveNodeContext("a")
+        original = PostRemoveNodeContext(self.node_handle_a)
 
         reconstructed = PostRemoveNodeContext._from_py_context(original._py_context)
 
-        assert reconstructed.node_index == "a"
+        assert reconstructed.node_handle == self.node_handle_a
 
     def test_pre_add_nodes_from_py_context(self) -> None:
         original = PreAddNodesContext([("a", {"x": 1})])
@@ -1048,44 +1184,54 @@ class TestContextFromPyContext(unittest.TestCase):
         assert reconstructed.nodes == [("a", {"x": 1})]
 
     def test_pre_add_nodes_with_group_from_py_context(self) -> None:
-        original = PreAddNodesWithGroupContext([("a", {})], "g")
+        original = PreAddNodesWithGroupContext([("a", {})], self.group_handle_g)
 
         reconstructed = PreAddNodesWithGroupContext._from_py_context(
             original._py_context
         )
 
         assert reconstructed.nodes == [("a", {})]
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_post_add_nodes_with_group_from_py_context(self) -> None:
-        original = PostAddNodesWithGroupContext([("a", {})], "g")
+        original = PostAddNodesWithGroupContext([("a", {})], self.group_handle_g)
 
         reconstructed = PostAddNodesWithGroupContext._from_py_context(
             original._py_context
         )
 
         assert reconstructed.nodes == [("a", {})]
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_pre_add_nodes_with_groups_from_py_context(self) -> None:
-        original = PreAddNodesWithGroupsContext([("a", {})], ["g0", "g1"])
+        original = PreAddNodesWithGroupsContext(
+            [("a", {})], [self.group_handle_g0, self.group_handle_g1]
+        )
 
         reconstructed = PreAddNodesWithGroupsContext._from_py_context(
             original._py_context
         )
 
         assert reconstructed.nodes == [("a", {})]
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_post_add_nodes_with_groups_from_py_context(self) -> None:
-        original = PostAddNodesWithGroupsContext([("a", {})], ["g0", "g1"])
+        original = PostAddNodesWithGroupsContext(
+            [("a", {})], [self.group_handle_g0, self.group_handle_g1]
+        )
 
         reconstructed = PostAddNodesWithGroupsContext._from_py_context(
             original._py_context
         )
 
         assert reconstructed.nodes == [("a", {})]
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_pre_add_nodes_dataframes_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
@@ -1109,30 +1255,34 @@ class TestContextFromPyContext(unittest.TestCase):
 
     def test_pre_add_nodes_dataframes_with_group_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
-        original = PreAddNodesDataframesWithGroupContext([(dataframe, "idx")], "g")
+        original = PreAddNodesDataframesWithGroupContext(
+            [(dataframe, "idx")], self.group_handle_g
+        )
 
         reconstructed = PreAddNodesDataframesWithGroupContext._from_py_context(
             original._py_context
         )
 
         assert len(reconstructed.nodes_dataframes) == 1
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_post_add_nodes_dataframes_with_group_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
-        original = PostAddNodesDataframesWithGroupContext([(dataframe, "idx")], "g")
+        original = PostAddNodesDataframesWithGroupContext(
+            [(dataframe, "idx")], self.group_handle_g
+        )
 
         reconstructed = PostAddNodesDataframesWithGroupContext._from_py_context(
             original._py_context
         )
 
         assert len(reconstructed.nodes_dataframes) == 1
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_pre_add_nodes_dataframes_with_groups_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
         original = PreAddNodesDataframesWithGroupsContext(
-            [(dataframe, "idx")], ["g0", "g1"]
+            [(dataframe, "idx")], [self.group_handle_g0, self.group_handle_g1]
         )
 
         reconstructed = PreAddNodesDataframesWithGroupsContext._from_py_context(
@@ -1140,12 +1290,15 @@ class TestContextFromPyContext(unittest.TestCase):
         )
 
         assert len(reconstructed.nodes_dataframes) == 1
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_post_add_nodes_dataframes_with_groups_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
         original = PostAddNodesDataframesWithGroupsContext(
-            [(dataframe, "idx")], ["g0", "g1"]
+            [(dataframe, "idx")], [self.group_handle_g0, self.group_handle_g1]
         )
 
         reconstructed = PostAddNodesDataframesWithGroupsContext._from_py_context(
@@ -1153,15 +1306,18 @@ class TestContextFromPyContext(unittest.TestCase):
         )
 
         assert len(reconstructed.nodes_dataframes) == 1
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_pre_add_edge_from_py_context(self) -> None:
-        original = PreAddEdgeContext("a", "b", {"w": 1})
+        original = PreAddEdgeContext(self.node_handle_a, self.node_handle_b, {"w": 1})
 
         reconstructed = PreAddEdgeContext._from_py_context(original._py_context)
 
-        assert reconstructed.source_node_index == "a"
-        assert reconstructed.target_node_index == "b"
+        assert reconstructed.source_node_handle == self.node_handle_a
+        assert reconstructed.target_node_handle == self.node_handle_b
         assert reconstructed.attributes == {"w": 1}
 
     def test_post_add_edge_from_py_context(self) -> None:
@@ -1172,47 +1328,63 @@ class TestContextFromPyContext(unittest.TestCase):
         assert reconstructed.edge_index == 0
 
     def test_pre_add_edge_with_group_from_py_context(self) -> None:
-        original = PreAddEdgeWithGroupContext("a", "b", {"w": 1}, "g")
+        original = PreAddEdgeWithGroupContext(
+            self.node_handle_a, self.node_handle_b, {"w": 1}, self.group_handle_g
+        )
 
         reconstructed = PreAddEdgeWithGroupContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.source_node_index == "a"
-        assert reconstructed.target_node_index == "b"
+        assert reconstructed.source_node_handle == self.node_handle_a
+        assert reconstructed.target_node_handle == self.node_handle_b
         assert reconstructed.attributes == {"w": 1}
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_post_add_edge_with_group_from_py_context(self) -> None:
-        original = PostAddEdgeWithGroupContext(0)
+        original = PostAddEdgeWithGroupContext(0, self.group_handle_g)
 
         reconstructed = PostAddEdgeWithGroupContext._from_py_context(
             original._py_context
         )
 
         assert reconstructed.edge_index == 0
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_pre_add_edge_with_groups_from_py_context(self) -> None:
-        original = PreAddEdgeWithGroupsContext("a", "b", {"x": 1}, ["g0", "g1"])
+        original = PreAddEdgeWithGroupsContext(
+            self.node_handle_a,
+            self.node_handle_b,
+            {"x": 1},
+            [self.group_handle_g0, self.group_handle_g1],
+        )
 
         reconstructed = PreAddEdgeWithGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.source_node_index == "a"
-        assert reconstructed.target_node_index == "b"
+        assert reconstructed.source_node_handle == self.node_handle_a
+        assert reconstructed.target_node_handle == self.node_handle_b
         assert reconstructed.attributes == {"x": 1}
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_post_add_edge_with_groups_from_py_context(self) -> None:
-        original = PostAddEdgeWithGroupsContext(0, ["g0", "g1"])
+        original = PostAddEdgeWithGroupsContext(
+            0, [self.group_handle_g0, self.group_handle_g1]
+        )
 
         reconstructed = PostAddEdgeWithGroupsContext._from_py_context(
             original._py_context
         )
 
         assert reconstructed.edge_index == 0
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_pre_remove_edge_from_py_context(self) -> None:
         original = PreRemoveEdgeContext(0)
@@ -1229,11 +1401,11 @@ class TestContextFromPyContext(unittest.TestCase):
         assert reconstructed.edge_index == 0
 
     def test_pre_add_edges_from_py_context(self) -> None:
-        original = PreAddEdgesContext([("a", "b", {})])
+        original = PreAddEdgesContext([(self.node_handle_a, self.node_handle_b, {})])
 
         reconstructed = PreAddEdgesContext._from_py_context(original._py_context)
 
-        assert reconstructed.edges == [("a", "b", {})]
+        assert reconstructed.edges == [(self.node_handle_a, self.node_handle_b, {})]
 
     def test_post_add_edges_from_py_context(self) -> None:
         original = PostAddEdgesContext([0])
@@ -1243,43 +1415,57 @@ class TestContextFromPyContext(unittest.TestCase):
         assert reconstructed.edge_indices == [0]
 
     def test_pre_add_edges_with_group_from_py_context(self) -> None:
-        original = PreAddEdgesWithGroupContext([("a", "b", {})], "g")
+        original = PreAddEdgesWithGroupContext(
+            [(self.node_handle_a, self.node_handle_b, {})], self.group_handle_g
+        )
 
         reconstructed = PreAddEdgesWithGroupContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.edges == [("a", "b", {})]
-        assert reconstructed.group == "g"
+        assert reconstructed.edges == [(self.node_handle_a, self.node_handle_b, {})]
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_post_add_edges_with_group_from_py_context(self) -> None:
-        original = PostAddEdgesWithGroupContext([0])
+        original = PostAddEdgesWithGroupContext([0], self.group_handle_g)
 
         reconstructed = PostAddEdgesWithGroupContext._from_py_context(
             original._py_context
         )
 
         assert reconstructed.edge_indices == [0]
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_pre_add_edges_with_groups_from_py_context(self) -> None:
-        original = PreAddEdgesWithGroupsContext([("a", "b", {})], ["g0", "g1"])
+        original = PreAddEdgesWithGroupsContext(
+            [(self.node_handle_a, self.node_handle_b, {})],
+            [self.group_handle_g0, self.group_handle_g1],
+        )
 
         reconstructed = PreAddEdgesWithGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.edges == [("a", "b", {})]
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.edges == [(self.node_handle_a, self.node_handle_b, {})]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_post_add_edges_with_groups_from_py_context(self) -> None:
-        original = PostAddEdgesWithGroupsContext([0], ["g0", "g1"])
+        original = PostAddEdgesWithGroupsContext(
+            [0], [self.group_handle_g0, self.group_handle_g1]
+        )
 
         reconstructed = PostAddEdgesWithGroupsContext._from_py_context(
             original._py_context
         )
 
         assert reconstructed.edge_indices == [0]
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_pre_add_edges_dataframes_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
@@ -1304,7 +1490,7 @@ class TestContextFromPyContext(unittest.TestCase):
     def test_pre_add_edges_dataframes_with_group_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
         original = PreAddEdgesDataframesWithGroupContext(
-            [(dataframe, "src", "tgt")], "g"
+            [(dataframe, "src", "tgt")], self.group_handle_g
         )
 
         reconstructed = PreAddEdgesDataframesWithGroupContext._from_py_context(
@@ -1312,12 +1498,12 @@ class TestContextFromPyContext(unittest.TestCase):
         )
 
         assert len(reconstructed.edges_dataframes) == 1
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_post_add_edges_dataframes_with_group_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
         original = PostAddEdgesDataframesWithGroupContext(
-            [(dataframe, "src", "tgt")], "g"
+            [(dataframe, "src", "tgt")], self.group_handle_g
         )
 
         reconstructed = PostAddEdgesDataframesWithGroupContext._from_py_context(
@@ -1325,12 +1511,12 @@ class TestContextFromPyContext(unittest.TestCase):
         )
 
         assert len(reconstructed.edges_dataframes) == 1
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_pre_add_edges_dataframes_with_groups_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
         original = PreAddEdgesDataframesWithGroupsContext(
-            [(dataframe, "src", "tgt")], ["g0", "g1"]
+            [(dataframe, "src", "tgt")], [self.group_handle_g0, self.group_handle_g1]
         )
 
         reconstructed = PreAddEdgesDataframesWithGroupsContext._from_py_context(
@@ -1338,12 +1524,15 @@ class TestContextFromPyContext(unittest.TestCase):
         )
 
         assert len(reconstructed.edges_dataframes) == 1
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_post_add_edges_dataframes_with_groups_from_py_context(self) -> None:
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
         original = PostAddEdgesDataframesWithGroupsContext(
-            [(dataframe, "src", "tgt")], ["g0", "g1"]
+            [(dataframe, "src", "tgt")], [self.group_handle_g0, self.group_handle_g1]
         )
 
         reconstructed = PostAddEdgesDataframesWithGroupsContext._from_py_context(
@@ -1351,270 +1540,389 @@ class TestContextFromPyContext(unittest.TestCase):
         )
 
         assert len(reconstructed.edges_dataframes) == 1
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
 
     def test_pre_add_group_from_py_context(self) -> None:
-        original = PreAddGroupContext("g", ["a"], [0])
+        original = PreAddGroupContext("g", [self.node_handle_a], [0])
 
         reconstructed = PreAddGroupContext._from_py_context(original._py_context)
 
         assert reconstructed.group == "g"
-        assert reconstructed.node_indices == ["a"]
+        assert reconstructed.node_handles == [self.node_handle_a]
         assert reconstructed.edge_indices == [0]
 
     def test_post_add_group_from_py_context(self) -> None:
-        original = PostAddGroupContext("g", ["a"], [0])
+        original = PostAddGroupContext("g", [self.node_handle_a], [0])
 
         reconstructed = PostAddGroupContext._from_py_context(original._py_context)
 
         assert reconstructed.group == "g"
-        assert reconstructed.node_indices == ["a"]
+        assert reconstructed.node_handles == [self.node_handle_a]
         assert reconstructed.edge_indices == [0]
 
     def test_pre_remove_group_from_py_context(self) -> None:
-        original = PreRemoveGroupContext("g")
+        original = PreRemoveGroupContext(self.group_handle_g)
 
         reconstructed = PreRemoveGroupContext._from_py_context(original._py_context)
 
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_post_remove_group_from_py_context(self) -> None:
-        original = PostRemoveGroupContext("g")
+        original = PostRemoveGroupContext(self.group_handle_g)
 
         reconstructed = PostRemoveGroupContext._from_py_context(original._py_context)
 
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
 
     def test_pre_add_node_to_group_from_py_context(self) -> None:
-        original = PreAddNodeToGroupContext("g", "a")
+        original = PreAddNodeToGroupContext(self.group_handle_g, self.node_handle_a)
 
         reconstructed = PreAddNodeToGroupContext._from_py_context(original._py_context)
 
-        assert reconstructed.group == "g"
-        assert reconstructed.node_index == "a"
+        assert reconstructed.group_handle == self.group_handle_g
+        assert reconstructed.node_handle == self.node_handle_a
 
     def test_post_add_node_to_group_from_py_context(self) -> None:
-        original = PostAddNodeToGroupContext("g", "a")
+        original = PostAddNodeToGroupContext(self.group_handle_g, self.node_handle_a)
 
         reconstructed = PostAddNodeToGroupContext._from_py_context(original._py_context)
 
-        assert reconstructed.group == "g"
-        assert reconstructed.node_index == "a"
+        assert reconstructed.group_handle == self.group_handle_g
+        assert reconstructed.node_handle == self.node_handle_a
 
     def test_pre_add_node_to_groups_from_py_context(self) -> None:
-        original = PreAddNodeToGroupsContext(["g1", "g2"], "a")
+        original = PreAddNodeToGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+        )
 
         reconstructed = PreAddNodeToGroupsContext._from_py_context(original._py_context)
 
-        assert reconstructed.groups == ["g1", "g2"]
-        assert reconstructed.node_index == "a"
+        assert reconstructed.group_handles == [
+            self.group_handle_g1,
+            self.group_handle_g2,
+        ]
+        assert reconstructed.node_handle == self.node_handle_a
 
     def test_post_add_node_to_groups_from_py_context(self) -> None:
-        original = PostAddNodeToGroupsContext(["g1", "g2"], "a")
+        original = PostAddNodeToGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+        )
 
         reconstructed = PostAddNodeToGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g1", "g2"]
-        assert reconstructed.node_index == "a"
+        assert reconstructed.group_handles == [
+            self.group_handle_g1,
+            self.group_handle_g2,
+        ]
+        assert reconstructed.node_handle == self.node_handle_a
 
     def test_pre_add_nodes_to_groups_from_py_context(self) -> None:
-        original = PreAddNodesToGroupsContext(["g0", "g1"], ["a", "b"])
+        original = PreAddNodesToGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1],
+            [self.node_handle_a, self.node_handle_b],
+        )
 
         reconstructed = PreAddNodesToGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g0", "g1"]
-        assert reconstructed.node_indices == ["a", "b"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
+        assert reconstructed.node_handles == [self.node_handle_a, self.node_handle_b]
 
     def test_post_add_nodes_to_groups_from_py_context(self) -> None:
-        original = PostAddNodesToGroupsContext(["g0", "g1"], ["a", "b"])
+        original = PostAddNodesToGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1],
+            [self.node_handle_a, self.node_handle_b],
+        )
 
         reconstructed = PostAddNodesToGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g0", "g1"]
-        assert reconstructed.node_indices == ["a", "b"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
+        assert reconstructed.node_handles == [self.node_handle_a, self.node_handle_b]
 
     def test_pre_add_edge_to_group_from_py_context(self) -> None:
-        original = PreAddEdgeToGroupContext("g", 0)
+        original = PreAddEdgeToGroupContext(self.group_handle_g, 0)
 
         reconstructed = PreAddEdgeToGroupContext._from_py_context(original._py_context)
 
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
         assert reconstructed.edge_index == 0
 
     def test_post_add_edge_to_group_from_py_context(self) -> None:
-        original = PostAddEdgeToGroupContext("g", 0)
+        original = PostAddEdgeToGroupContext(self.group_handle_g, 0)
 
         reconstructed = PostAddEdgeToGroupContext._from_py_context(original._py_context)
 
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
         assert reconstructed.edge_index == 0
 
     def test_pre_add_edge_to_groups_from_py_context(self) -> None:
-        original = PreAddEdgeToGroupsContext(["g1", "g2"], 0)
+        original = PreAddEdgeToGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], 0
+        )
 
         reconstructed = PreAddEdgeToGroupsContext._from_py_context(original._py_context)
 
-        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g1,
+            self.group_handle_g2,
+        ]
         assert reconstructed.edge_index == 0
 
     def test_post_add_edge_to_groups_from_py_context(self) -> None:
-        original = PostAddEdgeToGroupsContext(["g1", "g2"], 0)
+        original = PostAddEdgeToGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], 0
+        )
 
         reconstructed = PostAddEdgeToGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g1,
+            self.group_handle_g2,
+        ]
         assert reconstructed.edge_index == 0
 
     def test_pre_add_edges_to_groups_from_py_context(self) -> None:
-        original = PreAddEdgesToGroupsContext(["g0", "g1"], [0, 1])
+        original = PreAddEdgesToGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1], [0, 1]
+        )
 
         reconstructed = PreAddEdgesToGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
         assert reconstructed.edge_indices == [0, 1]
 
     def test_post_add_edges_to_groups_from_py_context(self) -> None:
-        original = PostAddEdgesToGroupsContext(["g0", "g1"], [0, 1])
+        original = PostAddEdgesToGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1], [0, 1]
+        )
 
         reconstructed = PostAddEdgesToGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
         assert reconstructed.edge_indices == [0, 1]
 
     def test_pre_remove_node_from_group_from_py_context(self) -> None:
-        original = PreRemoveNodeFromGroupContext("g", "a")
+        original = PreRemoveNodeFromGroupContext(
+            self.group_handle_g, self.node_handle_a
+        )
 
         reconstructed = PreRemoveNodeFromGroupContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.group == "g"
-        assert reconstructed.node_index == "a"
+        assert reconstructed.group_handle == self.group_handle_g
+        assert reconstructed.node_handle == self.node_handle_a
 
     def test_post_remove_node_from_group_from_py_context(self) -> None:
-        original = PostRemoveNodeFromGroupContext("g", "a")
+        original = PostRemoveNodeFromGroupContext(
+            self.group_handle_g, self.node_handle_a
+        )
 
         reconstructed = PostRemoveNodeFromGroupContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.group == "g"
-        assert reconstructed.node_index == "a"
+        assert reconstructed.group_handle == self.group_handle_g
+        assert reconstructed.node_handle == self.node_handle_a
 
     def test_pre_remove_node_from_groups_from_py_context(self) -> None:
-        original = PreRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+        original = PreRemoveNodeFromGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+        )
 
         reconstructed = PreRemoveNodeFromGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g1", "g2"]
-        assert reconstructed.node_index == "a"
+        assert reconstructed.group_handles == [
+            self.group_handle_g1,
+            self.group_handle_g2,
+        ]
+        assert reconstructed.node_handle == self.node_handle_a
 
     def test_post_remove_node_from_groups_from_py_context(self) -> None:
-        original = PostRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+        original = PostRemoveNodeFromGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+        )
 
         reconstructed = PostRemoveNodeFromGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g1", "g2"]
-        assert reconstructed.node_index == "a"
+        assert reconstructed.group_handles == [
+            self.group_handle_g1,
+            self.group_handle_g2,
+        ]
+        assert reconstructed.node_handle == self.node_handle_a
 
     def test_pre_remove_nodes_from_groups_from_py_context(self) -> None:
-        original = PreRemoveNodesFromGroupsContext(["g0", "g1"], ["a", "b"])
+        original = PreRemoveNodesFromGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1],
+            [self.node_handle_a, self.node_handle_b],
+        )
 
         reconstructed = PreRemoveNodesFromGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g0", "g1"]
-        assert reconstructed.node_indices == ["a", "b"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
+        assert reconstructed.node_handles == [self.node_handle_a, self.node_handle_b]
 
     def test_post_remove_nodes_from_groups_from_py_context(self) -> None:
-        original = PostRemoveNodesFromGroupsContext(["g0", "g1"], ["a", "b"])
+        original = PostRemoveNodesFromGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1],
+            [self.node_handle_a, self.node_handle_b],
+        )
 
         reconstructed = PostRemoveNodesFromGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g0", "g1"]
-        assert reconstructed.node_indices == ["a", "b"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
+        assert reconstructed.node_handles == [self.node_handle_a, self.node_handle_b]
 
     def test_pre_remove_edge_from_group_from_py_context(self) -> None:
-        original = PreRemoveEdgeFromGroupContext("g", 0)
+        original = PreRemoveEdgeFromGroupContext(self.group_handle_g, 0)
 
         reconstructed = PreRemoveEdgeFromGroupContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
         assert reconstructed.edge_index == 0
 
     def test_post_remove_edge_from_group_from_py_context(self) -> None:
-        original = PostRemoveEdgeFromGroupContext("g", 0)
+        original = PostRemoveEdgeFromGroupContext(self.group_handle_g, 0)
 
         reconstructed = PostRemoveEdgeFromGroupContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.group == "g"
+        assert reconstructed.group_handle == self.group_handle_g
         assert reconstructed.edge_index == 0
 
     def test_pre_remove_edge_from_groups_from_py_context(self) -> None:
-        original = PreRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+        original = PreRemoveEdgeFromGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], 0
+        )
 
         reconstructed = PreRemoveEdgeFromGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g1,
+            self.group_handle_g2,
+        ]
         assert reconstructed.edge_index == 0
 
     def test_post_remove_edge_from_groups_from_py_context(self) -> None:
-        original = PostRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+        original = PostRemoveEdgeFromGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], 0
+        )
 
         reconstructed = PostRemoveEdgeFromGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g1", "g2"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g1,
+            self.group_handle_g2,
+        ]
         assert reconstructed.edge_index == 0
 
     def test_pre_remove_edges_from_groups_from_py_context(self) -> None:
-        original = PreRemoveEdgesFromGroupsContext(["g0", "g1"], [0, 1])
+        original = PreRemoveEdgesFromGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1], [0, 1]
+        )
 
         reconstructed = PreRemoveEdgesFromGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
         assert reconstructed.edge_indices == [0, 1]
 
     def test_post_remove_edges_from_groups_from_py_context(self) -> None:
-        original = PostRemoveEdgesFromGroupsContext(["g0", "g1"], [0, 1])
+        original = PostRemoveEdgesFromGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1], [0, 1]
+        )
 
         reconstructed = PostRemoveEdgesFromGroupsContext._from_py_context(
             original._py_context
         )
 
-        assert reconstructed.groups == ["g0", "g1"]
+        assert reconstructed.group_handles == [
+            self.group_handle_g0,
+            self.group_handle_g1,
+        ]
         assert reconstructed.edge_indices == [0, 1]
 
 
 class TestPluginBaseDefaults(unittest.TestCase):
+    def setUp(self) -> None:
+        graphrecord = GraphRecord()
+        graphrecord.add_group("g")
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
+        graphrecord.add_group("g2")
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+
+        node_handle_a = graphrecord.node_handle("a")
+        node_handle_b = graphrecord.node_handle("b")
+        group_handle_g = graphrecord.group_handle("g")
+        group_handle_g0 = graphrecord.group_handle("g0")
+        group_handle_g1 = graphrecord.group_handle("g1")
+        group_handle_g2 = graphrecord.group_handle("g2")
+        assert node_handle_a is not None
+        assert node_handle_b is not None
+        assert group_handle_g is not None
+        assert group_handle_g0 is not None
+        assert group_handle_g1 is not None
+        assert group_handle_g2 is not None
+
+        self.node_handle_a = node_handle_a
+        self.node_handle_b = node_handle_b
+        self.group_handle_g = group_handle_g
+        self.group_handle_g0 = group_handle_g0
+        self.group_handle_g1 = group_handle_g1
+        self.group_handle_g2 = group_handle_g2
+
     def test_all_default_methods(self) -> None:
         plugin = Plugin()
         graphrecord = GraphRecord()
@@ -1635,48 +1943,58 @@ class TestPluginBaseDefaults(unittest.TestCase):
         assert plugin.pre_add_node(graphrecord, pre_add_node) is pre_add_node
         plugin.post_add_node(graphrecord, PostAddNodeContext("a"))
 
-        pre_add_node_wg = PreAddNodeWithGroupContext("a", {}, "g")
+        pre_add_node_wg = PreAddNodeWithGroupContext("a", {}, self.group_handle_g)
         assert (
             plugin.pre_add_node_with_group(graphrecord, pre_add_node_wg)
             is pre_add_node_wg
         )
         plugin.post_add_node_with_group(
-            graphrecord, PostAddNodeWithGroupContext("a", "g")
+            graphrecord, PostAddNodeWithGroupContext("a", self.group_handle_g)
         )
 
-        pre_add_node_wgs = PreAddNodeWithGroupsContext("a", {}, ["g0", "g1"])
+        pre_add_node_wgs = PreAddNodeWithGroupsContext(
+            "a", {}, [self.group_handle_g0, self.group_handle_g1]
+        )
         assert (
             plugin.pre_add_node_with_groups(graphrecord, pre_add_node_wgs)
             is pre_add_node_wgs
         )
         plugin.post_add_node_with_groups(
-            graphrecord, PostAddNodeWithGroupsContext("a", ["g0", "g1"])
+            graphrecord,
+            PostAddNodeWithGroupsContext(
+                "a", [self.group_handle_g0, self.group_handle_g1]
+            ),
         )
 
-        pre_remove_node = PreRemoveNodeContext("a")
+        pre_remove_node = PreRemoveNodeContext(self.node_handle_a)
         assert plugin.pre_remove_node(graphrecord, pre_remove_node) is pre_remove_node
-        plugin.post_remove_node(graphrecord, PostRemoveNodeContext("a"))
+        plugin.post_remove_node(graphrecord, PostRemoveNodeContext(self.node_handle_a))
 
         pre_add_nodes = PreAddNodesContext([("a", {})])
         assert plugin.pre_add_nodes(graphrecord, pre_add_nodes) is pre_add_nodes
         plugin.post_add_nodes(graphrecord, PostAddNodesContext([("a", {})]))
 
-        pre_add_nodes_wg = PreAddNodesWithGroupContext([("a", {})], "g")
+        pre_add_nodes_wg = PreAddNodesWithGroupContext([("a", {})], self.group_handle_g)
         assert (
             plugin.pre_add_nodes_with_group(graphrecord, pre_add_nodes_wg)
             is pre_add_nodes_wg
         )
         plugin.post_add_nodes_with_group(
-            graphrecord, PostAddNodesWithGroupContext([("a", {})], "g")
+            graphrecord, PostAddNodesWithGroupContext([("a", {})], self.group_handle_g)
         )
 
-        pre_add_nodes_wgs = PreAddNodesWithGroupsContext([("a", {})], ["g0", "g1"])
+        pre_add_nodes_wgs = PreAddNodesWithGroupsContext(
+            [("a", {})], [self.group_handle_g0, self.group_handle_g1]
+        )
         assert (
             plugin.pre_add_nodes_with_groups(graphrecord, pre_add_nodes_wgs)
             is pre_add_nodes_wgs
         )
         plugin.post_add_nodes_with_groups(
-            graphrecord, PostAddNodesWithGroupsContext([("a", {})], ["g0", "g1"])
+            graphrecord,
+            PostAddNodesWithGroupsContext(
+                [("a", {})], [self.group_handle_g0, self.group_handle_g1]
+            ),
         )
 
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
@@ -1691,7 +2009,7 @@ class TestPluginBaseDefaults(unittest.TestCase):
         )
 
         pre_add_nodes_df_wg = PreAddNodesDataframesWithGroupContext(
-            [(dataframe, "idx")], "g"
+            [(dataframe, "idx")], self.group_handle_g
         )
         assert (
             plugin.pre_add_nodes_dataframes_with_group(graphrecord, pre_add_nodes_df_wg)
@@ -1699,11 +2017,13 @@ class TestPluginBaseDefaults(unittest.TestCase):
         )
         plugin.post_add_nodes_dataframes_with_group(
             graphrecord,
-            PostAddNodesDataframesWithGroupContext([(dataframe, "idx")], "g"),
+            PostAddNodesDataframesWithGroupContext(
+                [(dataframe, "idx")], self.group_handle_g
+            ),
         )
 
         pre_add_nodes_df_wgs = PreAddNodesDataframesWithGroupsContext(
-            [(dataframe, "idx")], ["g0", "g1"]
+            [(dataframe, "idx")], [self.group_handle_g0, self.group_handle_g1]
         )
         assert (
             plugin.pre_add_nodes_dataframes_with_groups(
@@ -1713,51 +2033,77 @@ class TestPluginBaseDefaults(unittest.TestCase):
         )
         plugin.post_add_nodes_dataframes_with_groups(
             graphrecord,
-            PostAddNodesDataframesWithGroupsContext([(dataframe, "idx")], ["g0", "g1"]),
+            PostAddNodesDataframesWithGroupsContext(
+                [(dataframe, "idx")], [self.group_handle_g0, self.group_handle_g1]
+            ),
         )
 
-        pre_add_edge = PreAddEdgeContext("a", "b", {})
+        pre_add_edge = PreAddEdgeContext(self.node_handle_a, self.node_handle_b, {})
         assert plugin.pre_add_edge(graphrecord, pre_add_edge) is pre_add_edge
         plugin.post_add_edge(graphrecord, PostAddEdgeContext(0))
 
-        pre_add_edge_wg = PreAddEdgeWithGroupContext("a", "b", {}, "g")
+        pre_add_edge_wg = PreAddEdgeWithGroupContext(
+            self.node_handle_a, self.node_handle_b, {}, self.group_handle_g
+        )
         assert (
             plugin.pre_add_edge_with_group(graphrecord, pre_add_edge_wg)
             is pre_add_edge_wg
         )
-        plugin.post_add_edge_with_group(graphrecord, PostAddEdgeWithGroupContext(0))
+        plugin.post_add_edge_with_group(
+            graphrecord, PostAddEdgeWithGroupContext(0, self.group_handle_g)
+        )
 
-        pre_add_edge_wgs = PreAddEdgeWithGroupsContext("a", "b", {}, ["g0", "g1"])
+        pre_add_edge_wgs = PreAddEdgeWithGroupsContext(
+            self.node_handle_a,
+            self.node_handle_b,
+            {},
+            [self.group_handle_g0, self.group_handle_g1],
+        )
         assert (
             plugin.pre_add_edge_with_groups(graphrecord, pre_add_edge_wgs)
             is pre_add_edge_wgs
         )
         plugin.post_add_edge_with_groups(
-            graphrecord, PostAddEdgeWithGroupsContext(0, ["g0", "g1"])
+            graphrecord,
+            PostAddEdgeWithGroupsContext(
+                0, [self.group_handle_g0, self.group_handle_g1]
+            ),
         )
 
         pre_remove_edge = PreRemoveEdgeContext(0)
         assert plugin.pre_remove_edge(graphrecord, pre_remove_edge) is pre_remove_edge
         plugin.post_remove_edge(graphrecord, PostRemoveEdgeContext(0))
 
-        pre_add_edges = PreAddEdgesContext([("a", "b", {})])
+        pre_add_edges = PreAddEdgesContext(
+            [(self.node_handle_a, self.node_handle_b, {})]
+        )
         assert plugin.pre_add_edges(graphrecord, pre_add_edges) is pre_add_edges
         plugin.post_add_edges(graphrecord, PostAddEdgesContext([0]))
 
-        pre_add_edges_wg = PreAddEdgesWithGroupContext([("a", "b", {})], "g")
+        pre_add_edges_wg = PreAddEdgesWithGroupContext(
+            [(self.node_handle_a, self.node_handle_b, {})], self.group_handle_g
+        )
         assert (
             plugin.pre_add_edges_with_group(graphrecord, pre_add_edges_wg)
             is pre_add_edges_wg
         )
-        plugin.post_add_edges_with_group(graphrecord, PostAddEdgesWithGroupContext([0]))
+        plugin.post_add_edges_with_group(
+            graphrecord, PostAddEdgesWithGroupContext([0], self.group_handle_g)
+        )
 
-        pre_add_edges_wgs = PreAddEdgesWithGroupsContext([("a", "b", {})], ["g0", "g1"])
+        pre_add_edges_wgs = PreAddEdgesWithGroupsContext(
+            [(self.node_handle_a, self.node_handle_b, {})],
+            [self.group_handle_g0, self.group_handle_g1],
+        )
         assert (
             plugin.pre_add_edges_with_groups(graphrecord, pre_add_edges_wgs)
             is pre_add_edges_wgs
         )
         plugin.post_add_edges_with_groups(
-            graphrecord, PostAddEdgesWithGroupsContext([0], ["g0", "g1"])
+            graphrecord,
+            PostAddEdgesWithGroupsContext(
+                [0], [self.group_handle_g0, self.group_handle_g1]
+            ),
         )
 
         edge_dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
@@ -1775,7 +2121,7 @@ class TestPluginBaseDefaults(unittest.TestCase):
         )
 
         pre_add_edges_df_wg = PreAddEdgesDataframesWithGroupContext(
-            [(edge_dataframe, "src", "tgt")], "g"
+            [(edge_dataframe, "src", "tgt")], self.group_handle_g
         )
         assert (
             plugin.pre_add_edges_dataframes_with_group(graphrecord, pre_add_edges_df_wg)
@@ -1784,12 +2130,13 @@ class TestPluginBaseDefaults(unittest.TestCase):
         plugin.post_add_edges_dataframes_with_group(
             graphrecord,
             PostAddEdgesDataframesWithGroupContext(
-                [(edge_dataframe, "src", "tgt")], "g"
+                [(edge_dataframe, "src", "tgt")], self.group_handle_g
             ),
         )
 
         pre_add_edges_df_wgs = PreAddEdgesDataframesWithGroupsContext(
-            [(edge_dataframe, "src", "tgt")], ["g0", "g1"]
+            [(edge_dataframe, "src", "tgt")],
+            [self.group_handle_g0, self.group_handle_g1],
         )
         assert (
             plugin.pre_add_edges_dataframes_with_groups(
@@ -1800,7 +2147,8 @@ class TestPluginBaseDefaults(unittest.TestCase):
         plugin.post_add_edges_dataframes_with_groups(
             graphrecord,
             PostAddEdgesDataframesWithGroupsContext(
-                [(edge_dataframe, "src", "tgt")], ["g0", "g1"]
+                [(edge_dataframe, "src", "tgt")],
+                [self.group_handle_g0, self.group_handle_g1],
             ),
         )
 
@@ -1808,82 +2156,117 @@ class TestPluginBaseDefaults(unittest.TestCase):
         assert plugin.pre_add_group(graphrecord, pre_add_group) is pre_add_group
         plugin.post_add_group(graphrecord, PostAddGroupContext("g", None, None))
 
-        pre_remove_group = PreRemoveGroupContext("g")
+        pre_remove_group = PreRemoveGroupContext(self.group_handle_g)
         assert (
             plugin.pre_remove_group(graphrecord, pre_remove_group) is pre_remove_group
         )
-        plugin.post_remove_group(graphrecord, PostRemoveGroupContext("g"))
+        plugin.post_remove_group(
+            graphrecord, PostRemoveGroupContext(self.group_handle_g)
+        )
 
-        pre_add_node_to_group = PreAddNodeToGroupContext("g", "a")
+        pre_add_node_to_group = PreAddNodeToGroupContext(
+            self.group_handle_g, self.node_handle_a
+        )
         assert (
             plugin.pre_add_node_to_group(graphrecord, pre_add_node_to_group)
             is pre_add_node_to_group
         )
-        plugin.post_add_node_to_group(graphrecord, PostAddNodeToGroupContext("g", "a"))
+        plugin.post_add_node_to_group(
+            graphrecord,
+            PostAddNodeToGroupContext(self.group_handle_g, self.node_handle_a),
+        )
 
-        pre_add_node_to_groups = PreAddNodeToGroupsContext(["g1", "g2"], "a")
+        pre_add_node_to_groups = PreAddNodeToGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+        )
         assert (
             plugin.pre_add_node_to_groups(graphrecord, pre_add_node_to_groups)
             is pre_add_node_to_groups
         )
         plugin.post_add_node_to_groups(
-            graphrecord, PostAddNodeToGroupsContext(["g1", "g2"], "a")
+            graphrecord,
+            PostAddNodeToGroupsContext(
+                [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+            ),
         )
 
-        pre_add_nodes_to_groups = PreAddNodesToGroupsContext(["g0", "g1"], ["a"])
+        pre_add_nodes_to_groups = PreAddNodesToGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1], [self.node_handle_a]
+        )
         assert (
             plugin.pre_add_nodes_to_groups(graphrecord, pre_add_nodes_to_groups)
             is pre_add_nodes_to_groups
         )
         plugin.post_add_nodes_to_groups(
-            graphrecord, PostAddNodesToGroupsContext(["g0", "g1"], ["a"])
+            graphrecord,
+            PostAddNodesToGroupsContext(
+                [self.group_handle_g0, self.group_handle_g1], [self.node_handle_a]
+            ),
         )
 
-        pre_add_edge_to_group = PreAddEdgeToGroupContext("g", 0)
+        pre_add_edge_to_group = PreAddEdgeToGroupContext(self.group_handle_g, 0)
         assert (
             plugin.pre_add_edge_to_group(graphrecord, pre_add_edge_to_group)
             is pre_add_edge_to_group
         )
-        plugin.post_add_edge_to_group(graphrecord, PostAddEdgeToGroupContext("g", 0))
+        plugin.post_add_edge_to_group(
+            graphrecord, PostAddEdgeToGroupContext(self.group_handle_g, 0)
+        )
 
-        pre_add_edge_to_groups = PreAddEdgeToGroupsContext(["g1", "g2"], 0)
+        pre_add_edge_to_groups = PreAddEdgeToGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], 0
+        )
         assert (
             plugin.pre_add_edge_to_groups(graphrecord, pre_add_edge_to_groups)
             is pre_add_edge_to_groups
         )
         plugin.post_add_edge_to_groups(
-            graphrecord, PostAddEdgeToGroupsContext(["g1", "g2"], 0)
+            graphrecord,
+            PostAddEdgeToGroupsContext([self.group_handle_g1, self.group_handle_g2], 0),
         )
 
-        pre_add_edges_to_groups = PreAddEdgesToGroupsContext(["g0", "g1"], [0])
+        pre_add_edges_to_groups = PreAddEdgesToGroupsContext(
+            [self.group_handle_g0, self.group_handle_g1], [0]
+        )
         assert (
             plugin.pre_add_edges_to_groups(graphrecord, pre_add_edges_to_groups)
             is pre_add_edges_to_groups
         )
         plugin.post_add_edges_to_groups(
-            graphrecord, PostAddEdgesToGroupsContext(["g0", "g1"], [0])
+            graphrecord,
+            PostAddEdgesToGroupsContext(
+                [self.group_handle_g0, self.group_handle_g1], [0]
+            ),
         )
 
-        pre_remove_node_from_group = PreRemoveNodeFromGroupContext("g", "a")
+        pre_remove_node_from_group = PreRemoveNodeFromGroupContext(
+            self.group_handle_g, self.node_handle_a
+        )
         assert (
             plugin.pre_remove_node_from_group(graphrecord, pre_remove_node_from_group)
             is pre_remove_node_from_group
         )
         plugin.post_remove_node_from_group(
-            graphrecord, PostRemoveNodeFromGroupContext("g", "a")
+            graphrecord,
+            PostRemoveNodeFromGroupContext(self.group_handle_g, self.node_handle_a),
         )
 
-        pre_remove_node_from_groups = PreRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+        pre_remove_node_from_groups = PreRemoveNodeFromGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+        )
         assert (
             plugin.pre_remove_node_from_groups(graphrecord, pre_remove_node_from_groups)
             is pre_remove_node_from_groups
         )
         plugin.post_remove_node_from_groups(
-            graphrecord, PostRemoveNodeFromGroupsContext(["g1", "g2"], "a")
+            graphrecord,
+            PostRemoveNodeFromGroupsContext(
+                [self.group_handle_g1, self.group_handle_g2], self.node_handle_a
+            ),
         )
 
         pre_remove_nodes_from_groups = PreRemoveNodesFromGroupsContext(
-            ["g0", "g1"], ["a"]
+            [self.group_handle_g0, self.group_handle_g1], [self.node_handle_a]
         )
         assert (
             plugin.pre_remove_nodes_from_groups(
@@ -1892,29 +2275,39 @@ class TestPluginBaseDefaults(unittest.TestCase):
             is pre_remove_nodes_from_groups
         )
         plugin.post_remove_nodes_from_groups(
-            graphrecord, PostRemoveNodesFromGroupsContext(["g0", "g1"], ["a"])
+            graphrecord,
+            PostRemoveNodesFromGroupsContext(
+                [self.group_handle_g0, self.group_handle_g1], [self.node_handle_a]
+            ),
         )
 
-        pre_remove_edge_from_group = PreRemoveEdgeFromGroupContext("g", 0)
+        pre_remove_edge_from_group = PreRemoveEdgeFromGroupContext(
+            self.group_handle_g, 0
+        )
         assert (
             plugin.pre_remove_edge_from_group(graphrecord, pre_remove_edge_from_group)
             is pre_remove_edge_from_group
         )
         plugin.post_remove_edge_from_group(
-            graphrecord, PostRemoveEdgeFromGroupContext("g", 0)
+            graphrecord, PostRemoveEdgeFromGroupContext(self.group_handle_g, 0)
         )
 
-        pre_remove_edge_from_groups = PreRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+        pre_remove_edge_from_groups = PreRemoveEdgeFromGroupsContext(
+            [self.group_handle_g1, self.group_handle_g2], 0
+        )
         assert (
             plugin.pre_remove_edge_from_groups(graphrecord, pre_remove_edge_from_groups)
             is pre_remove_edge_from_groups
         )
         plugin.post_remove_edge_from_groups(
-            graphrecord, PostRemoveEdgeFromGroupsContext(["g1", "g2"], 0)
+            graphrecord,
+            PostRemoveEdgeFromGroupsContext(
+                [self.group_handle_g1, self.group_handle_g2], 0
+            ),
         )
 
         pre_remove_edges_from_groups = PreRemoveEdgesFromGroupsContext(
-            ["g0", "g1"], [0]
+            [self.group_handle_g0, self.group_handle_g1], [0]
         )
         assert (
             plugin.pre_remove_edges_from_groups(
@@ -1923,7 +2316,10 @@ class TestPluginBaseDefaults(unittest.TestCase):
             is pre_remove_edges_from_groups
         )
         plugin.post_remove_edges_from_groups(
-            graphrecord, PostRemoveEdgesFromGroupsContext(["g0", "g1"], [0])
+            graphrecord,
+            PostRemoveEdgesFromGroupsContext(
+                [self.group_handle_g0, self.group_handle_g1], [0]
+            ),
         )
 
         plugin.pre_clear(graphrecord)
@@ -1990,6 +2386,8 @@ class TestPluginHooksFiring(unittest.TestCase):
     def test_add_node_with_groups_hooks(self) -> None:
         plugin = RecordingPlugin()
         graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
         plugin.calls.clear()
 
         graphrecord._graphrecord.add_node_with_groups("a", {}, ["g0", "g1"])
@@ -2000,6 +2398,8 @@ class TestPluginHooksFiring(unittest.TestCase):
     def test_add_nodes_with_groups_hooks(self) -> None:
         plugin = RecordingPlugin()
         graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
         plugin.calls.clear()
 
         graphrecord.add_nodes([("a", {})], group=["g0", "g1"])
@@ -2033,6 +2433,8 @@ class TestPluginHooksFiring(unittest.TestCase):
     def test_add_nodes_polars_with_groups_hooks(self) -> None:
         plugin = RecordingPlugin()
         graphrecord = GraphRecord.with_plugins({"recorder": plugin})
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
         plugin.calls.clear()
 
         dataframe = pl.DataFrame({"idx": ["a"], "val": [1]})
@@ -2079,6 +2481,8 @@ class TestPluginHooksFiring(unittest.TestCase):
         plugin = RecordingPlugin()
         graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {}), ("b", {})])
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
         plugin.calls.clear()
 
         graphrecord._graphrecord.add_edge_with_groups("a", "b", {}, ["g0", "g1"])
@@ -2090,6 +2494,8 @@ class TestPluginHooksFiring(unittest.TestCase):
         plugin = RecordingPlugin()
         graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {}), ("b", {})])
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
         plugin.calls.clear()
 
         graphrecord.add_edges([("a", "b", {})], group=["g0", "g1"])
@@ -2126,6 +2532,8 @@ class TestPluginHooksFiring(unittest.TestCase):
         plugin = RecordingPlugin()
         graphrecord = GraphRecord.with_plugins({"recorder": plugin})
         graphrecord.add_nodes([("a", {}), ("b", {})])
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
         plugin.calls.clear()
 
         dataframe = pl.DataFrame({"src": ["a"], "tgt": ["b"]})
@@ -2355,7 +2763,11 @@ class TestContextModification(unittest.TestCase):
             def pre_add_edges(
                 self, graphrecord: GraphRecord, context: PreAddEdgesContext
             ) -> PreAddEdgesContext:
-                return PreAddEdgesContext([("a", "c", {})])
+                source_handle = graphrecord.node_handle("a")
+                target_handle = graphrecord.node_handle("c")
+                assert source_handle is not None
+                assert target_handle is not None
+                return PreAddEdgesContext([(source_handle, target_handle, {})])
 
         graphrecord = GraphRecord.with_plugins({"redirect": RedirectPlugin()})
         graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})])
@@ -2396,6 +2808,34 @@ class TestMultiplePlugins(unittest.TestCase):
 
 
 class TestPluginBridgeSingularHooks(unittest.TestCase):
+    def setUp(self) -> None:
+        graphrecord = GraphRecord()
+        graphrecord.add_group("g")
+        graphrecord.add_group("g0")
+        graphrecord.add_group("g1")
+        graphrecord.add_group("g2")
+        graphrecord.add_nodes([("a", {}), ("b", {})])
+
+        node_handle_a = graphrecord.node_handle("a")
+        node_handle_b = graphrecord.node_handle("b")
+        group_handle_g = graphrecord.group_handle("g")
+        group_handle_g0 = graphrecord.group_handle("g0")
+        group_handle_g1 = graphrecord.group_handle("g1")
+        group_handle_g2 = graphrecord.group_handle("g2")
+        assert node_handle_a is not None
+        assert node_handle_b is not None
+        assert group_handle_g is not None
+        assert group_handle_g0 is not None
+        assert group_handle_g1 is not None
+        assert group_handle_g2 is not None
+
+        self.node_handle_a = node_handle_a
+        self.node_handle_b = node_handle_b
+        self.group_handle_g = group_handle_g
+        self.group_handle_g0 = group_handle_g0
+        self.group_handle_g1 = group_handle_g1
+        self.group_handle_g2 = group_handle_g2
+
     def test_pre_add_node_bridge(self) -> None:
         plugin = RecordingPlugin()
         graphrecord = GraphRecord()
@@ -2420,7 +2860,7 @@ class TestPluginBridgeSingularHooks(unittest.TestCase):
         plugin = RecordingPlugin()
         graphrecord = GraphRecord()
         bridge = _PluginBridge(plugin)
-        context = PreAddNodeWithGroupContext("a", {"x": 1}, "g")
+        context = PreAddNodeWithGroupContext("a", {"x": 1}, self.group_handle_g)
 
         bridge.pre_add_node_with_group(graphrecord._graphrecord, context._py_context)
 
@@ -2430,7 +2870,7 @@ class TestPluginBridgeSingularHooks(unittest.TestCase):
         plugin = RecordingPlugin()
         graphrecord = GraphRecord()
         bridge = _PluginBridge(plugin)
-        context = PostAddNodeWithGroupContext("a", "g")
+        context = PostAddNodeWithGroupContext("a", self.group_handle_g)
 
         bridge.post_add_node_with_group(graphrecord._graphrecord, context._py_context)
 
@@ -2440,7 +2880,7 @@ class TestPluginBridgeSingularHooks(unittest.TestCase):
         plugin = RecordingPlugin()
         graphrecord = GraphRecord()
         bridge = _PluginBridge(plugin)
-        context = PreAddEdgeContext("a", "b", {"w": 1})
+        context = PreAddEdgeContext(self.node_handle_a, self.node_handle_b, {"w": 1})
 
         bridge.pre_add_edge(graphrecord._graphrecord, context._py_context)
 
@@ -2460,7 +2900,9 @@ class TestPluginBridgeSingularHooks(unittest.TestCase):
         plugin = RecordingPlugin()
         graphrecord = GraphRecord()
         bridge = _PluginBridge(plugin)
-        context = PreAddEdgeWithGroupContext("a", "b", {"w": 1}, "g")
+        context = PreAddEdgeWithGroupContext(
+            self.node_handle_a, self.node_handle_b, {"w": 1}, self.group_handle_g
+        )
 
         bridge.pre_add_edge_with_group(graphrecord._graphrecord, context._py_context)
 
@@ -2470,7 +2912,7 @@ class TestPluginBridgeSingularHooks(unittest.TestCase):
         plugin = RecordingPlugin()
         graphrecord = GraphRecord()
         bridge = _PluginBridge(plugin)
-        context = PostAddEdgeWithGroupContext(0)
+        context = PostAddEdgeWithGroupContext(0, self.group_handle_g)
 
         bridge.post_add_edge_with_group(graphrecord._graphrecord, context._py_context)
 

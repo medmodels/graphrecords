@@ -29,7 +29,9 @@ impl From<PyGraphRecordError> for PyErr {
                 PyRuntimeError::new_err(message)
             }
             GraphRecordError::AssertionError(message) => PyAssertionError::new_err(message),
-            GraphRecordError::SchemaError(message) => PyValueError::new_err(message),
+            GraphRecordError::SchemaError(message) | GraphRecordError::StaleHandle(message) => {
+                PyValueError::new_err(message)
+            }
         }
     }
 }
