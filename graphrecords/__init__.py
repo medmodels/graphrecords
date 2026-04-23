@@ -26,9 +26,11 @@ from graphrecords.graphrecord import (
 from graphrecords.plugins import Plugin
 from graphrecords.querying import EdgeOperand, MatchMode, NodeOperand
 from graphrecords.schema import AttributeType, GroupSchema, Schema, SchemaType
+from graphrecords.types import AttributeHandle, GroupHandle, NodeHandle
 
 __all__ = [
     "Any",
+    "AttributeHandle",
     "AttributeType",
     "Bool",
     "ConnectedGraphRecord",
@@ -41,10 +43,12 @@ __all__ = [
     "ExportConnector",
     "Float",
     "GraphRecord",
+    "GroupHandle",
     "GroupSchema",
     "IngestConnector",
     "Int",
     "MatchMode",
+    "NodeHandle",
     "NodeIndex",
     "NodeOperand",
     "NodeQuery",

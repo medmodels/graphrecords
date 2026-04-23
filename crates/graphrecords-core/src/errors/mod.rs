@@ -10,6 +10,7 @@ impl From<GraphError> for GraphRecordError {
             GraphError::IndexError(value) => Self::IndexError(value),
             GraphError::AssertionError(value) => Self::AssertionError(value),
             GraphError::SchemaError(value) => Self::SchemaError(value),
+            GraphError::StaleHandle(value) => Self::StaleHandle(value),
         }
     }
 }
@@ -33,6 +34,10 @@ mod test {
         assert_eq!(
             GraphRecordError::SchemaError("value".to_string()),
             GraphRecordError::from(GraphError::SchemaError("value".to_string()))
+        );
+        assert_eq!(
+            GraphRecordError::StaleHandle("value".to_string()),
+            GraphRecordError::from(GraphError::StaleHandle("value".to_string()))
         );
     }
 }

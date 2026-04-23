@@ -11,7 +11,7 @@ use crate::{
     GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
-        Attributes, EdgeIndex, GraphRecordAttribute, NodeIndex,
+        AttributesView, EdgeIndex, GraphRecordAttribute, NodeIndex,
         querying::{
             BoxedIterator, DeepClone, RootOperand, attributes::operation::AttributesTreeOperation,
             group_by::GroupOperand,
@@ -281,14 +281,14 @@ pub trait GetAttributes {
     fn get_attributes<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<&'a Attributes>;
+    ) -> GraphRecordResult<AttributesView<'a>>;
 }
 
 impl GetAttributes for NodeIndex {
     fn get_attributes<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<&'a Attributes> {
+    ) -> GraphRecordResult<AttributesView<'a>> {
         graphrecord.node_attributes(self)
     }
 }
@@ -297,7 +297,7 @@ impl GetAttributes for EdgeIndex {
     fn get_attributes<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<&'a Attributes> {
+    ) -> GraphRecordResult<AttributesView<'a>> {
         graphrecord.edge_attributes(self)
     }
 }
@@ -306,7 +306,7 @@ impl<T: GetAttributes> GetAttributes for &T {
     fn get_attributes<'b>(
         &'b self,
         graphrecord: &'b GraphRecord,
-    ) -> GraphRecordResult<&'b Attributes> {
+    ) -> GraphRecordResult<AttributesView<'b>> {
         (*self).get_attributes(graphrecord)
     }
 }

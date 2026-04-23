@@ -12,6 +12,7 @@ graphrecords-core = { workspace = true, features = [
     "serde",
     "plugins",
     "connectors",
+    "safe-handles",
 ] }
 graphrecords-utils = { workspace = true }
 

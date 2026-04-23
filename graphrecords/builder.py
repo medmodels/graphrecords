@@ -173,26 +173,34 @@ class GraphRecordBuilder:
         self._plugins[name] = plugin
         return self
 
-    def _build_group(
-        self,
-        graphrecord: gr.GraphRecord,
-        group_name: Group,
-        group_info: GroupInfo,
-        *,
-        bypass_plugins: bool,
-    ) -> None:
-        nodes = group_info["nodes"]
+    def _implicit_groups(self) -> List[Group]:
+        implicit: List[Group] = []
+        for _, group, _ in self._nodes:
+            if (
+                group is not None
+                and group not in self._groups
+                and group not in implicit
+            ):
+                implicit.append(group)
+        for _, group, _ in self._edges:
+            if (
+                group is not None
+                and group not in self._groups
+                and group not in implicit
+            ):
+                implicit.append(group)
+        return implicit
 
-        if not graphrecord.contains_group(group_name):
-            graphrecord.add_group(group_name, nodes, bypass_plugins=bypass_plugins)
-            return
-
-        existing_nodes = graphrecord.nodes_in_group(group_name)
-        missing_nodes = [node for node in nodes if node not in existing_nodes]
-        if missing_nodes:
-            graphrecord.add_nodes_to_group(
-                group_name, missing_nodes, bypass_plugins=bypass_plugins
-            )
+    def _populate_explicit_group_nodes(self, graphrecord: gr.GraphRecord) -> None:
+        for group_name, (group_info, bypass_plugins) in self._groups.items():
+            existing_nodes = graphrecord.nodes_in_group(group_name)
+            missing_nodes = [
+                node for node in group_info["nodes"] if node not in existing_nodes
+            ]
+            if missing_nodes:
+                graphrecord.add_nodes_to_group(
+                    group_name, missing_nodes, bypass_plugins=bypass_plugins
+                )
 
     def build(self) -> gr.GraphRecord:
         """Constructs a GraphRecord instance from the builder's configuration.
@@ -205,19 +213,19 @@ class GraphRecordBuilder:
         else:
             graphrecord = gr.GraphRecord()
 
+        for group_name in self._implicit_groups():
+            graphrecord.add_group(group_name)
+
+        for group_name, (_, bypass_plugins) in self._groups.items():
+            graphrecord.add_group(group_name, bypass_plugins=bypass_plugins)
+
         for nodes, group, bypass_plugins in self._nodes:
             graphrecord.add_nodes(nodes, group, bypass_plugins=bypass_plugins)
 
         for edges, group, bypass_plugins in self._edges:
             graphrecord.add_edges(edges, group, bypass_plugins=bypass_plugins)
 
-        for group_name, (group_info, bypass_plugins) in self._groups.items():
-            self._build_group(
-                graphrecord,
-                group_name,
-                group_info,
-                bypass_plugins=bypass_plugins,
-            )
+        self._populate_explicit_group_nodes(graphrecord)
 
         if self._schema is not None:
             schema, bypass_plugins = self._schema

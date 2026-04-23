@@ -11,6 +11,7 @@ pub enum GraphRecordError {
     AssertionError(String),
     SchemaError(String),
     QueryError(String),
+    StaleHandle(String),
 }
 
 impl Error for GraphRecordError {
@@ -21,7 +22,8 @@ impl Error for GraphRecordError {
             | Self::ConversionError(message)
             | Self::AssertionError(message)
             | Self::SchemaError(message)
-            | Self::QueryError(message) => message,
+            | Self::QueryError(message)
+            | Self::StaleHandle(message) => message,
         }
     }
 }
@@ -35,6 +37,7 @@ impl Display for GraphRecordError {
             Self::AssertionError(message) => write!(f, "AssertionError: {message}"),
             Self::SchemaError(message) => write!(f, "SchemaError: {message}"),
             Self::QueryError(message) => write!(f, "QueryError: {message}"),
+            Self::StaleHandle(message) => write!(f, "StaleHandle: {message}"),
         }
     }
 }
@@ -64,6 +67,14 @@ mod test {
         assert_eq!(
             "SchemaError: value",
             GraphRecordError::SchemaError("value".to_string()).to_string()
+        );
+        assert_eq!(
+            "QueryError: value",
+            GraphRecordError::QueryError("value".to_string()).to_string()
+        );
+        assert_eq!(
+            "StaleHandle: value",
+            GraphRecordError::StaleHandle("value".to_string()).to_string()
         );
     }
 }

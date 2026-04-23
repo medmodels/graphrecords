@@ -5,6 +5,7 @@ pub use crate::graphrecord::{
         PyAny, PyBool, PyDateTime, PyDuration, PyFloat, PyInt, PyNull, PyOption, PyString, PyUnion,
     },
     errors::PyGraphRecordError,
+    handle::{PyAttributeHandle, PyGroupHandle, PyNodeHandle},
     overview::{
         PyAttributeOverview, PyEdgeGroupOverview, PyGroupOverview, PyNodeGroupOverview, PyOverview,
     },

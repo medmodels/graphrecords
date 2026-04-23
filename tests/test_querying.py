@@ -162,6 +162,12 @@ def simple_example_dataset() -> GraphRecord:
     )
 
     graphrecord = GraphRecord()
+
+    for group in ("diagnosis", "drug", "patient", "procedure"):
+        graphrecord.add_group(group)
+    for group in ("patient_diagnosis", "patient_drug", "patient_procedure"):
+        graphrecord.add_group(group)
+
     graphrecord.add_nodes((diagnosis_nodes, "diagnosis_code"), "diagnosis")
     graphrecord.add_nodes((drug_nodes, "drug_code"), "drug")
     graphrecord.add_nodes((patient_nodes, "patient_id"), "patient")

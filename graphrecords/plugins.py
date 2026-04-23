@@ -85,6 +85,8 @@ if TYPE_CHECKING:
         Attributes,
         EdgeIndex,
         Group,
+        GroupHandle,
+        NodeHandle,
         NodeIndex,
         PolarsEdgeDataFrameInput,
         PolarsNodeDataFrameInput,
@@ -795,18 +797,20 @@ class PreAddNodeWithGroupContext:
     _py_context: PyPreAddNodeWithGroupContext
 
     def __init__(
-        self, node_index: NodeIndex, attributes: Attributes, group: Group
+        self, node_index: NodeIndex, attributes: Attributes, group_handle: GroupHandle
     ) -> None:
         """Initializes a PreAddNodeWithGroupContext.
 
         Args:
             node_index (NodeIndex): The index of the node being added.
             attributes (Attributes): The attributes of the node being added.
-            group (Group): The group to add the node to.
+            group_handle (GroupHandle): The handle of the group to add the node to.
         """
         from graphrecords._graphrecords.plugins import PyPreAddNodeWithGroupContext
 
-        self._py_context = PyPreAddNodeWithGroupContext(node_index, attributes, group)
+        self._py_context = PyPreAddNodeWithGroupContext(
+            node_index, attributes, group_handle
+        )
 
     @classmethod
     def _from_py_context(
@@ -827,9 +831,9 @@ class PreAddNodeWithGroupContext:
         return self._py_context.attributes
 
     @property
-    def group(self) -> Group:
-        """The group to add the node to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group to add the node to."""
+        return self._py_context.group_handle
 
 
 class PostAddNodeWithGroupContext:
@@ -837,16 +841,16 @@ class PostAddNodeWithGroupContext:
 
     _py_context: PyPostAddNodeWithGroupContext
 
-    def __init__(self, node_index: NodeIndex, group: Group) -> None:
+    def __init__(self, node_index: NodeIndex, group_handle: GroupHandle) -> None:
         """Initializes a PostAddNodeWithGroupContext.
 
         Args:
             node_index (NodeIndex): The index of the node that was added.
-            group (Group): The group the node was added to.
+            group_handle (GroupHandle): The handle of the group the node was added to.
         """
         from graphrecords._graphrecords.plugins import PyPostAddNodeWithGroupContext
 
-        self._py_context = PyPostAddNodeWithGroupContext(node_index, group)
+        self._py_context = PyPostAddNodeWithGroupContext(node_index, group_handle)
 
     @classmethod
     def _from_py_context(
@@ -862,9 +866,9 @@ class PostAddNodeWithGroupContext:
         return self._py_context.node_index
 
     @property
-    def group(self) -> Group:
-        """The group the node was added to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group the node was added to."""
+        return self._py_context.group_handle
 
 
 class PreAddNodeWithGroupsContext:
@@ -873,18 +877,24 @@ class PreAddNodeWithGroupsContext:
     _py_context: PyPreAddNodeWithGroupsContext
 
     def __init__(
-        self, node_index: NodeIndex, attributes: Attributes, groups: List[Group]
+        self,
+        node_index: NodeIndex,
+        attributes: Attributes,
+        group_handles: List[GroupHandle],
     ) -> None:
         """Initializes a PreAddNodeWithGroupsContext.
 
         Args:
             node_index (NodeIndex): The index of the node being added.
             attributes (Attributes): The attributes of the node being added.
-            groups (List[Group]): The groups to add the node to.
+            group_handles (List[GroupHandle]): The handles of the groups to add the
+                node to.
         """
         from graphrecords._graphrecords.plugins import PyPreAddNodeWithGroupsContext
 
-        self._py_context = PyPreAddNodeWithGroupsContext(node_index, attributes, groups)
+        self._py_context = PyPreAddNodeWithGroupsContext(
+            node_index, attributes, group_handles
+        )
 
     @classmethod
     def _from_py_context(
@@ -905,9 +915,9 @@ class PreAddNodeWithGroupsContext:
         return self._py_context.attributes
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to add the node to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to add the node to."""
+        return self._py_context.group_handles
 
 
 class PostAddNodeWithGroupsContext:
@@ -915,16 +925,17 @@ class PostAddNodeWithGroupsContext:
 
     _py_context: PyPostAddNodeWithGroupsContext
 
-    def __init__(self, node_index: NodeIndex, groups: List[Group]) -> None:
+    def __init__(self, node_index: NodeIndex, group_handles: List[GroupHandle]) -> None:
         """Initializes a PostAddNodeWithGroupsContext.
 
         Args:
             node_index (NodeIndex): The index of the node that was added.
-            groups (List[Group]): The groups the node was added to.
+            group_handles (List[GroupHandle]): The handles of the groups the node was
+                added to.
         """
         from graphrecords._graphrecords.plugins import PyPostAddNodeWithGroupsContext
 
-        self._py_context = PyPostAddNodeWithGroupsContext(node_index, groups)
+        self._py_context = PyPostAddNodeWithGroupsContext(node_index, group_handles)
 
     @classmethod
     def _from_py_context(
@@ -940,9 +951,9 @@ class PostAddNodeWithGroupsContext:
         return self._py_context.node_index
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the node was added to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the node was added to."""
+        return self._py_context.group_handles
 
 
 class PreRemoveNodeContext:
@@ -950,15 +961,15 @@ class PreRemoveNodeContext:
 
     _py_context: PyPreRemoveNodeContext
 
-    def __init__(self, node_index: NodeIndex) -> None:
+    def __init__(self, node_handle: NodeHandle) -> None:
         """Initializes a PreRemoveNodeContext.
 
         Args:
-            node_index (NodeIndex): The index of the node being removed.
+            node_handle (NodeHandle): The handle of the node being removed.
         """
         from graphrecords._graphrecords.plugins import PyPreRemoveNodeContext
 
-        self._py_context = PyPreRemoveNodeContext(node_index)
+        self._py_context = PyPreRemoveNodeContext(node_handle)
 
     @classmethod
     def _from_py_context(
@@ -969,9 +980,9 @@ class PreRemoveNodeContext:
         return context
 
     @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being removed."""
-        return self._py_context.node_index
+    def node_handle(self) -> NodeHandle:
+        """The handle of the node being removed."""
+        return self._py_context.node_handle
 
 
 class PostRemoveNodeContext:
@@ -979,15 +990,15 @@ class PostRemoveNodeContext:
 
     _py_context: PyPostRemoveNodeContext
 
-    def __init__(self, node_index: NodeIndex) -> None:
+    def __init__(self, node_handle: NodeHandle) -> None:
         """Initializes a PostRemoveNodeContext.
 
         Args:
-            node_index (NodeIndex): The index of the node that was removed.
+            node_handle (NodeHandle): The handle of the node that was removed.
         """
         from graphrecords._graphrecords.plugins import PyPostRemoveNodeContext
 
-        self._py_context = PyPostRemoveNodeContext(node_index)
+        self._py_context = PyPostRemoveNodeContext(node_handle)
 
     @classmethod
     def _from_py_context(
@@ -998,9 +1009,9 @@ class PostRemoveNodeContext:
         return context
 
     @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was removed."""
-        return self._py_context.node_index
+    def node_handle(self) -> NodeHandle:
+        """The handle of the node that was removed."""
+        return self._py_context.node_handle
 
 
 class PreAddNodesContext:
@@ -1062,16 +1073,20 @@ class PreAddNodesWithGroupContext:
 
     _py_context: PyPreAddNodesWithGroupContext
 
-    def __init__(self, nodes: List[Tuple[NodeIndex, Attributes]], group: Group) -> None:
+    def __init__(
+        self,
+        nodes: List[Tuple[NodeIndex, Attributes]],
+        group_handle: GroupHandle,
+    ) -> None:
         """Initializes a PreAddNodesWithGroupContext.
 
         Args:
             nodes (List[Tuple[NodeIndex, Attributes]]): The nodes being added.
-            group (Group): The group to add the nodes to.
+            group_handle (GroupHandle): The handle of the group to add the nodes to.
         """
         from graphrecords._graphrecords.plugins import PyPreAddNodesWithGroupContext
 
-        self._py_context = PyPreAddNodesWithGroupContext(nodes, group)
+        self._py_context = PyPreAddNodesWithGroupContext(nodes, group_handle)
 
     @classmethod
     def _from_py_context(
@@ -1087,9 +1102,9 @@ class PreAddNodesWithGroupContext:
         return self._py_context.nodes
 
     @property
-    def group(self) -> Group:
-        """The group to add the nodes to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group to add the nodes to."""
+        return self._py_context.group_handle
 
 
 class PostAddNodesWithGroupContext:
@@ -1097,16 +1112,21 @@ class PostAddNodesWithGroupContext:
 
     _py_context: PyPostAddNodesWithGroupContext
 
-    def __init__(self, nodes: List[Tuple[NodeIndex, Attributes]], group: Group) -> None:
+    def __init__(
+        self,
+        nodes: List[Tuple[NodeIndex, Attributes]],
+        group_handle: GroupHandle,
+    ) -> None:
         """Initializes a PostAddNodesWithGroupContext.
 
         Args:
             nodes (List[Tuple[NodeIndex, Attributes]]): The nodes that were added.
-            group (Group): The group the nodes were added to.
+            group_handle (GroupHandle): The handle of the group the nodes were added
+                to.
         """
         from graphrecords._graphrecords.plugins import PyPostAddNodesWithGroupContext
 
-        self._py_context = PyPostAddNodesWithGroupContext(nodes, group)
+        self._py_context = PyPostAddNodesWithGroupContext(nodes, group_handle)
 
     @classmethod
     def _from_py_context(
@@ -1122,9 +1142,9 @@ class PostAddNodesWithGroupContext:
         return self._py_context.nodes
 
     @property
-    def group(self) -> Group:
-        """The group the nodes were added to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group the nodes were added to."""
+        return self._py_context.group_handle
 
 
 class PreAddNodesWithGroupsContext:
@@ -1133,17 +1153,20 @@ class PreAddNodesWithGroupsContext:
     _py_context: PyPreAddNodesWithGroupsContext
 
     def __init__(
-        self, nodes: List[Tuple[NodeIndex, Attributes]], groups: List[Group]
+        self,
+        nodes: List[Tuple[NodeIndex, Attributes]],
+        group_handles: List[GroupHandle],
     ) -> None:
         """Initializes a PreAddNodesWithGroupsContext.
 
         Args:
             nodes (List[Tuple[NodeIndex, Attributes]]): The nodes being added.
-            groups (List[Group]): The groups to add the nodes to.
+            group_handles (List[GroupHandle]): The handles of the groups to add the
+                nodes to.
         """
         from graphrecords._graphrecords.plugins import PyPreAddNodesWithGroupsContext
 
-        self._py_context = PyPreAddNodesWithGroupsContext(nodes, groups)
+        self._py_context = PyPreAddNodesWithGroupsContext(nodes, group_handles)
 
     @classmethod
     def _from_py_context(
@@ -1159,9 +1182,9 @@ class PreAddNodesWithGroupsContext:
         return self._py_context.nodes
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to add the nodes to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to add the nodes to."""
+        return self._py_context.group_handles
 
 
 class PostAddNodesWithGroupsContext:
@@ -1170,17 +1193,20 @@ class PostAddNodesWithGroupsContext:
     _py_context: PyPostAddNodesWithGroupsContext
 
     def __init__(
-        self, nodes: List[Tuple[NodeIndex, Attributes]], groups: List[Group]
+        self,
+        nodes: List[Tuple[NodeIndex, Attributes]],
+        group_handles: List[GroupHandle],
     ) -> None:
         """Initializes a PostAddNodesWithGroupsContext.
 
         Args:
             nodes (List[Tuple[NodeIndex, Attributes]]): The nodes that were added.
-            groups (List[Group]): The groups the nodes were added to.
+            group_handles (List[GroupHandle]): The handles of the groups the nodes
+                were added to.
         """
         from graphrecords._graphrecords.plugins import PyPostAddNodesWithGroupsContext
 
-        self._py_context = PyPostAddNodesWithGroupsContext(nodes, groups)
+        self._py_context = PyPostAddNodesWithGroupsContext(nodes, group_handles)
 
     @classmethod
     def _from_py_context(
@@ -1196,9 +1222,9 @@ class PostAddNodesWithGroupsContext:
         return self._py_context.nodes
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the nodes were added to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the nodes were added to."""
+        return self._py_context.group_handles
 
 
 class PreAddNodesDataframesContext:
@@ -1267,21 +1293,23 @@ class PreAddNodesDataframesWithGroupContext:
     _py_context: PyPreAddNodesDataframesWithGroupContext
 
     def __init__(
-        self, nodes_dataframes: List[PolarsNodeDataFrameInput], group: Group
+        self,
+        nodes_dataframes: List[PolarsNodeDataFrameInput],
+        group_handle: GroupHandle,
     ) -> None:
         """Initializes a PreAddNodesDataframesWithGroupContext.
 
         Args:
             nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
                 inputs.
-            group (Group): The group to add the nodes to.
+            group_handle (GroupHandle): The handle of the group to add the nodes to.
         """
         from graphrecords._graphrecords.plugins import (
             PyPreAddNodesDataframesWithGroupContext,
         )
 
         self._py_context = PyPreAddNodesDataframesWithGroupContext(
-            nodes_dataframes, group
+            nodes_dataframes, group_handle
         )
 
     @classmethod
@@ -1298,9 +1326,9 @@ class PreAddNodesDataframesWithGroupContext:
         return self._py_context.nodes_dataframes
 
     @property
-    def group(self) -> Group:
-        """The group to add the nodes to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group to add the nodes to."""
+        return self._py_context.group_handle
 
 
 class PostAddNodesDataframesWithGroupContext:
@@ -1309,21 +1337,24 @@ class PostAddNodesDataframesWithGroupContext:
     _py_context: PyPostAddNodesDataframesWithGroupContext
 
     def __init__(
-        self, nodes_dataframes: List[PolarsNodeDataFrameInput], group: Group
+        self,
+        nodes_dataframes: List[PolarsNodeDataFrameInput],
+        group_handle: GroupHandle,
     ) -> None:
         """Initializes a PostAddNodesDataframesWithGroupContext.
 
         Args:
             nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
                 inputs.
-            group (Group): The group the nodes were added to.
+            group_handle (GroupHandle): The handle of the group the nodes were added
+                to.
         """
         from graphrecords._graphrecords.plugins import (
             PyPostAddNodesDataframesWithGroupContext,
         )
 
         self._py_context = PyPostAddNodesDataframesWithGroupContext(
-            nodes_dataframes, group
+            nodes_dataframes, group_handle
         )
 
     @classmethod
@@ -1340,9 +1371,9 @@ class PostAddNodesDataframesWithGroupContext:
         return self._py_context.nodes_dataframes
 
     @property
-    def group(self) -> Group:
-        """The group the nodes were added to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group the nodes were added to."""
+        return self._py_context.group_handle
 
 
 class PreAddNodesDataframesWithGroupsContext:
@@ -1351,21 +1382,24 @@ class PreAddNodesDataframesWithGroupsContext:
     _py_context: PyPreAddNodesDataframesWithGroupsContext
 
     def __init__(
-        self, nodes_dataframes: List[PolarsNodeDataFrameInput], groups: List[Group]
+        self,
+        nodes_dataframes: List[PolarsNodeDataFrameInput],
+        group_handles: List[GroupHandle],
     ) -> None:
         """Initializes a PreAddNodesDataframesWithGroupsContext.
 
         Args:
             nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
                 inputs.
-            groups (List[Group]): The groups to add the nodes to.
+            group_handles (List[GroupHandle]): The handles of the groups to add the
+                nodes to.
         """
         from graphrecords._graphrecords.plugins import (
             PyPreAddNodesDataframesWithGroupsContext,
         )
 
         self._py_context = PyPreAddNodesDataframesWithGroupsContext(
-            nodes_dataframes, groups
+            nodes_dataframes, group_handles
         )
 
     @classmethod
@@ -1382,9 +1416,9 @@ class PreAddNodesDataframesWithGroupsContext:
         return self._py_context.nodes_dataframes
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to add the nodes to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to add the nodes to."""
+        return self._py_context.group_handles
 
 
 class PostAddNodesDataframesWithGroupsContext:
@@ -1393,21 +1427,24 @@ class PostAddNodesDataframesWithGroupsContext:
     _py_context: PyPostAddNodesDataframesWithGroupsContext
 
     def __init__(
-        self, nodes_dataframes: List[PolarsNodeDataFrameInput], groups: List[Group]
+        self,
+        nodes_dataframes: List[PolarsNodeDataFrameInput],
+        group_handles: List[GroupHandle],
     ) -> None:
         """Initializes a PostAddNodesDataframesWithGroupsContext.
 
         Args:
             nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
                 inputs.
-            groups (List[Group]): The groups the nodes were added to.
+            group_handles (List[GroupHandle]): The handles of the groups the nodes
+                were added to.
         """
         from graphrecords._graphrecords.plugins import (
             PyPostAddNodesDataframesWithGroupsContext,
         )
 
         self._py_context = PyPostAddNodesDataframesWithGroupsContext(
-            nodes_dataframes, groups
+            nodes_dataframes, group_handles
         )
 
     @classmethod
@@ -1424,9 +1461,9 @@ class PostAddNodesDataframesWithGroupsContext:
         return self._py_context.nodes_dataframes
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the nodes were added to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the nodes were added to."""
+        return self._py_context.group_handles
 
 
 class PreAddEdgeContext:
@@ -1436,21 +1473,21 @@ class PreAddEdgeContext:
 
     def __init__(
         self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
+        source_node_handle: NodeHandle,
+        target_node_handle: NodeHandle,
         attributes: Attributes,
     ) -> None:
         """Initializes a PreAddEdgeContext.
 
         Args:
-            source_node_index (NodeIndex): The index of the source node.
-            target_node_index (NodeIndex): The index of the target node.
+            source_node_handle (NodeHandle): The handle of the source node.
+            target_node_handle (NodeHandle): The handle of the target node.
             attributes (Attributes): The attributes of the edge being added.
         """
         from graphrecords._graphrecords.plugins import PyPreAddEdgeContext
 
         self._py_context = PyPreAddEdgeContext(
-            source_node_index, target_node_index, attributes
+            source_node_handle, target_node_handle, attributes
         )
 
     @classmethod
@@ -1460,14 +1497,14 @@ class PreAddEdgeContext:
         return context
 
     @property
-    def source_node_index(self) -> NodeIndex:
-        """The index of the source node."""
-        return self._py_context.source_node_index
+    def source_node_handle(self) -> NodeHandle:
+        """The handle of the source node."""
+        return self._py_context.source_node_handle
 
     @property
-    def target_node_index(self) -> NodeIndex:
-        """The index of the target node."""
-        return self._py_context.target_node_index
+    def target_node_handle(self) -> NodeHandle:
+        """The handle of the target node."""
+        return self._py_context.target_node_handle
 
     @property
     def attributes(self) -> Attributes:
@@ -1509,23 +1546,23 @@ class PreAddEdgeWithGroupContext:
 
     def __init__(
         self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
+        source_node_handle: NodeHandle,
+        target_node_handle: NodeHandle,
         attributes: Attributes,
-        group: Group,
+        group_handle: GroupHandle,
     ) -> None:
         """Initializes a PreAddEdgeWithGroupContext.
 
         Args:
-            source_node_index (NodeIndex): The index of the source node.
-            target_node_index (NodeIndex): The index of the target node.
+            source_node_handle (NodeHandle): The handle of the source node.
+            target_node_handle (NodeHandle): The handle of the target node.
             attributes (Attributes): The attributes of the edge being added.
-            group (Group): The group to add the edge to.
+            group_handle (GroupHandle): The handle of the group to add the edge to.
         """
         from graphrecords._graphrecords.plugins import PyPreAddEdgeWithGroupContext
 
         self._py_context = PyPreAddEdgeWithGroupContext(
-            source_node_index, target_node_index, attributes, group
+            source_node_handle, target_node_handle, attributes, group_handle
         )
 
     @classmethod
@@ -1537,14 +1574,14 @@ class PreAddEdgeWithGroupContext:
         return context
 
     @property
-    def source_node_index(self) -> NodeIndex:
-        """The index of the source node."""
-        return self._py_context.source_node_index
+    def source_node_handle(self) -> NodeHandle:
+        """The handle of the source node."""
+        return self._py_context.source_node_handle
 
     @property
-    def target_node_index(self) -> NodeIndex:
-        """The index of the target node."""
-        return self._py_context.target_node_index
+    def target_node_handle(self) -> NodeHandle:
+        """The handle of the target node."""
+        return self._py_context.target_node_handle
 
     @property
     def attributes(self) -> Attributes:
@@ -1552,9 +1589,9 @@ class PreAddEdgeWithGroupContext:
         return self._py_context.attributes
 
     @property
-    def group(self) -> Group:
-        """The group to add the edge to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group to add the edge to."""
+        return self._py_context.group_handle
 
 
 class PostAddEdgeWithGroupContext:
@@ -1562,15 +1599,16 @@ class PostAddEdgeWithGroupContext:
 
     _py_context: PyPostAddEdgeWithGroupContext
 
-    def __init__(self, edge_index: EdgeIndex) -> None:
+    def __init__(self, edge_index: EdgeIndex, group_handle: GroupHandle) -> None:
         """Initializes a PostAddEdgeWithGroupContext.
 
         Args:
             edge_index (EdgeIndex): The index of the edge that was added.
+            group_handle (GroupHandle): The handle of the group the edge was added to.
         """
         from graphrecords._graphrecords.plugins import PyPostAddEdgeWithGroupContext
 
-        self._py_context = PyPostAddEdgeWithGroupContext(edge_index)
+        self._py_context = PyPostAddEdgeWithGroupContext(edge_index, group_handle)
 
     @classmethod
     def _from_py_context(
@@ -1585,6 +1623,11 @@ class PostAddEdgeWithGroupContext:
         """The index of the edge that was added."""
         return self._py_context.edge_index
 
+    @property
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group the edge was added to."""
+        return self._py_context.group_handle
+
 
 class PreAddEdgeWithGroupsContext:
     """Context for the pre_add_edge_with_groups hook."""
@@ -1593,23 +1636,24 @@ class PreAddEdgeWithGroupsContext:
 
     def __init__(
         self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
+        source_node_handle: NodeHandle,
+        target_node_handle: NodeHandle,
         attributes: Attributes,
-        groups: List[Group],
+        group_handles: List[GroupHandle],
     ) -> None:
         """Initializes a PreAddEdgeWithGroupsContext.
 
         Args:
-            source_node_index (NodeIndex): The index of the source node.
-            target_node_index (NodeIndex): The index of the target node.
+            source_node_handle (NodeHandle): The handle of the source node.
+            target_node_handle (NodeHandle): The handle of the target node.
             attributes (Attributes): The attributes of the edge being added.
-            groups (List[Group]): The groups to add the edge to.
+            group_handles (List[GroupHandle]): The handles of the groups to add the
+                edge to.
         """
         from graphrecords._graphrecords.plugins import PyPreAddEdgeWithGroupsContext
 
         self._py_context = PyPreAddEdgeWithGroupsContext(
-            source_node_index, target_node_index, attributes, groups
+            source_node_handle, target_node_handle, attributes, group_handles
         )
 
     @classmethod
@@ -1621,14 +1665,14 @@ class PreAddEdgeWithGroupsContext:
         return context
 
     @property
-    def source_node_index(self) -> NodeIndex:
-        """The index of the source node."""
-        return self._py_context.source_node_index
+    def source_node_handle(self) -> NodeHandle:
+        """The handle of the source node."""
+        return self._py_context.source_node_handle
 
     @property
-    def target_node_index(self) -> NodeIndex:
-        """The index of the target node."""
-        return self._py_context.target_node_index
+    def target_node_handle(self) -> NodeHandle:
+        """The handle of the target node."""
+        return self._py_context.target_node_handle
 
     @property
     def attributes(self) -> Attributes:
@@ -1636,9 +1680,9 @@ class PreAddEdgeWithGroupsContext:
         return self._py_context.attributes
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to add the edge to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to add the edge to."""
+        return self._py_context.group_handles
 
 
 class PostAddEdgeWithGroupsContext:
@@ -1646,16 +1690,17 @@ class PostAddEdgeWithGroupsContext:
 
     _py_context: PyPostAddEdgeWithGroupsContext
 
-    def __init__(self, edge_index: EdgeIndex, groups: List[Group]) -> None:
+    def __init__(self, edge_index: EdgeIndex, group_handles: List[GroupHandle]) -> None:
         """Initializes a PostAddEdgeWithGroupsContext.
 
         Args:
             edge_index (EdgeIndex): The index of the edge that was added.
-            groups (List[Group]): The groups the edge was added to.
+            group_handles (List[GroupHandle]): The handles of the groups the edge was
+                added to.
         """
         from graphrecords._graphrecords.plugins import PyPostAddEdgeWithGroupsContext
 
-        self._py_context = PyPostAddEdgeWithGroupsContext(edge_index, groups)
+        self._py_context = PyPostAddEdgeWithGroupsContext(edge_index, group_handles)
 
     @classmethod
     def _from_py_context(
@@ -1671,9 +1716,9 @@ class PostAddEdgeWithGroupsContext:
         return self._py_context.edge_index
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the edge was added to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the edge was added to."""
+        return self._py_context.group_handles
 
 
 class PreRemoveEdgeContext:
@@ -1739,11 +1784,11 @@ class PreAddEdgesContext:
 
     _py_context: PyPreAddEdgesContext
 
-    def __init__(self, edges: List[Tuple[NodeIndex, NodeIndex, Attributes]]) -> None:
+    def __init__(self, edges: List[Tuple[NodeHandle, NodeHandle, Attributes]]) -> None:
         """Initializes a PreAddEdgesContext.
 
         Args:
-            edges (List[Tuple[NodeIndex, NodeIndex, Attributes]]): The edges being
+            edges (List[Tuple[NodeHandle, NodeHandle, Attributes]]): The edges being
                 added.
         """
         from graphrecords._graphrecords.plugins import PyPreAddEdgesContext
@@ -1757,7 +1802,7 @@ class PreAddEdgesContext:
         return context
 
     @property
-    def edges(self) -> List[Tuple[NodeIndex, NodeIndex, Attributes]]:
+    def edges(self) -> List[Tuple[NodeHandle, NodeHandle, Attributes]]:
         """The edges being added."""
         return self._py_context.edges
 
@@ -1795,18 +1840,20 @@ class PreAddEdgesWithGroupContext:
     _py_context: PyPreAddEdgesWithGroupContext
 
     def __init__(
-        self, edges: List[Tuple[NodeIndex, NodeIndex, Attributes]], group: Group
+        self,
+        edges: List[Tuple[NodeHandle, NodeHandle, Attributes]],
+        group_handle: GroupHandle,
     ) -> None:
         """Initializes a PreAddEdgesWithGroupContext.
 
         Args:
-            edges (List[Tuple[NodeIndex, NodeIndex, Attributes]]): The edges being
+            edges (List[Tuple[NodeHandle, NodeHandle, Attributes]]): The edges being
                 added.
-            group (Group): The group to add the edges to.
+            group_handle (GroupHandle): The handle of the group to add the edges to.
         """
         from graphrecords._graphrecords.plugins import PyPreAddEdgesWithGroupContext
 
-        self._py_context = PyPreAddEdgesWithGroupContext(edges, group)
+        self._py_context = PyPreAddEdgesWithGroupContext(edges, group_handle)
 
     @classmethod
     def _from_py_context(
@@ -1817,14 +1864,14 @@ class PreAddEdgesWithGroupContext:
         return context
 
     @property
-    def edges(self) -> List[Tuple[NodeIndex, NodeIndex, Attributes]]:
+    def edges(self) -> List[Tuple[NodeHandle, NodeHandle, Attributes]]:
         """The edges being added."""
         return self._py_context.edges
 
     @property
-    def group(self) -> Group:
-        """The group to add the edges to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group to add the edges to."""
+        return self._py_context.group_handle
 
 
 class PostAddEdgesWithGroupContext:
@@ -1832,15 +1879,19 @@ class PostAddEdgesWithGroupContext:
 
     _py_context: PyPostAddEdgesWithGroupContext
 
-    def __init__(self, edge_indices: List[EdgeIndex]) -> None:
+    def __init__(
+        self, edge_indices: List[EdgeIndex], group_handle: GroupHandle
+    ) -> None:
         """Initializes a PostAddEdgesWithGroupContext.
 
         Args:
             edge_indices (List[EdgeIndex]): The indices of the edges that were added.
+            group_handle (GroupHandle): The handle of the group the edges were added
+                to.
         """
         from graphrecords._graphrecords.plugins import PyPostAddEdgesWithGroupContext
 
-        self._py_context = PyPostAddEdgesWithGroupContext(edge_indices)
+        self._py_context = PyPostAddEdgesWithGroupContext(edge_indices, group_handle)
 
     @classmethod
     def _from_py_context(
@@ -1855,6 +1906,11 @@ class PostAddEdgesWithGroupContext:
         """The indices of the edges that were added."""
         return self._py_context.edge_indices
 
+    @property
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group the edges were added to."""
+        return self._py_context.group_handle
+
 
 class PreAddEdgesWithGroupsContext:
     """Context for the pre_add_edges_with_groups hook."""
@@ -1863,19 +1919,20 @@ class PreAddEdgesWithGroupsContext:
 
     def __init__(
         self,
-        edges: List[Tuple[NodeIndex, NodeIndex, Attributes]],
-        groups: List[Group],
+        edges: List[Tuple[NodeHandle, NodeHandle, Attributes]],
+        group_handles: List[GroupHandle],
     ) -> None:
         """Initializes a PreAddEdgesWithGroupsContext.
 
         Args:
-            edges (List[Tuple[NodeIndex, NodeIndex, Attributes]]): The edges being
+            edges (List[Tuple[NodeHandle, NodeHandle, Attributes]]): The edges being
                 added.
-            groups (List[Group]): The groups to add the edges to.
+            group_handles (List[GroupHandle]): The handles of the groups to add the
+                edges to.
         """
         from graphrecords._graphrecords.plugins import PyPreAddEdgesWithGroupsContext
 
-        self._py_context = PyPreAddEdgesWithGroupsContext(edges, groups)
+        self._py_context = PyPreAddEdgesWithGroupsContext(edges, group_handles)
 
     @classmethod
     def _from_py_context(
@@ -1886,14 +1943,14 @@ class PreAddEdgesWithGroupsContext:
         return context
 
     @property
-    def edges(self) -> List[Tuple[NodeIndex, NodeIndex, Attributes]]:
+    def edges(self) -> List[Tuple[NodeHandle, NodeHandle, Attributes]]:
         """The edges being added."""
         return self._py_context.edges
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to add the edges to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to add the edges to."""
+        return self._py_context.group_handles
 
 
 class PostAddEdgesWithGroupsContext:
@@ -1901,17 +1958,20 @@ class PostAddEdgesWithGroupsContext:
 
     _py_context: PyPostAddEdgesWithGroupsContext
 
-    def __init__(self, edge_indices: List[EdgeIndex], groups: List[Group]) -> None:
+    def __init__(
+        self, edge_indices: List[EdgeIndex], group_handles: List[GroupHandle]
+    ) -> None:
         """Initializes a PostAddEdgesWithGroupsContext.
 
         Args:
             edge_indices (List[EdgeIndex]): The indices of the edges that were
                 added.
-            groups (List[Group]): The groups the edges were added to.
+            group_handles (List[GroupHandle]): The handles of the groups the edges
+                were added to.
         """
         from graphrecords._graphrecords.plugins import PyPostAddEdgesWithGroupsContext
 
-        self._py_context = PyPostAddEdgesWithGroupsContext(edge_indices, groups)
+        self._py_context = PyPostAddEdgesWithGroupsContext(edge_indices, group_handles)
 
     @classmethod
     def _from_py_context(
@@ -1927,9 +1987,9 @@ class PostAddEdgesWithGroupsContext:
         return self._py_context.edge_indices
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the edges were added to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the edges were added to."""
+        return self._py_context.group_handles
 
 
 class PreAddEdgesDataframesContext:
@@ -1998,21 +2058,23 @@ class PreAddEdgesDataframesWithGroupContext:
     _py_context: PyPreAddEdgesDataframesWithGroupContext
 
     def __init__(
-        self, edges_dataframes: List[PolarsEdgeDataFrameInput], group: Group
+        self,
+        edges_dataframes: List[PolarsEdgeDataFrameInput],
+        group_handle: GroupHandle,
     ) -> None:
         """Initializes a PreAddEdgesDataframesWithGroupContext.
 
         Args:
             edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
                 inputs.
-            group (Group): The group to add the edges to.
+            group_handle (GroupHandle): The handle of the group to add the edges to.
         """
         from graphrecords._graphrecords.plugins import (
             PyPreAddEdgesDataframesWithGroupContext,
         )
 
         self._py_context = PyPreAddEdgesDataframesWithGroupContext(
-            edges_dataframes, group
+            edges_dataframes, group_handle
         )
 
     @classmethod
@@ -2029,9 +2091,9 @@ class PreAddEdgesDataframesWithGroupContext:
         return self._py_context.edges_dataframes
 
     @property
-    def group(self) -> Group:
-        """The group to add the edges to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group to add the edges to."""
+        return self._py_context.group_handle
 
 
 class PostAddEdgesDataframesWithGroupContext:
@@ -2040,21 +2102,24 @@ class PostAddEdgesDataframesWithGroupContext:
     _py_context: PyPostAddEdgesDataframesWithGroupContext
 
     def __init__(
-        self, edges_dataframes: List[PolarsEdgeDataFrameInput], group: Group
+        self,
+        edges_dataframes: List[PolarsEdgeDataFrameInput],
+        group_handle: GroupHandle,
     ) -> None:
         """Initializes a PostAddEdgesDataframesWithGroupContext.
 
         Args:
             edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
                 inputs.
-            group (Group): The group the edges were added to.
+            group_handle (GroupHandle): The handle of the group the edges were added
+                to.
         """
         from graphrecords._graphrecords.plugins import (
             PyPostAddEdgesDataframesWithGroupContext,
         )
 
         self._py_context = PyPostAddEdgesDataframesWithGroupContext(
-            edges_dataframes, group
+            edges_dataframes, group_handle
         )
 
     @classmethod
@@ -2071,9 +2136,9 @@ class PostAddEdgesDataframesWithGroupContext:
         return self._py_context.edges_dataframes
 
     @property
-    def group(self) -> Group:
-        """The group the edges were added to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group the edges were added to."""
+        return self._py_context.group_handle
 
 
 class PreAddEdgesDataframesWithGroupsContext:
@@ -2082,21 +2147,24 @@ class PreAddEdgesDataframesWithGroupsContext:
     _py_context: PyPreAddEdgesDataframesWithGroupsContext
 
     def __init__(
-        self, edges_dataframes: List[PolarsEdgeDataFrameInput], groups: List[Group]
+        self,
+        edges_dataframes: List[PolarsEdgeDataFrameInput],
+        group_handles: List[GroupHandle],
     ) -> None:
         """Initializes a PreAddEdgesDataframesWithGroupsContext.
 
         Args:
             edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
                 inputs.
-            groups (List[Group]): The groups to add the edges to.
+            group_handles (List[GroupHandle]): The handles of the groups to add the
+                edges to.
         """
         from graphrecords._graphrecords.plugins import (
             PyPreAddEdgesDataframesWithGroupsContext,
         )
 
         self._py_context = PyPreAddEdgesDataframesWithGroupsContext(
-            edges_dataframes, groups
+            edges_dataframes, group_handles
         )
 
     @classmethod
@@ -2113,9 +2181,9 @@ class PreAddEdgesDataframesWithGroupsContext:
         return self._py_context.edges_dataframes
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to add the edges to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to add the edges to."""
+        return self._py_context.group_handles
 
 
 class PostAddEdgesDataframesWithGroupsContext:
@@ -2124,21 +2192,24 @@ class PostAddEdgesDataframesWithGroupsContext:
     _py_context: PyPostAddEdgesDataframesWithGroupsContext
 
     def __init__(
-        self, edges_dataframes: List[PolarsEdgeDataFrameInput], groups: List[Group]
+        self,
+        edges_dataframes: List[PolarsEdgeDataFrameInput],
+        group_handles: List[GroupHandle],
     ) -> None:
         """Initializes a PostAddEdgesDataframesWithGroupsContext.
 
         Args:
             edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
                 inputs.
-            groups (List[Group]): The groups the edges were added to.
+            group_handles (List[GroupHandle]): The handles of the groups the edges
+                were added to.
         """
         from graphrecords._graphrecords.plugins import (
             PyPostAddEdgesDataframesWithGroupsContext,
         )
 
         self._py_context = PyPostAddEdgesDataframesWithGroupsContext(
-            edges_dataframes, groups
+            edges_dataframes, group_handles
         )
 
     @classmethod
@@ -2155,9 +2226,9 @@ class PostAddEdgesDataframesWithGroupsContext:
         return self._py_context.edges_dataframes
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the edges were added to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the edges were added to."""
+        return self._py_context.group_handles
 
 
 class PreAddGroupContext:
@@ -2168,21 +2239,21 @@ class PreAddGroupContext:
     def __init__(
         self,
         group: Group,
-        node_indices: Optional[List[NodeIndex]],
+        node_handles: Optional[List[NodeHandle]],
         edge_indices: Optional[List[EdgeIndex]],
     ) -> None:
         """Initializes a PreAddGroupContext.
 
         Args:
             group (Group): The group being added.
-            node_indices (Optional[List[NodeIndex]]): The node indices to add to
-                the group.
+            node_handles (Optional[List[NodeHandle]]): The handles of the nodes to
+                add to the group.
             edge_indices (Optional[List[EdgeIndex]]): The edge indices to add to
                 the group.
         """
         from graphrecords._graphrecords.plugins import PyPreAddGroupContext
 
-        self._py_context = PyPreAddGroupContext(group, node_indices, edge_indices)
+        self._py_context = PyPreAddGroupContext(group, node_handles, edge_indices)
 
     @classmethod
     def _from_py_context(cls, py_context: PyPreAddGroupContext) -> PreAddGroupContext:
@@ -2196,9 +2267,9 @@ class PreAddGroupContext:
         return self._py_context.group
 
     @property
-    def node_indices(self) -> Optional[List[NodeIndex]]:
-        """The node indices to add to the group."""
-        return self._py_context.node_indices
+    def node_handles(self) -> Optional[List[NodeHandle]]:
+        """The handles of the nodes to add to the group."""
+        return self._py_context.node_handles
 
     @property
     def edge_indices(self) -> Optional[List[EdgeIndex]]:
@@ -2214,21 +2285,21 @@ class PostAddGroupContext:
     def __init__(
         self,
         group: Group,
-        node_indices: Optional[List[NodeIndex]],
+        node_handles: Optional[List[NodeHandle]],
         edge_indices: Optional[List[EdgeIndex]],
     ) -> None:
         """Initializes a PostAddGroupContext.
 
         Args:
             group (Group): The group that was added.
-            node_indices (Optional[List[NodeIndex]]): The node indices added to
-                the group.
+            node_handles (Optional[List[NodeHandle]]): The handles of the nodes
+                added to the group.
             edge_indices (Optional[List[EdgeIndex]]): The edge indices added to
                 the group.
         """
         from graphrecords._graphrecords.plugins import PyPostAddGroupContext
 
-        self._py_context = PyPostAddGroupContext(group, node_indices, edge_indices)
+        self._py_context = PyPostAddGroupContext(group, node_handles, edge_indices)
 
     @classmethod
     def _from_py_context(cls, py_context: PyPostAddGroupContext) -> PostAddGroupContext:
@@ -2242,9 +2313,9 @@ class PostAddGroupContext:
         return self._py_context.group
 
     @property
-    def node_indices(self) -> Optional[List[NodeIndex]]:
-        """The node indices added to the group."""
-        return self._py_context.node_indices
+    def node_handles(self) -> Optional[List[NodeHandle]]:
+        """The handles of the nodes added to the group."""
+        return self._py_context.node_handles
 
     @property
     def edge_indices(self) -> Optional[List[EdgeIndex]]:
@@ -2257,15 +2328,15 @@ class PreRemoveGroupContext:
 
     _py_context: PyPreRemoveGroupContext
 
-    def __init__(self, group: Group) -> None:
+    def __init__(self, group_handle: GroupHandle) -> None:
         """Initializes a PreRemoveGroupContext.
 
         Args:
-            group (Group): The group being removed.
+            group_handle (GroupHandle): The handle of the group being removed.
         """
         from graphrecords._graphrecords.plugins import PyPreRemoveGroupContext
 
-        self._py_context = PyPreRemoveGroupContext(group)
+        self._py_context = PyPreRemoveGroupContext(group_handle)
 
     @classmethod
     def _from_py_context(
@@ -2276,9 +2347,9 @@ class PreRemoveGroupContext:
         return context
 
     @property
-    def group(self) -> Group:
-        """The group being removed."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group being removed."""
+        return self._py_context.group_handle
 
 
 class PostRemoveGroupContext:
@@ -2286,15 +2357,15 @@ class PostRemoveGroupContext:
 
     _py_context: PyPostRemoveGroupContext
 
-    def __init__(self, group: Group) -> None:
+    def __init__(self, group_handle: GroupHandle) -> None:
         """Initializes a PostRemoveGroupContext.
 
         Args:
-            group (Group): The group that was removed.
+            group_handle (GroupHandle): The handle of the group that was removed.
         """
         from graphrecords._graphrecords.plugins import PyPostRemoveGroupContext
 
-        self._py_context = PyPostRemoveGroupContext(group)
+        self._py_context = PyPostRemoveGroupContext(group_handle)
 
     @classmethod
     def _from_py_context(
@@ -2305,9 +2376,9 @@ class PostRemoveGroupContext:
         return context
 
     @property
-    def group(self) -> Group:
-        """The group that was removed."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group that was removed."""
+        return self._py_context.group_handle
 
 
 class PreAddNodeToGroupContext:
@@ -2315,16 +2386,17 @@ class PreAddNodeToGroupContext:
 
     _py_context: PyPreAddNodeToGroupContext
 
-    def __init__(self, group: Group, node_index: NodeIndex) -> None:
+    def __init__(self, group_handle: GroupHandle, node_handle: NodeHandle) -> None:
         """Initializes a PreAddNodeToGroupContext.
 
         Args:
-            group (Group): The group to add the node to.
-            node_index (NodeIndex): The index of the node being added to the group.
+            group_handle (GroupHandle): The handle of the group to add the node to.
+            node_handle (NodeHandle): The handle of the node being added to the
+                group.
         """
         from graphrecords._graphrecords.plugins import PyPreAddNodeToGroupContext
 
-        self._py_context = PyPreAddNodeToGroupContext(group, node_index)
+        self._py_context = PyPreAddNodeToGroupContext(group_handle, node_handle)
 
     @classmethod
     def _from_py_context(
@@ -2335,14 +2407,14 @@ class PreAddNodeToGroupContext:
         return context
 
     @property
-    def group(self) -> Group:
-        """The group to add the node to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group to add the node to."""
+        return self._py_context.group_handle
 
     @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being added to the group."""
-        return self._py_context.node_index
+    def node_handle(self) -> NodeHandle:
+        """The handle of the node being added to the group."""
+        return self._py_context.node_handle
 
 
 class PostAddNodeToGroupContext:
@@ -2350,16 +2422,18 @@ class PostAddNodeToGroupContext:
 
     _py_context: PyPostAddNodeToGroupContext
 
-    def __init__(self, group: Group, node_index: NodeIndex) -> None:
+    def __init__(self, group_handle: GroupHandle, node_handle: NodeHandle) -> None:
         """Initializes a PostAddNodeToGroupContext.
 
         Args:
-            group (Group): The group the node was added to.
-            node_index (NodeIndex): The index of the node that was added to the group.
+            group_handle (GroupHandle): The handle of the group the node was added
+                to.
+            node_handle (NodeHandle): The handle of the node that was added to the
+                group.
         """
         from graphrecords._graphrecords.plugins import PyPostAddNodeToGroupContext
 
-        self._py_context = PyPostAddNodeToGroupContext(group, node_index)
+        self._py_context = PyPostAddNodeToGroupContext(group_handle, node_handle)
 
     @classmethod
     def _from_py_context(
@@ -2370,14 +2444,14 @@ class PostAddNodeToGroupContext:
         return context
 
     @property
-    def group(self) -> Group:
-        """The group the node was added to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group the node was added to."""
+        return self._py_context.group_handle
 
     @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was added to the group."""
-        return self._py_context.node_index
+    def node_handle(self) -> NodeHandle:
+        """The handle of the node that was added to the group."""
+        return self._py_context.node_handle
 
 
 class PreAddNodeToGroupsContext:
@@ -2385,16 +2459,19 @@ class PreAddNodeToGroupsContext:
 
     _py_context: PyPreAddNodeToGroupsContext
 
-    def __init__(self, groups: List[Group], node_index: NodeIndex) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], node_handle: NodeHandle
+    ) -> None:
         """Initializes a PreAddNodeToGroupsContext.
 
         Args:
-            groups (List[Group]): The groups to add the node to.
-            node_index (NodeIndex): The index of the node being added to the groups.
+            group_handles (List[GroupHandle]): The handles of the groups to add the
+                node to.
+            node_handle (NodeHandle): The handle of the node being added to the groups.
         """
         from graphrecords._graphrecords.plugins import PyPreAddNodeToGroupsContext
 
-        self._py_context = PyPreAddNodeToGroupsContext(groups, node_index)
+        self._py_context = PyPreAddNodeToGroupsContext(group_handles, node_handle)
 
     @classmethod
     def _from_py_context(
@@ -2405,14 +2482,14 @@ class PreAddNodeToGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to add the node to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to add the node to."""
+        return self._py_context.group_handles
 
     @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being added to the groups."""
-        return self._py_context.node_index
+    def node_handle(self) -> NodeHandle:
+        """The handle of the node being added to the groups."""
+        return self._py_context.node_handle
 
 
 class PostAddNodeToGroupsContext:
@@ -2420,16 +2497,20 @@ class PostAddNodeToGroupsContext:
 
     _py_context: PyPostAddNodeToGroupsContext
 
-    def __init__(self, groups: List[Group], node_index: NodeIndex) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], node_handle: NodeHandle
+    ) -> None:
         """Initializes a PostAddNodeToGroupsContext.
 
         Args:
-            groups (List[Group]): The groups the node was added to.
-            node_index (NodeIndex): The index of the node that was added to the groups.
+            group_handles (List[GroupHandle]): The handles of the groups the node
+                was added to.
+            node_handle (NodeHandle): The handle of the node that was added to the
+                groups.
         """
         from graphrecords._graphrecords.plugins import PyPostAddNodeToGroupsContext
 
-        self._py_context = PyPostAddNodeToGroupsContext(groups, node_index)
+        self._py_context = PyPostAddNodeToGroupsContext(group_handles, node_handle)
 
     @classmethod
     def _from_py_context(
@@ -2440,14 +2521,14 @@ class PostAddNodeToGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the node was added to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the node was added to."""
+        return self._py_context.group_handles
 
     @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was added to the groups."""
-        return self._py_context.node_index
+    def node_handle(self) -> NodeHandle:
+        """The handle of the node that was added to the groups."""
+        return self._py_context.node_handle
 
 
 class PreAddNodesToGroupsContext:
@@ -2455,17 +2536,20 @@ class PreAddNodesToGroupsContext:
 
     _py_context: PyPreAddNodesToGroupsContext
 
-    def __init__(self, groups: List[Group], node_indices: List[NodeIndex]) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], node_handles: List[NodeHandle]
+    ) -> None:
         """Initializes a PreAddNodesToGroupsContext.
 
         Args:
-            groups (List[Group]): The groups to add the nodes to.
-            node_indices (List[NodeIndex]): The indices of the nodes being added
+            group_handles (List[GroupHandle]): The handles of the groups to add the
+                nodes to.
+            node_handles (List[NodeHandle]): The handles of the nodes being added
                 to the groups.
         """
         from graphrecords._graphrecords.plugins import PyPreAddNodesToGroupsContext
 
-        self._py_context = PyPreAddNodesToGroupsContext(groups, node_indices)
+        self._py_context = PyPreAddNodesToGroupsContext(group_handles, node_handles)
 
     @classmethod
     def _from_py_context(
@@ -2476,14 +2560,14 @@ class PreAddNodesToGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to add the nodes to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to add the nodes to."""
+        return self._py_context.group_handles
 
     @property
-    def node_indices(self) -> List[NodeIndex]:
-        """The indices of the nodes being added to the groups."""
-        return self._py_context.node_indices
+    def node_handles(self) -> List[NodeHandle]:
+        """The handles of the nodes being added to the groups."""
+        return self._py_context.node_handles
 
 
 class PostAddNodesToGroupsContext:
@@ -2491,17 +2575,20 @@ class PostAddNodesToGroupsContext:
 
     _py_context: PyPostAddNodesToGroupsContext
 
-    def __init__(self, groups: List[Group], node_indices: List[NodeIndex]) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], node_handles: List[NodeHandle]
+    ) -> None:
         """Initializes a PostAddNodesToGroupsContext.
 
         Args:
-            groups (List[Group]): The groups the nodes were added to.
-            node_indices (List[NodeIndex]): The indices of the nodes that were
+            group_handles (List[GroupHandle]): The handles of the groups the nodes
+                were added to.
+            node_handles (List[NodeHandle]): The handles of the nodes that were
                 added to the groups.
         """
         from graphrecords._graphrecords.plugins import PyPostAddNodesToGroupsContext
 
-        self._py_context = PyPostAddNodesToGroupsContext(groups, node_indices)
+        self._py_context = PyPostAddNodesToGroupsContext(group_handles, node_handles)
 
     @classmethod
     def _from_py_context(
@@ -2512,14 +2599,14 @@ class PostAddNodesToGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the nodes were added to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the nodes were added to."""
+        return self._py_context.group_handles
 
     @property
-    def node_indices(self) -> List[NodeIndex]:
-        """The indices of the nodes that were added to the groups."""
-        return self._py_context.node_indices
+    def node_handles(self) -> List[NodeHandle]:
+        """The handles of the nodes that were added to the groups."""
+        return self._py_context.node_handles
 
 
 class PreAddEdgeToGroupContext:
@@ -2527,16 +2614,16 @@ class PreAddEdgeToGroupContext:
 
     _py_context: PyPreAddEdgeToGroupContext
 
-    def __init__(self, group: Group, edge_index: EdgeIndex) -> None:
+    def __init__(self, group_handle: GroupHandle, edge_index: EdgeIndex) -> None:
         """Initializes a PreAddEdgeToGroupContext.
 
         Args:
-            group (Group): The group to add the edge to.
+            group_handle (GroupHandle): The handle of the group to add the edge to.
             edge_index (EdgeIndex): The index of the edge being added to the group.
         """
         from graphrecords._graphrecords.plugins import PyPreAddEdgeToGroupContext
 
-        self._py_context = PyPreAddEdgeToGroupContext(group, edge_index)
+        self._py_context = PyPreAddEdgeToGroupContext(group_handle, edge_index)
 
     @classmethod
     def _from_py_context(
@@ -2547,9 +2634,9 @@ class PreAddEdgeToGroupContext:
         return context
 
     @property
-    def group(self) -> Group:
-        """The group to add the edge to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group to add the edge to."""
+        return self._py_context.group_handle
 
     @property
     def edge_index(self) -> EdgeIndex:
@@ -2562,16 +2649,17 @@ class PostAddEdgeToGroupContext:
 
     _py_context: PyPostAddEdgeToGroupContext
 
-    def __init__(self, group: Group, edge_index: EdgeIndex) -> None:
+    def __init__(self, group_handle: GroupHandle, edge_index: EdgeIndex) -> None:
         """Initializes a PostAddEdgeToGroupContext.
 
         Args:
-            group (Group): The group the edge was added to.
+            group_handle (GroupHandle): The handle of the group the edge was added
+                to.
             edge_index (EdgeIndex): The index of the edge that was added to the group.
         """
         from graphrecords._graphrecords.plugins import PyPostAddEdgeToGroupContext
 
-        self._py_context = PyPostAddEdgeToGroupContext(group, edge_index)
+        self._py_context = PyPostAddEdgeToGroupContext(group_handle, edge_index)
 
     @classmethod
     def _from_py_context(
@@ -2582,9 +2670,9 @@ class PostAddEdgeToGroupContext:
         return context
 
     @property
-    def group(self) -> Group:
-        """The group the edge was added to."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group the edge was added to."""
+        return self._py_context.group_handle
 
     @property
     def edge_index(self) -> EdgeIndex:
@@ -2597,16 +2685,17 @@ class PreAddEdgeToGroupsContext:
 
     _py_context: PyPreAddEdgeToGroupsContext
 
-    def __init__(self, groups: List[Group], edge_index: EdgeIndex) -> None:
+    def __init__(self, group_handles: List[GroupHandle], edge_index: EdgeIndex) -> None:
         """Initializes a PreAddEdgeToGroupsContext.
 
         Args:
-            groups (List[Group]): The groups to add the edge to.
+            group_handles (List[GroupHandle]): The handles of the groups to add the
+                edge to.
             edge_index (EdgeIndex): The index of the edge being added to the groups.
         """
         from graphrecords._graphrecords.plugins import PyPreAddEdgeToGroupsContext
 
-        self._py_context = PyPreAddEdgeToGroupsContext(groups, edge_index)
+        self._py_context = PyPreAddEdgeToGroupsContext(group_handles, edge_index)
 
     @classmethod
     def _from_py_context(
@@ -2617,9 +2706,9 @@ class PreAddEdgeToGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to add the edge to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to add the edge to."""
+        return self._py_context.group_handles
 
     @property
     def edge_index(self) -> EdgeIndex:
@@ -2632,16 +2721,17 @@ class PostAddEdgeToGroupsContext:
 
     _py_context: PyPostAddEdgeToGroupsContext
 
-    def __init__(self, groups: List[Group], edge_index: EdgeIndex) -> None:
+    def __init__(self, group_handles: List[GroupHandle], edge_index: EdgeIndex) -> None:
         """Initializes a PostAddEdgeToGroupsContext.
 
         Args:
-            groups (List[Group]): The groups the edge was added to.
+            group_handles (List[GroupHandle]): The handles of the groups the edge
+                was added to.
             edge_index (EdgeIndex): The index of the edge that was added to the groups.
         """
         from graphrecords._graphrecords.plugins import PyPostAddEdgeToGroupsContext
 
-        self._py_context = PyPostAddEdgeToGroupsContext(groups, edge_index)
+        self._py_context = PyPostAddEdgeToGroupsContext(group_handles, edge_index)
 
     @classmethod
     def _from_py_context(
@@ -2652,9 +2742,9 @@ class PostAddEdgeToGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the edge was added to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the edge was added to."""
+        return self._py_context.group_handles
 
     @property
     def edge_index(self) -> EdgeIndex:
@@ -2667,17 +2757,20 @@ class PreAddEdgesToGroupsContext:
 
     _py_context: PyPreAddEdgesToGroupsContext
 
-    def __init__(self, groups: List[Group], edge_indices: List[EdgeIndex]) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], edge_indices: List[EdgeIndex]
+    ) -> None:
         """Initializes a PreAddEdgesToGroupsContext.
 
         Args:
-            groups (List[Group]): The groups to add the edges to.
+            group_handles (List[GroupHandle]): The handles of the groups to add the
+                edges to.
             edge_indices (List[EdgeIndex]): The indices of the edges being added
                 to the groups.
         """
         from graphrecords._graphrecords.plugins import PyPreAddEdgesToGroupsContext
 
-        self._py_context = PyPreAddEdgesToGroupsContext(groups, edge_indices)
+        self._py_context = PyPreAddEdgesToGroupsContext(group_handles, edge_indices)
 
     @classmethod
     def _from_py_context(
@@ -2688,9 +2781,9 @@ class PreAddEdgesToGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to add the edges to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to add the edges to."""
+        return self._py_context.group_handles
 
     @property
     def edge_indices(self) -> List[EdgeIndex]:
@@ -2703,17 +2796,20 @@ class PostAddEdgesToGroupsContext:
 
     _py_context: PyPostAddEdgesToGroupsContext
 
-    def __init__(self, groups: List[Group], edge_indices: List[EdgeIndex]) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], edge_indices: List[EdgeIndex]
+    ) -> None:
         """Initializes a PostAddEdgesToGroupsContext.
 
         Args:
-            groups (List[Group]): The groups the edges were added to.
+            group_handles (List[GroupHandle]): The handles of the groups the edges
+                were added to.
             edge_indices (List[EdgeIndex]): The indices of the edges that were
                 added to the groups.
         """
         from graphrecords._graphrecords.plugins import PyPostAddEdgesToGroupsContext
 
-        self._py_context = PyPostAddEdgesToGroupsContext(groups, edge_indices)
+        self._py_context = PyPostAddEdgesToGroupsContext(group_handles, edge_indices)
 
     @classmethod
     def _from_py_context(
@@ -2724,9 +2820,9 @@ class PostAddEdgesToGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the edges were added to."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the edges were added to."""
+        return self._py_context.group_handles
 
     @property
     def edge_indices(self) -> List[EdgeIndex]:
@@ -2739,16 +2835,18 @@ class PreRemoveNodeFromGroupContext:
 
     _py_context: PyPreRemoveNodeFromGroupContext
 
-    def __init__(self, group: Group, node_index: NodeIndex) -> None:
+    def __init__(self, group_handle: GroupHandle, node_handle: NodeHandle) -> None:
         """Initializes a PreRemoveNodeFromGroupContext.
 
         Args:
-            group (Group): The group to remove the node from.
-            node_index (NodeIndex): The index of the node being removed from the group.
+            group_handle (GroupHandle): The handle of the group to remove the node
+                from.
+            node_handle (NodeHandle): The handle of the node being removed from the
+                group.
         """
         from graphrecords._graphrecords.plugins import PyPreRemoveNodeFromGroupContext
 
-        self._py_context = PyPreRemoveNodeFromGroupContext(group, node_index)
+        self._py_context = PyPreRemoveNodeFromGroupContext(group_handle, node_handle)
 
     @classmethod
     def _from_py_context(
@@ -2759,14 +2857,14 @@ class PreRemoveNodeFromGroupContext:
         return context
 
     @property
-    def group(self) -> Group:
-        """The group to remove the node from."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group to remove the node from."""
+        return self._py_context.group_handle
 
     @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being removed from the group."""
-        return self._py_context.node_index
+    def node_handle(self) -> NodeHandle:
+        """The handle of the node being removed from the group."""
+        return self._py_context.node_handle
 
 
 class PostRemoveNodeFromGroupContext:
@@ -2774,17 +2872,18 @@ class PostRemoveNodeFromGroupContext:
 
     _py_context: PyPostRemoveNodeFromGroupContext
 
-    def __init__(self, group: Group, node_index: NodeIndex) -> None:
+    def __init__(self, group_handle: GroupHandle, node_handle: NodeHandle) -> None:
         """Initializes a PostRemoveNodeFromGroupContext.
 
         Args:
-            group (Group): The group the node was removed from.
-            node_index (NodeIndex): The index of the node that was removed from
+            group_handle (GroupHandle): The handle of the group the node was removed
+                from.
+            node_handle (NodeHandle): The handle of the node that was removed from
                 the group.
         """
         from graphrecords._graphrecords.plugins import PyPostRemoveNodeFromGroupContext
 
-        self._py_context = PyPostRemoveNodeFromGroupContext(group, node_index)
+        self._py_context = PyPostRemoveNodeFromGroupContext(group_handle, node_handle)
 
     @classmethod
     def _from_py_context(
@@ -2795,14 +2894,14 @@ class PostRemoveNodeFromGroupContext:
         return context
 
     @property
-    def group(self) -> Group:
-        """The group the node was removed from."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group the node was removed from."""
+        return self._py_context.group_handle
 
     @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was removed from the group."""
-        return self._py_context.node_index
+    def node_handle(self) -> NodeHandle:
+        """The handle of the node that was removed from the group."""
+        return self._py_context.node_handle
 
 
 class PreRemoveNodeFromGroupsContext:
@@ -2810,16 +2909,20 @@ class PreRemoveNodeFromGroupsContext:
 
     _py_context: PyPreRemoveNodeFromGroupsContext
 
-    def __init__(self, groups: List[Group], node_index: NodeIndex) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], node_handle: NodeHandle
+    ) -> None:
         """Initializes a PreRemoveNodeFromGroupsContext.
 
         Args:
-            groups (List[Group]): The groups to remove the node from.
-            node_index (NodeIndex): The index of the node being removed from the groups.
+            group_handles (List[GroupHandle]): The handles of the groups to remove
+                the node from.
+            node_handle (NodeHandle): The handle of the node being removed from the
+                groups.
         """
         from graphrecords._graphrecords.plugins import PyPreRemoveNodeFromGroupsContext
 
-        self._py_context = PyPreRemoveNodeFromGroupsContext(groups, node_index)
+        self._py_context = PyPreRemoveNodeFromGroupsContext(group_handles, node_handle)
 
     @classmethod
     def _from_py_context(
@@ -2830,14 +2933,14 @@ class PreRemoveNodeFromGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to remove the node from."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to remove the node from."""
+        return self._py_context.group_handles
 
     @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being removed from the groups."""
-        return self._py_context.node_index
+    def node_handle(self) -> NodeHandle:
+        """The handle of the node being removed from the groups."""
+        return self._py_context.node_handle
 
 
 class PostRemoveNodeFromGroupsContext:
@@ -2845,19 +2948,22 @@ class PostRemoveNodeFromGroupsContext:
 
     _py_context: PyPostRemoveNodeFromGroupsContext
 
-    def __init__(self, groups: List[Group], node_index: NodeIndex) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], node_handle: NodeHandle
+    ) -> None:
         """Initializes a PostRemoveNodeFromGroupsContext.
 
         Args:
-            groups (List[Group]): The groups the node was removed from.
-            node_index (NodeIndex): The index of the node that was removed from
+            group_handles (List[GroupHandle]): The handles of the groups the node
+                was removed from.
+            node_handle (NodeHandle): The handle of the node that was removed from
                 the groups.
         """
         from graphrecords._graphrecords.plugins import (
             PyPostRemoveNodeFromGroupsContext,
         )
 
-        self._py_context = PyPostRemoveNodeFromGroupsContext(groups, node_index)
+        self._py_context = PyPostRemoveNodeFromGroupsContext(group_handles, node_handle)
 
     @classmethod
     def _from_py_context(
@@ -2868,14 +2974,14 @@ class PostRemoveNodeFromGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the node was removed from."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the node was removed from."""
+        return self._py_context.group_handles
 
     @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was removed from the groups."""
-        return self._py_context.node_index
+    def node_handle(self) -> NodeHandle:
+        """The handle of the node that was removed from the groups."""
+        return self._py_context.node_handle
 
 
 class PreRemoveNodesFromGroupsContext:
@@ -2883,19 +2989,24 @@ class PreRemoveNodesFromGroupsContext:
 
     _py_context: PyPreRemoveNodesFromGroupsContext
 
-    def __init__(self, groups: List[Group], node_indices: List[NodeIndex]) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], node_handles: List[NodeHandle]
+    ) -> None:
         """Initializes a PreRemoveNodesFromGroupsContext.
 
         Args:
-            groups (List[Group]): The groups to remove the nodes from.
-            node_indices (List[NodeIndex]): The indices of the nodes being removed
+            group_handles (List[GroupHandle]): The handles of the groups to remove
+                the nodes from.
+            node_handles (List[NodeHandle]): The handles of the nodes being removed
                 from the groups.
         """
         from graphrecords._graphrecords.plugins import (
             PyPreRemoveNodesFromGroupsContext,
         )
 
-        self._py_context = PyPreRemoveNodesFromGroupsContext(groups, node_indices)
+        self._py_context = PyPreRemoveNodesFromGroupsContext(
+            group_handles, node_handles
+        )
 
     @classmethod
     def _from_py_context(
@@ -2906,14 +3017,14 @@ class PreRemoveNodesFromGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to remove the nodes from."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to remove the nodes from."""
+        return self._py_context.group_handles
 
     @property
-    def node_indices(self) -> List[NodeIndex]:
-        """The indices of the nodes being removed from the groups."""
-        return self._py_context.node_indices
+    def node_handles(self) -> List[NodeHandle]:
+        """The handles of the nodes being removed from the groups."""
+        return self._py_context.node_handles
 
 
 class PostRemoveNodesFromGroupsContext:
@@ -2921,19 +3032,24 @@ class PostRemoveNodesFromGroupsContext:
 
     _py_context: PyPostRemoveNodesFromGroupsContext
 
-    def __init__(self, groups: List[Group], node_indices: List[NodeIndex]) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], node_handles: List[NodeHandle]
+    ) -> None:
         """Initializes a PostRemoveNodesFromGroupsContext.
 
         Args:
-            groups (List[Group]): The groups the nodes were removed from.
-            node_indices (List[NodeIndex]): The indices of the nodes that were
+            group_handles (List[GroupHandle]): The handles of the groups the nodes
+                were removed from.
+            node_handles (List[NodeHandle]): The handles of the nodes that were
                 removed from the groups.
         """
         from graphrecords._graphrecords.plugins import (
             PyPostRemoveNodesFromGroupsContext,
         )
 
-        self._py_context = PyPostRemoveNodesFromGroupsContext(groups, node_indices)
+        self._py_context = PyPostRemoveNodesFromGroupsContext(
+            group_handles, node_handles
+        )
 
     @classmethod
     def _from_py_context(
@@ -2944,14 +3060,14 @@ class PostRemoveNodesFromGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the nodes were removed from."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the nodes were removed from."""
+        return self._py_context.group_handles
 
     @property
-    def node_indices(self) -> List[NodeIndex]:
-        """The indices of the nodes that were removed from the groups."""
-        return self._py_context.node_indices
+    def node_handles(self) -> List[NodeHandle]:
+        """The handles of the nodes that were removed from the groups."""
+        return self._py_context.node_handles
 
 
 class PreRemoveEdgeFromGroupContext:
@@ -2959,16 +3075,17 @@ class PreRemoveEdgeFromGroupContext:
 
     _py_context: PyPreRemoveEdgeFromGroupContext
 
-    def __init__(self, group: Group, edge_index: EdgeIndex) -> None:
+    def __init__(self, group_handle: GroupHandle, edge_index: EdgeIndex) -> None:
         """Initializes a PreRemoveEdgeFromGroupContext.
 
         Args:
-            group (Group): The group to remove the edge from.
+            group_handle (GroupHandle): The handle of the group to remove the edge
+                from.
             edge_index (EdgeIndex): The index of the edge being removed from the group.
         """
         from graphrecords._graphrecords.plugins import PyPreRemoveEdgeFromGroupContext
 
-        self._py_context = PyPreRemoveEdgeFromGroupContext(group, edge_index)
+        self._py_context = PyPreRemoveEdgeFromGroupContext(group_handle, edge_index)
 
     @classmethod
     def _from_py_context(
@@ -2979,9 +3096,9 @@ class PreRemoveEdgeFromGroupContext:
         return context
 
     @property
-    def group(self) -> Group:
-        """The group to remove the edge from."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group to remove the edge from."""
+        return self._py_context.group_handle
 
     @property
     def edge_index(self) -> EdgeIndex:
@@ -2994,17 +3111,18 @@ class PostRemoveEdgeFromGroupContext:
 
     _py_context: PyPostRemoveEdgeFromGroupContext
 
-    def __init__(self, group: Group, edge_index: EdgeIndex) -> None:
+    def __init__(self, group_handle: GroupHandle, edge_index: EdgeIndex) -> None:
         """Initializes a PostRemoveEdgeFromGroupContext.
 
         Args:
-            group (Group): The group the edge was removed from.
+            group_handle (GroupHandle): The handle of the group the edge was removed
+                from.
             edge_index (EdgeIndex): The index of the edge that was removed from
                 the group.
         """
         from graphrecords._graphrecords.plugins import PyPostRemoveEdgeFromGroupContext
 
-        self._py_context = PyPostRemoveEdgeFromGroupContext(group, edge_index)
+        self._py_context = PyPostRemoveEdgeFromGroupContext(group_handle, edge_index)
 
     @classmethod
     def _from_py_context(
@@ -3015,9 +3133,9 @@ class PostRemoveEdgeFromGroupContext:
         return context
 
     @property
-    def group(self) -> Group:
-        """The group the edge was removed from."""
-        return self._py_context.group
+    def group_handle(self) -> GroupHandle:
+        """The handle of the group the edge was removed from."""
+        return self._py_context.group_handle
 
     @property
     def edge_index(self) -> EdgeIndex:
@@ -3030,18 +3148,19 @@ class PreRemoveEdgeFromGroupsContext:
 
     _py_context: PyPreRemoveEdgeFromGroupsContext
 
-    def __init__(self, groups: List[Group], edge_index: EdgeIndex) -> None:
+    def __init__(self, group_handles: List[GroupHandle], edge_index: EdgeIndex) -> None:
         """Initializes a PreRemoveEdgeFromGroupsContext.
 
         Args:
-            groups (List[Group]): The groups to remove the edge from.
+            group_handles (List[GroupHandle]): The handles of the groups to remove
+                the edge from.
             edge_index (EdgeIndex): The index of the edge being removed from the groups.
         """
         from graphrecords._graphrecords.plugins import (
             PyPreRemoveEdgeFromGroupsContext,
         )
 
-        self._py_context = PyPreRemoveEdgeFromGroupsContext(groups, edge_index)
+        self._py_context = PyPreRemoveEdgeFromGroupsContext(group_handles, edge_index)
 
     @classmethod
     def _from_py_context(
@@ -3052,9 +3171,9 @@ class PreRemoveEdgeFromGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to remove the edge from."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to remove the edge from."""
+        return self._py_context.group_handles
 
     @property
     def edge_index(self) -> EdgeIndex:
@@ -3067,11 +3186,12 @@ class PostRemoveEdgeFromGroupsContext:
 
     _py_context: PyPostRemoveEdgeFromGroupsContext
 
-    def __init__(self, groups: List[Group], edge_index: EdgeIndex) -> None:
+    def __init__(self, group_handles: List[GroupHandle], edge_index: EdgeIndex) -> None:
         """Initializes a PostRemoveEdgeFromGroupsContext.
 
         Args:
-            groups (List[Group]): The groups the edge was removed from.
+            group_handles (List[GroupHandle]): The handles of the groups the edge
+                was removed from.
             edge_index (EdgeIndex): The index of the edge that was removed from
                 the groups.
         """
@@ -3079,7 +3199,7 @@ class PostRemoveEdgeFromGroupsContext:
             PyPostRemoveEdgeFromGroupsContext,
         )
 
-        self._py_context = PyPostRemoveEdgeFromGroupsContext(groups, edge_index)
+        self._py_context = PyPostRemoveEdgeFromGroupsContext(group_handles, edge_index)
 
     @classmethod
     def _from_py_context(
@@ -3090,9 +3210,9 @@ class PostRemoveEdgeFromGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the edge was removed from."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the edge was removed from."""
+        return self._py_context.group_handles
 
     @property
     def edge_index(self) -> EdgeIndex:
@@ -3105,11 +3225,14 @@ class PreRemoveEdgesFromGroupsContext:
 
     _py_context: PyPreRemoveEdgesFromGroupsContext
 
-    def __init__(self, groups: List[Group], edge_indices: List[EdgeIndex]) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], edge_indices: List[EdgeIndex]
+    ) -> None:
         """Initializes a PreRemoveEdgesFromGroupsContext.
 
         Args:
-            groups (List[Group]): The groups to remove the edges from.
+            group_handles (List[GroupHandle]): The handles of the groups to remove
+                the edges from.
             edge_indices (List[EdgeIndex]): The indices of the edges being removed
                 from the groups.
         """
@@ -3117,7 +3240,9 @@ class PreRemoveEdgesFromGroupsContext:
             PyPreRemoveEdgesFromGroupsContext,
         )
 
-        self._py_context = PyPreRemoveEdgesFromGroupsContext(groups, edge_indices)
+        self._py_context = PyPreRemoveEdgesFromGroupsContext(
+            group_handles, edge_indices
+        )
 
     @classmethod
     def _from_py_context(
@@ -3128,9 +3253,9 @@ class PreRemoveEdgesFromGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups to remove the edges from."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups to remove the edges from."""
+        return self._py_context.group_handles
 
     @property
     def edge_indices(self) -> List[EdgeIndex]:
@@ -3143,11 +3268,14 @@ class PostRemoveEdgesFromGroupsContext:
 
     _py_context: PyPostRemoveEdgesFromGroupsContext
 
-    def __init__(self, groups: List[Group], edge_indices: List[EdgeIndex]) -> None:
+    def __init__(
+        self, group_handles: List[GroupHandle], edge_indices: List[EdgeIndex]
+    ) -> None:
         """Initializes a PostRemoveEdgesFromGroupsContext.
 
         Args:
-            groups (List[Group]): The groups the edges were removed from.
+            group_handles (List[GroupHandle]): The handles of the groups the edges
+                were removed from.
             edge_indices (List[EdgeIndex]): The indices of the edges that were
                 removed from the groups.
         """
@@ -3155,7 +3283,9 @@ class PostRemoveEdgesFromGroupsContext:
             PyPostRemoveEdgesFromGroupsContext,
         )
 
-        self._py_context = PyPostRemoveEdgesFromGroupsContext(groups, edge_indices)
+        self._py_context = PyPostRemoveEdgesFromGroupsContext(
+            group_handles, edge_indices
+        )
 
     @classmethod
     def _from_py_context(
@@ -3166,9 +3296,9 @@ class PostRemoveEdgesFromGroupsContext:
         return context
 
     @property
-    def groups(self) -> List[Group]:
-        """The groups the edges were removed from."""
-        return self._py_context.groups
+    def group_handles(self) -> List[GroupHandle]:
+        """The handles of the groups the edges were removed from."""
+        return self._py_context.group_handles
 
     @property
     def edge_indices(self) -> List[EdgeIndex]:

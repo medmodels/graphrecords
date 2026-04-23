@@ -1,25 +1,25 @@
-use super::{Attributes, NodeIndex};
+use super::super::intern_table::{HandleAttributes, NodeHandle};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Edge {
-    pub(crate) attributes: Attributes,
-    pub(crate) source_node_index: NodeIndex,
-    pub(crate) target_node_index: NodeIndex,
+    pub(crate) attributes: HandleAttributes,
+    pub(crate) source_node_handle: NodeHandle,
+    pub(crate) target_node_handle: NodeHandle,
 }
 
 impl Edge {
     pub const fn new(
-        attributes: Attributes,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
+        attributes: HandleAttributes,
+        source_node_handle: NodeHandle,
+        target_node_handle: NodeHandle,
     ) -> Self {
         Self {
             attributes,
-            source_node_index,
-            target_node_index,
+            source_node_handle,
+            target_node_handle,
         }
     }
 }

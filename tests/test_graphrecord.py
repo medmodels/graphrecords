@@ -1002,6 +1002,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes(("0", {}), "0")
 
         assert "0" in graphrecord.nodes_in_group("0")
@@ -1010,6 +1011,7 @@ class TestGraphRecord(unittest.TestCase):
         # Adding tuple to a group
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes(create_nodes(), "0")
 
         assert "0" in graphrecord.nodes_in_group("0")
@@ -1021,6 +1023,7 @@ class TestGraphRecord(unittest.TestCase):
         # Adding group without nodes
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes([], "0")
 
         assert graphrecord.node_count() == 0
@@ -1038,6 +1041,7 @@ class TestGraphRecord(unittest.TestCase):
         # Adding pandas dataframe to a group
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes((create_pandas_nodes_dataframe(), "index"), "0")
 
         assert "0" in graphrecord.nodes_in_group("0")
@@ -1057,6 +1061,7 @@ class TestGraphRecord(unittest.TestCase):
         # Adding polars dataframe to a group
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes((nodes, "index"), "0")
 
         assert "0" in graphrecord.nodes_in_group("0")
@@ -1079,6 +1084,7 @@ class TestGraphRecord(unittest.TestCase):
         # Adding multiple pandas dataframes to a group
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes(
             [
                 (create_pandas_nodes_dataframe(), "index"),
@@ -1095,6 +1101,7 @@ class TestGraphRecord(unittest.TestCase):
         # Checking if nodes can be added to a group that already exists
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes((create_pandas_nodes_dataframe(), "index"), group="0")
 
         assert "0" in graphrecord.nodes_in_group("0")
@@ -1128,6 +1135,7 @@ class TestGraphRecord(unittest.TestCase):
         # Adding multiple polars dataframes to a group
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes(
             [
                 (nodes, "index"),
@@ -1191,6 +1199,7 @@ class TestGraphRecord(unittest.TestCase):
         # Trying with the group argument
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes_pandas(nodes, group="0")
 
         assert "0" in graphrecord.nodes_in_group("0")
@@ -1198,6 +1207,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes_pandas([], group="0")
 
         assert graphrecord.node_count() == 0
@@ -1205,6 +1215,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes_pandas([nodes, second_nodes], group="0")
 
         assert "0" in graphrecord.nodes_in_group("0")
@@ -1236,6 +1247,7 @@ class TestGraphRecord(unittest.TestCase):
         # Trying with the group argument
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes_polars((nodes, "index"), group="0")
 
         assert "0" in graphrecord.nodes_in_group("0")
@@ -1243,6 +1255,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes_polars([], group="0")
 
         assert graphrecord.node_count() == 0
@@ -1250,6 +1263,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
         graphrecord.add_nodes_polars(
             [(nodes, "index"), (second_nodes, "index")], group="0"
         )
@@ -1276,6 +1290,8 @@ class TestGraphRecord(unittest.TestCase):
     def test_add_nodes_with_groups(self) -> None:
         graphrecord = GraphRecord()
 
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
         graphrecord.add_nodes(create_nodes(), group=["0", "1"])
 
         assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1", "2", "3"])
@@ -1283,6 +1299,9 @@ class TestGraphRecord(unittest.TestCase):
 
     def test_invalid_add_nodes_with_groups(self) -> None:
         graphrecord = create_graphrecord()
+
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
 
         with pytest.raises(AssertionError):
             graphrecord.add_nodes(create_nodes(), group=["0", "1"])
@@ -1293,6 +1312,8 @@ class TestGraphRecord(unittest.TestCase):
         nodes = pl.from_pandas(create_pandas_nodes_dataframe())
         second_nodes = pl.from_pandas(create_second_pandas_nodes_dataframe())
 
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
         graphrecord.add_nodes_polars(
             [(nodes, "index"), (second_nodes, "index")], group=["0", "1"]
         )
@@ -1378,6 +1399,7 @@ class TestGraphRecord(unittest.TestCase):
 
         assert graphrecord.edge_count() == 5
 
+        graphrecord.add_group("0")
         graphrecord.add_edges(("3", "0", {}), group="0")
 
         assert graphrecord.edge_count() == 6
@@ -1388,6 +1410,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.add_nodes(nodes)
 
+        graphrecord.add_group("0")
         graphrecord.add_edges(create_edges(), "0")
 
         assert 0 in graphrecord.edges_in_group("0")
@@ -1411,6 +1434,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.add_nodes(nodes)
 
+        graphrecord.add_group("0")
         graphrecord.add_edges(
             (create_pandas_edges_dataframe(), "source", "target"), "0"
         )
@@ -1436,6 +1460,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.add_nodes(nodes)
 
+        graphrecord.add_group("0")
         graphrecord.add_edges((edges, "source", "target"), "0")
 
         assert 0 in graphrecord.edges_in_group("0")
@@ -1462,6 +1487,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.add_nodes(nodes)
 
+        graphrecord.add_group("0")
         graphrecord.add_edges(
             [
                 (create_pandas_edges_dataframe(), "source", "target"),
@@ -1498,6 +1524,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.add_nodes(nodes)
 
+        graphrecord.add_group("0")
         graphrecord.add_edges(
             [
                 (edges, "source", "target"),
@@ -1566,6 +1593,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.add_nodes(nodes)
 
+        graphrecord.add_group("0")
         graphrecord.add_edges(edges, "0")
 
         assert 0 in graphrecord.edges_in_group("0")
@@ -1577,6 +1605,7 @@ class TestGraphRecord(unittest.TestCase):
 
         second_edges = (create_second_pandas_edges_dataframe(), "source", "target")
 
+        graphrecord.add_group("0")
         graphrecord.add_edges([edges, second_edges], "0")
 
         assert 0 in graphrecord.edges_in_group("0")
@@ -1604,6 +1633,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.add_nodes(nodes)
 
+        graphrecord.add_group("0")
         graphrecord.add_edges_polars((edges, "source", "target"), "0")
 
         assert 0 in graphrecord.edges_in_group("0")
@@ -1615,6 +1645,7 @@ class TestGraphRecord(unittest.TestCase):
 
         second_edges = pl.from_pandas(create_second_pandas_edges_dataframe())
 
+        graphrecord.add_group("0")
         graphrecord.add_edges_polars(
             [(edges, "source", "target"), (second_edges, "source", "target")], "0"
         )
@@ -1646,6 +1677,8 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.add_nodes(create_nodes())
 
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
         edge_indices = graphrecord.add_edges(create_edges(), group=["0", "1"])
 
         assert sorted(graphrecord.edges_in_group("0")) == sorted(edge_indices)
@@ -1655,6 +1688,9 @@ class TestGraphRecord(unittest.TestCase):
         graphrecord = GraphRecord()
 
         graphrecord.add_nodes(create_nodes())
+
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
 
         with pytest.raises(IndexError):
             graphrecord.add_edges([("0", "50", {})], group=["0", "1"])
@@ -1667,6 +1703,8 @@ class TestGraphRecord(unittest.TestCase):
         edges = pl.from_pandas(create_pandas_edges_dataframe())
         second_edges = pl.from_pandas(create_second_pandas_edges_dataframe())
 
+        graphrecord.add_group("0")
+        graphrecord.add_group("1")
         graphrecord.add_edges_polars(
             [(edges, "source", "target"), (second_edges, "source", "target")],
             group=["0", "1"],
@@ -1756,7 +1794,7 @@ class TestGraphRecord(unittest.TestCase):
             graphrecord.add_group("0", query)
 
         graphrecord.add_nodes(("4", {"test": "test"}))
-        edge_index = graphrecord.add_edges(("4", "4", {"test": "test"}))[0]
+        edge_index = graphrecord.add_edges(("4", "4", {"test": "test"}))
 
         graphrecord.freeze_schema()
 
@@ -2019,6 +2057,7 @@ class TestGraphRecord(unittest.TestCase):
         graphrecord = GraphRecord()
         graphrecord.add_nodes(create_nodes())
 
+        graphrecord.add_group("0")
         graphrecord.add_edges(("0", "1", {"test": "test"}), group="0")
 
         graphrecord.freeze_schema()
@@ -2061,6 +2100,7 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.add_nodes(("0", {}))
 
+        graphrecord.add_group("0")
         graphrecord.add_edges(("0", "0", {"test": "test"}), group="0")
 
         graphrecord.freeze_schema()
@@ -2923,6 +2963,303 @@ class TestGraphRecord(unittest.TestCase):
         assert sorted(node_indices) == ["0"]
 
 
+class TestGraphRecordHandles(unittest.TestCase):
+    def test_node_handles_property(self) -> None:
+        graphrecord = create_graphrecord()
+        handles = graphrecord.node_handles
+
+        assert len(handles) == len(graphrecord.nodes)
+        assert all(
+            graphrecord.resolve_node_handle(handle) in graphrecord.nodes
+            for handle in handles
+        )
+
+    def test_group_handles_property(self) -> None:
+        graphrecord = create_graphrecord()
+        graphrecord.add_group("alpha")
+        graphrecord.add_group("beta")
+
+        handles = graphrecord.group_handles
+
+        assert len(handles) == 2
+        assert {graphrecord.resolve_group_handle(handle) for handle in handles} == {
+            "alpha",
+            "beta",
+        }
+
+    def test_node_handle_roundtrip(self) -> None:
+        graphrecord = create_graphrecord()
+        handle = graphrecord.node_handle("0")
+
+        assert handle is not None
+        assert graphrecord.resolve_node_handle(handle) == "0"
+        assert graphrecord.node_handle("non-existent") is None
+
+    def test_group_handle_roundtrip(self) -> None:
+        graphrecord = create_graphrecord()
+        graphrecord.add_group("alpha")
+
+        handle = graphrecord.group_handle("alpha")
+
+        assert handle is not None
+        assert graphrecord.resolve_group_handle(handle) == "alpha"
+        assert graphrecord.group_handle("non-existent") is None
+
+    def test_attribute_handle_roundtrip(self) -> None:
+        graphrecord = create_graphrecord()
+        handle = graphrecord.attribute_handle("lorem")
+
+        assert handle is not None
+        assert graphrecord.resolve_attribute_handle(handle) == "lorem"
+        assert graphrecord.attribute_handle("never-interned") is None
+
+    def test_ungrouped_node_handles(self) -> None:
+        graphrecord = create_graphrecord()
+        graphrecord.add_group("alpha", ["0", "1"])
+
+        ungrouped = graphrecord.ungrouped_node_handles()
+
+        assert {graphrecord.resolve_node_handle(handle) for handle in ungrouped} == {
+            "2",
+            "3",
+        }
+
+    def test_node_handles_in_group(self) -> None:
+        graphrecord = create_graphrecord()
+        graphrecord.add_group("alpha", ["0", "1"])
+        graphrecord.add_group("beta", ["2", "3"])
+
+        single = graphrecord.node_handles_in_group("alpha")
+        assert {graphrecord.resolve_node_handle(handle) for handle in single} == {
+            "0",
+            "1",
+        }
+
+        batch = graphrecord.node_handles_in_group(["alpha", "beta"])
+        resolved = {
+            key: {graphrecord.resolve_node_handle(handle) for handle in value}
+            for key, value in batch.items()
+        }
+        assert resolved == {"alpha": {"0", "1"}, "beta": {"2", "3"}}
+
+    def test_edge_endpoint_handles(self) -> None:
+        graphrecord = create_graphrecord()
+        source_handle = graphrecord.node_handle("0")
+        target_handle = graphrecord.node_handle("1")
+
+        single = graphrecord.edge_endpoint_handles(0)
+        assert single == (source_handle, target_handle)
+
+        batch = graphrecord.edge_endpoint_handles([0, 1])
+        assert batch[0] == (source_handle, target_handle)
+        assert batch[1] == (target_handle, source_handle)
+
+        def query_multi(edge: EdgeOperand) -> EdgeIndicesOperand:
+            edge.index().is_in([0, 1])
+
+            return edge.index()
+
+        query_result = graphrecord.edge_endpoint_handles(query_multi)
+        assert query_result[0] == (source_handle, target_handle)
+        assert query_result[1] == (target_handle, source_handle)
+
+        def query_single(edge: EdgeOperand) -> EdgeIndexOperand:
+            edge.index().equal_to(0)
+
+            return edge.index().max()
+
+        assert graphrecord.edge_endpoint_handles(query_single) == (
+            source_handle,
+            target_handle,
+        )
+
+        def query_empty(edge: EdgeOperand) -> EdgeIndexOperand:
+            max_index = edge.index().max()
+            max_index.greater_than(10)
+
+            return max_index
+
+        with pytest.raises(IndexError, match="The query returned no results"):
+            graphrecord.edge_endpoint_handles(query_empty)
+
+    def test_group_handles_of_node(self) -> None:
+        graphrecord = create_graphrecord()
+        graphrecord.add_group("alpha", ["0", "1"])
+        alpha_handle = graphrecord.group_handle("alpha")
+
+        assert graphrecord.group_handles_of_node("0") == [alpha_handle]
+        assert graphrecord.group_handles_of_node(["0", "1"]) == {
+            "0": [alpha_handle],
+            "1": [alpha_handle],
+        }
+
+        def query_multi(node: NodeOperand) -> NodeIndicesOperand:
+            node.index().is_in(["0", "1"])
+
+            return node.index()
+
+        assert graphrecord.group_handles_of_node(query_multi) == {
+            "0": [alpha_handle],
+            "1": [alpha_handle],
+        }
+
+        def query_single(node: NodeOperand) -> NodeIndexOperand:
+            node.index().equal_to("0")
+
+            return node.index().max()
+
+        assert graphrecord.group_handles_of_node(query_single) == [alpha_handle]
+
+        def query_empty(node: NodeOperand) -> NodeIndexOperand:
+            max_index = node.index().max()
+            max_index.equal_to("non-existent")
+
+            return max_index
+
+        assert graphrecord.group_handles_of_node(query_empty) == []
+
+    def test_group_handles_of_edge(self) -> None:
+        graphrecord = create_graphrecord()
+        graphrecord.add_group("alpha", edges=[0, 1])
+        alpha_handle = graphrecord.group_handle("alpha")
+
+        assert graphrecord.group_handles_of_edge(0) == [alpha_handle]
+        assert graphrecord.group_handles_of_edge([0, 1]) == {
+            0: [alpha_handle],
+            1: [alpha_handle],
+        }
+
+        def query_multi(edge: EdgeOperand) -> EdgeIndicesOperand:
+            edge.index().is_in([0, 1])
+
+            return edge.index()
+
+        assert graphrecord.group_handles_of_edge(query_multi) == {
+            0: [alpha_handle],
+            1: [alpha_handle],
+        }
+
+        def query_single(edge: EdgeOperand) -> EdgeIndexOperand:
+            edge.index().equal_to(0)
+
+            return edge.index().max()
+
+        assert graphrecord.group_handles_of_edge(query_single) == [alpha_handle]
+
+        def query_empty(edge: EdgeOperand) -> EdgeIndexOperand:
+            max_index = edge.index().max()
+            max_index.greater_than(10)
+
+            return max_index
+
+        assert graphrecord.group_handles_of_edge(query_empty) == []
+
+    def test_neighbor_handles(self) -> None:
+        graphrecord = create_graphrecord()
+        handle_1 = graphrecord.node_handle("1")
+        handle_3 = graphrecord.node_handle("3")
+
+        single = graphrecord.neighbor_handles("0")
+        assert sorted(
+            single, key=lambda handle: graphrecord.resolve_node_handle(handle)
+        ) == [
+            handle_1,
+            handle_3,
+        ]
+
+        batch = graphrecord.neighbor_handles(["0"])
+        assert sorted(
+            batch["0"], key=lambda handle: graphrecord.resolve_node_handle(handle)
+        ) == [handle_1, handle_3]
+
+        incoming = graphrecord.neighbor_handles("0", directed=EdgesDirection.INCOMING)
+        assert incoming == [handle_1]
+
+        outgoing = graphrecord.neighbor_handles("0", directed=EdgesDirection.OUTGOING)
+        assert sorted(
+            outgoing, key=lambda handle: graphrecord.resolve_node_handle(handle)
+        ) == [handle_1, handle_3]
+
+        undirected = graphrecord.neighbor_handles(
+            "0", directed=EdgesDirection.UNDIRECTED
+        )
+        assert sorted(
+            undirected, key=lambda handle: graphrecord.resolve_node_handle(handle)
+        ) == [handle_1, handle_3]
+
+        def query(node: NodeOperand) -> NodeIndicesOperand:
+            node.index().is_in(["0"])
+
+            return node.index()
+
+        queried = graphrecord.neighbor_handles(query)
+        assert sorted(
+            queried["0"], key=lambda handle: graphrecord.resolve_node_handle(handle)
+        ) == [handle_1, handle_3]
+
+        def query_empty(node: NodeOperand) -> NodeIndexOperand:
+            max_index = node.index().max()
+            max_index.equal_to("non-existent")
+
+            return max_index
+
+        assert graphrecord.neighbor_handles(query_empty) == []
+
+    def test_add_node_tuple_with_group_list(self) -> None:
+        graphrecord = GraphRecord()
+        graphrecord.add_group("alpha")
+        graphrecord.add_group("beta")
+
+        handle = graphrecord.add_nodes(("x", {"k": 1}), group=["alpha", "beta"])
+
+        assert graphrecord.resolve_node_handle(handle) == "x"
+        assert sorted(graphrecord.groups_of_node("x")) == ["alpha", "beta"]
+
+    def test_add_edge_tuple_with_group_list(self) -> None:
+        graphrecord = GraphRecord()
+        graphrecord.add_nodes([("x", {}), ("y", {})])
+        graphrecord.add_group("alpha")
+        graphrecord.add_group("beta")
+
+        edge_index = graphrecord.add_edges(("x", "y", {}), group=["alpha", "beta"])
+
+        assert sorted(graphrecord.groups_of_edge(edge_index)) == ["alpha", "beta"]
+
+    def test_handle_accepted_as_input(self) -> None:
+        graphrecord = create_graphrecord()
+        handle = graphrecord.node_handle("0")
+        assert handle is not None
+
+        assert graphrecord.contains_node(handle)
+        assert graphrecord.groups_of_node(handle) == []
+
+    def test_cross_graph_handle_raises(self) -> None:
+        first = create_graphrecord()
+        second = create_graphrecord()
+
+        handle_from_first = first.node_handle("0")
+        assert handle_from_first is not None
+
+        with pytest.raises(ValueError, match="Handle from graph"):
+            second.resolve_node_handle(handle_from_first)
+
+    def test_serialization_preserves_handle_validity(self) -> None:
+        graphrecord = create_graphrecord()
+        graphrecord.add_group("alpha", ["0", "1"])
+
+        node_handle_before = graphrecord.node_handle("0")
+        group_handle_before = graphrecord.group_handle("alpha")
+        assert node_handle_before is not None
+        assert group_handle_before is not None
+
+        raw = graphrecord._graphrecord._to_bytes()
+        restored = GraphRecord()
+        restored._graphrecord = PyGraphRecord._from_bytes(raw)
+
+        assert restored.resolve_node_handle(node_handle_before) == "0"
+        assert restored.resolve_group_handle(group_handle_before) == "alpha"
+
+
 class TestGraphRecordPlugins(unittest.TestCase):
     def test_with_plugins_single(self) -> None:
         graphrecord = GraphRecord.with_plugins({"noop": Plugin()})
@@ -3546,6 +3883,8 @@ class TestBypassPlugins(unittest.TestCase):
     def test_bypass_add_nodes_with_group(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
 
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
         graphrecord.add_nodes([("a", {})], "group1")
 
         assert plugin.calls == [
@@ -3563,6 +3902,8 @@ class TestBypassPlugins(unittest.TestCase):
     def test_bypass_add_nodes_with_groups(self) -> None:
         graphrecord, plugin = self._create_graphrecord_with_plugin()
 
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
         graphrecord.add_nodes([("a", {})], group=["group1", "group2"])
 
         assert plugin.calls == [
@@ -3602,6 +3943,8 @@ class TestBypassPlugins(unittest.TestCase):
         graphrecord, plugin = self._create_graphrecord_with_plugin()
         dataframe = pl.DataFrame({"index": ["a", "b"], "value": [1, 2]})
 
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
         graphrecord.add_nodes_polars((dataframe, "index"), "group1")
 
         assert plugin.calls == [
@@ -3623,6 +3966,8 @@ class TestBypassPlugins(unittest.TestCase):
         graphrecord, plugin = self._create_graphrecord_with_plugin()
         dataframe = pl.DataFrame({"index": ["a", "b"], "value": [1, 2]})
 
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
         graphrecord.add_nodes_polars((dataframe, "index"), group=["group1", "group2"])
 
         assert plugin.calls == [
@@ -3675,6 +4020,8 @@ class TestBypassPlugins(unittest.TestCase):
         graphrecord, plugin = self._create_graphrecord_with_plugin()
         graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
 
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
         graphrecord.add_edges([("a", "b", {})], "group1")
 
         assert plugin.calls == [
@@ -3692,6 +4039,8 @@ class TestBypassPlugins(unittest.TestCase):
         graphrecord, plugin = self._create_graphrecord_with_plugin()
         graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
 
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
         graphrecord.add_edges([("a", "b", {})], group=["group1", "group2"])
 
         assert plugin.calls == [
@@ -3734,6 +4083,8 @@ class TestBypassPlugins(unittest.TestCase):
         graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
         dataframe = pl.DataFrame({"source": ["a"], "target": ["b"], "value": [1]})
 
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
         graphrecord.add_edges_polars((dataframe, "source", "target"), "group1")
 
         assert plugin.calls == [
@@ -3756,6 +4107,8 @@ class TestBypassPlugins(unittest.TestCase):
         graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
         dataframe = pl.DataFrame({"source": ["a"], "target": ["b"], "value": [1]})
 
+        graphrecord.add_group("group1", bypass_plugins=True)
+        graphrecord.add_group("group2", bypass_plugins=True)
         graphrecord.add_edges_polars(
             (dataframe, "source", "target"), group=["group1", "group2"]
         )

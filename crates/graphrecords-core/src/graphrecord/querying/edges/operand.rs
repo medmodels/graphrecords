@@ -255,12 +255,12 @@ impl RootOperand for EdgeOperand {
                 > = HashMap::new();
 
                 for edge_index in edge_indices {
-                    let endpoints = graphrecord
+                    let (source, target) = graphrecord
                         .edge_endpoints(edge_index)
                         .expect("Edge must exist");
 
                     buckets
-                        .entry((endpoints.0, endpoints.1))
+                        .entry((source, target))
                         .or_default()
                         .push(edge_index);
                 }

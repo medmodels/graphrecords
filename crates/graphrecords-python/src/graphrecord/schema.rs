@@ -8,7 +8,7 @@ use super::{
 use graphrecords_core::{
     errors::GraphError,
     graphrecord::{
-        EdgeIndex, Group,
+        Attributes, EdgeIndex, Group,
         schema::{AttributeDataType, AttributeType, GroupSchema, Schema, SchemaType},
     },
 };
@@ -170,16 +170,18 @@ impl PyGroupSchema {
     }
 
     pub fn validate_node(&self, index: PyNodeIndex, attributes: PyAttributes) -> PyResult<()> {
+        let attributes: Attributes = attributes.deep_into();
         Ok(self
             .0
-            .validate_node(&index.into(), &attributes.deep_into())
+            .validate_node(&index.into(), &attributes)
             .map_err(PyGraphRecordError::from)?)
     }
 
     pub fn validate_edge(&self, index: EdgeIndex, attributes: PyAttributes) -> PyResult<()> {
+        let attributes: Attributes = attributes.deep_into();
         Ok(self
             .0
-            .validate_edge(&index, &attributes.deep_into())
+            .validate_edge(&index, &attributes)
             .map_err(PyGraphRecordError::from)?)
     }
 }
@@ -295,12 +297,13 @@ impl PySchema {
         attributes: PyAttributes,
         group: Option<PyGroup>,
     ) -> PyResult<()> {
+        let attributes: Attributes = attributes.deep_into();
         Ok(self
             .0
             .read()
             .validate_node(
                 &index.into(),
-                &attributes.deep_into(),
+                &attributes,
                 group.map(std::convert::Into::into).as_ref(),
             )
             .map_err(PyGraphRecordError::from)?)
@@ -313,12 +316,13 @@ impl PySchema {
         attributes: PyAttributes,
         group: Option<PyGroup>,
     ) -> PyResult<()> {
+        let attributes: Attributes = attributes.deep_into();
         Ok(self
             .0
             .read()
             .validate_edge(
                 &index,
-                &attributes.deep_into(),
+                &attributes,
                 group.map(std::convert::Into::into).as_ref(),
             )
             .map_err(PyGraphRecordError::from)?)

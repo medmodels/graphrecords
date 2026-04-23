@@ -1,7 +1,16 @@
 mod edge;
 mod node;
 
-use super::{GraphRecordAttribute, GraphRecordValue, group_mapping::GroupMapping};
+#[cfg(feature = "safe-handles")]
+use super::intern_table::{Handle, HandleKind, fresh_graph_id};
+use super::{
+    GraphRecordAttribute, GraphRecordValue,
+    group_mapping::GroupMapping,
+    intern_table::{
+        AttributeNameKind, AttributesView, GroupKind, HandleAttributes, InternTable,
+        NodeHandle, NodeIndexKind,
+    },
+};
 use crate::errors::GraphError;
 use edge::Edge;
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
@@ -14,29 +23,64 @@ pub type NodeIndex = GraphRecordAttribute;
 pub type EdgeIndex = u32;
 pub type Attributes = HashMap<GraphRecordAttribute, GraphRecordValue>;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(super) struct Graph {
-    pub(crate) nodes: GrHashMap<NodeIndex, Node>,
+    #[cfg(feature = "safe-handles")]
+    pub(crate) id: u32,
+    pub(crate) nodes: GrHashMap<NodeHandle, Node>,
     pub(crate) edges: GrHashMap<EdgeIndex, Edge>,
-    edge_index_counter: u32,
+    pub(crate) edge_index_counter: u32,
+    pub(crate) node_index_table: InternTable<NodeIndexKind>,
+    pub(crate) attribute_name_table: InternTable<AttributeNameKind>,
+    pub(crate) group_name_table: InternTable<GroupKind>,
 }
 
-#[allow(dead_code)]
+#[cfg(not(feature = "safe-handles"))]
+fn new_intern_table<K: super::intern_table::HandleKind>(capacity: usize) -> InternTable<K> {
+    InternTable::with_capacity(capacity)
+}
+
+#[cfg(feature = "safe-handles")]
+fn new_intern_table<K: super::intern_table::HandleKind>(
+    capacity: usize,
+    graph_id: u32,
+) -> InternTable<K> {
+    InternTable::with_capacity(capacity, graph_id)
+}
+
 impl Graph {
     pub fn new() -> Self {
-        Self {
-            nodes: GrHashMap::new(),
-            edges: GrHashMap::new(),
-            edge_index_counter: 0,
-        }
+        Self::with_capacity(0, 0)
     }
 
     pub fn with_capacity(node_capacity: usize, edge_capacity: usize) -> Self {
+        #[cfg(feature = "safe-handles")]
+        let graph_id = fresh_graph_id();
+
+        #[cfg(not(feature = "safe-handles"))]
+        let (node_index_table, attribute_name_table, group_name_table) = (
+            new_intern_table(node_capacity),
+            new_intern_table(0),
+            new_intern_table(0),
+        );
+
+        #[cfg(feature = "safe-handles")]
+        let (node_index_table, attribute_name_table, group_name_table) = (
+            new_intern_table(node_capacity, graph_id),
+            new_intern_table(0, graph_id),
+            new_intern_table(0, graph_id),
+        );
+
         Self {
+            #[cfg(feature = "safe-handles")]
+            id: graph_id,
             nodes: GrHashMap::with_capacity(node_capacity),
             edges: GrHashMap::with_capacity(edge_capacity),
             edge_index_counter: 0,
+            node_index_table,
+            attribute_name_table,
+            group_name_table,
         }
     }
 
@@ -45,12 +89,35 @@ impl Graph {
         self.edges.clear();
 
         self.edge_index_counter = 0;
+
+        self.node_index_table.clear();
+        self.attribute_name_table.clear();
+        self.group_name_table.clear();
+
+        #[cfg(feature = "safe-handles")]
+        {
+            self.id = fresh_graph_id();
+
+            self.node_index_table.set_graph_id(self.id);
+            self.attribute_name_table.set_graph_id(self.id);
+            self.group_name_table.set_graph_id(self.id);
+        }
     }
 
-    pub fn clear_edges(&mut self) {
-        self.edges.clear();
+    #[cfg(feature = "safe-handles")]
+    pub(crate) fn validate_handle<K: HandleKind>(
+        &self,
+        handle: Handle<K>,
+    ) -> Result<(), GraphError> {
+        if handle.graph_id() != self.id {
+            return Err(GraphError::StaleHandle(format!(
+                "Handle from graph {} used on graph {}",
+                handle.graph_id(),
+                self.id
+            )));
+        }
 
-        self.edge_index_counter = 0;
+        Ok(())
     }
 
     pub fn node_count(&self) -> usize {
@@ -61,32 +128,57 @@ impl Graph {
         self.edges.len()
     }
 
+    pub(crate) fn intern_attributes(&mut self, attributes: Attributes) -> HandleAttributes {
+        attributes
+            .into_iter()
+            .map(|(name, value)| (self.attribute_name_table.intern_owned(name), value))
+            .collect()
+    }
+
+    pub(crate) fn resolve_handle_attributes(&self, attributes: &HandleAttributes) -> Attributes {
+        attributes
+            .iter()
+            .map(|(handle, value)| {
+                (
+                    self.attribute_name_table.resolve(*handle).clone(),
+                    value.clone(),
+                )
+            })
+            .collect()
+    }
+
     pub fn add_node(
         &mut self,
         node_index: NodeIndex,
         attributes: Attributes,
-    ) -> Result<(), GraphError> {
-        if self.nodes.contains_key(&node_index) {
+    ) -> Result<NodeHandle, GraphError> {
+        if let Some(existing_handle) = self.node_index_table.get(&node_index)
+            && self.nodes.contains_key(&existing_handle)
+        {
             return Err(GraphError::AssertionError(format!(
                 "Node with index {node_index} already exists"
             )));
         }
 
-        let node = Node::new(attributes);
+        let handle = self.node_index_table.intern_owned(node_index);
+        let handle_attributes = self.intern_attributes(attributes);
+        let node = Node::new(handle_attributes);
 
-        self.nodes.insert(node_index, node);
+        self.nodes.insert(handle, node);
 
-        Ok(())
+        Ok(handle)
     }
 
     pub fn remove_node(
         &mut self,
-        node_index: &NodeIndex,
+        handle: NodeHandle,
         group_mapping: &mut GroupMapping,
     ) -> Result<Attributes, GraphError> {
-        let node = self.nodes.remove(node_index).ok_or_else(|| {
-            GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+        let node = self.nodes.remove(&handle).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find node for handle {handle:?}"))
         })?;
+
+        group_mapping.remove_node(handle);
 
         let edge_indices = node
             .outgoing_edge_indices
@@ -98,22 +190,20 @@ impl Graph {
             let edge = self.edges.remove(edge_index).expect("Edge must exist");
 
             match (
-                edge.source_node_index == *node_index,
-                edge.target_node_index == *node_index,
+                edge.source_node_handle == handle,
+                edge.target_node_handle == handle,
             ) {
-                (true, true) => {
-                    // Do nothing
-                }
+                (true, true) => {}
                 (true, false) => {
                     self.nodes
-                        .get_mut(&edge.target_node_index)
+                        .get_mut(&edge.target_node_handle)
                         .expect("Node must exist")
                         .incoming_edge_indices
                         .remove(edge_index);
                 }
                 (false, true) => {
                     self.nodes
-                        .get_mut(&edge.source_node_index)
+                        .get_mut(&edge.source_node_handle)
                         .expect("Node must exist")
                         .outgoing_edge_indices
                         .remove(edge_index);
@@ -122,42 +212,49 @@ impl Graph {
             }
         }
 
-        Ok(node.attributes)
+        Ok(self.resolve_handle_attributes(&node.attributes))
     }
 
-    pub fn contains_node(&self, node_index: &NodeIndex) -> bool {
-        self.nodes.contains_key(node_index)
+    pub fn contains_node(&self, handle: NodeHandle) -> bool {
+        self.nodes.contains_key(&handle)
     }
 
     pub fn add_edge(
         &mut self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
+        source_handle: NodeHandle,
+        target_handle: NodeHandle,
         attributes: Attributes,
     ) -> Result<EdgeIndex, GraphError> {
-        if !self.nodes.contains_key(&target_node_index) {
+        if !self.nodes.contains_key(&source_handle) {
             return Err(GraphError::IndexError(format!(
-                "Cannot find node with index {target_node_index}"
+                "Cannot find node for handle {source_handle:?}"
+            )));
+        }
+
+        if !self.nodes.contains_key(&target_handle) {
+            return Err(GraphError::IndexError(format!(
+                "Cannot find node for handle {target_handle:?}"
             )));
         }
 
         let edge_index = self.edge_index_counter;
         self.edge_index_counter += 1;
 
-        let outgoing_node = self.nodes.get_mut(&source_node_index).ok_or_else(|| {
-            GraphError::IndexError(format!("Cannot find node with index {source_node_index}"))
-        })?;
+        let handle_attributes = self.intern_attributes(attributes);
 
-        outgoing_node.outgoing_edge_indices.insert(edge_index);
+        self.nodes
+            .get_mut(&source_handle)
+            .expect("Node must exist")
+            .outgoing_edge_indices
+            .insert(edge_index);
 
-        let incoming_node = self
-            .nodes
-            .get_mut(&target_node_index)
-            .expect("Node must exist");
+        self.nodes
+            .get_mut(&target_handle)
+            .expect("Node must exist")
+            .incoming_edge_indices
+            .insert(edge_index);
 
-        incoming_node.incoming_edge_indices.insert(edge_index);
-
-        let edge = Edge::new(attributes, source_node_index, target_node_index);
+        let edge = Edge::new(handle_attributes, source_handle, target_handle);
 
         self.edges.insert(edge_index, edge);
 
@@ -171,71 +268,78 @@ impl Graph {
         })?;
 
         self.nodes
-            .get_mut(&edge.target_node_index)
+            .get_mut(&edge.target_node_handle)
             .expect("Node must exist")
             .incoming_edge_indices
             .remove(edge_index);
 
         self.nodes
-            .get_mut(&edge.source_node_index)
+            .get_mut(&edge.source_node_handle)
             .expect("Node must exist")
             .outgoing_edge_indices
             .remove(edge_index);
 
-        Ok(edge.attributes)
+        Ok(self.resolve_handle_attributes(&edge.attributes))
     }
 
-    pub fn node_attributes(&self, node_index: &NodeIndex) -> Result<&Attributes, GraphError> {
-        Ok(&self
-            .nodes
-            .get(node_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
-            })?
-            .attributes)
+    pub fn node_attributes(
+        &self,
+        handle: NodeHandle,
+    ) -> Result<AttributesView<'_>, GraphError> {
+        let node = self.nodes.get(&handle).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find node for handle {handle:?}"))
+        })?;
+
+        Ok(AttributesView::new(
+            &self.attribute_name_table,
+            &node.attributes,
+        ))
     }
 
-    pub fn node_attributes_mut(
+    pub fn replace_node_attributes(
         &mut self,
-        node_index: &NodeIndex,
-    ) -> Result<&mut Attributes, GraphError> {
-        Ok(&mut self
-            .nodes
-            .get_mut(node_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
-            })?
-            .attributes)
-    }
+        handle: NodeHandle,
+        attributes: Attributes,
+    ) -> Result<(), GraphError> {
+        let handle_attributes = self.intern_attributes(attributes);
+        let node = self.nodes.get_mut(&handle).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find node for handle {handle:?}"))
+        })?;
 
-    pub fn nodes_attributes(&self) -> impl Iterator<Item = &Attributes> {
-        self.nodes.values().map(|node| &node.attributes)
-    }
+        node.attributes = handle_attributes;
 
-    pub fn nodes_attributes_mut(&mut self) -> impl Iterator<Item = &mut Attributes> {
-        self.nodes.iter_mut().map(|(_, node)| &mut node.attributes)
+        Ok(())
     }
 
     pub fn node_indices(&self) -> impl Iterator<Item = &NodeIndex> {
-        self.nodes.keys()
+        self.nodes
+            .keys()
+            .map(|handle| self.node_index_table.resolve(*handle))
+    }
+
+    pub fn node_handles(&self) -> impl Iterator<Item = NodeHandle> + use<'_> {
+        self.nodes.keys().copied()
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub fn edge_attributes(&self, edge_index: &EdgeIndex) -> Result<&Attributes, GraphError> {
-        Ok(&self
-            .edges
-            .get(edge_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
-            })?
-            .attributes)
+    pub fn edge_attributes(
+        &self,
+        edge_index: &EdgeIndex,
+    ) -> Result<AttributesView<'_>, GraphError> {
+        let edge = self.edges.get(edge_index).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
+        })?;
+        Ok(AttributesView::new(
+            &self.attribute_name_table,
+            &edge.attributes,
+        ))
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub fn edge_attributes_mut(
+    pub(crate) fn edge_handle_attributes_mut(
         &mut self,
         edge_index: &EdgeIndex,
-    ) -> Result<&mut Attributes, GraphError> {
+    ) -> Result<&mut HandleAttributes, GraphError> {
         Ok(&mut self
             .edges
             .get_mut(edge_index)
@@ -245,12 +349,28 @@ impl Graph {
             .attributes)
     }
 
-    pub fn edges_attributes(&self) -> impl Iterator<Item = &Attributes> {
-        self.edges.values().map(|edge| &edge.attributes)
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn replace_edge_attributes(
+        &mut self,
+        edge_index: &EdgeIndex,
+        attributes: Attributes,
+    ) -> Result<(), GraphError> {
+        let handle_attributes = self.intern_attributes(attributes);
+        let edge_attributes = self.edge_handle_attributes_mut(edge_index)?;
+        *edge_attributes = handle_attributes;
+        Ok(())
     }
 
-    pub fn edges_attributes_mut(&mut self) -> impl Iterator<Item = &mut Attributes> {
-        self.edges.values_mut().map(|edge| &mut edge.attributes)
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn edge_endpoint_handles(
+        &self,
+        edge_index: &EdgeIndex,
+    ) -> Result<(NodeHandle, NodeHandle), GraphError> {
+        let edge = self.edges.get(edge_index).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
+        })?;
+
+        Ok((edge.source_node_handle, edge.target_node_handle))
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -258,22 +378,23 @@ impl Graph {
         &self,
         edge_index: &EdgeIndex,
     ) -> Result<(&NodeIndex, &NodeIndex), GraphError> {
-        let edge = self.edges.get(edge_index).ok_or_else(|| {
-            GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
-        })?;
+        let (source_handle, target_handle) = self.edge_endpoint_handles(edge_index)?;
 
-        Ok((&edge.source_node_index, &edge.target_node_index))
+        Ok((
+            self.node_index_table.resolve(source_handle),
+            self.node_index_table.resolve(target_handle),
+        ))
     }
 
     pub fn outgoing_edges(
         &self,
-        node_index: &NodeIndex,
+        handle: NodeHandle,
     ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphError> {
         Ok(self
             .nodes
-            .get(node_index)
+            .get(&handle)
             .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+                GraphError::IndexError(format!("Cannot find node for handle {handle:?}"))
             })?
             .outgoing_edge_indices
             .iter())
@@ -281,13 +402,13 @@ impl Graph {
 
     pub fn incoming_edges(
         &self,
-        node_index: &NodeIndex,
+        handle: NodeHandle,
     ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphError> {
         Ok(self
             .nodes
-            .get(node_index)
+            .get(&handle)
             .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+                GraphError::IndexError(format!("Cannot find node for handle {handle:?}"))
             })?
             .incoming_edge_indices
             .iter())
@@ -297,28 +418,28 @@ impl Graph {
         self.edges.keys()
     }
 
-    pub fn edges_connecting<'a, SN, TN>(
-        &'a self,
-        source_node_indices: SN,
-        target_node_indices: TN,
-    ) -> impl Iterator<Item = &'a EdgeIndex>
+    pub fn edges_connecting<SN, TN>(
+        &self,
+        source_handles: SN,
+        target_handles: TN,
+    ) -> impl Iterator<Item = &EdgeIndex>
     where
-        SN: IntoIterator<Item = &'a NodeIndex>,
-        TN: IntoIterator<Item = &'a NodeIndex>,
+        SN: IntoIterator<Item = NodeHandle>,
+        TN: IntoIterator<Item = NodeHandle>,
     {
-        let target_set: GrHashSet<&NodeIndex> = target_node_indices.into_iter().collect();
+        let target_set: GrHashSet<NodeHandle> = target_handles.into_iter().collect();
 
         let mut result = Vec::new();
 
-        for source_index in source_node_indices {
-            let Some(node) = self.nodes.get(source_index) else {
+        for source_handle in source_handles {
+            let Some(node) = self.nodes.get(&source_handle) else {
                 continue;
             };
 
             for edge_index in &node.outgoing_edge_indices {
                 let edge = self.edges.get(edge_index).expect("Edge must exist");
 
-                if target_set.contains(&edge.target_node_index) {
+                if target_set.contains(&edge.target_node_handle) {
                     result.push(edge_index);
                 }
             }
@@ -327,63 +448,53 @@ impl Graph {
         result.into_iter()
     }
 
-    pub fn edges_connecting_undirected<'a, SN, TN>(
-        &'a self,
-        first_node_indices: SN,
-        second_node_indices: TN,
-    ) -> impl Iterator<Item = &'a EdgeIndex>
+    pub fn edges_connecting_undirected<SN, TN>(
+        &self,
+        first_handles: SN,
+        second_handles: TN,
+    ) -> impl Iterator<Item = &EdgeIndex>
     where
-        SN: IntoIterator<Item = &'a NodeIndex>,
-        TN: IntoIterator<Item = &'a NodeIndex>,
+        SN: IntoIterator<Item = NodeHandle>,
+        TN: IntoIterator<Item = NodeHandle>,
     {
-        let first_set: GrHashSet<&NodeIndex> = first_node_indices.into_iter().collect();
-        let second_set: GrHashSet<&NodeIndex> = second_node_indices.into_iter().collect();
+        let first_set: GrHashSet<NodeHandle> = first_handles.into_iter().collect();
+        let second_set: GrHashSet<NodeHandle> = second_handles.into_iter().collect();
 
         let mut result = GrHashSet::new();
 
-        for source_index in &first_set {
-            let Some(node) = self.nodes.get(*source_index) else {
-                continue;
-            };
-
-            for edge_index in &node.outgoing_edge_indices {
-                let edge = self.edges.get(edge_index).expect("Edge must exist");
-
-                if second_set.contains(&edge.target_node_index) {
-                    result.insert(edge_index);
-                }
-            }
-            for edge_index in &node.incoming_edge_indices {
-                let edge = self.edges.get(edge_index).expect("Edge must exist");
-
-                if second_set.contains(&edge.source_node_index) {
-                    result.insert(edge_index);
-                }
-            }
-        }
-
-        for source_index in &second_set {
-            let Some(node) = self.nodes.get(*source_index) else {
-                continue;
-            };
-
-            for edge_index in &node.outgoing_edge_indices {
-                let edge = self.edges.get(edge_index).expect("Edge must exist");
-
-                if first_set.contains(&edge.target_node_index) {
-                    result.insert(edge_index);
-                }
-            }
-            for edge_index in &node.incoming_edge_indices {
-                let edge = self.edges.get(edge_index).expect("Edge must exist");
-
-                if first_set.contains(&edge.source_node_index) {
-                    result.insert(edge_index);
-                }
-            }
-        }
+        self.collect_edges_between(&first_set, &second_set, &mut result);
+        self.collect_edges_between(&second_set, &first_set, &mut result);
 
         result.into_iter()
+    }
+
+    fn collect_edges_between<'a>(
+        &'a self,
+        sources: &GrHashSet<NodeHandle>,
+        targets: &GrHashSet<NodeHandle>,
+        result: &mut GrHashSet<&'a EdgeIndex>,
+    ) {
+        for source_handle in sources {
+            let Some(node) = self.nodes.get(source_handle) else {
+                continue;
+            };
+
+            for edge_index in &node.outgoing_edge_indices {
+                let edge = self.edges.get(edge_index).expect("Edge must exist");
+
+                if targets.contains(&edge.target_node_handle) {
+                    result.insert(edge_index);
+                }
+            }
+
+            for edge_index in &node.incoming_edge_indices {
+                let edge = self.edges.get(edge_index).expect("Edge must exist");
+
+                if targets.contains(&edge.source_node_handle) {
+                    result.insert(edge_index);
+                }
+            }
+        }
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -391,81 +502,102 @@ impl Graph {
         self.edges.contains_key(edge_index)
     }
 
-    pub fn neighbors_outgoing(
+    pub fn outgoing_neighbor_handles(
         &self,
-        node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
-        Ok(self
-            .nodes
-            .get(node_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
-            })?
-            .outgoing_edge_indices
-            .iter()
-            .map(|edge_index| {
-                &self
-                    .edges
-                    .get(edge_index)
-                    .expect("Edge must exist")
-                    .target_node_index
-            }))
+        handle: NodeHandle,
+    ) -> Result<impl Iterator<Item = NodeHandle> + use<'_>, GraphError> {
+        let node = self.nodes.get(&handle).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find node for handle {handle:?}"))
+        })?;
+
+        Ok(node.outgoing_edge_indices.iter().map(|edge_index| {
+            self.edges
+                .get(edge_index)
+                .expect("Edge must exist")
+                .target_node_handle
+        }))
     }
 
-    // TODO: Add tests
-    pub fn neighbors_incoming(
+    pub fn outgoing_neighbors(
         &self,
-        node_index: &NodeIndex,
+        handle: NodeHandle,
     ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
         Ok(self
-            .nodes
-            .get(node_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
-            })?
-            .incoming_edge_indices
-            .iter()
-            .map(|edge_index| {
-                &self
-                    .edges
-                    .get(edge_index)
-                    .expect("Edge must exist")
-                    .source_node_index
-            }))
+            .outgoing_neighbor_handles(handle)?
+            .map(|handle| self.node_index_table.resolve(handle)))
     }
 
-    pub fn neighbors_undirected(
+    pub fn incoming_neighbor_handles(
         &self,
-        node_index: &NodeIndex,
+        handle: NodeHandle,
+    ) -> Result<impl Iterator<Item = NodeHandle> + use<'_>, GraphError> {
+        let node = self.nodes.get(&handle).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find node for handle {handle:?}"))
+        })?;
+
+        Ok(node.incoming_edge_indices.iter().map(|edge_index| {
+            self.edges
+                .get(edge_index)
+                .expect("Edge must exist")
+                .source_node_handle
+        }))
+    }
+
+    pub fn incoming_neighbors(
+        &self,
+        handle: NodeHandle,
     ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
-        let node = self.nodes.get(node_index).ok_or_else(|| {
-            GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+        Ok(self
+            .incoming_neighbor_handles(handle)?
+            .map(|handle| self.node_index_table.resolve(handle)))
+    }
+
+    pub fn neighbor_handles(
+        &self,
+        handle: NodeHandle,
+    ) -> Result<impl Iterator<Item = NodeHandle> + use<'_>, GraphError> {
+        let node = self.nodes.get(&handle).ok_or_else(|| {
+            GraphError::IndexError(format!("Cannot find node for handle {handle:?}"))
         })?;
 
         Ok(node
             .outgoing_edge_indices
             .iter()
             .map(|edge_index| {
-                &self
-                    .edges
+                self.edges
                     .get(edge_index)
                     .expect("Edge must exist")
-                    .target_node_index
+                    .target_node_handle
             })
             .chain(node.incoming_edge_indices.iter().map(|edge_index| {
-                &self
-                    .edges
+                self.edges
                     .get(edge_index)
                     .expect("Edge must exist")
-                    .source_node_index
+                    .source_node_handle
             }))
             .collect::<GrHashSet<_>>()
             .into_iter())
+    }
+
+    pub fn neighbors(
+        &self,
+        handle: NodeHandle,
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
+        Ok(self
+            .neighbor_handles(handle)?
+            .map(|handle| self.node_index_table.resolve(handle)))
+    }
+}
+
+impl Default for Graph {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 #[cfg(test)]
 mod test {
+    use super::super::intern_table::{Handle, NodeHandle};
     use super::{Attributes, Graph, NodeIndex};
     use crate::{errors::GraphError, graphrecord::group_mapping::GroupMapping};
     use std::collections::HashMap;
@@ -529,8 +661,10 @@ mod test {
         }
 
         for (source_node_index, target_node_index, attributes) in edges {
+            let source_handle = graph.node_index_table.get(&source_node_index).unwrap();
+            let target_handle = graph.node_index_table.get(&target_node_index).unwrap();
             graph
-                .add_edge(source_node_index, target_node_index, attributes)
+                .add_edge(source_handle, target_handle, attributes)
                 .unwrap();
         }
 
@@ -544,16 +678,6 @@ mod test {
         graph.clear();
 
         assert_eq!(0, graph.node_count());
-        assert_eq!(0, graph.edge_count());
-    }
-
-    #[test]
-    fn test_clear_edges() {
-        let mut graph = create_graph();
-
-        graph.clear_edges();
-
-        assert_eq!(4, graph.node_count());
         assert_eq!(0, graph.edge_count());
     }
 
@@ -572,13 +696,13 @@ mod test {
     fn test_edge_count() {
         let mut graph = Graph::new();
 
-        graph.add_node("0".into(), HashMap::new()).unwrap();
-        graph.add_node("1".into(), HashMap::new()).unwrap();
+        let source_handle = graph.add_node("0".into(), HashMap::new()).unwrap();
+        let target_handle = graph.add_node("1".into(), HashMap::new()).unwrap();
 
         assert_eq!(0, graph.edge_count());
 
         graph
-            .add_edge("0".into(), "1".into(), HashMap::new())
+            .add_edge(source_handle, target_handle, HashMap::new())
             .unwrap();
 
         assert_eq!(1, graph.edge_count());
@@ -612,8 +736,9 @@ mod test {
 
         assert_eq!(4, graph.node_count());
 
+        let handle = graph.node_index_table.get(&"0".into()).unwrap();
         let attributes = graph
-            .remove_node(&"0".into(), &mut GroupMapping::default())
+            .remove_node(handle, &mut GroupMapping::default())
             .unwrap();
 
         assert_eq!(3, graph.node_count());
@@ -622,15 +747,17 @@ mod test {
 
         let mut graph = Graph::new();
 
-        graph.add_node(0.into(), HashMap::new()).unwrap();
-        graph.add_edge(0.into(), 0.into(), HashMap::new()).unwrap();
+        let node_handle = graph.add_node(0.into(), HashMap::new()).unwrap();
+        graph
+            .add_edge(node_handle, node_handle, HashMap::new())
+            .unwrap();
 
         assert_eq!(1, graph.node_count());
         assert_eq!(1, graph.edge_count());
 
         assert!(
             graph
-                .remove_node(&0.into(), &mut GroupMapping::default())
+                .remove_node(node_handle, &mut GroupMapping::default())
                 .is_ok()
         );
 
@@ -640,22 +767,20 @@ mod test {
 
     #[test]
     fn test_invalid_remove_node() {
-        let mut graph = create_graph();
+        let graph = create_graph();
 
-        assert!(
-            graph
-                .remove_node(&"50".into(), &mut GroupMapping::default())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
-        );
+        // A never-interned name has no handle to even pass in
+        assert!(graph.node_index_table.get(&"50".into()).is_none());
     }
 
     #[test]
     fn test_contains_node() {
         let graph = create_graph();
 
-        assert!(graph.contains_node(&"0".into()));
+        let handle = graph.node_index_table.get(&"0".into()).unwrap();
+        assert!(graph.contains_node(handle));
 
-        assert!(!graph.contains_node(&"50".into()));
+        assert!(graph.node_index_table.get(&"50".into()).is_none());
     }
 
     #[test]
@@ -664,8 +789,10 @@ mod test {
 
         assert_eq!(4, graph.edge_count());
 
+        let source_handle = graph.node_index_table.get(&"0".into()).unwrap();
+        let target_handle = graph.node_index_table.get(&"3".into()).unwrap();
         graph
-            .add_edge("0".into(), "3".into(), HashMap::new())
+            .add_edge(source_handle, target_handle, HashMap::new())
             .unwrap();
 
         assert_eq!(5, graph.edge_count());
@@ -674,19 +801,25 @@ mod test {
     #[test]
     fn test_invalid_add_edge() {
         let mut graph = Graph::new();
-        graph.add_node(0.into(), HashMap::new()).unwrap();
+        let valid_handle = graph.add_node(0.into(), HashMap::new()).unwrap();
+
+        #[cfg(not(feature = "safe-handles"))]
+        let missing_handle = Handle::new(u32::MAX);
+
+        #[cfg(feature = "safe-handles")]
+        let missing_handle = Handle::new(graph.id, u32::MAX);
 
         // Adding an edge pointing to a non-existing node should fail
         assert!(
             graph
-                .add_edge("0".into(), "50".into(), HashMap::new())
+                .add_edge(valid_handle, missing_handle, HashMap::new())
                 .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
         );
 
         // Adding an edge from a non-existing node should fail
         assert!(
             graph
-                .add_edge("50".into(), "0".into(), HashMap::new())
+                .add_edge(missing_handle, valid_handle, HashMap::new())
                 .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
         );
     }
@@ -718,85 +851,48 @@ mod test {
     fn test_node_attributes() {
         let graph = create_graph();
 
-        assert_eq!(
-            &create_nodes()[0].1,
-            graph.node_attributes(&"0".into()).unwrap()
-        );
+        let handle = graph.node_index_table.get(&"0".into()).unwrap();
+        assert_eq!(&create_nodes()[0].1, graph.node_attributes(handle).unwrap());
     }
 
     #[test]
     fn test_invalid_node_attributes() {
         let graph = create_graph();
 
-        // Accessing the node attributes of a non-existing node should fail
-        assert!(
-            graph
-                .node_attributes(&"50".into())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
-        );
+        // A name that was never interned has no handle at all
+        assert!(graph.node_index_table.get(&"50".into()).is_none());
     }
 
     #[test]
-    fn test_node_attributes_mut() {
+    fn test_replace_node_attributes() {
         let mut graph = create_graph();
 
-        let attributes = graph.node_attributes_mut(&"0".into()).unwrap();
+        let handle = graph.node_index_table.get(&"0".into()).unwrap();
 
-        assert_eq!(&create_nodes()[0].1, attributes);
+        assert_eq!(graph.node_attributes(handle).unwrap(), create_nodes()[0].1);
 
         let new_attributes = HashMap::from([("0".into(), "1".into()), ("2".into(), "3".into())]);
 
-        attributes.clone_from(&new_attributes);
+        graph
+            .replace_node_attributes(handle, new_attributes.clone())
+            .unwrap();
 
-        assert_eq!(&new_attributes, graph.node_attributes(&"0".into()).unwrap());
+        assert_eq!(graph.node_attributes(handle).unwrap(), new_attributes);
     }
 
     #[test]
-    fn test_invalid_node_attributes_mut() {
+    fn test_invalid_replace_node_attributes() {
         let mut graph = create_graph();
 
-        // Accessing the node attributes of a non-existing node should fail
+        let handle = graph.node_index_table.get(&"0".into()).unwrap();
+        let mut group_mapping = GroupMapping::default();
+        graph.remove_node(handle, &mut group_mapping).unwrap();
+
         assert!(
             graph
-                .node_attributes_mut(&"50".into())
+                .replace_node_attributes(handle, HashMap::new())
                 .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
         );
-    }
-
-    #[test]
-    fn test_nodes_attributes() {
-        let graph = create_graph();
-
-        let all_attributes: Vec<_> = create_nodes()
-            .into_iter()
-            .map(|(_, attributes)| attributes)
-            .collect();
-
-        for attributes in graph.nodes_attributes() {
-            assert!(all_attributes.contains(attributes));
-        }
-    }
-
-    #[test]
-    fn test_nodes_attributes_mut() {
-        let mut graph = create_graph();
-
-        let all_attributes: Vec<_> = create_nodes()
-            .into_iter()
-            .map(|(_, attributes)| attributes)
-            .collect();
-
-        let new_attributes = HashMap::from([("0".into(), "1".into()), ("2".into(), "3".into())]);
-
-        for attributes in graph.nodes_attributes_mut() {
-            assert!(all_attributes.contains(attributes));
-
-            attributes.clone_from(&new_attributes);
-        }
-
-        for attributes in graph.nodes_attributes() {
-            assert_eq!(&new_attributes, attributes);
-        }
     }
 
     #[test]
@@ -817,7 +913,7 @@ mod test {
     fn test_edge_attributes() {
         let graph = create_graph();
 
-        assert_eq!(&create_edges()[0].2, graph.edge_attributes(&0).unwrap());
+        assert_eq!(graph.edge_attributes(&0).unwrap(), create_edges()[0].2);
     }
 
     #[test]
@@ -833,66 +929,29 @@ mod test {
     }
 
     #[test]
-    fn test_edge_attributes_mut() {
+    fn test_replace_edge_attributes() {
         let mut graph = create_graph();
 
-        let attributes = graph.edge_attributes_mut(&0).unwrap();
-
-        assert_eq!(&create_edges()[0].2, attributes);
+        assert_eq!(graph.edge_attributes(&0).unwrap(), create_edges()[0].2);
 
         let new_attributes = HashMap::from([("0".into(), "1".into()), ("2".into(), "3".into())]);
 
-        attributes.clone_from(&new_attributes);
+        graph
+            .replace_edge_attributes(&0, new_attributes.clone())
+            .unwrap();
 
-        assert_eq!(&new_attributes, graph.edge_attributes(&0).unwrap());
+        assert_eq!(graph.edge_attributes(&0).unwrap(), new_attributes);
     }
 
     #[test]
-    fn test_invalid_edge_attributes_mut() {
+    fn test_invalid_replace_edge_attributes() {
         let mut graph = create_graph();
 
-        // Accessing the edge attributes of a non-existing edge should fail
         assert!(
             graph
-                .edge_attributes_mut(&50)
+                .replace_edge_attributes(&50, HashMap::new())
                 .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
         );
-    }
-
-    #[test]
-    fn test_edges_attributes() {
-        let graph = create_graph();
-
-        let all_attributes: Vec<_> = create_edges()
-            .into_iter()
-            .map(|(_, _, attributes)| attributes)
-            .collect();
-
-        for attributes in graph.edges_attributes() {
-            assert!(all_attributes.contains(attributes));
-        }
-    }
-
-    #[test]
-    fn test_edges_attributes_mut() {
-        let mut graph = create_graph();
-
-        let all_attributes: Vec<_> = create_edges()
-            .into_iter()
-            .map(|(_, _, attributes)| attributes)
-            .collect();
-
-        let new_attributes = HashMap::from([("0".into(), "1".into()), ("2".into(), "3".into())]);
-
-        for attributes in graph.edges_attributes_mut() {
-            assert!(all_attributes.contains(attributes));
-
-            attributes.clone_from(&new_attributes);
-        }
-
-        for attributes in graph.edges_attributes() {
-            assert_eq!(&new_attributes, attributes);
-        }
     }
 
     #[test]
@@ -901,21 +960,42 @@ mod test {
 
         let edge = &create_edges()[0];
 
-        let endpoints = graph.edge_endpoints(&0).unwrap();
+        let (source_node_index, target_node_index) = graph.edge_endpoints(&0).unwrap();
 
-        assert_eq!(&edge.0, endpoints.0);
-
-        assert_eq!(&edge.1, endpoints.1);
+        assert_eq!(&edge.0, source_node_index);
+        assert_eq!(&edge.1, target_node_index);
     }
 
     #[test]
     fn test_invalid_edge_endpoints() {
         let graph = create_graph();
 
-        // Accessing the edge endpoints of a non-existing edge should fail
         assert!(
             graph
                 .edge_endpoints(&50)
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
+    }
+
+    #[test]
+    fn test_edge_endpoint_handles() {
+        let graph = create_graph();
+
+        let edge = &create_edges()[0];
+
+        let (source_handle, target_handle) = graph.edge_endpoint_handles(&0).unwrap();
+
+        assert_eq!(&edge.0, graph.node_index_table.resolve(source_handle));
+        assert_eq!(&edge.1, graph.node_index_table.resolve(target_handle));
+    }
+
+    #[test]
+    fn test_invalid_edge_endpoint_handles() {
+        let graph = create_graph();
+
+        assert!(
+            graph
+                .edge_endpoint_handles(&50)
                 .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
         );
     }
@@ -931,40 +1011,38 @@ mod test {
         }
     }
 
+    fn handle_of(graph: &Graph, name: &str) -> NodeHandle {
+        graph.node_index_table.get(&name.into()).unwrap()
+    }
+
     #[test]
     fn test_edges_connecting() {
         let graph = create_graph();
 
-        let first_index = "0".into();
-        let second_index = "1".into();
-        let edges_connecting = graph.edges_connecting(vec![&first_index], vec![&second_index]);
+        let edges_connecting =
+            graph.edges_connecting([handle_of(&graph, "0")], [handle_of(&graph, "1")]);
 
         assert_eq!(vec![&0], edges_connecting.collect::<Vec<_>>());
 
-        let first_index = "0".into();
-        let second_index = "3".into();
-        let edges_connecting = graph.edges_connecting(vec![&first_index], vec![&second_index]);
+        let edges_connecting =
+            graph.edges_connecting([handle_of(&graph, "0")], [handle_of(&graph, "3")]);
 
         assert_eq!(0, edges_connecting.count());
 
-        let first_index = "0".into();
-        let second_index = "1".into();
-        let third_index = "2".into();
         let mut edges_connecting: Vec<_> = graph
-            .edges_connecting(vec![&first_index, &second_index], vec![&third_index])
+            .edges_connecting(
+                [handle_of(&graph, "0"), handle_of(&graph, "1")],
+                [handle_of(&graph, "2")],
+            )
             .collect();
 
         edges_connecting.sort();
         assert_eq!(vec![&2, &3], edges_connecting);
 
-        let first_index = "0".into();
-        let second_index = "1".into();
-        let third_index = "2".into();
-        let fourth_index = "3".into();
         let mut edges_connecting: Vec<_> = graph
             .edges_connecting(
-                vec![&first_index, &second_index],
-                vec![&third_index, &fourth_index],
+                [handle_of(&graph, "0"), handle_of(&graph, "1")],
+                [handle_of(&graph, "2"), handle_of(&graph, "3")],
             )
             .collect();
 
@@ -976,10 +1054,8 @@ mod test {
     fn test_edges_connecting_undirected() {
         let graph = create_graph();
 
-        let first_index = "0".into();
-        let second_index = "1".into();
         let mut edges_connecting: Vec<_> = graph
-            .edges_connecting_undirected(vec![&first_index], vec![&second_index])
+            .edges_connecting_undirected([handle_of(&graph, "0")], [handle_of(&graph, "1")])
             .collect();
 
         edges_connecting.sort();
@@ -996,11 +1072,29 @@ mod test {
     }
 
     #[test]
+    fn test_outgoing_neighbors() {
+        let graph = create_graph();
+
+        let neighbors = graph.outgoing_neighbors(handle_of(&graph, "0")).unwrap();
+
+        assert_eq!(2, neighbors.count());
+    }
+
+    #[test]
+    fn test_invalid_outgoing_neighbors() {
+        let graph = create_graph();
+
+        assert!(graph.node_index_table.get(&"50".into()).is_none());
+    }
+
+    #[test]
     fn test_neighbors() {
         let graph = create_graph();
 
-        let neighbors = graph.neighbors_outgoing(&"0".into()).unwrap();
+        let neighbors = graph.outgoing_neighbors(handle_of(&graph, "2")).unwrap();
+        assert_eq!(0, neighbors.count());
 
+        let neighbors = graph.neighbors(handle_of(&graph, "2")).unwrap();
         assert_eq!(2, neighbors.count());
     }
 
@@ -1008,32 +1102,6 @@ mod test {
     fn test_invalid_neighbors() {
         let graph = create_graph();
 
-        assert!(
-            graph
-                .neighbors_outgoing(&"50".into())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
-        );
-    }
-
-    #[test]
-    fn test_neighbors_undirected() {
-        let graph = create_graph();
-
-        let neighbors = graph.neighbors_outgoing(&"2".into()).unwrap();
-        assert_eq!(0, neighbors.count());
-
-        let neighbors = graph.neighbors_undirected(&"2".into()).unwrap();
-        assert_eq!(2, neighbors.count());
-    }
-
-    #[test]
-    fn test_invalid_neighbors_undirected() {
-        let graph = create_graph();
-
-        assert!(
-            graph
-                .neighbors_undirected(&"50".into())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
-        );
+        assert!(graph.node_index_table.get(&"50".into()).is_none());
     }
 }

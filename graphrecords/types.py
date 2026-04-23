@@ -21,6 +21,16 @@ from typing import (
 import pandas as pd
 import polars as pl
 
+from graphrecords._graphrecords.handle import (
+    AttributeHandle as _AttributeHandle,
+)
+from graphrecords._graphrecords.handle import (
+    GroupHandle as _GroupHandle,
+)
+from graphrecords._graphrecords.handle import (
+    NodeHandle as _NodeHandle,
+)
+
 if TYPE_CHECKING:
     from typing_extensions import TypeIs
 
@@ -46,6 +56,45 @@ NodeIndex: TypeAlias = GraphRecordAttribute
 
 #: A type alias for a list of node indices.
 NodeIndexInputList: TypeAlias = GraphRecordAttributeInputList
+
+#: A type alias for a node handle.
+NodeHandle: TypeAlias = _NodeHandle
+
+#: A type alias for a group handle.
+GroupHandle: TypeAlias = _GroupHandle
+
+#: A type alias for an attribute handle.
+AttributeHandle: TypeAlias = _AttributeHandle
+
+#: A type alias for a value that identifies a node — either a name or a handle.
+NodeLookup: TypeAlias = Union[NodeIndex, NodeHandle]
+
+#: A type alias for a list of node lookups — homogeneous name or handle lists
+#: plus the fully-mixed List[NodeLookup] option for covariant reuse.
+NodeLookupInputList: TypeAlias = Union[
+    List[str], List[int], List[NodeIndex], List[NodeHandle], List[NodeLookup]
+]
+
+#: A type alias for a value that identifies a group — either a name or a handle.
+GroupLookup: TypeAlias = "Union[Group, GroupHandle]"
+
+#: A type alias for a list of group lookups — homogeneous name or handle lists
+#: plus the fully-mixed List[GroupLookup] option for covariant reuse.
+GroupLookupInputList: TypeAlias = (
+    "Union[List[str], List[int], List[Group], List[GroupHandle], List[GroupLookup]]"
+)
+
+#: A type alias for a value that identifies an attribute — either a name or a handle.
+AttributeLookup: TypeAlias = Union[GraphRecordAttribute, AttributeHandle]
+
+#: A type alias for a list of attribute lookups.
+AttributeLookupInputList: TypeAlias = Union[
+    List[str],
+    List[int],
+    List[GraphRecordAttribute],
+    List[AttributeHandle],
+    List[AttributeLookup],
+]
 
 #: A type alias for an edge index.
 EdgeIndex: TypeAlias = int
@@ -79,18 +128,9 @@ NodeTuple: TypeAlias = Union[
     Tuple[NodeIndex, AttributesInput],
 ]
 
-#: A type alias for an edge tuple.
-EdgeTuple: TypeAlias = Union[
-    Tuple[str, str, AttributesInput],
-    Tuple[str, int, AttributesInput],
-    Tuple[str, NodeIndex, AttributesInput],
-    Tuple[int, str, AttributesInput],
-    Tuple[int, int, AttributesInput],
-    Tuple[int, NodeIndex, AttributesInput],
-    Tuple[NodeIndex, str, AttributesInput],
-    Tuple[NodeIndex, int, AttributesInput],
-    Tuple[NodeIndex, NodeIndex, AttributesInput],
-]
+#: A type alias for an edge tuple. Source and target may be either a node name
+#: (str/int/NodeIndex) or a NodeHandle.
+EdgeTuple: TypeAlias = Tuple[NodeLookup, NodeLookup, AttributesInput]
 
 #: A type alias for input to a Polars DataFrame for nodes.
 PolarsNodeDataFrameInput: TypeAlias = Tuple[pl.DataFrame, str]
@@ -104,9 +144,8 @@ PandasNodeDataFrameInput: TypeAlias = Tuple[pd.DataFrame, str]
 #: A type alias for input to a Pandas DataFrame for edges.
 PandasEdgeDataFrameInput: TypeAlias = Tuple[pd.DataFrame, str, str]
 
-#: A type alias for input to a node.
-NodeInput: TypeAlias = Union[
-    NodeTuple,
+#: A type alias for batch input to nodes (everything except a single tuple).
+NodeInputBatch: TypeAlias = Union[
     Sequence[NodeTuple],
     PandasNodeDataFrameInput,
     List[PandasNodeDataFrameInput],
@@ -114,15 +153,20 @@ NodeInput: TypeAlias = Union[
     List[PolarsNodeDataFrameInput],
 ]
 
-#: A type alias for input to an edge.
-EdgeInput: TypeAlias = Union[
-    EdgeTuple,
+#: A type alias for input to a node.
+NodeInput: TypeAlias = Union[NodeTuple, NodeInputBatch]
+
+#: A type alias for batch input to edges (everything except a single tuple).
+EdgeInputBatch: TypeAlias = Union[
     Sequence[EdgeTuple],
     PandasEdgeDataFrameInput,
     List[PandasEdgeDataFrameInput],
     PolarsEdgeDataFrameInput,
     List[PolarsEdgeDataFrameInput],
 ]
+
+#: A type alias for input to an edge.
+EdgeInput: TypeAlias = Union[EdgeTuple, EdgeInputBatch]
 
 
 class GroupInfo(TypedDict):
@@ -375,6 +419,19 @@ def is_node_tuple_list(value: object) -> TypeIs[List[NodeTuple]]:
     return isinstance(value, list) and all(is_node_tuple(input) for input in value)
 
 
+def is_node_lookup(value: object) -> TypeIs[NodeLookup]:
+    """Check if a value is a valid node lookup (name or handle).
+
+    Args:
+        value (object): The value to check.
+
+    Returns:
+        TypeIs[NodeLookup]: True if the value is a NodeIndex name or a NodeHandle,
+            otherwise False.
+    """
+    return is_node_index(value) or isinstance(value, _NodeHandle)
+
+
 def is_edge_tuple(value: object) -> TypeIs[EdgeTuple]:
     """Check if a value is a valid edge tuple.
 
@@ -387,8 +444,8 @@ def is_edge_tuple(value: object) -> TypeIs[EdgeTuple]:
     return (
         isinstance(value, tuple)
         and len(value) == 3
-        and is_graphrecord_attribute(value[0])
-        and is_graphrecord_attribute(value[1])
+        and is_node_lookup(value[0])
+        and is_node_lookup(value[1])
         and is_attributes(value[2])
     )
 

@@ -219,13 +219,12 @@ impl EdgeOperation {
         edge_indices: impl Iterator<Item = &'a EdgeIndex>,
     ) -> impl Iterator<Item = (&'a EdgeIndex, Vec<GraphRecordAttribute>)> {
         edge_indices.map(move |edge_index| {
-            let attributes = graphrecord
+            let attributes_view = graphrecord
                 .edge_attributes(edge_index)
-                .expect("Edge must exist")
-                .keys()
-                .cloned();
+                .expect("Edge must exist");
+            let attributes: Vec<GraphRecordAttribute> = attributes_view.keys().cloned().collect();
 
-            (edge_index, attributes.collect())
+            (edge_index, attributes)
         })
     }
 
@@ -301,12 +300,10 @@ impl EdgeOperation {
         attribute: CardinalityWrapper<GraphRecordAttribute>,
     ) -> impl Iterator<Item = &'a EdgeIndex> {
         edge_indices.filter(move |edge_index| {
-            let attributes_of_edge = graphrecord
+            let attributes_view = graphrecord
                 .edge_attributes(edge_index)
-                .expect("Node must exist")
-                .keys();
-
-            let attributes_of_edge: GrHashSet<_> = attributes_of_edge.collect();
+                .expect("Node must exist");
+            let attributes_of_edge: GrHashSet<_> = attributes_view.keys().collect();
 
             match &attribute {
                 CardinalityWrapper::Single(attribute) => attributes_of_edge.contains(&attribute),

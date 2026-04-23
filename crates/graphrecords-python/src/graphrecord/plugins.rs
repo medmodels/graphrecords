@@ -1,5 +1,8 @@
 use crate::{
-    graphrecord::traits::DeepInto,
+    graphrecord::{
+        handle::{PyGroupHandle, PyNodeHandle},
+        traits::DeepInto,
+    },
     prelude::{PyAttributes, PyGraphRecord, PyGroup, PyNodeIndex, PySchema},
 };
 use graphrecords_core::{
@@ -367,7 +370,7 @@ impl PyPostAddNodeContext {
 pub struct PyPreAddNodeWithGroupContext {
     node_index: Py<PyAny>,
     attributes: Py<PyAny>,
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreAddNodeWithGroupContext {
@@ -375,7 +378,7 @@ impl Clone for PyPreAddNodeWithGroupContext {
         Python::attach(|py| Self {
             node_index: self.node_index.clone_ref(py),
             attributes: self.attributes.clone_ref(py),
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -395,7 +398,7 @@ impl PyPreAddNodeWithGroupContext {
                     .into_py_any(py)
                     .expect("PyAttributes should be creatable")
             },
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -415,15 +418,15 @@ impl PyPreAddNodeWithGroupContext {
             .extract(py)
             .expect("PyAttributes should be extractable");
 
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
         PreAddNodeWithGroupContext {
             node_index: node_index.into(),
             attributes: attributes.deep_into(),
-            group: group.into(),
+            group_handle: group_handle.into(),
         }
     }
 }
@@ -431,11 +434,15 @@ impl PyPreAddNodeWithGroupContext {
 #[pymethods]
 impl PyPreAddNodeWithGroupContext {
     #[new]
-    pub const fn new(node_index: Py<PyAny>, attributes: Py<PyAny>, group: Py<PyAny>) -> Self {
+    pub const fn new(
+        node_index: Py<PyAny>,
+        attributes: Py<PyAny>,
+        group_handle: Py<PyAny>,
+    ) -> Self {
         Self {
             node_index,
             attributes,
-            group,
+            group_handle,
         }
     }
 
@@ -450,8 +457,8 @@ impl PyPreAddNodeWithGroupContext {
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -459,14 +466,14 @@ impl PyPreAddNodeWithGroupContext {
 #[derive(Debug)]
 pub struct PyPostAddNodeWithGroupContext {
     node_index: Py<PyAny>,
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostAddNodeWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             node_index: self.node_index.clone_ref(py),
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -480,7 +487,7 @@ impl PyPostAddNodeWithGroupContext {
             node_index: PyNodeIndex::from(context.node_index)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -490,8 +497,11 @@ impl PyPostAddNodeWithGroupContext {
 #[pymethods]
 impl PyPostAddNodeWithGroupContext {
     #[new]
-    pub const fn new(node_index: Py<PyAny>, group: Py<PyAny>) -> Self {
-        Self { node_index, group }
+    pub const fn new(node_index: Py<PyAny>, group_handle: Py<PyAny>) -> Self {
+        Self {
+            node_index,
+            group_handle,
+        }
     }
 
     #[getter]
@@ -500,8 +510,8 @@ impl PyPostAddNodeWithGroupContext {
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -510,7 +520,7 @@ impl PyPostAddNodeWithGroupContext {
 pub struct PyPreAddNodeWithGroupsContext {
     node_index: Py<PyAny>,
     attributes: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPreAddNodeWithGroupsContext {
@@ -518,7 +528,7 @@ impl Clone for PyPreAddNodeWithGroupsContext {
         Python::attach(|py| Self {
             node_index: self.node_index.clone_ref(py),
             attributes: self.attributes.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -528,7 +538,7 @@ impl PyPreAddNodeWithGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddNodeWithGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             node_index: PyNodeIndex::from(context.node_index)
@@ -540,7 +550,9 @@ impl PyPreAddNodeWithGroupsContext {
                     .into_py_any(py)
                     .expect("PyAttributes should be creatable")
             },
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 
@@ -558,15 +570,15 @@ impl PyPreAddNodeWithGroupsContext {
             .extract(py)
             .expect("PyAttributes should be extractable");
 
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
         PreAddNodeWithGroupsContext {
             node_index: node_index.into(),
             attributes: attributes.deep_into(),
-            groups: groups.deep_into(),
+            group_handles: group_handles.deep_into(),
         }
     }
 }
@@ -574,11 +586,15 @@ impl PyPreAddNodeWithGroupsContext {
 #[pymethods]
 impl PyPreAddNodeWithGroupsContext {
     #[new]
-    pub const fn new(node_index: Py<PyAny>, attributes: Py<PyAny>, groups: Py<PyAny>) -> Self {
+    pub const fn new(
+        node_index: Py<PyAny>,
+        attributes: Py<PyAny>,
+        group_handles: Py<PyAny>,
+    ) -> Self {
         Self {
             node_index,
             attributes,
-            groups,
+            group_handles,
         }
     }
 
@@ -593,8 +609,8 @@ impl PyPreAddNodeWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
@@ -602,14 +618,14 @@ impl PyPreAddNodeWithGroupsContext {
 #[derive(Debug)]
 pub struct PyPostAddNodeWithGroupsContext {
     node_index: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPostAddNodeWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             node_index: self.node_index.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -619,13 +635,15 @@ impl PyPostAddNodeWithGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddNodeWithGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             node_index: PyNodeIndex::from(context.node_index)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 }
@@ -633,8 +651,11 @@ impl PyPostAddNodeWithGroupsContext {
 #[pymethods]
 impl PyPostAddNodeWithGroupsContext {
     #[new]
-    pub const fn new(node_index: Py<PyAny>, groups: Py<PyAny>) -> Self {
-        Self { node_index, groups }
+    pub const fn new(node_index: Py<PyAny>, group_handles: Py<PyAny>) -> Self {
+        Self {
+            node_index,
+            group_handles,
+        }
     }
 
     #[getter]
@@ -643,21 +664,21 @@ impl PyPostAddNodeWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreRemoveNodeContext {
-    node_index: Py<PyAny>,
+    node_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreRemoveNodeContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            node_index: self.node_index.clone_ref(py),
+            node_handle: self.node_handle.clone_ref(py),
         })
     }
 }
@@ -668,7 +689,7 @@ impl PyPreRemoveNodeContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreRemoveNodeContext) -> Self {
         Self {
-            node_index: PyNodeIndex::from(context.node_index)
+            node_handle: PyNodeHandle::from(context.node_handle)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
         }
@@ -678,13 +699,13 @@ impl PyPreRemoveNodeContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreRemoveNodeContext {
-        let py_node_index: PyNodeIndex = self
-            .node_index
+        let node_handle: PyNodeHandle = self
+            .node_handle
             .extract(py)
-            .expect("PyNodeIndex should be extractable");
+            .expect("PyNodeHandle should be extractable");
 
         PreRemoveNodeContext {
-            node_index: py_node_index.into(),
+            node_handle: node_handle.into(),
         }
     }
 }
@@ -692,26 +713,26 @@ impl PyPreRemoveNodeContext {
 #[pymethods]
 impl PyPreRemoveNodeContext {
     #[new]
-    pub const fn new(node_index: Py<PyAny>) -> Self {
-        Self { node_index }
+    pub const fn new(node_handle: Py<PyAny>) -> Self {
+        Self { node_handle }
     }
 
     #[getter]
-    pub fn node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_index.clone_ref(py)
+    pub fn node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostRemoveNodeContext {
-    node_index: Py<PyAny>,
+    node_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostRemoveNodeContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            node_index: self.node_index.clone_ref(py),
+            node_handle: self.node_handle.clone_ref(py),
         })
     }
 }
@@ -722,7 +743,7 @@ impl PyPostRemoveNodeContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostRemoveNodeContext) -> Self {
         Self {
-            node_index: PyNodeIndex::from(context.node_index)
+            node_handle: PyNodeHandle::from(context.node_handle)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
         }
@@ -732,13 +753,13 @@ impl PyPostRemoveNodeContext {
 #[pymethods]
 impl PyPostRemoveNodeContext {
     #[new]
-    pub const fn new(node_index: Py<PyAny>) -> Self {
-        Self { node_index }
+    pub const fn new(node_handle: Py<PyAny>) -> Self {
+        Self { node_handle }
     }
 
     #[getter]
-    pub fn node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_index.clone_ref(py)
+    pub fn node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handle.clone_ref(py)
     }
 }
 
@@ -838,14 +859,14 @@ impl PyPostAddNodesContext {
 #[derive(Debug)]
 pub struct PyPreAddNodesWithGroupContext {
     nodes: Py<PyAny>,
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreAddNodesWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             nodes: self.nodes.clone_ref(py),
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -859,7 +880,7 @@ impl PyPreAddNodesWithGroupContext {
 
         Self {
             nodes: nodes.into_py_any(py).expect("nodes should be creatable"),
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -872,14 +893,14 @@ impl PyPreAddNodesWithGroupContext {
         let nodes: Vec<(PyNodeIndex, PyAttributes)> =
             self.nodes.extract(py).expect("nodes should be extractable");
 
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
         PreAddNodesWithGroupContext {
             nodes: nodes.deep_into(),
-            group: group.into(),
+            group_handle: group_handle.into(),
         }
     }
 }
@@ -887,8 +908,11 @@ impl PyPreAddNodesWithGroupContext {
 #[pymethods]
 impl PyPreAddNodesWithGroupContext {
     #[new]
-    pub const fn new(nodes: Py<PyAny>, group: Py<PyAny>) -> Self {
-        Self { nodes, group }
+    pub const fn new(nodes: Py<PyAny>, group_handle: Py<PyAny>) -> Self {
+        Self {
+            nodes,
+            group_handle,
+        }
     }
 
     #[getter]
@@ -897,8 +921,8 @@ impl PyPreAddNodesWithGroupContext {
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -906,14 +930,14 @@ impl PyPreAddNodesWithGroupContext {
 #[derive(Debug)]
 pub struct PyPostAddNodesWithGroupContext {
     nodes: Py<PyAny>,
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostAddNodesWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             nodes: self.nodes.clone_ref(py),
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -927,7 +951,7 @@ impl PyPostAddNodesWithGroupContext {
 
         Self {
             nodes: nodes.into_py_any(py).expect("nodes should be creatable"),
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -937,8 +961,11 @@ impl PyPostAddNodesWithGroupContext {
 #[pymethods]
 impl PyPostAddNodesWithGroupContext {
     #[new]
-    pub const fn new(nodes: Py<PyAny>, group: Py<PyAny>) -> Self {
-        Self { nodes, group }
+    pub const fn new(nodes: Py<PyAny>, group_handle: Py<PyAny>) -> Self {
+        Self {
+            nodes,
+            group_handle,
+        }
     }
 
     #[getter]
@@ -947,8 +974,8 @@ impl PyPostAddNodesWithGroupContext {
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -956,14 +983,14 @@ impl PyPostAddNodesWithGroupContext {
 #[derive(Debug)]
 pub struct PyPreAddNodesWithGroupsContext {
     nodes: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPreAddNodesWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             nodes: self.nodes.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -974,11 +1001,13 @@ impl PyPreAddNodesWithGroupsContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddNodesWithGroupsContext) -> Self {
         let nodes: Vec<(PyNodeIndex, PyAttributes)> = context.nodes.deep_into();
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             nodes: nodes.into_py_any(py).expect("nodes should be creatable"),
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 
@@ -989,14 +1018,14 @@ impl PyPreAddNodesWithGroupsContext {
         let nodes: Vec<(PyNodeIndex, PyAttributes)> =
             self.nodes.extract(py).expect("nodes should be extractable");
 
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
         PreAddNodesWithGroupsContext {
             nodes: nodes.deep_into(),
-            groups: groups.deep_into(),
+            group_handles: group_handles.deep_into(),
         }
     }
 }
@@ -1004,8 +1033,11 @@ impl PyPreAddNodesWithGroupsContext {
 #[pymethods]
 impl PyPreAddNodesWithGroupsContext {
     #[new]
-    pub const fn new(nodes: Py<PyAny>, groups: Py<PyAny>) -> Self {
-        Self { nodes, groups }
+    pub const fn new(nodes: Py<PyAny>, group_handles: Py<PyAny>) -> Self {
+        Self {
+            nodes,
+            group_handles,
+        }
     }
 
     #[getter]
@@ -1014,8 +1046,8 @@ impl PyPreAddNodesWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
@@ -1023,14 +1055,14 @@ impl PyPreAddNodesWithGroupsContext {
 #[derive(Debug)]
 pub struct PyPostAddNodesWithGroupsContext {
     nodes: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPostAddNodesWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             nodes: self.nodes.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -1041,11 +1073,13 @@ impl PyPostAddNodesWithGroupsContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddNodesWithGroupsContext) -> Self {
         let nodes: Vec<(PyNodeIndex, PyAttributes)> = context.nodes.deep_into();
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             nodes: nodes.into_py_any(py).expect("nodes should be creatable"),
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 }
@@ -1053,8 +1087,11 @@ impl PyPostAddNodesWithGroupsContext {
 #[pymethods]
 impl PyPostAddNodesWithGroupsContext {
     #[new]
-    pub const fn new(nodes: Py<PyAny>, groups: Py<PyAny>) -> Self {
-        Self { nodes, groups }
+    pub const fn new(nodes: Py<PyAny>, group_handles: Py<PyAny>) -> Self {
+        Self {
+            nodes,
+            group_handles,
+        }
     }
 
     #[getter]
@@ -1063,8 +1100,8 @@ impl PyPostAddNodesWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
@@ -1170,14 +1207,14 @@ impl PyPostAddNodesDataframesContext {
 #[derive(Debug)]
 pub struct PyPreAddNodesDataframesWithGroupContext {
     nodes_dataframes: Py<PyAny>,
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreAddNodesDataframesWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             nodes_dataframes: self.nodes_dataframes.clone_ref(py),
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -1193,7 +1230,7 @@ impl PyPreAddNodesDataframesWithGroupContext {
             nodes_dataframes: nodes_dataframes
                 .into_py_any(py)
                 .expect("nodes_dataframes should be creatable"),
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -1208,14 +1245,14 @@ impl PyPreAddNodesDataframesWithGroupContext {
             .extract(py)
             .expect("nodes_dataframes should be extractable");
 
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
         PreAddNodesDataframesWithGroupContext {
             nodes_dataframes: py_to_node_dataframe_inputs(nodes_dataframes),
-            group: group.into(),
+            group_handle: group_handle.into(),
         }
     }
 }
@@ -1223,10 +1260,10 @@ impl PyPreAddNodesDataframesWithGroupContext {
 #[pymethods]
 impl PyPreAddNodesDataframesWithGroupContext {
     #[new]
-    pub const fn new(nodes_dataframes: Py<PyAny>, group: Py<PyAny>) -> Self {
+    pub const fn new(nodes_dataframes: Py<PyAny>, group_handle: Py<PyAny>) -> Self {
         Self {
             nodes_dataframes,
-            group,
+            group_handle,
         }
     }
 
@@ -1236,8 +1273,8 @@ impl PyPreAddNodesDataframesWithGroupContext {
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -1245,14 +1282,14 @@ impl PyPreAddNodesDataframesWithGroupContext {
 #[derive(Debug)]
 pub struct PyPostAddNodesDataframesWithGroupContext {
     nodes_dataframes: Py<PyAny>,
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostAddNodesDataframesWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             nodes_dataframes: self.nodes_dataframes.clone_ref(py),
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -1268,7 +1305,7 @@ impl PyPostAddNodesDataframesWithGroupContext {
             nodes_dataframes: nodes_dataframes
                 .into_py_any(py)
                 .expect("nodes_dataframes should be creatable"),
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -1278,10 +1315,10 @@ impl PyPostAddNodesDataframesWithGroupContext {
 #[pymethods]
 impl PyPostAddNodesDataframesWithGroupContext {
     #[new]
-    pub const fn new(nodes_dataframes: Py<PyAny>, group: Py<PyAny>) -> Self {
+    pub const fn new(nodes_dataframes: Py<PyAny>, group_handle: Py<PyAny>) -> Self {
         Self {
             nodes_dataframes,
-            group,
+            group_handle,
         }
     }
 
@@ -1291,8 +1328,8 @@ impl PyPostAddNodesDataframesWithGroupContext {
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -1300,14 +1337,14 @@ impl PyPostAddNodesDataframesWithGroupContext {
 #[derive(Debug)]
 pub struct PyPreAddNodesDataframesWithGroupsContext {
     nodes_dataframes: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPreAddNodesDataframesWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             nodes_dataframes: self.nodes_dataframes.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -1318,13 +1355,15 @@ impl PyPreAddNodesDataframesWithGroupsContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddNodesDataframesWithGroupsContext) -> Self {
         let nodes_dataframes = node_dataframe_inputs_to_py(context.nodes_dataframes);
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             nodes_dataframes: nodes_dataframes
                 .into_py_any(py)
                 .expect("nodes_dataframes should be creatable"),
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 
@@ -1337,14 +1376,14 @@ impl PyPreAddNodesDataframesWithGroupsContext {
             .extract(py)
             .expect("nodes_dataframes should be extractable");
 
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
         PreAddNodesDataframesWithGroupsContext {
             nodes_dataframes: py_to_node_dataframe_inputs(nodes_dataframes),
-            groups: groups.deep_into(),
+            group_handles: group_handles.deep_into(),
         }
     }
 }
@@ -1352,10 +1391,10 @@ impl PyPreAddNodesDataframesWithGroupsContext {
 #[pymethods]
 impl PyPreAddNodesDataframesWithGroupsContext {
     #[new]
-    pub const fn new(nodes_dataframes: Py<PyAny>, groups: Py<PyAny>) -> Self {
+    pub const fn new(nodes_dataframes: Py<PyAny>, group_handles: Py<PyAny>) -> Self {
         Self {
             nodes_dataframes,
-            groups,
+            group_handles,
         }
     }
 
@@ -1365,8 +1404,8 @@ impl PyPreAddNodesDataframesWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
@@ -1374,14 +1413,14 @@ impl PyPreAddNodesDataframesWithGroupsContext {
 #[derive(Debug)]
 pub struct PyPostAddNodesDataframesWithGroupsContext {
     nodes_dataframes: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPostAddNodesDataframesWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             nodes_dataframes: self.nodes_dataframes.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -1392,13 +1431,15 @@ impl PyPostAddNodesDataframesWithGroupsContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddNodesDataframesWithGroupsContext) -> Self {
         let nodes_dataframes = node_dataframe_inputs_to_py(context.nodes_dataframes);
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             nodes_dataframes: nodes_dataframes
                 .into_py_any(py)
                 .expect("nodes_dataframes should be creatable"),
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 }
@@ -1406,10 +1447,10 @@ impl PyPostAddNodesDataframesWithGroupsContext {
 #[pymethods]
 impl PyPostAddNodesDataframesWithGroupsContext {
     #[new]
-    pub const fn new(nodes_dataframes: Py<PyAny>, groups: Py<PyAny>) -> Self {
+    pub const fn new(nodes_dataframes: Py<PyAny>, group_handles: Py<PyAny>) -> Self {
         Self {
             nodes_dataframes,
-            groups,
+            group_handles,
         }
     }
 
@@ -1419,24 +1460,24 @@ impl PyPostAddNodesDataframesWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreAddEdgeContext {
-    source_node_index: Py<PyAny>,
-    target_node_index: Py<PyAny>,
+    source_node_handle: Py<PyAny>,
+    target_node_handle: Py<PyAny>,
     attributes: Py<PyAny>,
 }
 
 impl Clone for PyPreAddEdgeContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            source_node_index: self.source_node_index.clone_ref(py),
-            target_node_index: self.target_node_index.clone_ref(py),
+            source_node_handle: self.source_node_handle.clone_ref(py),
+            target_node_handle: self.target_node_handle.clone_ref(py),
             attributes: self.attributes.clone_ref(py),
         })
     }
@@ -1448,12 +1489,12 @@ impl PyPreAddEdgeContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddEdgeContext) -> Self {
         Self {
-            source_node_index: PyNodeIndex::from(context.source_node_index)
+            source_node_handle: PyNodeHandle::from(context.source_node_handle)
                 .into_py_any(py)
-                .expect("PyNodeIndex should be creatable"),
-            target_node_index: PyNodeIndex::from(context.target_node_index)
+                .expect("PyNodeHandle should be creatable"),
+            target_node_handle: PyNodeHandle::from(context.target_node_handle)
                 .into_py_any(py)
-                .expect("PyNodeIndex should be creatable"),
+                .expect("PyNodeHandle should be creatable"),
             attributes: {
                 let py_attrs: PyAttributes = context.attributes.deep_into();
                 py_attrs
@@ -1467,15 +1508,15 @@ impl PyPreAddEdgeContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddEdgeContext {
-        let source: PyNodeIndex = self
-            .source_node_index
+        let source: PyNodeHandle = self
+            .source_node_handle
             .extract(py)
-            .expect("PyNodeIndex should be extractable");
+            .expect("PyNodeHandle should be extractable");
 
-        let target: PyNodeIndex = self
-            .target_node_index
+        let target: PyNodeHandle = self
+            .target_node_handle
             .extract(py)
-            .expect("PyNodeIndex should be extractable");
+            .expect("PyNodeHandle should be extractable");
 
         let attributes: PyAttributes = self
             .attributes
@@ -1483,8 +1524,8 @@ impl PyPreAddEdgeContext {
             .expect("PyAttributes should be extractable");
 
         PreAddEdgeContext {
-            source_node_index: source.into(),
-            target_node_index: target.into(),
+            source_node_handle: source.into(),
+            target_node_handle: target.into(),
             attributes: attributes.deep_into(),
         }
     }
@@ -1494,25 +1535,25 @@ impl PyPreAddEdgeContext {
 impl PyPreAddEdgeContext {
     #[new]
     pub const fn new(
-        source_node_index: Py<PyAny>,
-        target_node_index: Py<PyAny>,
+        source_node_handle: Py<PyAny>,
+        target_node_handle: Py<PyAny>,
         attributes: Py<PyAny>,
     ) -> Self {
         Self {
-            source_node_index,
-            target_node_index,
+            source_node_handle,
+            target_node_handle,
             attributes,
         }
     }
 
     #[getter]
-    pub fn source_node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.source_node_index.clone_ref(py)
+    pub fn source_node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.source_node_handle.clone_ref(py)
     }
 
     #[getter]
-    pub fn target_node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.target_node_index.clone_ref(py)
+    pub fn target_node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.target_node_handle.clone_ref(py)
     }
 
     #[getter]
@@ -1577,19 +1618,19 @@ impl PyPostAddEdgeContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreAddEdgeWithGroupContext {
-    source_node_index: Py<PyAny>,
-    target_node_index: Py<PyAny>,
+    source_node_handle: Py<PyAny>,
+    target_node_handle: Py<PyAny>,
     attributes: Py<PyAny>,
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreAddEdgeWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            source_node_index: self.source_node_index.clone_ref(py),
-            target_node_index: self.target_node_index.clone_ref(py),
+            source_node_handle: self.source_node_handle.clone_ref(py),
+            target_node_handle: self.target_node_handle.clone_ref(py),
             attributes: self.attributes.clone_ref(py),
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -1600,19 +1641,19 @@ impl PyPreAddEdgeWithGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddEdgeWithGroupContext) -> Self {
         Self {
-            source_node_index: PyNodeIndex::from(context.source_node_index)
+            source_node_handle: PyNodeHandle::from(context.source_node_handle)
                 .into_py_any(py)
-                .expect("PyNodeIndex should be creatable"),
-            target_node_index: PyNodeIndex::from(context.target_node_index)
+                .expect("PyNodeHandle should be creatable"),
+            target_node_handle: PyNodeHandle::from(context.target_node_handle)
                 .into_py_any(py)
-                .expect("PyNodeIndex should be creatable"),
+                .expect("PyNodeHandle should be creatable"),
             attributes: {
                 let py_attrs: PyAttributes = context.attributes.deep_into();
                 py_attrs
                     .into_py_any(py)
                     .expect("PyAttributes should be creatable")
             },
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -1622,31 +1663,31 @@ impl PyPreAddEdgeWithGroupContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddEdgeWithGroupContext {
-        let source: PyNodeIndex = self
-            .source_node_index
+        let source: PyNodeHandle = self
+            .source_node_handle
             .extract(py)
-            .expect("PyNodeIndex should be extractable");
+            .expect("PyNodeHandle should be extractable");
 
-        let target: PyNodeIndex = self
-            .target_node_index
+        let target: PyNodeHandle = self
+            .target_node_handle
             .extract(py)
-            .expect("PyNodeIndex should be extractable");
+            .expect("PyNodeHandle should be extractable");
 
         let attributes: PyAttributes = self
             .attributes
             .extract(py)
             .expect("PyAttributes should be extractable");
 
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
         PreAddEdgeWithGroupContext {
-            source_node_index: source.into(),
-            target_node_index: target.into(),
+            source_node_handle: source.into(),
+            target_node_handle: target.into(),
             attributes: attributes.deep_into(),
-            group: group.into(),
+            group_handle: group_handle.into(),
         }
     }
 }
@@ -1655,27 +1696,27 @@ impl PyPreAddEdgeWithGroupContext {
 impl PyPreAddEdgeWithGroupContext {
     #[new]
     pub const fn new(
-        source_node_index: Py<PyAny>,
-        target_node_index: Py<PyAny>,
+        source_node_handle: Py<PyAny>,
+        target_node_handle: Py<PyAny>,
         attributes: Py<PyAny>,
-        group: Py<PyAny>,
+        group_handle: Py<PyAny>,
     ) -> Self {
         Self {
-            source_node_index,
-            target_node_index,
+            source_node_handle,
+            target_node_handle,
             attributes,
-            group,
+            group_handle,
         }
     }
 
     #[getter]
-    pub fn source_node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.source_node_index.clone_ref(py)
+    pub fn source_node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.source_node_handle.clone_ref(py)
     }
 
     #[getter]
-    pub fn target_node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.target_node_index.clone_ref(py)
+    pub fn target_node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.target_node_handle.clone_ref(py)
     }
 
     #[getter]
@@ -1684,8 +1725,8 @@ impl PyPreAddEdgeWithGroupContext {
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -1693,12 +1734,14 @@ impl PyPreAddEdgeWithGroupContext {
 #[derive(Debug)]
 pub struct PyPostAddEdgeWithGroupContext {
     edge_index: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostAddEdgeWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             edge_index: self.edge_index.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -1713,6 +1756,9 @@ impl PyPostAddEdgeWithGroupContext {
                 .edge_index
                 .into_py_any(py)
                 .expect("edge_index should be creatable"),
+            group_handle: PyGroupHandle::from(context.group_handle)
+                .into_py_any(py)
+                .expect("group_handle should be creatable"),
         }
     }
 }
@@ -1720,32 +1766,40 @@ impl PyPostAddEdgeWithGroupContext {
 #[pymethods]
 impl PyPostAddEdgeWithGroupContext {
     #[new]
-    pub const fn new(edge_index: Py<PyAny>) -> Self {
-        Self { edge_index }
+    pub const fn new(edge_index: Py<PyAny>, group_handle: Py<PyAny>) -> Self {
+        Self {
+            edge_index,
+            group_handle,
+        }
     }
 
     #[getter]
     pub fn edge_index(&self, py: Python<'_>) -> Py<PyAny> {
         self.edge_index.clone_ref(py)
     }
+
+    #[getter]
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
+    }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreAddEdgeWithGroupsContext {
-    source_node_index: Py<PyAny>,
-    target_node_index: Py<PyAny>,
+    source_node_handle: Py<PyAny>,
+    target_node_handle: Py<PyAny>,
     attributes: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPreAddEdgeWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            source_node_index: self.source_node_index.clone_ref(py),
-            target_node_index: self.target_node_index.clone_ref(py),
+            source_node_handle: self.source_node_handle.clone_ref(py),
+            target_node_handle: self.target_node_handle.clone_ref(py),
             attributes: self.attributes.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -1755,22 +1809,24 @@ impl PyPreAddEdgeWithGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddEdgeWithGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            source_node_index: PyNodeIndex::from(context.source_node_index)
+            source_node_handle: PyNodeHandle::from(context.source_node_handle)
                 .into_py_any(py)
-                .expect("PyNodeIndex should be creatable"),
-            target_node_index: PyNodeIndex::from(context.target_node_index)
+                .expect("PyNodeHandle should be creatable"),
+            target_node_handle: PyNodeHandle::from(context.target_node_handle)
                 .into_py_any(py)
-                .expect("PyNodeIndex should be creatable"),
+                .expect("PyNodeHandle should be creatable"),
             attributes: {
                 let py_attrs: PyAttributes = context.attributes.deep_into();
                 py_attrs
                     .into_py_any(py)
                     .expect("PyAttributes should be creatable")
             },
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 
@@ -1778,31 +1834,31 @@ impl PyPreAddEdgeWithGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddEdgeWithGroupsContext {
-        let source: PyNodeIndex = self
-            .source_node_index
+        let source: PyNodeHandle = self
+            .source_node_handle
             .extract(py)
-            .expect("PyNodeIndex should be extractable");
+            .expect("PyNodeHandle should be extractable");
 
-        let target: PyNodeIndex = self
-            .target_node_index
+        let target: PyNodeHandle = self
+            .target_node_handle
             .extract(py)
-            .expect("PyNodeIndex should be extractable");
+            .expect("PyNodeHandle should be extractable");
 
         let attributes: PyAttributes = self
             .attributes
             .extract(py)
             .expect("PyAttributes should be extractable");
 
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
         PreAddEdgeWithGroupsContext {
-            source_node_index: source.into(),
-            target_node_index: target.into(),
+            source_node_handle: source.into(),
+            target_node_handle: target.into(),
             attributes: attributes.deep_into(),
-            groups: groups.deep_into(),
+            group_handles: group_handles.deep_into(),
         }
     }
 }
@@ -1811,27 +1867,27 @@ impl PyPreAddEdgeWithGroupsContext {
 impl PyPreAddEdgeWithGroupsContext {
     #[new]
     pub const fn new(
-        source_node_index: Py<PyAny>,
-        target_node_index: Py<PyAny>,
+        source_node_handle: Py<PyAny>,
+        target_node_handle: Py<PyAny>,
         attributes: Py<PyAny>,
-        groups: Py<PyAny>,
+        group_handles: Py<PyAny>,
     ) -> Self {
         Self {
-            source_node_index,
-            target_node_index,
+            source_node_handle,
+            target_node_handle,
             attributes,
-            groups,
+            group_handles,
         }
     }
 
     #[getter]
-    pub fn source_node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.source_node_index.clone_ref(py)
+    pub fn source_node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.source_node_handle.clone_ref(py)
     }
 
     #[getter]
-    pub fn target_node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.target_node_index.clone_ref(py)
+    pub fn target_node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.target_node_handle.clone_ref(py)
     }
 
     #[getter]
@@ -1840,8 +1896,8 @@ impl PyPreAddEdgeWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
@@ -1849,14 +1905,14 @@ impl PyPreAddEdgeWithGroupsContext {
 #[derive(Debug)]
 pub struct PyPostAddEdgeWithGroupsContext {
     edge_index: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPostAddEdgeWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             edge_index: self.edge_index.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -1866,14 +1922,16 @@ impl PyPostAddEdgeWithGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddEdgeWithGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             edge_index: context
                 .edge_index
                 .into_py_any(py)
                 .expect("edge_index should be creatable"),
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 }
@@ -1881,8 +1939,11 @@ impl PyPostAddEdgeWithGroupsContext {
 #[pymethods]
 impl PyPostAddEdgeWithGroupsContext {
     #[new]
-    pub const fn new(edge_index: Py<PyAny>, groups: Py<PyAny>) -> Self {
-        Self { edge_index, groups }
+    pub const fn new(edge_index: Py<PyAny>, group_handles: Py<PyAny>) -> Self {
+        Self {
+            edge_index,
+            group_handles,
+        }
     }
 
     #[getter]
@@ -1891,8 +1952,8 @@ impl PyPostAddEdgeWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
@@ -2009,7 +2070,7 @@ impl PyPreAddEdgesContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddEdgesContext) -> Self {
-        let edges: Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)> = context.edges.deep_into();
+        let edges: Vec<(PyNodeHandle, PyNodeHandle, PyAttributes)> = context.edges.deep_into();
 
         Self {
             edges: edges.into_py_any(py).expect("edges should be creatable"),
@@ -2020,7 +2081,7 @@ impl PyPreAddEdgesContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddEdgesContext {
-        let edges: Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)> =
+        let edges: Vec<(PyNodeHandle, PyNodeHandle, PyAttributes)> =
             self.edges.extract(py).expect("edges should be extractable");
 
         PreAddEdgesContext {
@@ -2087,14 +2148,14 @@ impl PyPostAddEdgesContext {
 #[derive(Debug)]
 pub struct PyPreAddEdgesWithGroupContext {
     edges: Py<PyAny>,
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreAddEdgesWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             edges: self.edges.clone_ref(py),
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -2104,11 +2165,11 @@ impl PyPreAddEdgesWithGroupContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddEdgesWithGroupContext) -> Self {
-        let edges: Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)> = context.edges.deep_into();
+        let edges: Vec<(PyNodeHandle, PyNodeHandle, PyAttributes)> = context.edges.deep_into();
 
         Self {
             edges: edges.into_py_any(py).expect("edges should be creatable"),
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -2118,17 +2179,17 @@ impl PyPreAddEdgesWithGroupContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddEdgesWithGroupContext {
-        let edges: Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)> =
+        let edges: Vec<(PyNodeHandle, PyNodeHandle, PyAttributes)> =
             self.edges.extract(py).expect("edges should be extractable");
 
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
         PreAddEdgesWithGroupContext {
             edges: edges.deep_into(),
-            group: group.into(),
+            group_handle: group_handle.into(),
         }
     }
 }
@@ -2136,8 +2197,11 @@ impl PyPreAddEdgesWithGroupContext {
 #[pymethods]
 impl PyPreAddEdgesWithGroupContext {
     #[new]
-    pub const fn new(edges: Py<PyAny>, group: Py<PyAny>) -> Self {
-        Self { edges, group }
+    pub const fn new(edges: Py<PyAny>, group_handle: Py<PyAny>) -> Self {
+        Self {
+            edges,
+            group_handle,
+        }
     }
 
     #[getter]
@@ -2146,8 +2210,8 @@ impl PyPreAddEdgesWithGroupContext {
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -2155,12 +2219,14 @@ impl PyPreAddEdgesWithGroupContext {
 #[derive(Debug)]
 pub struct PyPostAddEdgesWithGroupContext {
     edge_indices: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostAddEdgesWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             edge_indices: self.edge_indices.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -2175,6 +2241,9 @@ impl PyPostAddEdgesWithGroupContext {
                 .edge_indices
                 .into_py_any(py)
                 .expect("edge_indices should be creatable"),
+            group_handle: PyGroupHandle::from(context.group_handle)
+                .into_py_any(py)
+                .expect("group_handle should be creatable"),
         }
     }
 }
@@ -2182,13 +2251,21 @@ impl PyPostAddEdgesWithGroupContext {
 #[pymethods]
 impl PyPostAddEdgesWithGroupContext {
     #[new]
-    pub const fn new(edge_indices: Py<PyAny>) -> Self {
-        Self { edge_indices }
+    pub const fn new(edge_indices: Py<PyAny>, group_handle: Py<PyAny>) -> Self {
+        Self {
+            edge_indices,
+            group_handle,
+        }
     }
 
     #[getter]
     pub fn edge_indices(&self, py: Python<'_>) -> Py<PyAny> {
         self.edge_indices.clone_ref(py)
+    }
+
+    #[getter]
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -2196,14 +2273,14 @@ impl PyPostAddEdgesWithGroupContext {
 #[derive(Debug)]
 pub struct PyPreAddEdgesWithGroupsContext {
     edges: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPreAddEdgesWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             edges: self.edges.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -2213,12 +2290,14 @@ impl PyPreAddEdgesWithGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddEdgesWithGroupsContext) -> Self {
-        let edges: Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)> = context.edges.deep_into();
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let edges: Vec<(PyNodeHandle, PyNodeHandle, PyAttributes)> = context.edges.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             edges: edges.into_py_any(py).expect("edges should be creatable"),
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 
@@ -2226,17 +2305,17 @@ impl PyPreAddEdgesWithGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddEdgesWithGroupsContext {
-        let edges: Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)> =
+        let edges: Vec<(PyNodeHandle, PyNodeHandle, PyAttributes)> =
             self.edges.extract(py).expect("edges should be extractable");
 
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
         PreAddEdgesWithGroupsContext {
             edges: edges.deep_into(),
-            groups: groups.deep_into(),
+            group_handles: group_handles.deep_into(),
         }
     }
 }
@@ -2244,8 +2323,11 @@ impl PyPreAddEdgesWithGroupsContext {
 #[pymethods]
 impl PyPreAddEdgesWithGroupsContext {
     #[new]
-    pub const fn new(edges: Py<PyAny>, groups: Py<PyAny>) -> Self {
-        Self { edges, groups }
+    pub const fn new(edges: Py<PyAny>, group_handles: Py<PyAny>) -> Self {
+        Self {
+            edges,
+            group_handles,
+        }
     }
 
     #[getter]
@@ -2254,8 +2336,8 @@ impl PyPreAddEdgesWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
@@ -2263,14 +2345,14 @@ impl PyPreAddEdgesWithGroupsContext {
 #[derive(Debug)]
 pub struct PyPostAddEdgesWithGroupsContext {
     edge_indices: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPostAddEdgesWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             edge_indices: self.edge_indices.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -2280,14 +2362,16 @@ impl PyPostAddEdgesWithGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddEdgesWithGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             edge_indices: context
                 .edge_indices
                 .into_py_any(py)
                 .expect("edge_indices should be creatable"),
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 }
@@ -2295,10 +2379,10 @@ impl PyPostAddEdgesWithGroupsContext {
 #[pymethods]
 impl PyPostAddEdgesWithGroupsContext {
     #[new]
-    pub const fn new(edge_indices: Py<PyAny>, groups: Py<PyAny>) -> Self {
+    pub const fn new(edge_indices: Py<PyAny>, group_handles: Py<PyAny>) -> Self {
         Self {
             edge_indices,
-            groups,
+            group_handles,
         }
     }
 
@@ -2308,8 +2392,8 @@ impl PyPostAddEdgesWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
@@ -2415,14 +2499,14 @@ impl PyPostAddEdgesDataframesContext {
 #[derive(Debug)]
 pub struct PyPreAddEdgesDataframesWithGroupContext {
     edges_dataframes: Py<PyAny>,
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreAddEdgesDataframesWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             edges_dataframes: self.edges_dataframes.clone_ref(py),
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -2438,7 +2522,7 @@ impl PyPreAddEdgesDataframesWithGroupContext {
             edges_dataframes: edges_dataframes
                 .into_py_any(py)
                 .expect("edges_dataframes should be creatable"),
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -2453,14 +2537,14 @@ impl PyPreAddEdgesDataframesWithGroupContext {
             .extract(py)
             .expect("edges_dataframes should be extractable");
 
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
         PreAddEdgesDataframesWithGroupContext {
             edges_dataframes: py_to_edge_dataframe_inputs(edges_dataframes),
-            group: group.into(),
+            group_handle: group_handle.into(),
         }
     }
 }
@@ -2468,10 +2552,10 @@ impl PyPreAddEdgesDataframesWithGroupContext {
 #[pymethods]
 impl PyPreAddEdgesDataframesWithGroupContext {
     #[new]
-    pub const fn new(edges_dataframes: Py<PyAny>, group: Py<PyAny>) -> Self {
+    pub const fn new(edges_dataframes: Py<PyAny>, group_handle: Py<PyAny>) -> Self {
         Self {
             edges_dataframes,
-            group,
+            group_handle,
         }
     }
 
@@ -2481,8 +2565,8 @@ impl PyPreAddEdgesDataframesWithGroupContext {
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -2490,14 +2574,14 @@ impl PyPreAddEdgesDataframesWithGroupContext {
 #[derive(Debug)]
 pub struct PyPostAddEdgesDataframesWithGroupContext {
     edges_dataframes: Py<PyAny>,
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostAddEdgesDataframesWithGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             edges_dataframes: self.edges_dataframes.clone_ref(py),
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -2513,7 +2597,7 @@ impl PyPostAddEdgesDataframesWithGroupContext {
             edges_dataframes: edges_dataframes
                 .into_py_any(py)
                 .expect("edges_dataframes should be creatable"),
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -2523,10 +2607,10 @@ impl PyPostAddEdgesDataframesWithGroupContext {
 #[pymethods]
 impl PyPostAddEdgesDataframesWithGroupContext {
     #[new]
-    pub const fn new(edges_dataframes: Py<PyAny>, group: Py<PyAny>) -> Self {
+    pub const fn new(edges_dataframes: Py<PyAny>, group_handle: Py<PyAny>) -> Self {
         Self {
             edges_dataframes,
-            group,
+            group_handle,
         }
     }
 
@@ -2536,8 +2620,8 @@ impl PyPostAddEdgesDataframesWithGroupContext {
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
@@ -2545,14 +2629,14 @@ impl PyPostAddEdgesDataframesWithGroupContext {
 #[derive(Debug)]
 pub struct PyPreAddEdgesDataframesWithGroupsContext {
     edges_dataframes: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPreAddEdgesDataframesWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             edges_dataframes: self.edges_dataframes.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -2563,13 +2647,15 @@ impl PyPreAddEdgesDataframesWithGroupsContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddEdgesDataframesWithGroupsContext) -> Self {
         let edges_dataframes = edge_dataframe_inputs_to_py(context.edges_dataframes);
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             edges_dataframes: edges_dataframes
                 .into_py_any(py)
                 .expect("edges_dataframes should be creatable"),
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 
@@ -2582,14 +2668,14 @@ impl PyPreAddEdgesDataframesWithGroupsContext {
             .extract(py)
             .expect("edges_dataframes should be extractable");
 
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
         PreAddEdgesDataframesWithGroupsContext {
             edges_dataframes: py_to_edge_dataframe_inputs(edges_dataframes),
-            groups: groups.deep_into(),
+            group_handles: group_handles.deep_into(),
         }
     }
 }
@@ -2597,10 +2683,10 @@ impl PyPreAddEdgesDataframesWithGroupsContext {
 #[pymethods]
 impl PyPreAddEdgesDataframesWithGroupsContext {
     #[new]
-    pub const fn new(edges_dataframes: Py<PyAny>, groups: Py<PyAny>) -> Self {
+    pub const fn new(edges_dataframes: Py<PyAny>, group_handles: Py<PyAny>) -> Self {
         Self {
             edges_dataframes,
-            groups,
+            group_handles,
         }
     }
 
@@ -2610,8 +2696,8 @@ impl PyPreAddEdgesDataframesWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
@@ -2619,14 +2705,14 @@ impl PyPreAddEdgesDataframesWithGroupsContext {
 #[derive(Debug)]
 pub struct PyPostAddEdgesDataframesWithGroupsContext {
     edges_dataframes: Py<PyAny>,
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
 }
 
 impl Clone for PyPostAddEdgesDataframesWithGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             edges_dataframes: self.edges_dataframes.clone_ref(py),
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
         })
     }
 }
@@ -2637,13 +2723,15 @@ impl PyPostAddEdgesDataframesWithGroupsContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddEdgesDataframesWithGroupsContext) -> Self {
         let edges_dataframes = edge_dataframe_inputs_to_py(context.edges_dataframes);
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
             edges_dataframes: edges_dataframes
                 .into_py_any(py)
                 .expect("edges_dataframes should be creatable"),
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
         }
     }
 }
@@ -2651,10 +2739,10 @@ impl PyPostAddEdgesDataframesWithGroupsContext {
 #[pymethods]
 impl PyPostAddEdgesDataframesWithGroupsContext {
     #[new]
-    pub const fn new(edges_dataframes: Py<PyAny>, groups: Py<PyAny>) -> Self {
+    pub const fn new(edges_dataframes: Py<PyAny>, group_handles: Py<PyAny>) -> Self {
         Self {
             edges_dataframes,
-            groups,
+            group_handles,
         }
     }
 
@@ -2664,8 +2752,8 @@ impl PyPostAddEdgesDataframesWithGroupsContext {
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 }
 
@@ -2673,7 +2761,7 @@ impl PyPostAddEdgesDataframesWithGroupsContext {
 #[derive(Debug)]
 pub struct PyPreAddGroupContext {
     group: Py<PyAny>,
-    node_indices: Py<PyAny>,
+    node_handles: Py<PyAny>,
     edge_indices: Py<PyAny>,
 }
 
@@ -2681,7 +2769,7 @@ impl Clone for PyPreAddGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             group: self.group.clone_ref(py),
-            node_indices: self.node_indices.clone_ref(py),
+            node_handles: self.node_handles.clone_ref(py),
             edge_indices: self.edge_indices.clone_ref(py),
         })
     }
@@ -2692,15 +2780,15 @@ impl PyPreAddGroupContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddGroupContext) -> Self {
-        let node_indices: Option<Vec<PyNodeIndex>> = context.node_indices.deep_into();
+        let node_handles: Option<Vec<PyNodeHandle>> = context.node_handles.deep_into();
 
         Self {
             group: PyGroup::from(context.group)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
-            node_indices: node_indices
+            node_handles: node_handles
                 .into_py_any(py)
-                .expect("node_indices should be creatable"),
+                .expect("node_handles should be creatable"),
             edge_indices: context
                 .edge_indices
                 .into_py_any(py)
@@ -2717,10 +2805,10 @@ impl PyPreAddGroupContext {
             .extract(py)
             .expect("PyGroup should be extractable");
 
-        let node_indices: Option<Vec<PyNodeIndex>> = self
-            .node_indices
+        let node_handles: Option<Vec<PyNodeHandle>> = self
+            .node_handles
             .extract(py)
-            .expect("node_indices should be extractable");
+            .expect("node_handles should be extractable");
 
         let edge_indices: Option<Vec<EdgeIndex>> = self
             .edge_indices
@@ -2729,7 +2817,7 @@ impl PyPreAddGroupContext {
 
         PreAddGroupContext {
             group: group.into(),
-            node_indices: node_indices.deep_into(),
+            node_handles: node_handles.deep_into(),
             edge_indices,
         }
     }
@@ -2738,10 +2826,10 @@ impl PyPreAddGroupContext {
 #[pymethods]
 impl PyPreAddGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>, node_indices: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
+    pub const fn new(group: Py<PyAny>, node_handles: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
         Self {
             group,
-            node_indices,
+            node_handles,
             edge_indices,
         }
     }
@@ -2752,8 +2840,8 @@ impl PyPreAddGroupContext {
     }
 
     #[getter]
-    pub fn node_indices(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_indices.clone_ref(py)
+    pub fn node_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handles.clone_ref(py)
     }
 
     #[getter]
@@ -2766,7 +2854,7 @@ impl PyPreAddGroupContext {
 #[derive(Debug)]
 pub struct PyPostAddGroupContext {
     group: Py<PyAny>,
-    node_indices: Py<PyAny>,
+    node_handles: Py<PyAny>,
     edge_indices: Py<PyAny>,
 }
 
@@ -2774,7 +2862,7 @@ impl Clone for PyPostAddGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
             group: self.group.clone_ref(py),
-            node_indices: self.node_indices.clone_ref(py),
+            node_handles: self.node_handles.clone_ref(py),
             edge_indices: self.edge_indices.clone_ref(py),
         })
     }
@@ -2785,15 +2873,15 @@ impl PyPostAddGroupContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddGroupContext) -> Self {
-        let node_indices: Option<Vec<PyNodeIndex>> = context.node_indices.deep_into();
+        let node_handles: Option<Vec<PyNodeHandle>> = context.node_handles.deep_into();
 
         Self {
             group: PyGroup::from(context.group)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
-            node_indices: node_indices
+            node_handles: node_handles
                 .into_py_any(py)
-                .expect("node_indices should be creatable"),
+                .expect("node_handles should be creatable"),
             edge_indices: context
                 .edge_indices
                 .into_py_any(py)
@@ -2805,10 +2893,10 @@ impl PyPostAddGroupContext {
 #[pymethods]
 impl PyPostAddGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>, node_indices: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
+    pub const fn new(group: Py<PyAny>, node_handles: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
         Self {
             group,
-            node_indices,
+            node_handles,
             edge_indices,
         }
     }
@@ -2819,8 +2907,8 @@ impl PyPostAddGroupContext {
     }
 
     #[getter]
-    pub fn node_indices(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_indices.clone_ref(py)
+    pub fn node_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handles.clone_ref(py)
     }
 
     #[getter]
@@ -2832,13 +2920,13 @@ impl PyPostAddGroupContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreRemoveGroupContext {
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreRemoveGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -2849,7 +2937,7 @@ impl PyPreRemoveGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreRemoveGroupContext) -> Self {
         Self {
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
         }
@@ -2859,13 +2947,13 @@ impl PyPreRemoveGroupContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreRemoveGroupContext {
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
         PreRemoveGroupContext {
-            group: group.into(),
+            group_handle: group_handle.into(),
         }
     }
 }
@@ -2873,26 +2961,26 @@ impl PyPreRemoveGroupContext {
 #[pymethods]
 impl PyPreRemoveGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>) -> Self {
-        Self { group }
+    pub const fn new(group_handle: Py<PyAny>) -> Self {
+        Self { group_handle }
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostRemoveGroupContext {
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostRemoveGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
         })
     }
 }
@@ -2903,9 +2991,9 @@ impl PyPostRemoveGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostRemoveGroupContext) -> Self {
         Self {
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
-                .expect("PyGroup should be creatable"),
+                .expect("PyGroupHandle should be creatable"),
         }
     }
 }
@@ -2913,28 +3001,28 @@ impl PyPostRemoveGroupContext {
 #[pymethods]
 impl PyPostRemoveGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>) -> Self {
-        Self { group }
+    pub const fn new(group_handle: Py<PyAny>) -> Self {
+        Self { group_handle }
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreAddNodeToGroupContext {
-    group: Py<PyAny>,
-    node_index: Py<PyAny>,
+    group_handle: Py<PyAny>,
+    node_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreAddNodeToGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            group: self.group.clone_ref(py),
-            node_index: self.node_index.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
+            node_handle: self.node_handle.clone_ref(py),
         })
     }
 }
@@ -2945,10 +3033,10 @@ impl PyPreAddNodeToGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddNodeToGroupContext) -> Self {
         Self {
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
-            node_index: PyNodeIndex::from(context.node_index)
+            node_handle: PyNodeHandle::from(context.node_handle)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
         }
@@ -2958,19 +3046,19 @@ impl PyPreAddNodeToGroupContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddNodeToGroupContext {
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
-        let node_index: PyNodeIndex = self
-            .node_index
+        let node_handle: PyNodeHandle = self
+            .node_handle
             .extract(py)
             .expect("PyNodeIndex should be extractable");
 
         PreAddNodeToGroupContext {
-            group: group.into(),
-            node_index: node_index.into(),
+            group_handle: group_handle.into(),
+            node_handle: node_handle.into(),
         }
     }
 }
@@ -2978,33 +3066,36 @@ impl PyPreAddNodeToGroupContext {
 #[pymethods]
 impl PyPreAddNodeToGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>, node_index: Py<PyAny>) -> Self {
-        Self { group, node_index }
+    pub const fn new(group_handle: Py<PyAny>, node_handle: Py<PyAny>) -> Self {
+        Self {
+            group_handle,
+            node_handle,
+        }
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_index.clone_ref(py)
+    pub fn node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostAddNodeToGroupContext {
-    group: Py<PyAny>,
-    node_index: Py<PyAny>,
+    group_handle: Py<PyAny>,
+    node_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostAddNodeToGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            group: self.group.clone_ref(py),
-            node_index: self.node_index.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
+            node_handle: self.node_handle.clone_ref(py),
         })
     }
 }
@@ -3015,10 +3106,10 @@ impl PyPostAddNodeToGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddNodeToGroupContext) -> Self {
         Self {
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
-            node_index: PyNodeIndex::from(context.node_index)
+            node_handle: PyNodeHandle::from(context.node_handle)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
         }
@@ -3028,33 +3119,36 @@ impl PyPostAddNodeToGroupContext {
 #[pymethods]
 impl PyPostAddNodeToGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>, node_index: Py<PyAny>) -> Self {
-        Self { group, node_index }
+    pub const fn new(group_handle: Py<PyAny>, node_handle: Py<PyAny>) -> Self {
+        Self {
+            group_handle,
+            node_handle,
+        }
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_index.clone_ref(py)
+    pub fn node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreAddNodeToGroupsContext {
-    groups: Py<PyAny>,
-    node_index: Py<PyAny>,
+    group_handles: Py<PyAny>,
+    node_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreAddNodeToGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
-            node_index: self.node_index.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
+            node_handle: self.node_handle.clone_ref(py),
         })
     }
 }
@@ -3064,11 +3158,13 @@ impl PyPreAddNodeToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddNodeToGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
-            node_index: PyNodeIndex::from(context.node_index)
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
+            node_handle: PyNodeHandle::from(context.node_handle)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
         }
@@ -3078,19 +3174,19 @@ impl PyPreAddNodeToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddNodeToGroupsContext {
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
-        let node_index: PyNodeIndex = self
-            .node_index
+        let node_handle: PyNodeHandle = self
+            .node_handle
             .extract(py)
             .expect("PyNodeIndex should be extractable");
 
         PreAddNodeToGroupsContext {
-            groups: groups.deep_into(),
-            node_index: node_index.into(),
+            group_handles: group_handles.deep_into(),
+            node_handle: node_handle.into(),
         }
     }
 }
@@ -3098,33 +3194,36 @@ impl PyPreAddNodeToGroupsContext {
 #[pymethods]
 impl PyPreAddNodeToGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, node_index: Py<PyAny>) -> Self {
-        Self { groups, node_index }
+    pub const fn new(group_handles: Py<PyAny>, node_handle: Py<PyAny>) -> Self {
+        Self {
+            group_handles,
+            node_handle,
+        }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_index.clone_ref(py)
+    pub fn node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostAddNodeToGroupsContext {
-    groups: Py<PyAny>,
-    node_index: Py<PyAny>,
+    group_handles: Py<PyAny>,
+    node_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostAddNodeToGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
-            node_index: self.node_index.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
+            node_handle: self.node_handle.clone_ref(py),
         })
     }
 }
@@ -3134,11 +3233,13 @@ impl PyPostAddNodeToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddNodeToGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
-            node_index: PyNodeIndex::from(context.node_index)
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
+            node_handle: PyNodeHandle::from(context.node_handle)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
         }
@@ -3148,33 +3249,36 @@ impl PyPostAddNodeToGroupsContext {
 #[pymethods]
 impl PyPostAddNodeToGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, node_index: Py<PyAny>) -> Self {
-        Self { groups, node_index }
+    pub const fn new(group_handles: Py<PyAny>, node_handle: Py<PyAny>) -> Self {
+        Self {
+            group_handles,
+            node_handle,
+        }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_index.clone_ref(py)
+    pub fn node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreAddNodesToGroupsContext {
-    groups: Py<PyAny>,
-    node_indices: Py<PyAny>,
+    group_handles: Py<PyAny>,
+    node_handles: Py<PyAny>,
 }
 
 impl Clone for PyPreAddNodesToGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
-            node_indices: self.node_indices.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
+            node_handles: self.node_handles.clone_ref(py),
         })
     }
 }
@@ -3184,12 +3288,14 @@ impl PyPreAddNodesToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddNodesToGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
-        let node_indices: Vec<PyNodeIndex> = context.node_indices.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
+        let node_handles: Vec<PyNodeHandle> = context.node_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
-            node_indices: node_indices
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
+            node_handles: node_handles
                 .into_py_any(py)
                 .expect("node_indices should be creatable"),
         }
@@ -3199,19 +3305,19 @@ impl PyPreAddNodesToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddNodesToGroupsContext {
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
-        let node_indices: Vec<PyNodeIndex> = self
-            .node_indices
+        let node_handles: Vec<PyNodeHandle> = self
+            .node_handles
             .extract(py)
             .expect("node_indices should be extractable");
 
         PreAddNodesToGroupsContext {
-            groups: groups.deep_into(),
-            node_indices: node_indices.deep_into(),
+            group_handles: group_handles.deep_into(),
+            node_handles: node_handles.deep_into(),
         }
     }
 }
@@ -3219,36 +3325,36 @@ impl PyPreAddNodesToGroupsContext {
 #[pymethods]
 impl PyPreAddNodesToGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, node_indices: Py<PyAny>) -> Self {
+    pub const fn new(group_handles: Py<PyAny>, node_handles: Py<PyAny>) -> Self {
         Self {
-            groups,
-            node_indices,
+            group_handles,
+            node_handles,
         }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_indices(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_indices.clone_ref(py)
+    pub fn node_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handles.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostAddNodesToGroupsContext {
-    groups: Py<PyAny>,
-    node_indices: Py<PyAny>,
+    group_handles: Py<PyAny>,
+    node_handles: Py<PyAny>,
 }
 
 impl Clone for PyPostAddNodesToGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
-            node_indices: self.node_indices.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
+            node_handles: self.node_handles.clone_ref(py),
         })
     }
 }
@@ -3258,12 +3364,14 @@ impl PyPostAddNodesToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddNodesToGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
-        let node_indices: Vec<PyNodeIndex> = context.node_indices.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
+        let node_handles: Vec<PyNodeHandle> = context.node_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
-            node_indices: node_indices
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
+            node_handles: node_handles
                 .into_py_any(py)
                 .expect("node_indices should be creatable"),
         }
@@ -3273,35 +3381,35 @@ impl PyPostAddNodesToGroupsContext {
 #[pymethods]
 impl PyPostAddNodesToGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, node_indices: Py<PyAny>) -> Self {
+    pub const fn new(group_handles: Py<PyAny>, node_handles: Py<PyAny>) -> Self {
         Self {
-            groups,
-            node_indices,
+            group_handles,
+            node_handles,
         }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_indices(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_indices.clone_ref(py)
+    pub fn node_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handles.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreAddEdgeToGroupContext {
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
     edge_index: Py<PyAny>,
 }
 
 impl Clone for PyPreAddEdgeToGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
             edge_index: self.edge_index.clone_ref(py),
         })
     }
@@ -3313,7 +3421,7 @@ impl PyPreAddEdgeToGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddEdgeToGroupContext) -> Self {
         Self {
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
             edge_index: context
@@ -3327,13 +3435,13 @@ impl PyPreAddEdgeToGroupContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddEdgeToGroupContext {
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
         PreAddEdgeToGroupContext {
-            group: group.into(),
+            group_handle: group_handle.into(),
             edge_index: self
                 .edge_index
                 .extract(py)
@@ -3345,13 +3453,16 @@ impl PyPreAddEdgeToGroupContext {
 #[pymethods]
 impl PyPreAddEdgeToGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
-        Self { group, edge_index }
+    pub const fn new(group_handle: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
+        Self {
+            group_handle,
+            edge_index,
+        }
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 
     #[getter]
@@ -3363,14 +3474,14 @@ impl PyPreAddEdgeToGroupContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostAddEdgeToGroupContext {
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
     edge_index: Py<PyAny>,
 }
 
 impl Clone for PyPostAddEdgeToGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
             edge_index: self.edge_index.clone_ref(py),
         })
     }
@@ -3382,7 +3493,7 @@ impl PyPostAddEdgeToGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddEdgeToGroupContext) -> Self {
         Self {
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
             edge_index: context
@@ -3396,13 +3507,16 @@ impl PyPostAddEdgeToGroupContext {
 #[pymethods]
 impl PyPostAddEdgeToGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
-        Self { group, edge_index }
+    pub const fn new(group_handle: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
+        Self {
+            group_handle,
+            edge_index,
+        }
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 
     #[getter]
@@ -3414,14 +3528,14 @@ impl PyPostAddEdgeToGroupContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreAddEdgeToGroupsContext {
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
     edge_index: Py<PyAny>,
 }
 
 impl Clone for PyPreAddEdgeToGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
             edge_index: self.edge_index.clone_ref(py),
         })
     }
@@ -3432,10 +3546,12 @@ impl PyPreAddEdgeToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddEdgeToGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
             edge_index: context
                 .edge_index
                 .into_py_any(py)
@@ -3447,13 +3563,13 @@ impl PyPreAddEdgeToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddEdgeToGroupsContext {
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
         PreAddEdgeToGroupsContext {
-            groups: groups.deep_into(),
+            group_handles: group_handles.deep_into(),
             edge_index: self
                 .edge_index
                 .extract(py)
@@ -3465,13 +3581,16 @@ impl PyPreAddEdgeToGroupsContext {
 #[pymethods]
 impl PyPreAddEdgeToGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
-        Self { groups, edge_index }
+    pub const fn new(group_handles: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
+        Self {
+            group_handles,
+            edge_index,
+        }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
@@ -3483,14 +3602,14 @@ impl PyPreAddEdgeToGroupsContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostAddEdgeToGroupsContext {
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
     edge_index: Py<PyAny>,
 }
 
 impl Clone for PyPostAddEdgeToGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
             edge_index: self.edge_index.clone_ref(py),
         })
     }
@@ -3501,10 +3620,12 @@ impl PyPostAddEdgeToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddEdgeToGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
             edge_index: context
                 .edge_index
                 .into_py_any(py)
@@ -3516,13 +3637,16 @@ impl PyPostAddEdgeToGroupsContext {
 #[pymethods]
 impl PyPostAddEdgeToGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
-        Self { groups, edge_index }
+    pub const fn new(group_handles: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
+        Self {
+            group_handles,
+            edge_index,
+        }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
@@ -3534,14 +3658,14 @@ impl PyPostAddEdgeToGroupsContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreAddEdgesToGroupsContext {
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
     edge_indices: Py<PyAny>,
 }
 
 impl Clone for PyPreAddEdgesToGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
             edge_indices: self.edge_indices.clone_ref(py),
         })
     }
@@ -3552,10 +3676,12 @@ impl PyPreAddEdgesToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreAddEdgesToGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
             edge_indices: context
                 .edge_indices
                 .into_py_any(py)
@@ -3567,13 +3693,13 @@ impl PyPreAddEdgesToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreAddEdgesToGroupsContext {
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
         PreAddEdgesToGroupsContext {
-            groups: groups.deep_into(),
+            group_handles: group_handles.deep_into(),
             edge_indices: self
                 .edge_indices
                 .extract(py)
@@ -3585,16 +3711,16 @@ impl PyPreAddEdgesToGroupsContext {
 #[pymethods]
 impl PyPreAddEdgesToGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
+    pub const fn new(group_handles: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
         Self {
-            groups,
+            group_handles,
             edge_indices,
         }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
@@ -3606,14 +3732,14 @@ impl PyPreAddEdgesToGroupsContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostAddEdgesToGroupsContext {
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
     edge_indices: Py<PyAny>,
 }
 
 impl Clone for PyPostAddEdgesToGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
             edge_indices: self.edge_indices.clone_ref(py),
         })
     }
@@ -3624,10 +3750,12 @@ impl PyPostAddEdgesToGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostAddEdgesToGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
             edge_indices: context
                 .edge_indices
                 .into_py_any(py)
@@ -3639,16 +3767,16 @@ impl PyPostAddEdgesToGroupsContext {
 #[pymethods]
 impl PyPostAddEdgesToGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
+    pub const fn new(group_handles: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
         Self {
-            groups,
+            group_handles,
             edge_indices,
         }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
@@ -3660,15 +3788,15 @@ impl PyPostAddEdgesToGroupsContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreRemoveNodeFromGroupContext {
-    group: Py<PyAny>,
-    node_index: Py<PyAny>,
+    group_handle: Py<PyAny>,
+    node_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreRemoveNodeFromGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            group: self.group.clone_ref(py),
-            node_index: self.node_index.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
+            node_handle: self.node_handle.clone_ref(py),
         })
     }
 }
@@ -3679,10 +3807,10 @@ impl PyPreRemoveNodeFromGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreRemoveNodeFromGroupContext) -> Self {
         Self {
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
-            node_index: PyNodeIndex::from(context.node_index)
+            node_handle: PyNodeHandle::from(context.node_handle)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
         }
@@ -3692,19 +3820,19 @@ impl PyPreRemoveNodeFromGroupContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreRemoveNodeFromGroupContext {
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
-        let node_index: PyNodeIndex = self
-            .node_index
+        let node_handle: PyNodeHandle = self
+            .node_handle
             .extract(py)
             .expect("PyNodeIndex should be extractable");
 
         PreRemoveNodeFromGroupContext {
-            group: group.into(),
-            node_index: node_index.into(),
+            group_handle: group_handle.into(),
+            node_handle: node_handle.into(),
         }
     }
 }
@@ -3712,33 +3840,36 @@ impl PyPreRemoveNodeFromGroupContext {
 #[pymethods]
 impl PyPreRemoveNodeFromGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>, node_index: Py<PyAny>) -> Self {
-        Self { group, node_index }
+    pub const fn new(group_handle: Py<PyAny>, node_handle: Py<PyAny>) -> Self {
+        Self {
+            group_handle,
+            node_handle,
+        }
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_index.clone_ref(py)
+    pub fn node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostRemoveNodeFromGroupContext {
-    group: Py<PyAny>,
-    node_index: Py<PyAny>,
+    group_handle: Py<PyAny>,
+    node_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostRemoveNodeFromGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            group: self.group.clone_ref(py),
-            node_index: self.node_index.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
+            node_handle: self.node_handle.clone_ref(py),
         })
     }
 }
@@ -3749,10 +3880,10 @@ impl PyPostRemoveNodeFromGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostRemoveNodeFromGroupContext) -> Self {
         Self {
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
-            node_index: PyNodeIndex::from(context.node_index)
+            node_handle: PyNodeHandle::from(context.node_handle)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
         }
@@ -3762,33 +3893,36 @@ impl PyPostRemoveNodeFromGroupContext {
 #[pymethods]
 impl PyPostRemoveNodeFromGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>, node_index: Py<PyAny>) -> Self {
-        Self { group, node_index }
+    pub const fn new(group_handle: Py<PyAny>, node_handle: Py<PyAny>) -> Self {
+        Self {
+            group_handle,
+            node_handle,
+        }
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_index.clone_ref(py)
+    pub fn node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreRemoveNodeFromGroupsContext {
-    groups: Py<PyAny>,
-    node_index: Py<PyAny>,
+    group_handles: Py<PyAny>,
+    node_handle: Py<PyAny>,
 }
 
 impl Clone for PyPreRemoveNodeFromGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
-            node_index: self.node_index.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
+            node_handle: self.node_handle.clone_ref(py),
         })
     }
 }
@@ -3798,11 +3932,13 @@ impl PyPreRemoveNodeFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreRemoveNodeFromGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
-            node_index: PyNodeIndex::from(context.node_index)
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
+            node_handle: PyNodeHandle::from(context.node_handle)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
         }
@@ -3812,19 +3948,19 @@ impl PyPreRemoveNodeFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreRemoveNodeFromGroupsContext {
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
-        let node_index: PyNodeIndex = self
-            .node_index
+        let node_handle: PyNodeHandle = self
+            .node_handle
             .extract(py)
             .expect("PyNodeIndex should be extractable");
 
         PreRemoveNodeFromGroupsContext {
-            groups: groups.deep_into(),
-            node_index: node_index.into(),
+            group_handles: group_handles.deep_into(),
+            node_handle: node_handle.into(),
         }
     }
 }
@@ -3832,33 +3968,36 @@ impl PyPreRemoveNodeFromGroupsContext {
 #[pymethods]
 impl PyPreRemoveNodeFromGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, node_index: Py<PyAny>) -> Self {
-        Self { groups, node_index }
+    pub const fn new(group_handles: Py<PyAny>, node_handle: Py<PyAny>) -> Self {
+        Self {
+            group_handles,
+            node_handle,
+        }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_index.clone_ref(py)
+    pub fn node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostRemoveNodeFromGroupsContext {
-    groups: Py<PyAny>,
-    node_index: Py<PyAny>,
+    group_handles: Py<PyAny>,
+    node_handle: Py<PyAny>,
 }
 
 impl Clone for PyPostRemoveNodeFromGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
-            node_index: self.node_index.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
+            node_handle: self.node_handle.clone_ref(py),
         })
     }
 }
@@ -3868,11 +4007,13 @@ impl PyPostRemoveNodeFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostRemoveNodeFromGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
-            node_index: PyNodeIndex::from(context.node_index)
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
+            node_handle: PyNodeHandle::from(context.node_handle)
                 .into_py_any(py)
                 .expect("PyNodeIndex should be creatable"),
         }
@@ -3882,33 +4023,36 @@ impl PyPostRemoveNodeFromGroupsContext {
 #[pymethods]
 impl PyPostRemoveNodeFromGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, node_index: Py<PyAny>) -> Self {
-        Self { groups, node_index }
+    pub const fn new(group_handles: Py<PyAny>, node_handle: Py<PyAny>) -> Self {
+        Self {
+            group_handles,
+            node_handle,
+        }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_index(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_index.clone_ref(py)
+    pub fn node_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handle.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreRemoveNodesFromGroupsContext {
-    groups: Py<PyAny>,
-    node_indices: Py<PyAny>,
+    group_handles: Py<PyAny>,
+    node_handles: Py<PyAny>,
 }
 
 impl Clone for PyPreRemoveNodesFromGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
-            node_indices: self.node_indices.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
+            node_handles: self.node_handles.clone_ref(py),
         })
     }
 }
@@ -3918,12 +4062,14 @@ impl PyPreRemoveNodesFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreRemoveNodesFromGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
-        let node_indices: Vec<PyNodeIndex> = context.node_indices.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
+        let node_handles: Vec<PyNodeHandle> = context.node_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
-            node_indices: node_indices
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
+            node_handles: node_handles
                 .into_py_any(py)
                 .expect("node_indices should be creatable"),
         }
@@ -3933,19 +4079,19 @@ impl PyPreRemoveNodesFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreRemoveNodesFromGroupsContext {
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
-        let node_indices: Vec<PyNodeIndex> = self
-            .node_indices
+        let node_handles: Vec<PyNodeHandle> = self
+            .node_handles
             .extract(py)
             .expect("node_indices should be extractable");
 
         PreRemoveNodesFromGroupsContext {
-            groups: groups.deep_into(),
-            node_indices: node_indices.deep_into(),
+            group_handles: group_handles.deep_into(),
+            node_handles: node_handles.deep_into(),
         }
     }
 }
@@ -3953,36 +4099,36 @@ impl PyPreRemoveNodesFromGroupsContext {
 #[pymethods]
 impl PyPreRemoveNodesFromGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, node_indices: Py<PyAny>) -> Self {
+    pub const fn new(group_handles: Py<PyAny>, node_handles: Py<PyAny>) -> Self {
         Self {
-            groups,
-            node_indices,
+            group_handles,
+            node_handles,
         }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_indices(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_indices.clone_ref(py)
+    pub fn node_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handles.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostRemoveNodesFromGroupsContext {
-    groups: Py<PyAny>,
-    node_indices: Py<PyAny>,
+    group_handles: Py<PyAny>,
+    node_handles: Py<PyAny>,
 }
 
 impl Clone for PyPostRemoveNodesFromGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
-            node_indices: self.node_indices.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
+            node_handles: self.node_handles.clone_ref(py),
         })
     }
 }
@@ -3992,12 +4138,14 @@ impl PyPostRemoveNodesFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostRemoveNodesFromGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
-        let node_indices: Vec<PyNodeIndex> = context.node_indices.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
+        let node_handles: Vec<PyNodeHandle> = context.node_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
-            node_indices: node_indices
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
+            node_handles: node_handles
                 .into_py_any(py)
                 .expect("node_indices should be creatable"),
         }
@@ -4007,35 +4155,35 @@ impl PyPostRemoveNodesFromGroupsContext {
 #[pymethods]
 impl PyPostRemoveNodesFromGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, node_indices: Py<PyAny>) -> Self {
+    pub const fn new(group_handles: Py<PyAny>, node_handles: Py<PyAny>) -> Self {
         Self {
-            groups,
-            node_indices,
+            group_handles,
+            node_handles,
         }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
-    pub fn node_indices(&self, py: Python<'_>) -> Py<PyAny> {
-        self.node_indices.clone_ref(py)
+    pub fn node_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.node_handles.clone_ref(py)
     }
 }
 
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreRemoveEdgeFromGroupContext {
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
     edge_index: Py<PyAny>,
 }
 
 impl Clone for PyPreRemoveEdgeFromGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
             edge_index: self.edge_index.clone_ref(py),
         })
     }
@@ -4047,7 +4195,7 @@ impl PyPreRemoveEdgeFromGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreRemoveEdgeFromGroupContext) -> Self {
         Self {
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
             edge_index: context
@@ -4061,13 +4209,13 @@ impl PyPreRemoveEdgeFromGroupContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreRemoveEdgeFromGroupContext {
-        let group: PyGroup = self
-            .group
+        let group_handle: PyGroupHandle = self
+            .group_handle
             .extract(py)
             .expect("PyGroup should be extractable");
 
         PreRemoveEdgeFromGroupContext {
-            group: group.into(),
+            group_handle: group_handle.into(),
             edge_index: self
                 .edge_index
                 .extract(py)
@@ -4079,13 +4227,16 @@ impl PyPreRemoveEdgeFromGroupContext {
 #[pymethods]
 impl PyPreRemoveEdgeFromGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
-        Self { group, edge_index }
+    pub const fn new(group_handle: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
+        Self {
+            group_handle,
+            edge_index,
+        }
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 
     #[getter]
@@ -4097,14 +4248,14 @@ impl PyPreRemoveEdgeFromGroupContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostRemoveEdgeFromGroupContext {
-    group: Py<PyAny>,
+    group_handle: Py<PyAny>,
     edge_index: Py<PyAny>,
 }
 
 impl Clone for PyPostRemoveEdgeFromGroupContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            group: self.group.clone_ref(py),
+            group_handle: self.group_handle.clone_ref(py),
             edge_index: self.edge_index.clone_ref(py),
         })
     }
@@ -4116,7 +4267,7 @@ impl PyPostRemoveEdgeFromGroupContext {
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostRemoveEdgeFromGroupContext) -> Self {
         Self {
-            group: PyGroup::from(context.group)
+            group_handle: PyGroupHandle::from(context.group_handle)
                 .into_py_any(py)
                 .expect("PyGroup should be creatable"),
             edge_index: context
@@ -4130,13 +4281,16 @@ impl PyPostRemoveEdgeFromGroupContext {
 #[pymethods]
 impl PyPostRemoveEdgeFromGroupContext {
     #[new]
-    pub const fn new(group: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
-        Self { group, edge_index }
+    pub const fn new(group_handle: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
+        Self {
+            group_handle,
+            edge_index,
+        }
     }
 
     #[getter]
-    pub fn group(&self, py: Python<'_>) -> Py<PyAny> {
-        self.group.clone_ref(py)
+    pub fn group_handle(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handle.clone_ref(py)
     }
 
     #[getter]
@@ -4148,14 +4302,14 @@ impl PyPostRemoveEdgeFromGroupContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreRemoveEdgeFromGroupsContext {
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
     edge_index: Py<PyAny>,
 }
 
 impl Clone for PyPreRemoveEdgeFromGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
             edge_index: self.edge_index.clone_ref(py),
         })
     }
@@ -4166,10 +4320,12 @@ impl PyPreRemoveEdgeFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreRemoveEdgeFromGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
             edge_index: context
                 .edge_index
                 .into_py_any(py)
@@ -4181,13 +4337,13 @@ impl PyPreRemoveEdgeFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreRemoveEdgeFromGroupsContext {
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
         PreRemoveEdgeFromGroupsContext {
-            groups: groups.deep_into(),
+            group_handles: group_handles.deep_into(),
             edge_index: self
                 .edge_index
                 .extract(py)
@@ -4199,13 +4355,16 @@ impl PyPreRemoveEdgeFromGroupsContext {
 #[pymethods]
 impl PyPreRemoveEdgeFromGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
-        Self { groups, edge_index }
+    pub const fn new(group_handles: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
+        Self {
+            group_handles,
+            edge_index,
+        }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
@@ -4217,14 +4376,14 @@ impl PyPreRemoveEdgeFromGroupsContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostRemoveEdgeFromGroupsContext {
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
     edge_index: Py<PyAny>,
 }
 
 impl Clone for PyPostRemoveEdgeFromGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
             edge_index: self.edge_index.clone_ref(py),
         })
     }
@@ -4235,10 +4394,12 @@ impl PyPostRemoveEdgeFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostRemoveEdgeFromGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
             edge_index: context
                 .edge_index
                 .into_py_any(py)
@@ -4250,13 +4411,16 @@ impl PyPostRemoveEdgeFromGroupsContext {
 #[pymethods]
 impl PyPostRemoveEdgeFromGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
-        Self { groups, edge_index }
+    pub const fn new(group_handles: Py<PyAny>, edge_index: Py<PyAny>) -> Self {
+        Self {
+            group_handles,
+            edge_index,
+        }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
@@ -4268,14 +4432,14 @@ impl PyPostRemoveEdgeFromGroupsContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPreRemoveEdgesFromGroupsContext {
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
     edge_indices: Py<PyAny>,
 }
 
 impl Clone for PyPreRemoveEdgesFromGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
             edge_indices: self.edge_indices.clone_ref(py),
         })
     }
@@ -4286,10 +4450,12 @@ impl PyPreRemoveEdgesFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PreRemoveEdgesFromGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
             edge_indices: context
                 .edge_indices
                 .into_py_any(py)
@@ -4301,13 +4467,13 @@ impl PyPreRemoveEdgesFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn extract(self, py: Python<'_>) -> PreRemoveEdgesFromGroupsContext {
-        let groups: Vec<PyGroup> = self
-            .groups
+        let group_handles: Vec<PyGroupHandle> = self
+            .group_handles
             .extract(py)
             .expect("groups should be extractable");
 
         PreRemoveEdgesFromGroupsContext {
-            groups: groups.deep_into(),
+            group_handles: group_handles.deep_into(),
             edge_indices: self
                 .edge_indices
                 .extract(py)
@@ -4319,16 +4485,16 @@ impl PyPreRemoveEdgesFromGroupsContext {
 #[pymethods]
 impl PyPreRemoveEdgesFromGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
+    pub const fn new(group_handles: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
         Self {
-            groups,
+            group_handles,
             edge_indices,
         }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]
@@ -4340,14 +4506,14 @@ impl PyPreRemoveEdgesFromGroupsContext {
 #[pyclass(frozen)]
 #[derive(Debug)]
 pub struct PyPostRemoveEdgesFromGroupsContext {
-    groups: Py<PyAny>,
+    group_handles: Py<PyAny>,
     edge_indices: Py<PyAny>,
 }
 
 impl Clone for PyPostRemoveEdgesFromGroupsContext {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            groups: self.groups.clone_ref(py),
+            group_handles: self.group_handles.clone_ref(py),
             edge_indices: self.edge_indices.clone_ref(py),
         })
     }
@@ -4358,10 +4524,12 @@ impl PyPostRemoveEdgesFromGroupsContext {
     ///
     /// Panics if the python typing was not followed.
     pub fn bind(py: Python<'_>, context: PostRemoveEdgesFromGroupsContext) -> Self {
-        let groups: Vec<PyGroup> = context.groups.deep_into();
+        let group_handles: Vec<PyGroupHandle> = context.group_handles.deep_into();
 
         Self {
-            groups: groups.into_py_any(py).expect("groups should be creatable"),
+            group_handles: group_handles
+                .into_py_any(py)
+                .expect("groups should be creatable"),
             edge_indices: context
                 .edge_indices
                 .into_py_any(py)
@@ -4373,16 +4541,16 @@ impl PyPostRemoveEdgesFromGroupsContext {
 #[pymethods]
 impl PyPostRemoveEdgesFromGroupsContext {
     #[new]
-    pub const fn new(groups: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
+    pub const fn new(group_handles: Py<PyAny>, edge_indices: Py<PyAny>) -> Self {
         Self {
-            groups,
+            group_handles,
             edge_indices,
         }
     }
 
     #[getter]
-    pub fn groups(&self, py: Python<'_>) -> Py<PyAny> {
-        self.groups.clone_ref(py)
+    pub fn group_handles(&self, py: Python<'_>) -> Py<PyAny> {
+        self.group_handles.clone_ref(py)
     }
 
     #[getter]

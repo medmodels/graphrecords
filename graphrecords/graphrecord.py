@@ -131,17 +131,25 @@ from graphrecords.querying import (
 )
 from graphrecords.schema import Schema
 from graphrecords.types import (
+    AttributeHandle,
     Attributes,
     EdgeIndex,
     EdgeIndexInputList,
     EdgeInput,
+    EdgeInputBatch,
     EdgeTuple,
+    GraphRecordAttribute,
     Group,
+    GroupHandle,
     GroupInfo,
-    GroupInputList,
+    GroupLookup,
+    GroupLookupInputList,
+    NodeHandle,
     NodeIndex,
-    NodeIndexInputList,
     NodeInput,
+    NodeInputBatch,
+    NodeLookup,
+    NodeLookupInputList,
     NodeTuple,
     PandasDataFramesExport,
     PandasDataFramesGroupExport,
@@ -630,6 +638,15 @@ class GraphRecord:
         return self._graphrecord.nodes
 
     @property
+    def node_handles(self) -> List[NodeHandle]:
+        """Lists the node handles in the GraphRecord instance.
+
+        Returns:
+            List[NodeHandle]: A list of node handles.
+        """
+        return self._graphrecord.node_handles()
+
+    @property
     def node(self) -> NodeIndexer:
         """Provides access to node attributes within the GraphRecord via an indexer.
 
@@ -678,15 +695,24 @@ class GraphRecord:
         """
         return self._graphrecord.groups
 
-    @overload
-    def group(self, group: Group) -> GroupInfo: ...
+    @property
+    def group_handles(self) -> List[GroupHandle]:
+        """Lists the group handles in the GraphRecord instance.
+
+        Returns:
+            List[GroupHandle]: A list of group handles.
+        """
+        return self._graphrecord.group_handles()
 
     @overload
-    def group(self, group: GroupInputList) -> Dict[Group, GroupInfo]: ...
+    def group(self, group: GroupLookup) -> GroupInfo: ...
+
+    @overload
+    def group(self, group: GroupLookupInputList) -> Dict[GroupLookup, GroupInfo]: ...
 
     def group(
-        self, group: Union[Group, GroupInputList]
-    ) -> Union[GroupInfo, Dict[Group, GroupInfo]]:
+        self, group: Union[GroupLookup, GroupLookupInputList]
+    ) -> Union[GroupInfo, Dict[GroupLookup, GroupInfo]]:
         """Returns the node and edge indices associated with the specified group/s.
 
         If a single group is specified, returns a list of node and edge indices
@@ -695,10 +721,10 @@ class GraphRecord:
         mapping to its list of node and edge indices indices.
 
         Args:
-            group (Union[Group, List[Group]]): One or more group names.
+            group (Union[GroupLookup, GroupLookupInputList]): One or more group names.
 
         Returns:
-            Union[GroupInfo, Dict[Group, GroupInfo]]: Node and edge indices for
+            Union[GroupInfo, Dict[GroupLookup, GroupInfo]]: Node and edge indices for
                 the specified group(s).
         """
         if isinstance(group, list):
@@ -717,18 +743,18 @@ class GraphRecord:
 
     @overload
     def outgoing_edges(
-        self, node: Union[NodeIndex, NodeIndexQuery]
+        self, node: Union[NodeLookup, NodeIndexQuery]
     ) -> List[EdgeIndex]: ...
 
     @overload
     def outgoing_edges(
-        self, node: Union[NodeIndexInputList, NodeIndicesQuery]
-    ) -> Dict[NodeIndex, List[EdgeIndex]]: ...
+        self, node: Union[NodeLookupInputList, NodeIndicesQuery]
+    ) -> Dict[NodeLookup, List[EdgeIndex]]: ...
 
     def outgoing_edges(
         self,
-        node: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
-    ) -> Union[List[EdgeIndex], Dict[NodeIndex, List[EdgeIndex]]]:
+        node: Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery],
+    ) -> Union[List[EdgeIndex], Dict[NodeLookup, List[EdgeIndex]]]:
         """Lists the outgoing edges of the specified node(s) in the GraphRecord.
 
         If a single node index is provided, returns a list of its outgoing edge indices.
@@ -736,11 +762,11 @@ class GraphRecord:
         its list of outgoing edge indices.
 
         Args:
-            node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            node (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query.
 
         Returns:
-            Union[List[EdgeIndex], Dict[NodeIndex, List[EdgeIndex]]]: Outgoing
+            Union[List[EdgeIndex], Dict[NodeLookup, List[EdgeIndex]]]: Outgoing
                 edge indices for each specified node.
         """  # noqa: W505
         if isinstance(node, Callable):
@@ -764,18 +790,18 @@ class GraphRecord:
 
     @overload
     def incoming_edges(
-        self, node: Union[NodeIndex, NodeIndexQuery]
+        self, node: Union[NodeLookup, NodeIndexQuery]
     ) -> List[EdgeIndex]: ...
 
     @overload
     def incoming_edges(
-        self, node: Union[NodeIndexInputList, NodeIndicesQuery]
-    ) -> Dict[NodeIndex, List[EdgeIndex]]: ...
+        self, node: Union[NodeLookupInputList, NodeIndicesQuery]
+    ) -> Dict[NodeLookup, List[EdgeIndex]]: ...
 
     def incoming_edges(
         self,
-        node: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
-    ) -> Union[List[EdgeIndex], Dict[NodeIndex, List[EdgeIndex]]]:
+        node: Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery],
+    ) -> Union[List[EdgeIndex], Dict[NodeLookup, List[EdgeIndex]]]:
         """Lists the incoming edges of the specified node(s) in the GraphRecord.
 
         If a single node index is provided, returns a list of its incoming edge indices.
@@ -783,11 +809,11 @@ class GraphRecord:
         its list of incoming edge indices.
 
         Args:
-            node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            node (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query.
 
         Returns:
-            Union[List[EdgeIndex], Dict[NodeIndex, List[EdgeIndex]]]: Incoming
+            Union[List[EdgeIndex], Dict[NodeLookup, List[EdgeIndex]]]: Incoming
                 edge indices for each specified node.
         """  # noqa: W505
         if isinstance(node, Callable):
@@ -864,13 +890,71 @@ class GraphRecord:
 
         return endpoints[edge]
 
+    @overload
+    def edge_endpoint_handles(
+        self, edge: Union[EdgeIndex, EdgeIndexQuery]
+    ) -> tuple[NodeHandle, NodeHandle]: ...
+
+    @overload
+    def edge_endpoint_handles(
+        self, edge: Union[EdgeIndexInputList, EdgeIndicesQuery]
+    ) -> Dict[EdgeIndex, tuple[NodeHandle, NodeHandle]]: ...
+
+    def edge_endpoint_handles(
+        self,
+        edge: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
+    ) -> Union[
+        tuple[NodeHandle, NodeHandle],
+        Dict[EdgeIndex, tuple[NodeHandle, NodeHandle]],
+    ]:
+        """Retrieves the source and target node handles of the specified edge(s).
+
+        If a single edge index is provided, returns a tuple of node handles
+        (source, target). If multiple edges are specified, returns a dictionary
+        mapping each edge index to its tuple of node handles.
+
+        Args:
+            edge (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
+                One or more edge indices or an edge query.
+
+        Returns:
+            Union[tuple[NodeHandle, NodeHandle],
+                Dict[EdgeIndex, tuple[NodeHandle, NodeHandle]]]:
+                Tuple of node handles or a dictionary mapping each edge to its
+                node handles.
+
+        Raises:
+            IndexError: If the query returned no results.
+        """  # noqa: W505
+        if isinstance(edge, Callable):
+            query_result = self.query_edges(edge)
+
+            if isinstance(query_result, list):
+                return self._graphrecord.edge_endpoint_handles(query_result)
+            if query_result is not None:
+                return self._graphrecord.edge_endpoint_handles([query_result])[
+                    query_result
+                ]
+
+            msg = "The query returned no results"
+            raise IndexError(msg)
+
+        endpoints = self._graphrecord.edge_endpoint_handles(
+            edge if isinstance(edge, list) else [edge]
+        )
+
+        if isinstance(edge, list):
+            return endpoints
+
+        return endpoints[edge]
+
     def edges_connecting(
         self,
         source_node: Union[
-            NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery
+            NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery
         ],
         target_node: Union[
-            NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery
+            NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery
         ],
         directed: EdgesDirection = EdgesDirection.OUTGOING,
     ) -> List[EdgeIndex]:
@@ -882,10 +966,10 @@ class GraphRecord:
         target nodes.
 
         Args:
-            source_node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            source_node (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
                 The index or indices of the source node(s), or a node query to
                 select source nodes.
-            target_node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            target_node (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
                 The index or indices of the target node(s), or a node query to
                 select target nodes.
             directed (EdgesDirection, optional): The direction to traverse edges.
@@ -933,7 +1017,7 @@ class GraphRecord:
     @overload
     def remove_nodes(
         self,
-        nodes: Union[NodeIndex, NodeIndexQuery],
+        nodes: Union[NodeLookup, NodeIndexQuery],
         *,
         bypass_plugins: bool = False,
     ) -> Attributes: ...
@@ -941,17 +1025,17 @@ class GraphRecord:
     @overload
     def remove_nodes(
         self,
-        nodes: Union[NodeIndexInputList, NodeIndicesQuery],
+        nodes: Union[NodeLookupInputList, NodeIndicesQuery],
         *,
         bypass_plugins: bool = False,
-    ) -> Dict[NodeIndex, Attributes]: ...
+    ) -> Dict[NodeLookup, Attributes]: ...
 
     def remove_nodes(
         self,
-        nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        nodes: Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery],
         *,
         bypass_plugins: bool = False,
-    ) -> Union[Attributes, Dict[NodeIndex, Attributes]]:
+    ) -> Union[Attributes, Dict[NodeLookup, Attributes]]:
         """Removes nodes from the GraphRecord and returns their attributes.
 
         If a single node index is provided, returns the attributes of the removed node.
@@ -959,13 +1043,13 @@ class GraphRecord:
         index to its attributes.
 
         Args:
-            nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            nodes (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
 
         Returns:
-            Union[Attributes, Dict[NodeIndex, Attributes]]: Attributes of the
+            Union[Attributes, Dict[NodeLookup, Attributes]]: Attributes of the
                 removed node(s).
         """  # noqa: W505
         if isinstance(nodes, Callable):
@@ -989,13 +1073,31 @@ class GraphRecord:
 
         return attributes[nodes]
 
+    @overload
+    def add_nodes(
+        self,
+        nodes: NodeTuple,
+        group: Optional[Union[GroupLookup, GroupLookupInputList]] = None,
+        *,
+        bypass_plugins: bool = False,
+    ) -> NodeHandle: ...
+
+    @overload
+    def add_nodes(
+        self,
+        nodes: NodeInputBatch,
+        group: Optional[Union[GroupLookup, GroupLookupInputList]] = None,
+        *,
+        bypass_plugins: bool = False,
+    ) -> List[NodeHandle]: ...
+
     def add_nodes(
         self,
         nodes: NodeInput,
-        group: Optional[Union[Group, GroupInputList]] = None,
+        group: Optional[Union[GroupLookup, GroupLookupInputList]] = None,
         *,
         bypass_plugins: bool = False,
-    ) -> None:
+    ) -> Union[NodeHandle, List[NodeHandle]]:
         """Adds nodes to the GraphRecord from different data formats.
 
         Accepts a node tuple (single node added), a list of tuples, DataFrame(s), or
@@ -1006,11 +1108,16 @@ class GraphRecord:
 
         Args:
             nodes (NodeInput): Data representing nodes in various formats.
-            group (Optional[Union[Group, GroupInputList]]): The name of the group or
-                list of groups to add the nodes to. If not specified, the nodes are
-                added to the GraphRecord without a group.
+            group (Optional[Union[GroupLookup, GroupLookupInputList]]): The name of the
+                group or list of groups to add the nodes to. If not specified, the
+                nodes are added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
+
+        Returns:
+            Union[NodeHandle, List[NodeHandle]]: The handle of the newly added node
+                when a single node tuple is passed, otherwise a list of handles in
+                insertion order.
         """
         if is_pandas_node_dataframe_input(nodes) or is_pandas_node_dataframe_input_list(
             nodes
@@ -1023,24 +1130,37 @@ class GraphRecord:
             return self.add_nodes_polars(nodes, group, bypass_plugins=bypass_plugins)
 
         if is_node_tuple(nodes):
-            nodes = [nodes]
+            node_index, attributes = nodes
+
+            if group is None:
+                return self._graphrecord.add_node(
+                    node_index, attributes, bypass_plugins
+                )
+
+            if isinstance(group, list):
+                return self._graphrecord.add_node_with_groups(
+                    node_index, attributes, group, bypass_plugins
+                )
+
+            return self._graphrecord.add_node_with_group(
+                node_index, attributes, group, bypass_plugins
+            )
 
         if group is None:
-            self._graphrecord.add_nodes(nodes, bypass_plugins)
-        elif isinstance(group, list):
-            self._graphrecord.add_nodes_with_groups(nodes, group, bypass_plugins)
-        else:
-            self._graphrecord.add_nodes_with_group(nodes, group, bypass_plugins)
+            return self._graphrecord.add_nodes(nodes, bypass_plugins)
 
-        return None
+        if isinstance(group, list):
+            return self._graphrecord.add_nodes_with_groups(nodes, group, bypass_plugins)
+
+        return self._graphrecord.add_nodes_with_group(nodes, group, bypass_plugins)
 
     def add_nodes_pandas(
         self,
         nodes: Union[PandasNodeDataFrameInput, List[PandasNodeDataFrameInput]],
-        group: Optional[Union[Group, GroupInputList]] = None,
+        group: Optional[Union[GroupLookup, GroupLookupInputList]] = None,
         *,
         bypass_plugins: bool = False,
-    ) -> None:
+    ) -> List[NodeHandle]:
         """Adds nodes to the GraphRecord instance from one or more Pandas DataFrames.
 
         This method accepts either a single tuple or a list of tuples, where each tuple
@@ -1050,13 +1170,16 @@ class GraphRecord:
         Args:
             nodes (Union[PandasNodeDataFrameInput, List[PandasNodeDataFrameInput]]):
                 A tuple or list of tuples, each with a DataFrame and index column.
-            group (Optional[Union[Group, GroupInputList]]): The name of the group or
-                list of groups to add the nodes to. If not specified, the nodes are
-                added to the GraphRecord without a group.
+            group (Optional[Union[GroupLookup, GroupLookupInputList]]): The name of the
+                group or list of groups to add the nodes to. If not specified, the
+                nodes are added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
+
+        Returns:
+            List[NodeHandle]: Handles of the newly added nodes, in insertion order.
         """
-        self.add_nodes_polars(
+        return self.add_nodes_polars(
             [process_nodes_dataframe(nodes_df) for nodes_df in nodes]
             if isinstance(nodes, list)
             else [process_nodes_dataframe(nodes)],
@@ -1067,10 +1190,10 @@ class GraphRecord:
     def add_nodes_polars(
         self,
         nodes: Union[PolarsNodeDataFrameInput, List[PolarsNodeDataFrameInput]],
-        group: Optional[Union[Group, GroupInputList]] = None,
+        group: Optional[Union[GroupLookup, GroupLookupInputList]] = None,
         *,
         bypass_plugins: bool = False,
-    ) -> None:
+    ) -> List[NodeHandle]:
         """Adds nodes to the GraphRecord instance from one or more Polars DataFrames.
 
         This method accepts either a single tuple or a list of tuples, where each tuple
@@ -1080,25 +1203,29 @@ class GraphRecord:
         Args:
             nodes (Union[PolarsNodeDataFrameInput, List[PolarsNodeDataFrameInput]]):
                 A tuple or list of tuples, each with a DataFrame and index column.
-            group (Optional[Union[Group, GroupInputList]]): The name of the group or
-                list of groups to add the nodes to. If not specified, the nodes are
-                added to the GraphRecord without a group.
+            group (Optional[Union[GroupLookup, GroupLookupInputList]]): The name of the
+                group or list of groups to add the nodes to. If not specified, the
+                nodes are added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
+
+        Returns:
+            List[NodeHandle]: Handles of the newly added nodes, in insertion order.
         """
         if not isinstance(nodes, list):
             nodes = [nodes]
 
         if group is None:
-            self._graphrecord.add_nodes_dataframes(nodes, bypass_plugins)
-        elif isinstance(group, list):
-            self._graphrecord.add_nodes_dataframes_with_groups(
+            return self._graphrecord.add_nodes_dataframes(nodes, bypass_plugins)
+
+        if isinstance(group, list):
+            return self._graphrecord.add_nodes_dataframes_with_groups(
                 nodes, group, bypass_plugins
             )
-        else:
-            self._graphrecord.add_nodes_dataframes_with_group(
-                nodes, group, bypass_plugins
-            )
+
+        return self._graphrecord.add_nodes_dataframes_with_group(
+            nodes, group, bypass_plugins
+        )
 
     @overload
     def remove_edges(
@@ -1159,13 +1286,31 @@ class GraphRecord:
 
         return attributes[edges]
 
+    @overload
+    def add_edges(
+        self,
+        edges: EdgeTuple,
+        group: Optional[Union[GroupLookup, GroupLookupInputList]] = None,
+        *,
+        bypass_plugins: bool = False,
+    ) -> EdgeIndex: ...
+
+    @overload
+    def add_edges(
+        self,
+        edges: EdgeInputBatch,
+        group: Optional[Union[GroupLookup, GroupLookupInputList]] = None,
+        *,
+        bypass_plugins: bool = False,
+    ) -> List[EdgeIndex]: ...
+
     def add_edges(
         self,
         edges: EdgeInput,
-        group: Optional[Union[Group, GroupInputList]] = None,
+        group: Optional[Union[GroupLookup, GroupLookupInputList]] = None,
         *,
         bypass_plugins: bool = False,
-    ) -> List[EdgeIndex]:
+    ) -> Union[EdgeIndex, List[EdgeIndex]]:
         """Adds edges to the GraphRecord instance from various data formats.
 
         Accepts edge tuple, lists of tuples, DataFrame(s), or EdgeDataFrameInput(s) to
@@ -1178,14 +1323,15 @@ class GraphRecord:
 
         Args:
             edges (EdgeInput): Data representing edges in several formats.
-            group (Optional[Union[Group, GroupInputList]]): The name of the group or
-                list of groups to add the edges to. If not specified, the edges are
-                added to the GraphRecord without a group.
+            group (Optional[Union[GroupLookup, GroupLookupInputList]]): The name of the
+                group or list of groups to add the edges to. If not specified, the
+                edges are added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
 
         Returns:
-            List[EdgeIndex]: A list of edge indices that were added.
+            Union[EdgeIndex, List[EdgeIndex]]: The edge index when a single edge
+                tuple is passed, otherwise a list of edge indices in insertion order.
         """
         if is_pandas_edge_dataframe_input(edges) or is_pandas_edge_dataframe_input_list(
             edges
@@ -1196,10 +1342,25 @@ class GraphRecord:
         ):
             return self.add_edges_polars(edges, group, bypass_plugins=bypass_plugins)
         if is_edge_tuple(edges):
-            edges = [edges]
+            source, target, attributes = edges
+
+            if group is None:
+                return self._graphrecord.add_edge(
+                    source, target, attributes, bypass_plugins
+                )
+
+            if isinstance(group, list):
+                return self._graphrecord.add_edge_with_groups(
+                    source, target, attributes, group, bypass_plugins
+                )
+
+            return self._graphrecord.add_edge_with_group(
+                source, target, attributes, group, bypass_plugins
+            )
 
         if group is None:
             return self._graphrecord.add_edges(edges, bypass_plugins)
+
         if isinstance(group, list):
             return self._graphrecord.add_edges_with_groups(edges, group, bypass_plugins)
 
@@ -1208,7 +1369,7 @@ class GraphRecord:
     def add_edges_pandas(
         self,
         edges: Union[PandasEdgeDataFrameInput, List[PandasEdgeDataFrameInput]],
-        group: Optional[Union[Group, GroupInputList]] = None,
+        group: Optional[Union[GroupLookup, GroupLookupInputList]] = None,
         *,
         bypass_plugins: bool = False,
     ) -> List[EdgeIndex]:
@@ -1223,9 +1384,9 @@ class GraphRecord:
             edges (Union[PandasEdgeDataFrameInput, List[PandasEdgeDataFrameInput]]):
                 A tuple or list of tuples, each including a DataFrame and index columns
                 for source and target nodes.
-            group (Optional[Union[Group, GroupInputList]]): The name of the group or
-                list of groups to add the edges to. If not specified, the edges are
-                added to the GraphRecord without a group.
+            group (Optional[Union[GroupLookup, GroupLookupInputList]]): The name of the
+                group or list of groups to add the edges to. If not specified, the
+                edges are added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
 
@@ -1243,7 +1404,7 @@ class GraphRecord:
     def add_edges_polars(
         self,
         edges: Union[PolarsEdgeDataFrameInput, List[PolarsEdgeDataFrameInput]],
-        group: Optional[Union[Group, GroupInputList]] = None,
+        group: Optional[Union[GroupLookup, GroupLookupInputList]] = None,
         *,
         bypass_plugins: bool = False,
     ) -> List[EdgeIndex]:
@@ -1258,9 +1419,9 @@ class GraphRecord:
             edges (Union[PolarsEdgeDataFrameInput, List[PolarsEdgeDataFrameInput]]):
                 A tuple or list of tuples, each including a DataFrame and index columns
                 for source and target nodes.
-            group (Optional[Union[Group, GroupInputList]]): The name of the group or
-                list of groups to add the edges to. If not specified, the edges are
-                added to the GraphRecord without a group.
+            group (Optional[Union[GroupLookup, GroupLookupInputList]]): The name of the
+                group or list of groups to add the edges to. If not specified, the
+                edges are added to the GraphRecord without a group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
 
@@ -1272,10 +1433,12 @@ class GraphRecord:
 
         if group is None:
             return self._graphrecord.add_edges_dataframes(edges, bypass_plugins)
+
         if isinstance(group, list):
             return self._graphrecord.add_edges_dataframes_with_groups(
                 edges, group, bypass_plugins
             )
+
         return self._graphrecord.add_edges_dataframes_with_group(
             edges, group, bypass_plugins
         )
@@ -1284,7 +1447,7 @@ class GraphRecord:
         self,
         group: Group,
         nodes: Optional[
-            Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]
+            Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]
         ] = None,
         edges: Optional[
             Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]
@@ -1299,7 +1462,7 @@ class GraphRecord:
 
         Args:
             group (Group): The name of the group to add.
-            nodes (Optional[Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]]):
+            nodes (Optional[Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]]):
                 One or more node indices or a node query to add
                 to the group, optional.
             edges (Optional[Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]]):
@@ -1324,14 +1487,15 @@ class GraphRecord:
 
     def remove_groups(
         self,
-        groups: Union[Group, GroupInputList],
+        groups: Union[GroupLookup, GroupLookupInputList],
         *,
         bypass_plugins: bool = False,
     ) -> None:
         """Removes one or more groups from the GraphRecord instance.
 
         Args:
-            groups (Union[Group, GroupInputList]): One or more group names to remove.
+            groups (Union[GroupLookup, GroupLookupInputList]): One or more group names
+                to remove.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
         """
@@ -1342,17 +1506,17 @@ class GraphRecord:
 
     def add_nodes_to_group(
         self,
-        group: Union[Group, GroupInputList],
-        nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        group: Union[GroupLookup, GroupLookupInputList],
+        nodes: Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> None:
         """Adds one or more nodes to a specified group or groups in the GraphRecord.
 
         Args:
-            group (Union[Group, GroupInputList]): The name of the group or list of
-                groups to add nodes to.
-            nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            group (Union[GroupLookup, GroupLookupInputList]): The name of the group or
+                list of groups to add nodes to.
+            nodes (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query to add to the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
@@ -1374,7 +1538,7 @@ class GraphRecord:
 
     def add_edges_to_group(
         self,
-        group: Union[Group, GroupInputList],
+        group: Union[GroupLookup, GroupLookupInputList],
         edges: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
         *,
         bypass_plugins: bool = False,
@@ -1382,8 +1546,8 @@ class GraphRecord:
         """Adds one or more edges to a specified group or groups in the GraphRecord.
 
         Args:
-            group (Union[Group, GroupInputList]): The name of the group or list of
-                groups to add edges to.
+            group (Union[GroupLookup, GroupLookupInputList]): The name of the group or
+                list of groups to add edges to.
             edges (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
                 One or more edge indices or an edge query to add to the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
@@ -1406,17 +1570,17 @@ class GraphRecord:
 
     def remove_nodes_from_group(
         self,
-        group: Union[Group, GroupInputList],
-        nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        group: Union[GroupLookup, GroupLookupInputList],
+        nodes: Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> None:
         """Removes one or more nodes from a specified group or groups in the GraphRecord.
 
         Args:
-            group (Union[Group, GroupInputList]): The name of the group or list of
-                groups from which to remove nodes.
-            nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            group (Union[GroupLookup, GroupLookupInputList]): The name of the group or
+                list of groups from which to remove nodes.
+            nodes (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query to remove from the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
@@ -1438,7 +1602,7 @@ class GraphRecord:
 
     def remove_edges_from_group(
         self,
-        group: Union[Group, GroupInputList],
+        group: Union[GroupLookup, GroupLookupInputList],
         edges: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
         *,
         bypass_plugins: bool = False,
@@ -1446,8 +1610,8 @@ class GraphRecord:
         """Removes one or more edges from a specified group or groups in the GraphRecord.
 
         Args:
-            group (Union[Group, GroupInputList]): The name of the group or list of
-                groups from which to remove edges.
+            group (Union[GroupLookup, GroupLookupInputList]): The name of the group or
+                list of groups from which to remove edges.
             edges (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
                 One or more edge indices or an edge query to remove from the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
@@ -1469,14 +1633,16 @@ class GraphRecord:
             self._graphrecord.remove_edges_from_group(group, edges, bypass_plugins)
 
     @overload
-    def nodes_in_group(self, group: Group) -> List[NodeIndex]: ...
+    def nodes_in_group(self, group: GroupLookup) -> List[NodeIndex]: ...
 
     @overload
-    def nodes_in_group(self, group: GroupInputList) -> Dict[Group, List[NodeIndex]]: ...
+    def nodes_in_group(
+        self, group: GroupLookupInputList
+    ) -> Dict[GroupLookup, List[NodeIndex]]: ...
 
     def nodes_in_group(
-        self, group: Union[Group, GroupInputList]
-    ) -> Union[List[NodeIndex], Dict[Group, List[NodeIndex]]]:
+        self, group: Union[GroupLookup, GroupLookupInputList]
+    ) -> Union[List[NodeIndex], Dict[GroupLookup, List[NodeIndex]]]:
         """Retrieves the node indices associated with the specified group/s.
 
         If a single group is specified, returns a list of node indices for that group.
@@ -1484,10 +1650,10 @@ class GraphRecord:
         to its list of node indices.
 
         Args:
-            group (GroupInputList): One or more group names.
+            group (Union[GroupLookup, GroupLookupInputList]): One or more group names.
 
         Returns:
-            Union[List[NodeIndex], Dict[Group, List[NodeIndex]]]: Node indices
+            Union[List[NodeIndex], Dict[GroupLookup, List[NodeIndex]]]: Node indices
                 associated with the specified group(s).
         """
         nodes = self._graphrecord.nodes_in_group(
@@ -1508,14 +1674,55 @@ class GraphRecord:
         return self._graphrecord.ungrouped_nodes()
 
     @overload
-    def edges_in_group(self, group: Group) -> List[EdgeIndex]: ...
+    def node_handles_in_group(self, group: GroupLookup) -> List[NodeHandle]: ...
 
     @overload
-    def edges_in_group(self, group: GroupInputList) -> Dict[Group, List[EdgeIndex]]: ...
+    def node_handles_in_group(
+        self, group: GroupLookupInputList
+    ) -> Dict[GroupLookup, List[NodeHandle]]: ...
+
+    def node_handles_in_group(
+        self, group: Union[GroupLookup, GroupLookupInputList]
+    ) -> Union[List[NodeHandle], Dict[GroupLookup, List[NodeHandle]]]:
+        """Retrieves the node handles associated with the specified group(s).
+
+        Same shape as :py:meth:`nodes_in_group` but returns handles instead of names.
+
+        Args:
+            group (Union[GroupLookup, GroupLookupInputList]): One or more group names.
+
+        Returns:
+            Union[List[NodeHandle], Dict[GroupLookup, List[NodeHandle]]]: Node handles
+                associated with each group.
+        """
+        handles = self._graphrecord.node_handles_in_group(
+            group if isinstance(group, list) else [group]
+        )
+
+        if isinstance(group, list):
+            return handles
+
+        return handles[group]
+
+    def ungrouped_node_handles(self) -> List[NodeHandle]:
+        """Retrieves the node handles that are not associated with any group.
+
+        Returns:
+            List[NodeHandle]: Node handles that are ungrouped.
+        """
+        return self._graphrecord.ungrouped_node_handles()
+
+    @overload
+    def edges_in_group(self, group: GroupLookup) -> List[EdgeIndex]: ...
+
+    @overload
+    def edges_in_group(
+        self, group: GroupLookupInputList
+    ) -> Dict[GroupLookup, List[EdgeIndex]]: ...
 
     def edges_in_group(
-        self, group: Union[Group, GroupInputList]
-    ) -> Union[List[EdgeIndex], Dict[Group, List[EdgeIndex]]]:
+        self, group: Union[GroupLookup, GroupLookupInputList]
+    ) -> Union[List[EdgeIndex], Dict[GroupLookup, List[EdgeIndex]]]:
         """Retrieves the edge indices associated with the specified group(s).
 
         If a single group is specified, returns a list of edge indices for that group.
@@ -1523,10 +1730,10 @@ class GraphRecord:
         to its list of edge indices.
 
         Args:
-            group (GroupInputList): One or more group names.
+            group (Union[GroupLookup, GroupLookupInputList]): One or more group names.
 
         Returns:
-            Union[List[EdgeIndex], Dict[Group, List[EdgeIndex]]]: Edge indices
+            Union[List[EdgeIndex], Dict[GroupLookup, List[EdgeIndex]]]: Edge indices
                 associated with the specified group(s).
         """
         edges = self._graphrecord.edges_in_group(
@@ -1547,17 +1754,19 @@ class GraphRecord:
         return self._graphrecord.ungrouped_edges()
 
     @overload
-    def groups_of_node(self, node: Union[NodeIndex, NodeIndexQuery]) -> List[Group]: ...
+    def groups_of_node(
+        self, node: Union[NodeLookup, NodeIndexQuery]
+    ) -> List[Group]: ...
 
     @overload
     def groups_of_node(
-        self, node: Union[NodeIndexInputList, NodeIndicesQuery]
-    ) -> Dict[NodeIndex, List[Group]]: ...
+        self, node: Union[NodeLookupInputList, NodeIndicesQuery]
+    ) -> Dict[NodeLookup, List[Group]]: ...
 
     def groups_of_node(
         self,
-        node: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
-    ) -> Union[List[Group], Dict[NodeIndex, List[Group]]]:
+        node: Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery],
+    ) -> Union[List[Group], Dict[NodeLookup, List[Group]]]:
         """Retrieves the groups associated with the specified node(s) in the GraphRecord.
 
         If a single node index is provided, returns a list of groups for that node.
@@ -1565,11 +1774,11 @@ class GraphRecord:
         its list of groups.
 
         Args:
-            node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            node (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a node query.
 
         Returns:
-            Union[List[Group], Dict[NodeIndex, List[Group]]]: Groups associated with
+            Union[List[Group], Dict[NodeLookup, List[Group]]]: Groups associated with
                 each node.
         """  # noqa: W505
         if isinstance(node, Callable):
@@ -1590,6 +1799,53 @@ class GraphRecord:
             return groups
 
         return groups[node]
+
+    @overload
+    def group_handles_of_node(
+        self, node: Union[NodeLookup, NodeIndexQuery]
+    ) -> List[GroupHandle]: ...
+
+    @overload
+    def group_handles_of_node(
+        self, node: Union[NodeLookupInputList, NodeIndicesQuery]
+    ) -> Dict[NodeLookup, List[GroupHandle]]: ...
+
+    def group_handles_of_node(
+        self,
+        node: Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery],
+    ) -> Union[List[GroupHandle], Dict[NodeLookup, List[GroupHandle]]]:
+        """Retrieves the group handles associated with the specified node(s).
+
+        Same shape as :py:meth:`groups_of_node` but returns handles instead of names.
+
+        Args:
+            node (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
+                One or more node indices or a node query.
+
+        Returns:
+            Union[List[GroupHandle], Dict[NodeLookup, List[GroupHandle]]]: Group
+                handles associated with each node.
+        """  # noqa: W505
+        if isinstance(node, Callable):
+            query_result = self.query_nodes(node)
+
+            if isinstance(query_result, list):
+                return self._graphrecord.group_handles_of_node(query_result)
+            if query_result is not None:
+                return self._graphrecord.group_handles_of_node([query_result])[
+                    query_result
+                ]
+
+            return []
+
+        handles = self._graphrecord.group_handles_of_node(
+            node if isinstance(node, list) else [node]
+        )
+
+        if isinstance(node, list):
+            return handles
+
+        return handles[node]
 
     @overload
     def groups_of_edge(self, edge: Union[EdgeIndex, EdgeIndexQuery]) -> List[Group]: ...
@@ -1636,6 +1892,53 @@ class GraphRecord:
 
         return groups[edge]
 
+    @overload
+    def group_handles_of_edge(
+        self, edge: Union[EdgeIndex, EdgeIndexQuery]
+    ) -> List[GroupHandle]: ...
+
+    @overload
+    def group_handles_of_edge(
+        self, edge: Union[EdgeIndexInputList, EdgeIndicesQuery]
+    ) -> Dict[EdgeIndex, List[GroupHandle]]: ...
+
+    def group_handles_of_edge(
+        self,
+        edge: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
+    ) -> Union[List[GroupHandle], Dict[EdgeIndex, List[GroupHandle]]]:
+        """Retrieves the group handles associated with the specified edge(s).
+
+        Same shape as :py:meth:`groups_of_edge` but returns handles instead of names.
+
+        Args:
+            edge (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
+                One or more edge indices or an edge query.
+
+        Returns:
+            Union[List[GroupHandle], Dict[EdgeIndex, List[GroupHandle]]]: Group
+                handles associated with each edge.
+        """  # noqa: W505
+        if isinstance(edge, Callable):
+            query_result = self.query_edges(edge)
+
+            if isinstance(query_result, list):
+                return self._graphrecord.group_handles_of_edge(query_result)
+            if query_result is not None:
+                return self._graphrecord.group_handles_of_edge([query_result])[
+                    query_result
+                ]
+
+            return []
+
+        handles = self._graphrecord.group_handles_of_edge(
+            edge if isinstance(edge, list) else [edge]
+        )
+
+        if isinstance(edge, list):
+            return handles
+
+        return handles[edge]
+
     def node_count(self) -> int:
         """Returns the total number of nodes currently managed by the GraphRecord.
 
@@ -1660,11 +1963,11 @@ class GraphRecord:
         """
         return self._graphrecord.group_count()
 
-    def contains_node(self, node: NodeIndex) -> bool:
+    def contains_node(self, node: NodeLookup) -> bool:
         """Checks whether a specific node exists in the GraphRecord.
 
         Args:
-            node (NodeIndex): The index of the node to check.
+            node (NodeLookup): The index of the node to check.
 
         Returns:
             bool: True if the node exists, False otherwise.
@@ -1682,11 +1985,11 @@ class GraphRecord:
         """
         return self._graphrecord.contains_edge(edge)
 
-    def contains_group(self, group: Group) -> bool:
+    def contains_group(self, group: GroupLookup) -> bool:
         """Checks whether a specific group exists in the GraphRecord.
 
         Args:
-            group (Group): The name of the group to check.
+            group (GroupLookup): The name of the group to check.
 
         Returns:
             bool: True if the group exists, False otherwise.
@@ -1696,22 +1999,22 @@ class GraphRecord:
     @overload
     def neighbors(
         self,
-        node: Union[NodeIndex, NodeIndexQuery],
+        node: Union[NodeLookup, NodeIndexQuery],
         directed: EdgesDirection = EdgesDirection.OUTGOING,
     ) -> List[NodeIndex]: ...
 
     @overload
     def neighbors(
         self,
-        node: Union[NodeIndexInputList, NodeIndicesQuery],
+        node: Union[NodeLookupInputList, NodeIndicesQuery],
         directed: EdgesDirection = EdgesDirection.OUTGOING,
-    ) -> Dict[NodeIndex, List[NodeIndex]]: ...
+    ) -> Dict[NodeLookup, List[NodeIndex]]: ...
 
     def neighbors(
         self,
-        node: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        node: Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery],
         directed: EdgesDirection = EdgesDirection.OUTGOING,
-    ) -> Union[List[NodeIndex], Dict[NodeIndex, List[NodeIndex]]]:
+    ) -> Union[List[NodeIndex], Dict[NodeLookup, List[NodeIndex]]]:
         """Retrieves the neighbors of the specified node(s) in the GraphRecord.
 
         If a single node index is provided, returns a list of its neighboring
@@ -1719,13 +2022,13 @@ class GraphRecord:
         each node index to its list of neighboring nodes.
 
         Args:
-            node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            node (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
                 One or more node indices or a query that returns node indices.
             directed (EdgesDirection, optional): The direction to traverse edges.
                 Defaults to EdgesDirection.OUTGOING.
 
         Returns:
-            Union[List[NodeIndex], Dict[NodeIndex, List[NodeIndex]]]: Neighboring nodes.
+            Union[List[NodeIndex], Dict[NodeLookup, List[NodeIndex]]]: Neighboring nodes.
         """  # noqa: W505
         if isinstance(node, Callable):
             query_result = self.query_nodes(node)
@@ -1738,16 +2041,150 @@ class GraphRecord:
         node_indices = node if isinstance(node, list) else [node]
 
         if directed == EdgesDirection.OUTGOING:
-            neighbors = self._graphrecord.neighbors_outgoing(node_indices)
+            neighbors = self._graphrecord.outgoing_neighbors(node_indices)
         elif directed == EdgesDirection.INCOMING:
-            neighbors = self._graphrecord.neighbors_incoming(node_indices)
+            neighbors = self._graphrecord.incoming_neighbors(node_indices)
         else:
-            neighbors = self._graphrecord.neighbors_undirected(node_indices)
+            neighbors = self._graphrecord.neighbors(node_indices)
 
         if isinstance(node, list):
             return neighbors
 
         return neighbors[node]
+
+    @overload
+    def neighbor_handles(
+        self,
+        node: Union[NodeLookup, NodeIndexQuery],
+        directed: EdgesDirection = EdgesDirection.OUTGOING,
+    ) -> List[NodeHandle]: ...
+
+    @overload
+    def neighbor_handles(
+        self,
+        node: Union[NodeLookupInputList, NodeIndicesQuery],
+        directed: EdgesDirection = EdgesDirection.OUTGOING,
+    ) -> Dict[NodeLookup, List[NodeHandle]]: ...
+
+    def neighbor_handles(
+        self,
+        node: Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery],
+        directed: EdgesDirection = EdgesDirection.OUTGOING,
+    ) -> Union[List[NodeHandle], Dict[NodeLookup, List[NodeHandle]]]:
+        """Retrieves the neighbor handles of the specified node(s).
+
+        Same semantics as :py:meth:`neighbors`, but returns :py:class:`NodeHandle`
+        values instead of node indices. Use this when you need opaque, fast
+        handles for repeated lookups.
+
+        Args:
+            node (Union[NodeLookup, NodeLookupInputList, NodeIndexQuery, NodeIndicesQuery]):
+                One or more node indices or a query that returns node indices.
+            directed (EdgesDirection, optional): The direction to traverse edges.
+                Defaults to EdgesDirection.OUTGOING.
+
+        Returns:
+            Union[List[NodeHandle], Dict[NodeLookup, List[NodeHandle]]]:
+                Neighbor handles.
+        """  # noqa: W505
+        if isinstance(node, Callable):
+            query_result = self.query_nodes(node)
+
+            if query_result is None:
+                return []
+
+            node = query_result
+
+        node_indices = node if isinstance(node, list) else [node]
+
+        if directed == EdgesDirection.OUTGOING:
+            handles = self._graphrecord.outgoing_neighbor_handles(node_indices)
+        elif directed == EdgesDirection.INCOMING:
+            handles = self._graphrecord.incoming_neighbor_handles(node_indices)
+        else:
+            handles = self._graphrecord.neighbor_handles(node_indices)
+
+        if isinstance(node, list):
+            return handles
+
+        return handles[node]
+
+    def node_handle(self, node_index: NodeIndex) -> Optional[NodeHandle]:
+        """Returns the :py:class:`NodeHandle` for the given node index, if it exists.
+
+        Args:
+            node_index (NodeIndex): The name of the node to look up.
+
+        Returns:
+            Optional[NodeHandle]: The handle of the node, or None if the index
+                has never been interned.
+        """
+        return self._graphrecord.node_handle(node_index)
+
+    def group_handle(self, group: Group) -> Optional[GroupHandle]:
+        """Returns the :py:class:`GroupHandle` for the given group, if it exists.
+
+        Args:
+            group (Group): The name of the group to look up.
+
+        Returns:
+            Optional[GroupHandle]: The handle of the group, or None if the
+                group has never been interned.
+        """
+        return self._graphrecord.group_handle(group)
+
+    def attribute_handle(self, name: GraphRecordAttribute) -> Optional[AttributeHandle]:
+        """Returns the :py:class:`AttributeHandle` for the given attribute name.
+
+        Args:
+            name (GraphRecordAttribute): The attribute name to look up.
+
+        Returns:
+            Optional[AttributeHandle]: The handle of the attribute name, or
+                None if the name has never been interned.
+        """
+        return self._graphrecord.attribute_handle(name)
+
+    def resolve_node_handle(self, handle: NodeHandle) -> NodeIndex:
+        """Resolves a :py:class:`NodeHandle` back to its node index.
+
+        Propagates an IndexError if the handle is stale or not associated
+        with a currently-existing node.
+
+        Args:
+            handle (NodeHandle): The handle to resolve.
+
+        Returns:
+            NodeIndex: The node index associated with the handle.
+        """
+        return self._graphrecord.resolve_node_handle(handle)
+
+    def resolve_group_handle(self, handle: GroupHandle) -> Group:
+        """Resolves a :py:class:`GroupHandle` back to its group name.
+
+        Propagates an IndexError if the handle is stale or not associated
+        with a currently-existing group.
+
+        Args:
+            handle (GroupHandle): The handle to resolve.
+
+        Returns:
+            Group: The group name associated with the handle.
+        """
+        return self._graphrecord.resolve_group_handle(handle)
+
+    def resolve_attribute_handle(self, handle: AttributeHandle) -> GraphRecordAttribute:
+        """Resolves an :py:class:`AttributeHandle` back to its attribute name.
+
+        Propagates an IndexError if the handle is stale.
+
+        Args:
+            handle (AttributeHandle): The handle to resolve.
+
+        Returns:
+            GraphRecordAttribute: The attribute name associated with the handle.
+        """
+        return self._graphrecord.resolve_attribute_handle(handle)
 
     def clear(self, *, bypass_plugins: bool = False) -> None:
         """Clears all data from the GraphRecord instance.
@@ -2167,12 +2604,14 @@ class GraphRecord:
         )  # pragma: no cover
 
     def group_overview(
-        self, group: Group, truncate_details: Optional[int] = DEFAULT_TRUNCATE_DETAILS
+        self,
+        group: GroupLookup,
+        truncate_details: Optional[int] = DEFAULT_TRUNCATE_DETAILS,
     ) -> GroupOverview:
         """Generates an overview of a specific group in the GraphRecord instance.
 
         Args:
-            group (Group): The name of the group to generate an overview for.
+            group (GroupLookup): The name of the group to generate an overview for.
             truncate_details (int, optional): The maximum number of detail characters
                 to include in the overview. No truncation if None.
                 Defaults to DEFAULT_TRUNCATE_DETAILS.

@@ -1,4 +1,4 @@
-use super::{Attributes, EdgeIndex, GraphRecord, Group, NodeIndex};
+use super::{EdgeIndex, GraphRecord, Group, NodeIndex, intern_table::AttributesMap};
 use crate::{
     errors::GraphError,
     graphrecord::{GraphRecordAttribute, datatypes::DataType},
@@ -237,13 +237,13 @@ impl AttributeSchema {
 
     fn validate(
         &self,
-        attributes: &Attributes,
+        attributes: &impl AttributesMap,
         kind: &AttributeSchemaKind,
     ) -> Result<(), GraphError> {
         let mut matched_count = 0;
         let mut attributes_not_in_schema = Vec::new();
 
-        for (key, value) in attributes {
+        for (key, value) in attributes.iter_attributes() {
             match self.0.get(key) {
                 Some(schema) => {
                     let data_type = DataType::from(value);
@@ -266,7 +266,8 @@ impl AttributeSchema {
 
         if matched_count < self.0.len() {
             for (key, schema) in &self.0 {
-                if !attributes.contains_key(key) && !matches!(schema.data_type, DataType::Option(_))
+                if !attributes.contains_attribute(key)
+                    && !matches!(schema.data_type, DataType::Option(_))
                 {
                     return Err(GraphError::SchemaError(
                         kind.error_message(key, &schema.data_type),
@@ -284,14 +285,14 @@ impl AttributeSchema {
         Ok(())
     }
 
-    fn update(&mut self, attributes: &Attributes, empty: bool) {
+    fn update(&mut self, attributes: &impl AttributesMap, empty: bool) {
         for (attribute, data_type) in &mut self.0 {
-            if !attributes.contains_key(attribute) {
+            if !attributes.contains_attribute(attribute) {
                 data_type.data_type = data_type.data_type.merge(&DataType::Null);
             }
         }
 
-        for (attribute, value) in attributes {
+        for (attribute, value) in attributes.iter_attributes() {
             let data_type = DataType::from(value);
             let attribute_type = AttributeType::infer(&data_type);
 
@@ -315,13 +316,17 @@ impl AttributeSchema {
     }
 
     #[must_use]
-    pub fn infer(attributes: Vec<&Attributes>) -> Self {
+    pub fn infer<I>(attributes: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: AttributesMap,
+    {
         let mut schema = Self::default();
 
         let mut empty = true;
 
         for attributes in attributes {
-            schema.update(attributes, empty);
+            schema.update(&attributes, empty);
 
             empty = false;
         }
@@ -353,37 +358,43 @@ impl GroupSchema {
         &self.edges
     }
 
-    pub fn validate_node<'a>(
+    pub fn validate_node(
         &self,
-        index: &'a NodeIndex,
-        attributes: &'a Attributes,
+        index: &NodeIndex,
+        attributes: &impl AttributesMap,
     ) -> Result<(), GraphError> {
         self.nodes
             .validate(attributes, &AttributeSchemaKind::Node(index))
     }
 
-    pub fn validate_edge<'a>(
+    pub fn validate_edge(
         &self,
-        index: &'a EdgeIndex,
-        attributes: &'a Attributes,
+        index: &EdgeIndex,
+        attributes: &impl AttributesMap,
     ) -> Result<(), GraphError> {
         self.edges
             .validate(attributes, &AttributeSchemaKind::Edge(index))
     }
 
     #[must_use]
-    pub fn infer(nodes: Vec<&Attributes>, edges: Vec<&Attributes>) -> Self {
+    pub fn infer<NI, EI>(nodes: NI, edges: EI) -> Self
+    where
+        NI: IntoIterator,
+        NI::Item: AttributesMap,
+        EI: IntoIterator,
+        EI::Item: AttributesMap,
+    {
         Self {
             nodes: AttributeSchema::infer(nodes),
             edges: AttributeSchema::infer(edges),
         }
     }
 
-    pub(crate) fn update_node(&mut self, attributes: &Attributes, empty: bool) {
+    pub(crate) fn update_node(&mut self, attributes: &impl AttributesMap, empty: bool) {
         self.nodes.update(attributes, empty);
     }
 
-    pub(crate) fn update_edge(&mut self, attributes: &Attributes, empty: bool) {
+    pub(crate) fn update_edge(&mut self, attributes: &impl AttributesMap, empty: bool) {
         self.edges.update(attributes, empty);
     }
 }
@@ -472,22 +483,19 @@ impl Schema {
             }
         }
 
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         let group_schemas =
             group_mapping
                 .into_iter()
                 .map(|(group, (nodes_in_group, edges_in_group))| {
-                    #[expect(clippy::missing_panics_doc, reason = "infallible")]
-                    let node_attributes: Vec<_> = nodes_in_group
-                        .into_iter()
-                        .map(|node| graphrecord.node_attributes(node).expect("Node must exist."))
-                        .collect();
-                    #[expect(clippy::missing_panics_doc, reason = "infallible")]
-                    let edge_attributes: Vec<_> = edges_in_group
-                        .into_iter()
-                        .map(|edge| graphrecord.edge_attributes(edge).expect("Edge must exist."))
-                        .collect();
-
-                    let schema = GroupSchema::infer(node_attributes, edge_attributes);
+                    let schema = GroupSchema::infer(
+                        nodes_in_group.into_iter().map(|node| {
+                            graphrecord.node_attributes(node).expect("Node must exist.")
+                        }),
+                        edges_in_group.into_iter().map(|edge| {
+                            graphrecord.edge_attributes(edge).expect("Edge must exist.")
+                        }),
+                    );
 
                     (group.clone(), schema)
                 });
@@ -497,13 +505,11 @@ impl Schema {
             ungrouped
                 .0
                 .into_iter()
-                .map(|node| graphrecord.node_attributes(node).expect("Node must exist."))
-                .collect::<Vec<_>>(),
+                .map(|node| graphrecord.node_attributes(node).expect("Node must exist.")),
             ungrouped
                 .1
                 .into_iter()
-                .map(|edge| graphrecord.edge_attributes(edge).expect("Edge must exist."))
-                .collect::<Vec<_>>(),
+                .map(|edge| graphrecord.edge_attributes(edge).expect("Edge must exist.")),
         );
 
         Self {
@@ -537,7 +543,7 @@ impl Schema {
     pub fn validate_node<'a>(
         &self,
         index: &'a NodeIndex,
-        attributes: &'a Attributes,
+        attributes: &impl AttributesMap,
         group: Option<&'a Group>,
     ) -> Result<(), GraphError> {
         match group {
@@ -555,7 +561,7 @@ impl Schema {
     pub fn validate_edge<'a>(
         &self,
         index: &'a EdgeIndex,
-        attributes: &'a Attributes,
+        attributes: &impl AttributesMap,
         group: Option<&'a Group>,
     ) -> Result<(), GraphError> {
         match group {
@@ -572,7 +578,7 @@ impl Schema {
 
     pub(crate) fn update_node(
         &mut self,
-        attributes: &Attributes,
+        attributes: &impl AttributesMap,
         group: Option<&Group>,
         empty: bool,
     ) {
@@ -589,7 +595,7 @@ impl Schema {
 
     pub(crate) fn update_edge(
         &mut self,
-        attributes: &Attributes,
+        attributes: &impl AttributesMap,
         group: Option<&Group>,
         empty: bool,
     ) {
@@ -785,7 +791,7 @@ impl Schema {
 
 #[cfg(test)]
 mod test {
-    use super::{AttributeDataType, GroupSchema};
+    use super::{AttributeDataType, Group, GroupSchema, NodeIndex};
     use crate::{
         GraphRecord,
         graphrecord::{
@@ -1313,7 +1319,7 @@ mod test {
             .into_iter()
             .collect();
 
-        let schema = AttributeSchema::infer(vec![&attributes1, &attributes2]);
+        let schema = AttributeSchema::infer(vec![attributes1.clone(), attributes2.clone()]);
 
         assert_eq!(schema.0.len(), 3);
         assert_eq!(
@@ -1472,8 +1478,8 @@ mod test {
                 .collect();
 
         let group_schema = GroupSchema::infer(
-            vec![&node_attributes1, &node_attributes2],
-            vec![&edge_attributes],
+            vec![node_attributes1.clone(), node_attributes2.clone()],
+            vec![edge_attributes.clone()],
         );
 
         assert_eq!(group_schema.nodes().len(), 3);
@@ -1586,8 +1592,8 @@ mod test {
             .unwrap();
         graphrecord
             .add_edge(
-                0.into(),
-                1.into(),
+                &NodeIndex::from(0),
+                &NodeIndex::from(1),
                 Attributes::from([("key3".into(), true.into())]),
             )
             .unwrap();
@@ -1598,7 +1604,11 @@ mod test {
         assert_eq!(schema.ungrouped().edges().len(), 1);
 
         graphrecord
-            .add_group("test".into(), Some(vec![0.into(), 1.into()]), Some(vec![0]))
+            .add_group(
+                Group::from("test"),
+                Some(vec![NodeIndex::from(0), NodeIndex::from(1)]),
+                Some(vec![0]),
+            )
             .unwrap();
 
         let schema = Schema::infer(&graphrecord);
@@ -2092,7 +2102,7 @@ mod test {
         let mut schema = Schema::new_inferred(HashMap::new(), GroupSchema::default());
         schema
             .add_group(
-                "group1".into(),
+                NodeIndex::from("group1"),
                 GroupSchema::new(attribute_schema.clone(), AttributeSchema::default()),
             )
             .unwrap();
@@ -2103,7 +2113,7 @@ mod test {
 
         assert!(
             schema
-                .add_group("group1".into(), GroupSchema::default())
+                .add_group(Group::from("group1"), GroupSchema::default())
                 .is_err_and(|error| { matches!(error, crate::errors::GraphError::SchemaError(_)) })
         );
     }
