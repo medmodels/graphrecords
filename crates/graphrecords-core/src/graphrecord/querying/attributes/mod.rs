@@ -11,7 +11,7 @@ use crate::{
     GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
-        AttributesView, EdgeIndex, GraphRecordAttribute, NodeIndex,
+        AttributesView, EdgeIndex, GraphRecordAttribute, NodeHandle,
         querying::{
             BoxedIterator, DeepClone, RootOperand, attributes::operation::AttributesTreeOperation,
             group_by::GroupOperand,
@@ -43,7 +43,7 @@ impl<O: RootOperand> AttributesTreeContext<O> {
     pub(crate) fn get_attributes<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>
     where
         O: 'a,
     {
@@ -89,7 +89,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexContext<O> {
     pub(crate) fn get_attributes<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -284,7 +284,7 @@ pub trait GetAttributes {
     ) -> GraphRecordResult<AttributesView<'a>>;
 }
 
-impl GetAttributes for NodeIndex {
+impl GetAttributes for NodeHandle {
     fn get_attributes<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
@@ -315,23 +315,23 @@ pub trait GetAllAttributes<I> {
     fn get_attributes<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a I, Vec<GraphRecordAttribute>)> + 'a>
+    ) -> GraphRecordResult<impl Iterator<Item = (I, Vec<GraphRecordAttribute>)> + 'a>
     where
         I: 'a;
 
     fn get_attributes_from_indices<'a>(
         graphrecord: &'a GraphRecord,
-        indices: impl Iterator<Item = &'a I> + 'a,
-    ) -> impl Iterator<Item = (&'a I, Vec<GraphRecordAttribute>)> + 'a
+        indices: impl Iterator<Item = I> + 'a,
+    ) -> impl Iterator<Item = (I, Vec<GraphRecordAttribute>)> + 'a
     where
         I: 'a;
 }
 
-impl GetAllAttributes<NodeIndex> for NodeOperand {
+impl GetAllAttributes<NodeHandle> for NodeOperand {
     fn get_attributes<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a NodeIndex, Vec<GraphRecordAttribute>)> + 'a>
+    ) -> GraphRecordResult<impl Iterator<Item = (NodeHandle, Vec<GraphRecordAttribute>)> + 'a>
     where
         Self: 'a,
     {
@@ -342,10 +342,10 @@ impl GetAllAttributes<NodeIndex> for NodeOperand {
 
     fn get_attributes_from_indices<'a>(
         graphrecord: &'a GraphRecord,
-        indices: impl Iterator<Item = &'a NodeIndex> + 'a,
-    ) -> impl Iterator<Item = (&'a NodeIndex, Vec<GraphRecordAttribute>)> + 'a
+        indices: impl Iterator<Item = NodeHandle> + 'a,
+    ) -> impl Iterator<Item = (NodeHandle, Vec<GraphRecordAttribute>)> + 'a
     where
-        NodeIndex: 'a,
+        NodeHandle: 'a,
     {
         NodeOperation::get_attributes(graphrecord, indices)
     }
@@ -355,7 +355,7 @@ impl GetAllAttributes<EdgeIndex> for EdgeOperand {
     fn get_attributes<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a EdgeIndex, Vec<GraphRecordAttribute>)> + 'a>
+    ) -> GraphRecordResult<impl Iterator<Item = (EdgeIndex, Vec<GraphRecordAttribute>)> + 'a>
     where
         NodeOperand: 'a,
     {
@@ -366,8 +366,8 @@ impl GetAllAttributes<EdgeIndex> for EdgeOperand {
 
     fn get_attributes_from_indices<'a>(
         graphrecord: &'a GraphRecord,
-        indices: impl Iterator<Item = &'a EdgeIndex> + 'a,
-    ) -> impl Iterator<Item = (&'a EdgeIndex, Vec<GraphRecordAttribute>)> + 'a
+        indices: impl Iterator<Item = EdgeIndex> + 'a,
+    ) -> impl Iterator<Item = (EdgeIndex, Vec<GraphRecordAttribute>)> + 'a
     where
         EdgeIndex: 'a,
     {

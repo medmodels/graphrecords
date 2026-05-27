@@ -50,10 +50,7 @@ impl AsAttributeName for Handle<AttributeNameKind> {
     }
 }
 
-pub fn resolve_all<K, I, L>(
-    graph: &GraphRecord,
-    items: I,
-) -> GraphRecordResult<Vec<Handle<K>>>
+pub fn resolve_all<K, I, L>(graph: &GraphRecord, items: I) -> GraphRecordResult<Vec<Handle<K>>>
 where
     K: HandleKind,
     I: IntoIterator<Item = L>,

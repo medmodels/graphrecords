@@ -100,7 +100,7 @@ impl<'a> EvaluateBackward<'a> for GroupOperand<NodeIndicesOperand> {
         let partitions = self.context.evaluate_backward(graphrecord)?;
 
         let indices = Box::new(partitions.map(|(key, partition)| {
-            let reduced_partition = self.operand.reduce_input(partition)?;
+            let reduced_partition = self.operand.reduce_input(graphrecord, partition)?;
 
             Ok((key, reduced_partition))
         }))
@@ -140,7 +140,7 @@ impl<'a> EvaluateBackward<'a> for GroupOperand<NodeIndexOperand> {
 
         let indices: Vec<_> = partitions
             .map(|(key, partition)| {
-                let reduced_partition = self.operand.reduce_input(partition)?;
+                let reduced_partition = self.operand.reduce_input(graphrecord, partition)?;
 
                 Ok((key, reduced_partition))
             })

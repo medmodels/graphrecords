@@ -9,15 +9,19 @@ use super::{
 };
 use crate::{
     conversion_lut::ConversionLut,
-    graphrecord::querying::{
-        attributes::{
-            PyEdgeSingleAttributeWithoutIndexGroupOperand,
-            PyNodeSingleAttributeWithoutIndexGroupOperand,
-        },
-        edges::{PyEdgeIndexGroupOperand, PyEdgeIndicesGroupOperand},
-        nodes::{PyNodeIndexGroupOperand, PyNodeIndicesGroupOperand},
-        values::{
-            PyEdgeSingleValueWithoutIndexGroupOperand, PyNodeSingleValueWithoutIndexGroupOperand,
+    graphrecord::{
+        handle::PyNodeHandle,
+        querying::{
+            attributes::{
+                PyEdgeSingleAttributeWithoutIndexGroupOperand,
+                PyNodeSingleAttributeWithoutIndexGroupOperand,
+            },
+            edges::{PyEdgeIndexGroupOperand, PyEdgeIndicesGroupOperand},
+            nodes::{PyNodeIndexGroupOperand, PyNodeIndicesGroupOperand},
+            values::{
+                PyEdgeSingleValueWithoutIndexGroupOperand,
+                PyNodeSingleValueWithoutIndexGroupOperand,
+            },
         },
     },
 };
@@ -889,7 +893,7 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
             PyReturnValue::NodeAttributesTree(iterator) => iterator
                 .map(|item| {
                     (
-                        PyNodeIndex::from(item.0.clone()),
+                        PyNodeHandle::from(item.0),
                         Vec::<PyGraphRecordAttribute>::deep_from(item.1),
                     )
                 })
@@ -902,7 +906,7 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                         items
                             .map(|item| {
                                 (
-                                    PyNodeIndex::from(item.0.clone()),
+                                    PyNodeHandle::from(item.0),
                                     Vec::<PyGraphRecordAttribute>::deep_from(item.1),
                                 )
                             })
@@ -929,7 +933,7 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
             PyReturnValue::NodeMultipleAttributesWithIndex(iterator) => iterator
                 .map(|item| {
                     (
-                        PyNodeIndex::from(item.0.clone()),
+                        PyNodeHandle::from(item.0),
                         PyGraphRecordAttribute::from(item.1),
                     )
                 })
@@ -942,7 +946,7 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                         items
                             .map(|item| {
                                 (
-                                    PyNodeIndex::from(item.0.clone()),
+                                    PyNodeHandle::from(item.0),
                                     PyGraphRecordAttribute::from(item.1),
                                 )
                             })
@@ -975,7 +979,7 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
             PyReturnValue::NodeSingleAttributeWithIndex(attribute) => attribute
                 .map(|item| {
                     (
-                        PyGraphRecordAttribute::from(item.0.clone()),
+                        PyNodeHandle::from(item.0),
                         PyGraphRecordAttribute::from(item.1),
                     )
                 })
@@ -986,7 +990,7 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                         PyGroupKey::from(key),
                         items.map(|item| {
                             (
-                                PyGraphRecordAttribute::from(item.0.clone()),
+                                PyNodeHandle::from(item.0),
                                 PyGraphRecordAttribute::from(item.1),
                             )
                         }),
@@ -1064,12 +1068,7 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
             PyReturnValue::NodeMultipleValuesWithIndex(iterator) => iterator
-                .map(|item| {
-                    (
-                        PyNodeIndex::from(item.0.clone()),
-                        PyGraphRecordValue::from(item.1),
-                    )
-                })
+                .map(|item| (PyNodeHandle::from(item.0), PyGraphRecordValue::from(item.1)))
                 .collect::<HashMap<_, _>>()
                 .into_bound_py_any(py),
             PyReturnValue::NodeMultipleValuesWithIndexGroup(iterator) => iterator
@@ -1078,10 +1077,7 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                         PyGroupKey::from(key),
                         items
                             .map(|item| {
-                                (
-                                    PyNodeIndex::from(item.0.clone()),
-                                    PyGraphRecordValue::from(item.1),
-                                )
+                                (PyNodeHandle::from(item.0), PyGraphRecordValue::from(item.1))
                             })
                             .collect::<HashMap<_, _>>(),
                     )
@@ -1109,22 +1105,14 @@ impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
                 .collect::<Vec<_>>()
                 .into_bound_py_any(py),
             PyReturnValue::NodeSingleValueWithIndex(value) => value
-                .map(|item| {
-                    (
-                        PyGraphRecordAttribute::from(item.0.clone()),
-                        PyGraphRecordValue::from(item.1),
-                    )
-                })
+                .map(|item| (PyNodeHandle::from(item.0), PyGraphRecordValue::from(item.1)))
                 .into_bound_py_any(py),
             PyReturnValue::NodeSingleValueWithIndexGroup(value) => value
                 .map(|(key, items)| {
                     (
                         PyGroupKey::from(key),
                         items.map(|item| {
-                            (
-                                PyGraphRecordAttribute::from(item.0.clone()),
-                                PyGraphRecordValue::from(item.1),
-                            )
+                            (PyNodeHandle::from(item.0), PyGraphRecordValue::from(item.1))
                         }),
                     )
                 })

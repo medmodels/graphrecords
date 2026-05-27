@@ -1,7 +1,7 @@
 use graphrecords_core::errors::GraphRecordResult;
 use graphrecords_core::graphrecord::{
     AsAttributeName, AsLookup, AttributeHandle, AttributeNameKind, GraphRecord,
-    GraphRecordAttribute, Group, GroupHandle, GroupKind, Handle, NodeIndex, NodeHandle,
+    GraphRecordAttribute, Group, GroupHandle, GroupKind, Handle, NodeHandle, NodeIndex,
     NodeIndexKind,
 };
 use pyo3::prelude::*;
@@ -221,9 +221,11 @@ impl<'py> IntoPyObject<'py> for PyAttributeInput {
 impl AsLookup<AttributeNameKind> for PyAttributeInput {
     fn resolve(&self, graph: &GraphRecord) -> GraphRecordResult<Handle<AttributeNameKind>> {
         match self {
-            Self::Handle(handle) => <Handle<AttributeNameKind> as AsLookup<
-                AttributeNameKind,
-            >>::resolve(&handle.0, graph),
+            Self::Handle(handle) => {
+                <Handle<AttributeNameKind> as AsLookup<AttributeNameKind>>::resolve(
+                    &handle.0, graph,
+                )
+            }
             Self::Name(name) => {
                 let core_name: &GraphRecordAttribute = name;
                 <&GraphRecordAttribute as AsLookup<AttributeNameKind>>::resolve(&core_name, graph)

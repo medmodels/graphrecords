@@ -59,8 +59,8 @@ impl RootOperand for EdgeOperand {
     fn _evaluate_forward<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        edge_indices: BoxedIterator<'a, &'a Self::Index>,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a Self::Index>> {
+        edge_indices: BoxedIterator<'a, Self::Index>,
+    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index>> {
         self.operations
             .iter()
             .try_fold(edge_indices, |edge_indices, operation| {
@@ -71,8 +71,8 @@ impl RootOperand for EdgeOperand {
     fn _evaluate_forward_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>> {
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, Self::Index>>,
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, Self::Index>>> {
         self.operations
             .iter()
             .try_fold(edge_indices, |edge_indices, operation| {
@@ -83,7 +83,7 @@ impl RootOperand for EdgeOperand {
     fn _evaluate_backward<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a Self::Index>> {
+    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index>> {
         let edge_indices: BoxedIterator<_> = match &self.context {
             Some(EdgeOperandContext::Edges { operand, kind }) => {
                 let node_indices = operand.evaluate_backward(graphrecord)?;
@@ -93,14 +93,16 @@ impl RootOperand for EdgeOperand {
                         Box::new(node_indices.flat_map(|node_index| {
                             graphrecord
                                 .incoming_edges(node_index)
-                                .expect("Node must exist.")
+                                .expect("Node must exist")
+                                .copied()
                         }))
                     }
                     nodes::EdgeDirection::Outgoing => {
                         Box::new(node_indices.flat_map(|node_index| {
                             graphrecord
                                 .outgoing_edges(node_index)
-                                .expect("Node must exist.")
+                                .expect("Node must exist")
+                                .copied()
                         }))
                     }
                     nodes::EdgeDirection::Both => Box::new(node_indices.flat_map(|node_index| {
@@ -112,13 +114,14 @@ impl RootOperand for EdgeOperand {
                                     .outgoing_edges(node_index)
                                     .expect("Node must exist"),
                             )
+                            .copied()
                     })),
                 }
             }
             Some(EdgeOperandContext::GroupBy { operand }) => {
                 operand.evaluate_backward(graphrecord)?
             }
-            None => Box::new(graphrecord.edge_indices()),
+            None => Box::new(graphrecord.edge_indices().copied()),
         };
 
         self.evaluate_forward(graphrecord, edge_indices)
@@ -127,7 +130,7 @@ impl RootOperand for EdgeOperand {
     fn _evaluate_backward_grouped_operand<'a>(
         group_operand: &GroupOperand<Self>,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>> {
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, Self::Index>>> {
         match &group_operand.context {
             group_by::EdgeOperandContext::Discriminator(discriminator) => {
                 let edge_indices = group_operand.operand.evaluate_backward(graphrecord)?;
@@ -152,14 +155,16 @@ impl RootOperand for EdgeOperand {
                                 Box::new(partition.flat_map(|node_index| {
                                     graphrecord
                                         .incoming_edges(node_index)
-                                        .expect("Node must exist.")
+                                        .expect("Node must exist")
+                                        .copied()
                                 }))
                             }
                             nodes::EdgeDirection::Outgoing => {
                                 Box::new(partition.flat_map(|node_index| {
                                     graphrecord
                                         .outgoing_edges(node_index)
-                                        .expect("Node must exist.")
+                                        .expect("Node must exist")
+                                        .copied()
                                 }))
                             }
                             nodes::EdgeDirection::Both => {
@@ -172,6 +177,7 @@ impl RootOperand for EdgeOperand {
                                                 .outgoing_edges(node_index)
                                                 .expect("Node must exist"),
                                         )
+                                        .copied()
                                 }))
                             }
                         };
@@ -204,17 +210,16 @@ impl RootOperand for EdgeOperand {
 
     fn _partition<'a>(
         graphrecord: &'a GraphRecord,
-        edge_indices: BoxedIterator<'a, &'a Self::Index>,
+        edge_indices: BoxedIterator<'a, Self::Index>,
         discriminator: &Self::Discriminator,
-    ) -> GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>> {
+    ) -> GroupedIterator<'a, BoxedIterator<'a, Self::Index>> {
         match discriminator {
             EdgeOperandGroupDiscriminator::SourceNode => {
-                let mut buckets: HashMap<&'a GraphRecordAttribute, Vec<&'a EdgeIndex>> =
-                    HashMap::new();
+                let mut buckets: HashMap<&'a GraphRecordAttribute, Vec<EdgeIndex>> = HashMap::new();
 
                 for edge_index in edge_indices {
                     let source_node = graphrecord
-                        .edge_endpoints(edge_index)
+                        .edge_endpoints(&edge_index)
                         .expect("Edge must exist")
                         .0;
 
@@ -229,12 +234,11 @@ impl RootOperand for EdgeOperand {
                 }))
             }
             EdgeOperandGroupDiscriminator::TargetNode => {
-                let mut buckets: HashMap<&'a GraphRecordAttribute, Vec<&'a EdgeIndex>> =
-                    HashMap::new();
+                let mut buckets: HashMap<&'a GraphRecordAttribute, Vec<EdgeIndex>> = HashMap::new();
 
                 for edge_index in edge_indices {
                     let target_node = graphrecord
-                        .edge_endpoints(edge_index)
+                        .edge_endpoints(&edge_index)
                         .expect("Edge must exist")
                         .1;
 
@@ -251,12 +255,12 @@ impl RootOperand for EdgeOperand {
             EdgeOperandGroupDiscriminator::Parallel => {
                 let mut buckets: HashMap<
                     (&'a GraphRecordAttribute, &'a GraphRecordAttribute),
-                    Vec<&'a EdgeIndex>,
+                    Vec<EdgeIndex>,
                 > = HashMap::new();
 
                 for edge_index in edge_indices {
                     let (source, target) = graphrecord
-                        .edge_endpoints(edge_index)
+                        .edge_endpoints(&edge_index)
                         .expect("Edge must exist");
 
                     buckets
@@ -276,12 +280,11 @@ impl RootOperand for EdgeOperand {
                 }))
             }
             EdgeOperandGroupDiscriminator::Attribute(attribute) => {
-                let mut buckets: Vec<(Option<&'a GraphRecordValue>, Vec<&'a EdgeIndex>)> =
-                    Vec::new();
+                let mut buckets: Vec<(Option<&'a GraphRecordValue>, Vec<EdgeIndex>)> = Vec::new();
 
                 for edge_index in edge_indices {
                     let value = graphrecord
-                        .edge_attributes(edge_index)
+                        .edge_attributes(&edge_index)
                         .expect("Edge must exist")
                         .get(attribute);
 
@@ -303,8 +306,8 @@ impl RootOperand for EdgeOperand {
     }
 
     fn _merge<'a>(
-        edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>,
-    ) -> BoxedIterator<'a, &'a Self::Index> {
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, Self::Index>>,
+    ) -> BoxedIterator<'a, Self::Index> {
         Box::new(edge_indices.flat_map(|(_, edge_indices)| edge_indices))
     }
 }
@@ -1023,7 +1026,7 @@ impl<'a> EvaluateBackward<'a> for EdgeIndexOperand {
     ) -> GraphRecordResult<Self::ReturnValue> {
         let edge_indices = self.context.evaluate_backward(graphrecord)?;
 
-        let edge_index = self.reduce_input(edge_indices)?;
+        let edge_index = self.reduce_input(graphrecord, edge_indices)?;
 
         self.evaluate_forward(graphrecord, edge_index)
     }
@@ -1035,6 +1038,7 @@ impl<'a> ReduceInput<'a> for EdgeIndexOperand {
     #[inline]
     fn reduce_input(
         &self,
+        _graphrecord: &'a GraphRecord,
         edge_indices: <Self::Context as EvaluateBackward<'a>>::ReturnValue,
     ) -> GraphRecordResult<<Self as EvaluateForward<'a>>::InputValue> {
         Ok(match self.kind {

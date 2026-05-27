@@ -145,7 +145,7 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a>
 
         let values: Vec<_> = partitions
             .map(|(key, partition)| {
-                let reduced_partition = self.operand.reduce_input(partition)?;
+                let reduced_partition = self.operand.reduce_input(graphrecord, partition)?;
 
                 Ok((key, reduced_partition))
             })

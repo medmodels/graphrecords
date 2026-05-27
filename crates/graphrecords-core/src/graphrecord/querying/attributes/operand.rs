@@ -299,8 +299,8 @@ impl<O: RootOperand> DeepClone for AttributesTreeOperand<O> {
 }
 
 impl<'a, O: 'a + RootOperand> EvaluateForward<'a> for AttributesTreeOperand<O> {
-    type InputValue = BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>;
-    type ReturnValue = BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>;
+    type InputValue = BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>;
+    type ReturnValue = BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>;
 
     fn evaluate_forward(
         &self,
@@ -332,7 +332,7 @@ impl<'a, O: 'a + RootOperand> EvaluateForwardGrouped<'a> for AttributesTreeOpera
 }
 
 impl<'a, O: 'a + RootOperand> EvaluateBackward<'a> for AttributesTreeOperand<O> {
-    type ReturnValue = BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>;
+    type ReturnValue = BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>;
 
     fn evaluate_backward(
         &self,
@@ -812,8 +812,8 @@ impl<O: RootOperand> DeepClone for MultipleAttributesWithIndexOperand<O> {
 }
 
 impl<'a, O: 'a + RootOperand> EvaluateForward<'a> for MultipleAttributesWithIndexOperand<O> {
-    type InputValue = BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>;
-    type ReturnValue = BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>;
+    type InputValue = BoxedIterator<'a, (O::Index, GraphRecordAttribute)>;
+    type ReturnValue = BoxedIterator<'a, (O::Index, GraphRecordAttribute)>;
 
     fn evaluate_forward(
         &self,
@@ -845,7 +845,7 @@ impl<'a, O: 'a + RootOperand> EvaluateForwardGrouped<'a> for MultipleAttributesW
 }
 
 impl<'a, O: 'a + RootOperand> EvaluateBackward<'a> for MultipleAttributesWithIndexOperand<O> {
-    type ReturnValue = BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>;
+    type ReturnValue = BoxedIterator<'a, (O::Index, GraphRecordAttribute)>;
 
     fn evaluate_backward(
         &self,
@@ -1866,8 +1866,8 @@ impl<O: RootOperand> DeepClone for SingleAttributeWithIndexOperand<O> {
 }
 
 impl<'a, O: 'a + RootOperand> EvaluateForward<'a> for SingleAttributeWithIndexOperand<O> {
-    type InputValue = Option<(&'a O::Index, GraphRecordAttribute)>;
-    type ReturnValue = Option<(&'a O::Index, GraphRecordAttribute)>;
+    type InputValue = Option<(O::Index, GraphRecordAttribute)>;
+    type ReturnValue = Option<(O::Index, GraphRecordAttribute)>;
 
     fn evaluate_forward(
         &self,
@@ -1905,7 +1905,7 @@ impl<'a, O: 'a + RootOperand> EvaluateBackward<'a> for SingleAttributeWithIndexO
     ) -> GraphRecordResult<Self::ReturnValue> {
         let attributes = self.context.evaluate_backward(graphrecord)?;
 
-        let attribute = self.reduce_input(attributes)?;
+        let attribute = self.reduce_input(graphrecord, attributes)?;
 
         self.evaluate_forward(graphrecord, attribute)
     }
@@ -1917,6 +1917,7 @@ impl<'a, O: 'a + RootOperand> ReduceInput<'a> for SingleAttributeWithIndexOperan
     #[inline]
     fn reduce_input(
         &self,
+        _graphrecord: &'a GraphRecord,
         attributes: <Self::Context as EvaluateBackward<'a>>::ReturnValue,
     ) -> GraphRecordResult<<Self as EvaluateForward<'a>>::InputValue> {
         Ok(match self.kind {

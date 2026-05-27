@@ -2846,12 +2846,13 @@ class TestGraphRecord(unittest.TestCase):
         def query3(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             return node.attribute("lorem")
 
-        assert graphrecord.query_nodes(query3) == {"0": "ipsum"}
+        node_handle = graphrecord.node_handle
+        assert graphrecord.query_nodes(query3) == {node_handle("0"): "ipsum"}
 
         def query4(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             return node.attribute("lorem").max()
 
-        assert graphrecord.query_nodes(query4) == ("0", "ipsum")
+        assert graphrecord.query_nodes(query4) == (node_handle("0"), "ipsum")
 
         def query5(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to("0")
@@ -2859,19 +2860,19 @@ class TestGraphRecord(unittest.TestCase):
 
         actual = {k: sorted(v) for k, v in graphrecord.query_nodes(query5).items()}
 
-        assert actual == {"0": ["dolor", "lorem"]}
+        assert actual == {node_handle("0"): ["dolor", "lorem"]}
 
         def query6(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             attributes_tree = query5(node)
             return attributes_tree.max()
 
-        assert graphrecord.query_nodes(query6) == {"0": "lorem"}
+        assert graphrecord.query_nodes(query6) == {node_handle("0"): "lorem"}
 
         def query7(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             multiple_attributes = query6(node)
             return multiple_attributes.max()
 
-        assert graphrecord.query_nodes(query7) == ("0", "lorem")
+        assert graphrecord.query_nodes(query7) == (node_handle("0"), "lorem")
 
         def query8(node: NodeOperand) -> EdgeIndexOperand:
             node.index().equal_to("0")

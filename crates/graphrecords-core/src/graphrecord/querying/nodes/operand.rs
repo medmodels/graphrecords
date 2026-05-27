@@ -7,7 +7,7 @@ use crate::{
     GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
-        GraphRecordAttribute, Group, NodeIndex,
+        GraphRecordAttribute, Group, HandleLookup, NodeHandle, NodeIndex,
         querying::{
             BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
             GroupedIterator, ReduceInput, RootOperand,
@@ -49,14 +49,14 @@ impl DeepClone for NodeOperand {
 }
 
 impl RootOperand for NodeOperand {
-    type Index = NodeIndex;
+    type Index = NodeHandle;
     type Discriminator = NodeOperandGroupDiscriminator;
 
     fn _evaluate_forward<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        node_indices: BoxedIterator<'a, &'a Self::Index>,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a Self::Index>> {
+        node_indices: BoxedIterator<'a, Self::Index>,
+    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index>> {
         self.operations
             .iter()
             .try_fold(node_indices, |node_indices, operation| {
@@ -67,8 +67,8 @@ impl RootOperand for NodeOperand {
     fn _evaluate_forward_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        node_indices: GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>> {
+        node_indices: GroupedIterator<'a, BoxedIterator<'a, Self::Index>>,
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, Self::Index>>> {
         self.operations
             .iter()
             .try_fold(node_indices, |node_indices, operation| {
@@ -79,7 +79,7 @@ impl RootOperand for NodeOperand {
     fn _evaluate_backward<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a Self::Index>> {
+    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index>> {
         let node_indices: BoxedIterator<_> = match &self.context {
             Some(NodeOperandContext::Neighbors { operand, direction }) => {
                 let node_indices = operand.evaluate_backward(graphrecord)?;
@@ -87,16 +87,18 @@ impl RootOperand for NodeOperand {
                 match direction {
                     EdgeDirection::Incoming => Box::new(node_indices.flat_map(move |node_index| {
                         graphrecord
-                            .incoming_neighbors(node_index)
+                            .incoming_neighbor_handles(node_index)
                             .expect("Node must exist")
                     })),
                     EdgeDirection::Outgoing => Box::new(node_indices.flat_map(move |node_index| {
                         graphrecord
-                            .outgoing_neighbors(node_index)
+                            .outgoing_neighbor_handles(node_index)
                             .expect("Node must exist")
                     })),
                     EdgeDirection::Both => Box::new(node_indices.flat_map(move |node_index| {
-                        graphrecord.neighbors(node_index).expect("Node must exist")
+                        graphrecord
+                            .neighbor_handles(node_index)
+                            .expect("Node must exist")
                     })),
                 }
             }
@@ -105,7 +107,7 @@ impl RootOperand for NodeOperand {
 
                 Box::new(edge_indices.map(move |edge_index| {
                     graphrecord
-                        .edge_endpoints(edge_index)
+                        .edge_endpoint_handles(&edge_index)
                         .expect("Edge must exist")
                         .0
                 }))
@@ -115,7 +117,7 @@ impl RootOperand for NodeOperand {
 
                 Box::new(edge_indices.map(move |edge_index| {
                     graphrecord
-                        .edge_endpoints(edge_index)
+                        .edge_endpoint_handles(&edge_index)
                         .expect("Edge must exist")
                         .1
                 }))
@@ -123,7 +125,7 @@ impl RootOperand for NodeOperand {
             Some(NodeOperandContext::GroupBy { operand }) => {
                 operand.evaluate_backward(graphrecord)?
             }
-            None => Box::new(graphrecord.node_indices()),
+            None => Box::new(graphrecord.node_handles()),
         };
 
         self.evaluate_forward(graphrecord, node_indices)
@@ -132,7 +134,7 @@ impl RootOperand for NodeOperand {
     fn _evaluate_backward_grouped_operand<'a>(
         group_operand: &GroupOperand<Self>,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>> {
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, Self::Index>>> {
         match &group_operand.context {
             group_by::NodeOperandContext::Discriminator(discriminator) => {
                 let node_indices = group_operand.operand.evaluate_backward(graphrecord)?;
@@ -156,20 +158,22 @@ impl RootOperand for NodeOperand {
                             EdgeDirection::Incoming => {
                                 Box::new(partition.flat_map(move |node_index| {
                                     graphrecord
-                                        .incoming_neighbors(node_index)
+                                        .incoming_neighbor_handles(node_index)
                                         .expect("Node must exist")
                                 }))
                             }
                             EdgeDirection::Outgoing => {
                                 Box::new(partition.flat_map(move |node_index| {
                                     graphrecord
-                                        .outgoing_neighbors(node_index)
+                                        .outgoing_neighbor_handles(node_index)
                                         .expect("Node must exist")
                                 }))
                             }
                             EdgeDirection::Both => {
                                 Box::new(partition.flat_map(move |node_index| {
-                                    graphrecord.neighbors(node_index).expect("Node must exist")
+                                    graphrecord
+                                        .neighbor_handles(node_index)
+                                        .expect("Node must exist")
                                 }))
                             }
                         };
@@ -193,7 +197,7 @@ impl RootOperand for NodeOperand {
                             .map(|(key, partition)| {
                                 let reduced_partition = partition.map(move |edge_index| {
                                     graphrecord
-                                        .edge_endpoints(edge_index)
+                                        .edge_endpoint_handles(&edge_index)
                                         .expect("Edge must exist")
                                         .0
                                 });
@@ -213,7 +217,7 @@ impl RootOperand for NodeOperand {
                             .map(|(key, partition)| {
                                 let reduced_partition = partition.map(move |edge_index| {
                                     graphrecord
-                                        .edge_endpoints(edge_index)
+                                        .edge_endpoint_handles(&edge_index)
                                         .expect("Edge must exist")
                                         .1
                                 });
@@ -249,13 +253,12 @@ impl RootOperand for NodeOperand {
 
     fn _partition<'a>(
         graphrecord: &'a GraphRecord,
-        node_indices: BoxedIterator<'a, &'a Self::Index>,
+        node_indices: BoxedIterator<'a, Self::Index>,
         discriminator: &Self::Discriminator,
-    ) -> GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>> {
+    ) -> GroupedIterator<'a, BoxedIterator<'a, Self::Index>> {
         match discriminator {
             NodeOperandGroupDiscriminator::Attribute(attribute) => {
-                let mut buckets: Vec<(Option<&'a GraphRecordValue>, Vec<&'a NodeIndex>)> =
-                    Vec::new();
+                let mut buckets: Vec<(Option<&'a GraphRecordValue>, Vec<NodeHandle>)> = Vec::new();
 
                 for node_index in node_indices {
                     let value = graphrecord
@@ -281,8 +284,8 @@ impl RootOperand for NodeOperand {
     }
 
     fn _merge<'a>(
-        node_indices: GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>,
-    ) -> BoxedIterator<'a, &'a Self::Index> {
+        node_indices: GroupedIterator<'a, BoxedIterator<'a, Self::Index>>,
+    ) -> BoxedIterator<'a, Self::Index> {
         Box::new(node_indices.flat_map(|(_, node_indices)| node_indices))
     }
 }
@@ -606,8 +609,15 @@ impl<'a> ReduceInput<'a> for NodeIndicesOperand {
     #[inline]
     fn reduce_input(
         &self,
+        graphrecord: &'a GraphRecord,
         node_indices: <Self::Context as EvaluateBackward<'a>>::ReturnValue,
     ) -> GraphRecordResult<<Self as EvaluateForward<'a>>::InputValue> {
+        let node_indices = node_indices.map(|handle| {
+            graphrecord
+                .resolve_handle(handle)
+                .expect("Handle must exist")
+        });
+
         Ok(Box::new(node_indices.cloned()))
     }
 }
@@ -1082,7 +1092,7 @@ impl<'a> EvaluateBackward<'a> for NodeIndexOperand {
     ) -> GraphRecordResult<Self::ReturnValue> {
         let node_indices = self.context.evaluate_backward(graphrecord)?;
 
-        let node_index = self.reduce_input(node_indices)?;
+        let node_index = self.reduce_input(graphrecord, node_indices)?;
 
         self.evaluate_forward(graphrecord, node_index)
     }
@@ -1094,6 +1104,7 @@ impl<'a> ReduceInput<'a> for NodeIndexOperand {
     #[inline]
     fn reduce_input(
         &self,
+        _graphrecord: &'a GraphRecord,
         node_indices: <Self::Context as EvaluateBackward<'a>>::ReturnValue,
     ) -> GraphRecordResult<<Self as EvaluateForward<'a>>::InputValue> {
         Ok(match self.kind {

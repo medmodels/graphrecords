@@ -6,7 +6,10 @@ use super::edges::EdgeOperand;
 use crate::{
     GraphRecord,
     errors::GraphRecordResult,
-    graphrecord::querying::{BoxedIterator, DeepClone, EvaluateBackward, group_by::GroupOperand},
+    graphrecord::{
+        HandleLookup,
+        querying::{BoxedIterator, DeepClone, EvaluateBackward, group_by::GroupOperand},
+    },
     prelude::NodeIndex,
 };
 pub use group_by::NodeOperandGroupDiscriminator;
@@ -84,7 +87,14 @@ impl<'a> EvaluateBackward<'a> for NodeIndicesOperandContext {
     ) -> GraphRecordResult<Self::ReturnValue> {
         Ok(match self {
             Self::NodeOperand(operand) => {
-                Box::new(operand.evaluate_backward(graphrecord)?.cloned())
+                let node_handles = operand.evaluate_backward(graphrecord)?;
+
+                Box::new(node_handles.map(|handle| {
+                    graphrecord
+                        .resolve_handle(handle)
+                        .expect("Handle must exist")
+                        .clone()
+                }))
             }
             Self::NodeIndexGroupByOperand(operand) => Box::new(
                 operand

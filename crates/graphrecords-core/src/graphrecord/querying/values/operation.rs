@@ -161,8 +161,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     pub(crate) fn evaluate<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)> + 'a,
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordValue)>>
     where
         O: 'a,
     {
@@ -214,9 +214,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     }
 
     #[inline]
-    pub(crate) fn get_max<'a>(
-        mut values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordValue)>> {
+    pub(crate) fn get_max(
+        mut values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordValue)>> {
         let max_value = values.next();
 
         let Some(max_value) = max_value else {
@@ -242,9 +242,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     }
 
     #[inline]
-    pub(crate) fn get_min<'a>(
-        mut values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordValue)>> {
+    pub(crate) fn get_min(
+        mut values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordValue)>> {
         let min_value = values.next();
 
         let Some(min_value) = min_value else {
@@ -270,18 +270,18 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     }
 
     #[inline]
-    pub(crate) fn get_random<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
-    ) -> Option<(&'a O::Index, GraphRecordValue)> {
+    pub(crate) fn get_random(
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
+    ) -> Option<(O::Index, GraphRecordValue)> {
         values.choose(&mut rng())
     }
 
     #[inline]
     fn evaluate_value_with_index_operation<'a>(
         graphrecord: &'a GraphRecord,
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a,
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)> + 'a,
         operand: &Wrapper<SingleValueWithIndexOperand<O>>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordValue)>>
     where
         O: 'a,
     {
@@ -304,9 +304,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     #[inline]
     fn evaluate_value_without_index_operation<'a>(
         graphrecord: &'a GraphRecord,
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a,
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)> + 'a,
         operand: &Wrapper<SingleValueWithoutIndexOperand<O>>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordValue)>>
     where
         O: 'a,
     {
@@ -357,10 +357,10 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     #[inline]
     fn evaluate_single_value_comparison_operation<'a>(
         graphrecord: &'a GraphRecord,
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a,
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)> + 'a,
         comparison_operand: &SingleValueComparisonOperand,
         kind: &SingleComparisonKind,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>> {
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordValue)>> {
         let comparison_value = comparison_operand
             .evaluate_backward(graphrecord)?
             .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
@@ -405,10 +405,10 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     #[inline]
     fn evaluate_multiple_values_comparison_operation<'a>(
         graphrecord: &'a GraphRecord,
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a,
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)> + 'a,
         comparison_operand: &MultipleValuesComparisonOperand,
         kind: &MultipleComparisonKind,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>> {
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordValue)>> {
         let comparison_values = comparison_operand.evaluate_backward(graphrecord)?;
 
         match kind {
@@ -431,10 +431,10 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
         values: T,
         operand: &SingleValueComparisonOperand,
         kind: &BinaryArithmeticKind,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + use<'a, O, T>>
+    ) -> GraphRecordResult<impl Iterator<Item = (O::Index, GraphRecordValue)> + use<'a, O, T>>
     where
         O: 'a,
-        T: Iterator<Item = (&'a O::Index, GraphRecordValue)>,
+        T: Iterator<Item = (O::Index, GraphRecordValue)>,
     {
         let arithmetic_value = operand
             .evaluate_backward(graphrecord)?
@@ -470,9 +470,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_unary_arithmetic_operation<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
         kind: UnaryArithmeticKind,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordValue)>
+    ) -> impl Iterator<Item = (O::Index, GraphRecordValue)>
     where
         O: 'a,
     {
@@ -495,9 +495,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_slice<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
         range: Range<usize>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordValue)>
+    ) -> impl Iterator<Item = (O::Index, GraphRecordValue)>
     where
         O: 'a,
     {
@@ -506,8 +506,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_string<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordValue)>
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
+    ) -> impl Iterator<Item = (O::Index, GraphRecordValue)>
     where
         O: 'a,
     {
@@ -516,8 +516,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_int<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordValue)>
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
+    ) -> impl Iterator<Item = (O::Index, GraphRecordValue)>
     where
         O: 'a,
     {
@@ -526,8 +526,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_float<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordValue)>
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
+    ) -> impl Iterator<Item = (O::Index, GraphRecordValue)>
     where
         O: 'a,
     {
@@ -536,8 +536,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_bool<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordValue)>
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
+    ) -> impl Iterator<Item = (O::Index, GraphRecordValue)>
     where
         O: 'a,
     {
@@ -546,8 +546,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_datetime<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordValue)>
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
+    ) -> impl Iterator<Item = (O::Index, GraphRecordValue)>
     where
         O: 'a,
     {
@@ -556,8 +556,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_duration<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordValue)>
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
+    ) -> impl Iterator<Item = (O::Index, GraphRecordValue)>
     where
         O: 'a,
     {
@@ -566,8 +566,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_null<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordValue)>
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)>,
+    ) -> impl Iterator<Item = (O::Index, GraphRecordValue)>
     where
         O: 'a,
     {
@@ -576,8 +576,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_max<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)> + 'a,
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordValue)>>
     where
         O: 'a,
     {
@@ -596,8 +596,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_min<'a>(
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)> + 'a,
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordValue)>>
     where
         O: 'a,
     {
@@ -617,10 +617,10 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     #[inline]
     fn evaluate_either_or<'a>(
         graphrecord: &'a GraphRecord,
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a,
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)> + 'a,
         either: &Wrapper<MultipleValuesWithIndexOperand<O>>,
         or: &Wrapper<MultipleValuesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordValue)>>
     where
         O: 'a,
     {
@@ -630,18 +630,16 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
         let or_values = or.evaluate_forward(graphrecord, Box::new(values_2))?;
 
         Ok(Box::new(
-            either_values
-                .chain(or_values)
-                .unique_by(|value| value.0.clone()),
+            either_values.chain(or_values).unique_by(|value| value.0),
         ))
     }
 
     #[inline]
     fn evaluate_exclude<'a>(
         graphrecord: &'a GraphRecord,
-        values: impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a,
+        values: impl Iterator<Item = (O::Index, GraphRecordValue)> + 'a,
         operand: &Wrapper<MultipleValuesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordValue)>>
     where
         O: 'a,
     {
@@ -661,8 +659,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     pub(crate) fn evaluate_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        values: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>>
+        values: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordValue)>>,
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordValue)>>>
     where
         O: 'a,
     {
@@ -838,9 +836,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     #[inline]
     fn evaluate_value_with_index_operation_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        values: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>,
+        values: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordValue)>>,
         operand: &Wrapper<SingleValueWithIndexOperand<O>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>>
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordValue)>>>
     where
         O: 'a,
     {
@@ -881,9 +879,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     #[inline]
     fn evaluate_value_without_index_operation_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        values: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>,
+        values: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordValue)>>,
         operand: &Wrapper<SingleValueWithoutIndexOperand<O>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>>
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordValue)>>>
     where
         O: 'a,
     {
@@ -953,10 +951,10 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     #[inline]
     fn evaluate_either_or_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        values: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>,
+        values: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordValue)>>,
         either: &Wrapper<MultipleValuesWithIndexOperand<O>>,
         or: &Wrapper<MultipleValuesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>>
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordValue)>>>
     where
         O: 'a,
     {
@@ -975,11 +973,8 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
 
             let or_values = or_values.remove(values_position).1;
 
-            let values: BoxedIterator<_> = Box::new(
-                either_values
-                    .chain(or_values)
-                    .unique_by(|value| value.0.clone()),
-            );
+            let values: BoxedIterator<_> =
+                Box::new(either_values.chain(or_values).unique_by(|value| value.0));
 
             (key, values)
         });
@@ -991,9 +986,9 @@ impl<O: RootOperand> MultipleValuesWithIndexOperation<O> {
     #[inline]
     fn evaluate_exclude_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        values: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>,
+        values: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordValue)>>,
         operand: &Wrapper<MultipleValuesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordValue)>>>
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordValue)>>>
     where
         O: 'a,
     {
@@ -1846,8 +1841,8 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
     pub(crate) fn evaluate<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        value: Option<(&'a O::Index, GraphRecordValue)>,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordValue)>>
+        value: Option<(O::Index, GraphRecordValue)>,
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordValue)>>
     where
         O: 'a,
     {
@@ -1897,12 +1892,12 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_single_value_comparison_operation<'a>(
+    fn evaluate_single_value_comparison_operation(
         graphrecord: &GraphRecord,
-        value: (&'a O::Index, GraphRecordValue),
+        value: (O::Index, GraphRecordValue),
         comparison_operand: &SingleValueComparisonOperand,
         kind: &SingleComparisonKind,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordValue)>> {
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordValue)>> {
         let comparison_value = comparison_operand
             .evaluate_backward(graphrecord)?
             .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
@@ -1923,12 +1918,12 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_multiple_values_comparison_operation<'a>(
+    fn evaluate_multiple_values_comparison_operation(
         graphrecord: &GraphRecord,
-        value: (&'a O::Index, GraphRecordValue),
+        value: (O::Index, GraphRecordValue),
         comparison_operand: &MultipleValuesComparisonOperand,
         kind: &MultipleComparisonKind,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordValue)>> {
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordValue)>> {
         let comparison_values = comparison_operand.evaluate_backward(graphrecord)?;
 
         let comparison_result = match kind {
@@ -1940,12 +1935,12 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_binary_arithmetic_operation<'a>(
+    fn evaluate_binary_arithmetic_operation(
         graphrecord: &GraphRecord,
-        value: (&'a O::Index, GraphRecordValue),
+        value: (O::Index, GraphRecordValue),
         operand: &SingleValueComparisonOperand,
         kind: &BinaryArithmeticKind,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordValue)>> {
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordValue)>> {
         let arithmetic_value = operand
             .evaluate_backward(graphrecord)?
             .ok_or_else(|| GraphRecordError::QueryError("No value to compare".to_string()))?;
@@ -1961,10 +1956,10 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_unary_arithmetic_operation<'a>(
-        value: (&'a O::Index, GraphRecordValue),
+    fn evaluate_unary_arithmetic_operation(
+        value: (O::Index, GraphRecordValue),
         kind: &UnaryArithmeticKind,
-    ) -> (&'a O::Index, GraphRecordValue) {
+    ) -> (O::Index, GraphRecordValue) {
         match kind {
             UnaryArithmeticKind::Round => (value.0, value.1.round()),
             UnaryArithmeticKind::Ceil => (value.0, value.1.ceil()),
@@ -1980,17 +1975,17 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_slice<'a>(
-        value: (&'a O::Index, GraphRecordValue),
+    fn evaluate_slice(
+        value: (O::Index, GraphRecordValue),
         range: &Range<usize>,
-    ) -> (&'a O::Index, GraphRecordValue) {
+    ) -> (O::Index, GraphRecordValue) {
         (value.0, value.1.slice(range.clone()))
     }
 
     #[inline]
     fn evaluate_is_string(
-        value: (&O::Index, GraphRecordValue),
-    ) -> Option<(&O::Index, GraphRecordValue)> {
+        value: (O::Index, GraphRecordValue),
+    ) -> Option<(O::Index, GraphRecordValue)> {
         match value.1 {
             GraphRecordValue::String(_) => Some(value),
             _ => None,
@@ -1999,8 +1994,8 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_int(
-        value: (&O::Index, GraphRecordValue),
-    ) -> Option<(&O::Index, GraphRecordValue)> {
+        value: (O::Index, GraphRecordValue),
+    ) -> Option<(O::Index, GraphRecordValue)> {
         match value.1 {
             GraphRecordValue::Int(_) => Some(value),
             _ => None,
@@ -2009,8 +2004,8 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_float(
-        value: (&O::Index, GraphRecordValue),
-    ) -> Option<(&O::Index, GraphRecordValue)> {
+        value: (O::Index, GraphRecordValue),
+    ) -> Option<(O::Index, GraphRecordValue)> {
         match value.1 {
             GraphRecordValue::Float(_) => Some(value),
             _ => None,
@@ -2019,8 +2014,8 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_bool(
-        value: (&O::Index, GraphRecordValue),
-    ) -> Option<(&O::Index, GraphRecordValue)> {
+        value: (O::Index, GraphRecordValue),
+    ) -> Option<(O::Index, GraphRecordValue)> {
         match value.1 {
             GraphRecordValue::Bool(_) => Some(value),
             _ => None,
@@ -2029,8 +2024,8 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_datetime(
-        value: (&O::Index, GraphRecordValue),
-    ) -> Option<(&O::Index, GraphRecordValue)> {
+        value: (O::Index, GraphRecordValue),
+    ) -> Option<(O::Index, GraphRecordValue)> {
         match value.1 {
             GraphRecordValue::DateTime(_) => Some(value),
             _ => None,
@@ -2039,8 +2034,8 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_duration(
-        value: (&O::Index, GraphRecordValue),
-    ) -> Option<(&O::Index, GraphRecordValue)> {
+        value: (O::Index, GraphRecordValue),
+    ) -> Option<(O::Index, GraphRecordValue)> {
         match value.1 {
             GraphRecordValue::Duration(_) => Some(value),
             _ => None,
@@ -2049,8 +2044,8 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_null(
-        value: (&O::Index, GraphRecordValue),
-    ) -> Option<(&O::Index, GraphRecordValue)> {
+        value: (O::Index, GraphRecordValue),
+    ) -> Option<(O::Index, GraphRecordValue)> {
         match value.1 {
             GraphRecordValue::Null => Some(value),
             _ => None,
@@ -2060,10 +2055,10 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
     #[inline]
     fn evaluate_either_or<'a>(
         graphrecord: &'a GraphRecord,
-        value: (&'a O::Index, GraphRecordValue),
+        value: (O::Index, GraphRecordValue),
         either: &Wrapper<SingleValueWithIndexOperand<O>>,
         or: &Wrapper<SingleValueWithIndexOperand<O>>,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordValue)>>
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordValue)>>
     where
         O: 'a,
     {
@@ -2083,8 +2078,8 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
     pub(crate) fn evaluate_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        values: GroupedIterator<'a, Option<(&'a O::Index, GraphRecordValue)>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, Option<(&'a O::Index, GraphRecordValue)>>>
+        values: GroupedIterator<'a, Option<(O::Index, GraphRecordValue)>>,
+    ) -> GraphRecordResult<GroupedIterator<'a, Option<(O::Index, GraphRecordValue)>>>
     where
         O: 'a,
     {
@@ -2251,10 +2246,10 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
     #[inline]
     fn evaluate_either_or_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        values: GroupedIterator<'a, Option<(&'a O::Index, GraphRecordValue)>>,
+        values: GroupedIterator<'a, Option<(O::Index, GraphRecordValue)>>,
         either: &Wrapper<SingleValueWithIndexOperand<O>>,
         or: &Wrapper<SingleValueWithIndexOperand<O>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, Option<(&'a O::Index, GraphRecordValue)>>>
+    ) -> GraphRecordResult<GroupedIterator<'a, Option<(O::Index, GraphRecordValue)>>>
     where
         O: 'a,
     {
@@ -2289,9 +2284,9 @@ impl<O: RootOperand> SingleValueWithIndexOperation<O> {
     #[inline]
     fn evaluate_exclude_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        values: GroupedIterator<'a, Option<(&'a O::Index, GraphRecordValue)>>,
+        values: GroupedIterator<'a, Option<(O::Index, GraphRecordValue)>>,
         operand: &Wrapper<SingleValueWithIndexOperand<O>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, Option<(&'a O::Index, GraphRecordValue)>>>
+    ) -> GraphRecordResult<GroupedIterator<'a, Option<(O::Index, GraphRecordValue)>>>
     where
         O: 'a,
     {

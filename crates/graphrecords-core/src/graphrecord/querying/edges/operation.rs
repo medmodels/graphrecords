@@ -109,8 +109,8 @@ impl EdgeOperation {
     pub(crate) fn evaluate<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex> + 'a,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a EdgeIndex>> {
+        edge_indices: impl Iterator<Item = EdgeIndex> + 'a,
+    ) -> GraphRecordResult<BoxedIterator<'a, EdgeIndex>> {
         Ok(match self {
             Self::Values { operand } => {
                 Box::new(Self::evaluate_values(graphrecord, edge_indices, operand)?)
@@ -175,16 +175,16 @@ impl EdgeOperation {
     }
 
     #[inline]
-    pub(crate) fn get_values<'a>(
-        graphrecord: &'a GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex>,
+    pub(crate) fn get_values(
+        graphrecord: &GraphRecord,
+        edge_indices: impl Iterator<Item = EdgeIndex>,
         attribute: GraphRecordAttribute,
-    ) -> impl Iterator<Item = (&'a EdgeIndex, GraphRecordValue)> {
+    ) -> impl Iterator<Item = (EdgeIndex, GraphRecordValue)> {
         edge_indices.filter_map(move |edge_index| {
             Some((
                 edge_index,
                 graphrecord
-                    .edge_attributes(edge_index)
+                    .edge_attributes(&edge_index)
                     .expect("Edge must exist")
                     .get(&attribute)?
                     .clone(),
@@ -197,9 +197,9 @@ impl EdgeOperation {
         graphrecord: &'a GraphRecord,
         edge_indices: T,
         operand: &Wrapper<MultipleValuesWithIndexOperand<EdgeOperand>>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    ) -> GraphRecordResult<impl Iterator<Item = EdgeIndex> + use<'a, T>>
     where
-        T: Iterator<Item = &'a EdgeIndex> + 'a,
+        T: Iterator<Item = EdgeIndex> + 'a,
     {
         let MultipleValuesWithIndexContext::Operand((_, ref attribute)) = operand.0.read().context
         else {
@@ -214,13 +214,13 @@ impl EdgeOperation {
     }
 
     #[inline]
-    pub(crate) fn get_attributes<'a>(
-        graphrecord: &'a GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex>,
-    ) -> impl Iterator<Item = (&'a EdgeIndex, Vec<GraphRecordAttribute>)> {
+    pub(crate) fn get_attributes(
+        graphrecord: &GraphRecord,
+        edge_indices: impl Iterator<Item = EdgeIndex>,
+    ) -> impl Iterator<Item = (EdgeIndex, Vec<GraphRecordAttribute>)> {
         edge_indices.map(move |edge_index| {
             let attributes_view = graphrecord
-                .edge_attributes(edge_index)
+                .edge_attributes(&edge_index)
                 .expect("Edge must exist");
             let attributes: Vec<GraphRecordAttribute> = attributes_view.keys().cloned().collect();
 
@@ -233,9 +233,9 @@ impl EdgeOperation {
         graphrecord: &'a GraphRecord,
         edge_indices: T,
         operand: &Wrapper<AttributesTreeOperand<EdgeOperand>>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    ) -> GraphRecordResult<impl Iterator<Item = EdgeIndex> + use<'a, T>>
     where
-        T: Iterator<Item = &'a EdgeIndex> + 'a,
+        T: Iterator<Item = EdgeIndex> + 'a,
     {
         let attributes = Self::get_attributes(graphrecord, edge_indices);
 
@@ -249,27 +249,27 @@ impl EdgeOperation {
         graphrecord: &GraphRecord,
         edge_indices: T,
         operand: &Wrapper<EdgeIndicesOperand>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    ) -> GraphRecordResult<impl Iterator<Item = EdgeIndex> + use<'a, T>>
     where
-        T: Iterator<Item = &'a EdgeIndex>,
+        T: Iterator<Item = EdgeIndex>,
     {
         let (edge_indices_1, edge_indices_2) = Itertools::tee(edge_indices);
 
         let result: GrHashSet<_> = operand
-            .evaluate_forward(graphrecord, Box::new(edge_indices_1.copied()))?
+            .evaluate_forward(graphrecord, Box::new(edge_indices_1))?
             .collect();
 
         Ok(edge_indices_2
             .into_iter()
-            .filter(move |index| result.contains(*index)))
+            .filter(move |index| result.contains(index)))
     }
 
     #[inline]
-    fn evaluate_in_group<'a>(
-        graphrecord: &'a GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex>,
+    fn evaluate_in_group(
+        graphrecord: &GraphRecord,
+        edge_indices: impl Iterator<Item = EdgeIndex>,
         group: CardinalityWrapper<Group>,
-    ) -> impl Iterator<Item = &'a EdgeIndex> {
+    ) -> impl Iterator<Item = EdgeIndex> {
         edge_indices.filter(move |edge_index| {
             let groups_of_edge = graphrecord
                 .groups_of_edge(edge_index)
@@ -294,11 +294,11 @@ impl EdgeOperation {
     }
 
     #[inline]
-    fn evaluate_has_attribute<'a>(
-        graphrecord: &'a GraphRecord,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex>,
+    fn evaluate_has_attribute(
+        graphrecord: &GraphRecord,
+        edge_indices: impl Iterator<Item = EdgeIndex>,
         attribute: CardinalityWrapper<GraphRecordAttribute>,
-    ) -> impl Iterator<Item = &'a EdgeIndex> {
+    ) -> impl Iterator<Item = EdgeIndex> {
         edge_indices.filter(move |edge_index| {
             let attributes_view = graphrecord
                 .edge_attributes(edge_index)
@@ -330,15 +330,15 @@ impl EdgeOperation {
         graphrecord: &'a GraphRecord,
         edge_indices: T,
         operand: &Wrapper<NodeOperand>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    ) -> GraphRecordResult<impl Iterator<Item = EdgeIndex> + use<'a, T>>
     where
-        T: Iterator<Item = &'a EdgeIndex> + 'a,
+        T: Iterator<Item = EdgeIndex> + 'a,
     {
         let (edge_indices_1, edge_indices_2) = Itertools::tee(edge_indices);
 
         let node_indices = edge_indices_1.map(|edge_index| {
             let edge_endpoints = graphrecord
-                .edge_endpoints(edge_index)
+                .edge_endpoint_handles(&edge_index)
                 .expect("Edge must exist");
 
             edge_endpoints.0
@@ -350,10 +350,10 @@ impl EdgeOperation {
 
         Ok(edge_indices_2.filter(move |edge_index| {
             let edge_endpoints = graphrecord
-                .edge_endpoints(edge_index)
+                .edge_endpoint_handles(edge_index)
                 .expect("Edge must exist");
 
-            node_indices.contains(edge_endpoints.0)
+            node_indices.contains(&edge_endpoints.0)
         }))
     }
 
@@ -362,15 +362,15 @@ impl EdgeOperation {
         graphrecord: &'a GraphRecord,
         edge_indices: T,
         operand: &Wrapper<NodeOperand>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    ) -> GraphRecordResult<impl Iterator<Item = EdgeIndex> + use<'a, T>>
     where
-        T: Iterator<Item = &'a EdgeIndex> + 'a,
+        T: Iterator<Item = EdgeIndex> + 'a,
     {
         let (edge_indices_1, edge_indices_2) = Itertools::tee(edge_indices);
 
         let node_indices = edge_indices_1.map(|edge_index| {
             let edge_endpoints = graphrecord
-                .edge_endpoints(edge_index)
+                .edge_endpoint_handles(&edge_index)
                 .expect("Edge must exist");
 
             edge_endpoints.1
@@ -382,10 +382,10 @@ impl EdgeOperation {
 
         Ok(edge_indices_2.filter(move |edge_index| {
             let edge_endpoints = graphrecord
-                .edge_endpoints(edge_index)
+                .edge_endpoint_handles(edge_index)
                 .expect("Edge must exist");
 
-            node_indices.contains(edge_endpoints.1)
+            node_indices.contains(&edge_endpoints.1)
         }))
     }
 
@@ -393,9 +393,9 @@ impl EdgeOperation {
         graphrecord: &'a GraphRecord,
         edge_indices: T,
         operand: &Wrapper<GroupOperand<EdgeOperand>>,
-    ) -> GraphRecordResult<impl Iterator<Item = &'a EdgeIndex> + use<'a, T>>
+    ) -> GraphRecordResult<impl Iterator<Item = EdgeIndex> + use<'a, T>>
     where
-        T: Iterator<Item = &'a EdgeIndex> + 'a,
+        T: Iterator<Item = EdgeIndex> + 'a,
     {
         Ok(EdgeOperand::merge(
             operand.evaluate_forward(graphrecord, Box::new(edge_indices))?,
@@ -407,8 +407,8 @@ impl EdgeOperation {
     pub(crate) fn evaluate_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>> {
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>,
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>> {
         Ok(match self {
             Self::Values { operand } => Box::new(Self::evaluate_values_grouped(
                 graphrecord,
@@ -481,9 +481,9 @@ impl EdgeOperation {
     #[inline]
     fn evaluate_values_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>,
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>,
         operand: &Wrapper<MultipleValuesWithIndexOperand<EdgeOperand>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>> {
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>> {
         let MultipleValuesWithIndexContext::Operand((_, ref attribute)) = operand.0.read().context
         else {
             unreachable!()
@@ -516,9 +516,9 @@ impl EdgeOperation {
     #[inline]
     fn evaluate_attributes_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>,
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>,
         operand: &Wrapper<AttributesTreeOperand<EdgeOperand>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>> {
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>> {
         let attributes = edge_indices.map(|(key, edge_indices)| {
             (
                 key,
@@ -542,13 +542,13 @@ impl EdgeOperation {
     #[inline]
     fn evaluate_indices_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>,
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>,
         operand: &Wrapper<EdgeIndicesOperand>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>> {
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>> {
         let (edge_indices_1, edge_indices_2) = tee_grouped_iterator(edge_indices);
 
         let edge_indices_1 = edge_indices_1
-            .map(|(key, edge_indices)| (key, Box::new(edge_indices.copied()) as BoxedIterator<_>));
+            .map(|(key, edge_indices)| (key, Box::new(edge_indices) as BoxedIterator<_>));
 
         let mut edge_indices_1: Vec<_> = operand
             .evaluate_forward_grouped(graphrecord, Box::new(edge_indices_1))?
@@ -564,7 +564,7 @@ impl EdgeOperation {
                 edge_indices_1.remove(*edge_indices_position).1.collect();
 
             let filtered_indices: Vec<_> = edge_indices
-                .filter(|edge_index| edge_indices_1.contains(*edge_index))
+                .filter(|edge_index| edge_indices_1.contains(edge_index))
                 .collect();
 
             (
@@ -577,15 +577,15 @@ impl EdgeOperation {
     #[inline]
     fn evaluate_source_node_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>,
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>,
         operand: &Wrapper<NodeOperand>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>> {
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>> {
         let (edge_indices_1, edge_indices_2) = tee_grouped_iterator(edge_indices);
 
         let node_indices = edge_indices_1.map(|(key, edge_indices)| {
             let node_indices: BoxedIterator<_> = Box::new(edge_indices.map(|edge_index| {
                 let edge_endpoints = graphrecord
-                    .edge_endpoints(edge_index)
+                    .edge_endpoint_handles(&edge_index)
                     .expect("Edge must exist");
 
                 edge_endpoints.0
@@ -610,10 +610,10 @@ impl EdgeOperation {
             let filtered_indices: Vec<_> = edge_indices
                 .filter(|edge_index| {
                     let edge_endpoints = graphrecord
-                        .edge_endpoints(edge_index)
+                        .edge_endpoint_handles(edge_index)
                         .expect("Edge must exist");
 
-                    node_indices.contains(edge_endpoints.0)
+                    node_indices.contains(&edge_endpoints.0)
                 })
                 .collect();
 
@@ -627,15 +627,15 @@ impl EdgeOperation {
     #[inline]
     fn evaluate_target_node_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>,
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>,
         operand: &Wrapper<NodeOperand>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>> {
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>> {
         let (edge_indices_1, edge_indices_2) = tee_grouped_iterator(edge_indices);
 
         let node_indices = edge_indices_1.map(|(key, edge_indices)| {
             let node_indices: BoxedIterator<_> = Box::new(edge_indices.map(|edge_index| {
                 let edge_endpoints = graphrecord
-                    .edge_endpoints(edge_index)
+                    .edge_endpoint_handles(&edge_index)
                     .expect("Edge must exist");
 
                 edge_endpoints.1
@@ -660,10 +660,10 @@ impl EdgeOperation {
             let filtered_indices: Vec<_> = edge_indices
                 .filter(|edge_index| {
                     let edge_endpoints = graphrecord
-                        .edge_endpoints(edge_index)
+                        .edge_endpoint_handles(edge_index)
                         .expect("Edge must exist");
 
-                    node_indices.contains(edge_endpoints.1)
+                    node_indices.contains(&edge_endpoints.1)
                 })
                 .collect();
 
@@ -677,10 +677,10 @@ impl EdgeOperation {
     #[inline]
     fn evaluate_either_or_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>,
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>,
         either: &Wrapper<EdgeOperand>,
         or: &Wrapper<EdgeOperand>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>> {
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>> {
         let (edge_indices_1, edge_indices_2) = tee_grouped_iterator(edge_indices);
 
         let either_indices = either.evaluate_forward_grouped(graphrecord, edge_indices_1)?;
@@ -699,7 +699,7 @@ impl EdgeOperation {
             let edge_indices: BoxedIterator<_> = Box::new(
                 either_indices
                     .chain(or_indices)
-                    .unique_by(|edge_index| **edge_index),
+                    .unique_by(|edge_index| *edge_index),
             );
 
             (key, edge_indices)
@@ -711,9 +711,9 @@ impl EdgeOperation {
     #[inline]
     fn evaluate_exclude_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        edge_indices: GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>,
+        edge_indices: GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>,
         operand: &Wrapper<EdgeOperand>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a EdgeIndex>>> {
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, EdgeIndex>>> {
         let (edge_indices_1, edge_indices_2) = tee_grouped_iterator(edge_indices);
 
         let mut result: Vec<_> = operand

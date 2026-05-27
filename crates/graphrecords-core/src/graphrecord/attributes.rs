@@ -20,6 +20,7 @@ impl<'a> NodeAttributesMut<'a> {
 
         if !graphrecord.graph.contains_node(node_handle) {
             let node_index = graphrecord.graph.node_index_table.resolve(node_handle);
+
             return Err(GraphRecordError::IndexError(format!(
                 "Cannot find node with index {node_index}",
             )));
@@ -50,7 +51,7 @@ impl<'a> NodeAttributesMut<'a> {
         self.graphrecord
             .graph
             .node_attributes(self.node_handle)
-            .expect("node must exist.")
+            .expect("Node must exist")
             .to_owned_attributes()
     }
 
@@ -95,7 +96,7 @@ impl<'a> NodeAttributesMut<'a> {
         self.graphrecord
             .graph
             .replace_node_attributes(self.node_handle, attributes)
-            .expect("node must exist.");
+            .expect("Node must exist");
     }
 
     pub fn replace_attributes(&mut self, attributes: Attributes) -> GraphRecordResult<()> {
@@ -177,7 +178,7 @@ impl<'a> EdgeAttributesMut<'a> {
     fn get_groups(&self) -> Vec<Group> {
         self.graphrecord
             .groups_of_edge(self.edge_index)
-            .expect("edge must exist.")
+            .expect("Edge must exist")
             .cloned()
             .collect()
     }
@@ -185,7 +186,7 @@ impl<'a> EdgeAttributesMut<'a> {
     fn current_attributes(&self) -> Attributes {
         self.graphrecord
             .edge_attributes(self.edge_index)
-            .expect("edge must exist.")
+            .expect("Edge must exist")
             .to_owned_attributes()
     }
 
@@ -224,7 +225,7 @@ impl<'a> EdgeAttributesMut<'a> {
         self.graphrecord
             .graph
             .replace_edge_attributes(self.edge_index, attributes)
-            .expect("edge must exist.");
+            .expect("Edge must exist");
     }
 
     pub fn replace_attributes(&mut self, attributes: Attributes) -> GraphRecordResult<()> {

@@ -3,8 +3,7 @@ use crate::{
     GraphRecord,
     errors::GraphRecordResult,
     graphrecord::querying::{
-        BoxedIterator, DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped,
-        GroupedIterator,
+        DeepClone, EvaluateBackward, EvaluateForward, EvaluateForwardGrouped, GroupedIterator,
         edges::{EdgeIndexOperand, EdgeIndicesOperand, EdgeIndicesOperandContext},
         group_by::{GroupBy, GroupOperand, GroupedOperand, PartitionGroups, Ungroup},
         nodes::NodeOperand,
@@ -96,18 +95,9 @@ impl<'a> EvaluateBackward<'a> for GroupOperand<EdgeIndicesOperand> {
         &self,
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<Self::ReturnValue> {
-        let partitions = self.context.evaluate_backward(graphrecord)?;
+        let indices = self.context.evaluate_backward(graphrecord)?;
 
-        let indices: Vec<_> = partitions
-            .map(|(key, partition)| {
-                let reduced_partition: BoxedIterator<_> = Box::new(partition.copied());
-
-                Ok((key, reduced_partition))
-            })
-            .collect::<GraphRecordResult<_>>()?;
-
-        self.operand
-            .evaluate_forward_grouped(graphrecord, Box::new(indices.into_iter()))
+        self.operand.evaluate_forward_grouped(graphrecord, indices)
     }
 }
 
@@ -140,7 +130,7 @@ impl<'a> EvaluateBackward<'a> for GroupOperand<EdgeIndexOperand> {
 
         let indices: Vec<_> = partitions
             .map(|(key, partition)| {
-                let reduced_partition = self.operand.reduce_input(partition)?;
+                let reduced_partition = self.operand.reduce_input(graphrecord, partition)?;
 
                 Ok((key, reduced_partition))
             })

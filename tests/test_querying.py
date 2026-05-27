@@ -582,13 +582,14 @@ class TestNodeOperand(unittest.TestCase):
     def setUp(self) -> None:
         """Set up the test environment with a diverse GraphRecord."""
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
 
     def test_node_operand_attribute_simple(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
             return node.attribute("gender")
 
-        assert self.graphrecord.query_nodes(query) == {"pat_1": "M"}
+        assert self.graphrecord.query_nodes(query) == {self.node_handle("pat_1"): "M"}
 
     def test_node_operand_attributes(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeOperand:
@@ -599,7 +600,7 @@ class TestNodeOperand(unittest.TestCase):
             key: sorted(value)
             for key, value in self.graphrecord.query_nodes(query).items()
         }
-        assert result == {"pat_1": ["age", "gender"]}
+        assert result == {self.node_handle("pat_1"): ["age", "gender"]}
 
     def test_node_operand_index(self) -> None:
         def query(node: NodeOperand) -> NodeIndicesOperand:
@@ -754,6 +755,7 @@ class TestNodeGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         """Set up the test environment with a diverse GraphRecord."""
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
 
     def test_group_operand_attribute(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleValuesWithIndexGroupOperand:
@@ -776,8 +778,15 @@ class TestNodeGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 22, "pat_3": 96}),
-            ("M", {"pat_4": 19, "pat_5": 37, "pat_1": 42}),
+            ("F", {self.node_handle("pat_2"): 22, self.node_handle("pat_3"): 96}),
+            (
+                "M",
+                {
+                    self.node_handle("pat_4"): 19,
+                    self.node_handle("pat_5"): 37,
+                    self.node_handle("pat_1"): 42,
+                },
+            ),
         ]
 
     def test_group_operand_attributes(self) -> None:
@@ -793,7 +802,7 @@ class TestNodeGroupOperand(unittest.TestCase):
             value, nodes_with_attributes = tuple_to_sort
             sorted_nodes = sorted(
                 ((k, sorted(v)) for k, v in dict(nodes_with_attributes).items()),
-                key=operator.itemgetter(0),
+                key=lambda x: str(self.graphrecord.resolve_node_handle(x[0])),
             )
             return (value, dict(sorted_nodes))
 
@@ -803,13 +812,19 @@ class TestNodeGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": ["age", "gender"], "pat_3": ["age", "gender"]}),
+            (
+                "F",
+                {
+                    self.node_handle("pat_2"): ["age", "gender"],
+                    self.node_handle("pat_3"): ["age", "gender"],
+                },
+            ),
             (
                 "M",
                 {
-                    "pat_1": ["age", "gender"],
-                    "pat_4": ["age", "gender"],
-                    "pat_5": ["age", "gender"],
+                    self.node_handle("pat_1"): ["age", "gender"],
+                    self.node_handle("pat_4"): ["age", "gender"],
+                    self.node_handle("pat_5"): ["age", "gender"],
                 },
             ),
         ]
@@ -1395,6 +1410,7 @@ class TestEdgeGroupOperand(unittest.TestCase):
 class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
 
     def sort_tuple(
         self,
@@ -1415,8 +1431,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group.max()
 
         assert sorted(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96)),
-            ("M", ("pat_1", 42)),
+            ("F", (self.node_handle("pat_3"), 96)),
+            ("M", (self.node_handle("pat_1"), 42)),
         ]
 
     def test_min(self) -> None:
@@ -1428,8 +1444,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group.min()
 
         assert sorted(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_2", 22)),
-            ("M", ("pat_4", 19)),
+            ("F", (self.node_handle("pat_2"), 22)),
+            ("M", (self.node_handle("pat_4"), 19)),
         ]
 
     def test_mean(self) -> None:
@@ -1534,8 +1550,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group.random()
 
         assert sorted(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96)),
-            ("M", ("pat_1", 42)),
+            ("F", (self.node_handle("pat_3"), 96)),
+            ("M", (self.node_handle("pat_1"), 42)),
         ]
 
     def test_is_string(self) -> None:
@@ -1552,8 +1568,15 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", {"pat_2": "F", "pat_3": "F"}),
-            ("M", {"pat_1": "M", "pat_4": "M", "pat_5": "M"}),
+            ("F", {self.node_handle("pat_2"): "F", self.node_handle("pat_3"): "F"}),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): "M",
+                    self.node_handle("pat_4"): "M",
+                    self.node_handle("pat_5"): "M",
+                },
+            ),
         ]
 
     def test_is_int(self) -> None:
@@ -1570,8 +1593,15 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", {"pat_2": 22, "pat_3": 96}),
-            ("M", {"pat_4": 19, "pat_5": 37, "pat_1": 42}),
+            ("F", {self.node_handle("pat_2"): 22, self.node_handle("pat_3"): 96}),
+            (
+                "M",
+                {
+                    self.node_handle("pat_4"): 19,
+                    self.node_handle("pat_5"): 37,
+                    self.node_handle("pat_1"): 42,
+                },
+            ),
         ]
 
     def test_is_float(self) -> None:
@@ -1586,7 +1616,9 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             group.is_float()
             return group
 
-        assert self.graphrecord.query_nodes(query) == [("M", {"pat_6": 2.3})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("M", {self.node_handle("pat_6"): 2.3})
+        ]
 
     def test_is_bool(self) -> None:
         self.graphrecord.unfreeze_schema()
@@ -1600,7 +1632,9 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             group.is_bool()
             return group
 
-        assert self.graphrecord.query_nodes(query) == [("M", {"pat_6": True})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("M", {self.node_handle("pat_6"): True})
+        ]
 
     def test_is_datetime(self) -> None:
         self.graphrecord.unfreeze_schema()
@@ -1617,7 +1651,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", {"pat_6": datetime(2023, 10, 1)})
+            ("M", {self.node_handle("pat_6"): datetime(2023, 10, 1)})
         ]
 
     def test_is_duration(self) -> None:
@@ -1635,7 +1669,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", {"pat_6": timedelta(days=5)})
+            ("M", {self.node_handle("pat_6"): timedelta(days=5)})
         ]
 
     def test_is_null(self) -> None:
@@ -1650,7 +1684,9 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             group.is_null()
             return group
 
-        assert self.graphrecord.query_nodes(query) == [("M", {"pat_6": None})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("M", {self.node_handle("pat_6"): None})
+        ]
 
     def test_is_max(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleValuesWithIndexGroupOperand:
@@ -1662,8 +1698,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert sorted(self.graphrecord.query_nodes(query)) == [
-            ("F", {"pat_3": 96}),
-            ("M", {"pat_1": 42}),
+            ("F", {self.node_handle("pat_3"): 96}),
+            ("M", {self.node_handle("pat_1"): 42}),
         ]
 
     def test_is_min(self) -> None:
@@ -1676,8 +1712,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert sorted(self.graphrecord.query_nodes(query)) == [
-            ("F", {"pat_2": 22}),
-            ("M", {"pat_4": 19}),
+            ("F", {self.node_handle("pat_2"): 22}),
+            ("M", {self.node_handle("pat_4"): 19}),
         ]
 
     def test_greater_than(self) -> None:
@@ -1695,8 +1731,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_3": 96}),
-            ("M", {"pat_1": 42}),
+            ("F", {self.node_handle("pat_3"): 96}),
+            ("M", {self.node_handle("pat_1"): 42}),
         ]
 
     def test_greater_than_or_equal_to(self) -> None:
@@ -1714,8 +1750,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_3": 96}),
-            ("M", {"pat_1": 42}),
+            ("F", {self.node_handle("pat_3"): 96}),
+            ("M", {self.node_handle("pat_1"): 42}),
         ]
 
     def test_equal_to(self) -> None:
@@ -1734,7 +1770,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
 
         assert result == [
             ("F", {}),
-            ("M", {"pat_1": 42}),
+            ("M", {self.node_handle("pat_1"): 42}),
         ]
 
     def test_less_than(self) -> None:
@@ -1753,7 +1789,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
 
         assert result == [
             ("F", {}),
-            ("M", {"pat_4": 19}),
+            ("M", {self.node_handle("pat_4"): 19}),
         ]
 
     def test_less_than_or_equal_to(self) -> None:
@@ -1771,8 +1807,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 22}),
-            ("M", {"pat_4": 19}),
+            ("F", {self.node_handle("pat_2"): 22}),
+            ("M", {self.node_handle("pat_4"): 19}),
         ]
 
     def test_not_equal_to(self) -> None:
@@ -1790,8 +1826,15 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_3": 96}),
-            ("M", {"pat_4": 19, "pat_5": 37, "pat_1": 42}),
+            ("F", {self.node_handle("pat_3"): 96}),
+            (
+                "M",
+                {
+                    self.node_handle("pat_4"): 19,
+                    self.node_handle("pat_5"): 37,
+                    self.node_handle("pat_1"): 42,
+                },
+            ),
         ]
 
     def test_is_in(self) -> None:
@@ -1809,8 +1852,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 22}),
-            ("M", {"pat_4": 19, "pat_1": 42}),
+            ("F", {self.node_handle("pat_2"): 22}),
+            ("M", {self.node_handle("pat_4"): 19, self.node_handle("pat_1"): 42}),
         ]
 
     def test_is_not_in(self) -> None:
@@ -1828,8 +1871,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_3": 96}),
-            ("M", {"pat_5": 37}),
+            ("F", {self.node_handle("pat_3"): 96}),
+            ("M", {self.node_handle("pat_5"): 37}),
         ]
 
     def test_starts_with(self) -> None:
@@ -1848,7 +1891,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
 
         assert result == [
             ("F", {}),
-            ("M", {"pat_4": 19}),
+            ("M", {self.node_handle("pat_4"): 19}),
         ]
 
     def test_ends_with(self) -> None:
@@ -1866,8 +1909,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 22}),
-            ("M", {"pat_1": 42}),
+            ("F", {self.node_handle("pat_2"): 22}),
+            ("M", {self.node_handle("pat_1"): 42}),
         ]
 
     def test_contains(self) -> None:
@@ -1885,8 +1928,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 22}),
-            ("M", {"pat_1": 42}),
+            ("F", {self.node_handle("pat_2"): 22}),
+            ("M", {self.node_handle("pat_1"): 42}),
         ]
 
     def test_add(self) -> None:
@@ -1905,8 +1948,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 24}),
-            ("M", {"pat_1": 44}),
+            ("F", {self.node_handle("pat_2"): 24}),
+            ("M", {self.node_handle("pat_1"): 44}),
         ]
 
     def test_subtract(self) -> None:
@@ -1925,8 +1968,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 20}),
-            ("M", {"pat_1": 40}),
+            ("F", {self.node_handle("pat_2"): 20}),
+            ("M", {self.node_handle("pat_1"): 40}),
         ]
 
     def test_multiply(self) -> None:
@@ -1946,8 +1989,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 40}),
-            ("M", {"pat_1": 80}),
+            ("F", {self.node_handle("pat_2"): 40}),
+            ("M", {self.node_handle("pat_1"): 80}),
         ]
 
     def test_divide(self) -> None:
@@ -1967,8 +2010,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 10}),
-            ("M", {"pat_1": 20}),
+            ("F", {self.node_handle("pat_2"): 10}),
+            ("M", {self.node_handle("pat_1"): 20}),
         ]
 
     def test_power(self) -> None:
@@ -1988,8 +2031,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 400}),
-            ("M", {"pat_1": 1600}),
+            ("F", {self.node_handle("pat_2"): 400}),
+            ("M", {self.node_handle("pat_1"): 1600}),
         ]
 
     def test_modulo(self) -> None:
@@ -2008,8 +2051,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_3": 1}),
-            ("M", {"pat_5": 2, "pat_1": 2}),
+            ("F", {self.node_handle("pat_3"): 1}),
+            ("M", {self.node_handle("pat_5"): 2, self.node_handle("pat_1"): 2}),
         ]
 
     def test_round_ceil_floor(self) -> None:
@@ -2027,7 +2070,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", {"pat_6": 2}),
+            ("M", {self.node_handle("pat_6"): 2}),
         ]
 
         def query_ceil(node: NodeOperand) -> NodeMultipleValuesWithIndexGroupOperand:
@@ -2039,7 +2082,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query_ceil) == [
-            ("M", {"pat_6": 3}),
+            ("M", {self.node_handle("pat_6"): 3}),
         ]
 
         def query_floor(node: NodeOperand) -> NodeMultipleValuesWithIndexGroupOperand:
@@ -2051,7 +2094,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query_floor) == [
-            ("M", {"pat_6": 2}),
+            ("M", {self.node_handle("pat_6"): 2}),
         ]
 
     def test_absolute(self) -> None:
@@ -2067,7 +2110,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", {"pat_6": 2.35}),
+            ("M", {self.node_handle("pat_6"): 2.35}),
         ]
 
     def test_sqrt(self) -> None:
@@ -2087,7 +2130,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("M", {"pat_6": 9.0}),
+            ("M", {self.node_handle("pat_6"): 9.0}),
         ]
 
     def test_string_operations(self) -> None:
@@ -2105,7 +2148,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", {"pat_6": "Hello World"}),
+            ("M", {self.node_handle("pat_6"): "Hello World"}),
         ]
 
         def query_trim_start(
@@ -2119,7 +2162,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query_trim_start) == [
-            ("M", {"pat_6": "Hello World "}),
+            ("M", {self.node_handle("pat_6"): "Hello World "}),
         ]
 
         def query_trim_end(
@@ -2133,7 +2176,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query_trim_end) == [
-            ("M", {"pat_6": " Hello World"}),
+            ("M", {self.node_handle("pat_6"): " Hello World"}),
         ]
 
         def query_lowercase(
@@ -2147,7 +2190,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query_lowercase) == [
-            ("M", {"pat_6": " hello world "}),
+            ("M", {self.node_handle("pat_6"): " hello world "}),
         ]
 
         def query_uppercase(
@@ -2161,7 +2204,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query_uppercase) == [
-            ("M", {"pat_6": " HELLO WORLD "}),
+            ("M", {self.node_handle("pat_6"): " HELLO WORLD "}),
         ]
 
         def query_slice(node: NodeOperand) -> NodeMultipleValuesWithIndexGroupOperand:
@@ -2173,7 +2216,7 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query_slice) == [
-            ("M", {"pat_6": " Hello"}),
+            ("M", {self.node_handle("pat_6"): " Hello"}),
         ]
 
     def test_either_or(self) -> None:
@@ -2194,8 +2237,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_3": 96}),
-            ("M", {"pat_4": 19}),
+            ("F", {self.node_handle("pat_3"): 96}),
+            ("M", {self.node_handle("pat_4"): 19}),
         ]
 
     def test_exclude(self) -> None:
@@ -2213,8 +2256,8 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_3": 96}),
-            ("M", {"pat_5": 37, "pat_1": 42}),
+            ("F", {self.node_handle("pat_3"): 96}),
+            ("M", {self.node_handle("pat_5"): 37, self.node_handle("pat_1"): 42}),
         ]
 
     def test_ungroup(self) -> None:
@@ -2227,15 +2270,16 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
 
         result = dict(
             sorted(
-                self.graphrecord.query_nodes(query).items(), key=operator.itemgetter(0)
+                self.graphrecord.query_nodes(query).items(),
+                key=lambda x: str(self.graphrecord.resolve_node_handle(x[0])),
             )
         )
         assert result == {
-            "pat_1": 42,
-            "pat_2": 22,
-            "pat_3": 96,
-            "pat_4": 19,
-            "pat_5": 37,
+            self.node_handle("pat_1"): 42,
+            self.node_handle("pat_2"): 22,
+            self.node_handle("pat_3"): 96,
+            self.node_handle("pat_4"): 19,
+            self.node_handle("pat_5"): 37,
         }
 
     def test_clone(self) -> None:
@@ -2253,8 +2297,15 @@ class TestNodeMultipleValuesWithIndexGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
         assert result == [
-            ("F", {"pat_2": 22, "pat_3": 96}),
-            ("M", {"pat_4": 19, "pat_5": 37, "pat_1": 42}),
+            ("F", {self.node_handle("pat_2"): 22, self.node_handle("pat_3"): 96}),
+            (
+                "M",
+                {
+                    self.node_handle("pat_4"): 19,
+                    self.node_handle("pat_5"): 37,
+                    self.node_handle("pat_1"): 42,
+                },
+            ),
         ]
 
 
@@ -2995,19 +3046,20 @@ class TestNodeMultipleValuesWithoutIndexOperand(unittest.TestCase):
 class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
 
     def test_node_multiple_values_operand_numeric(self) -> None:
         assert self.graphrecord.query_nodes(
             lambda node: node.attribute("age").min()
         ) == (
-            "pat_4",
+            self.node_handle("pat_4"),
             19,
         )
 
         assert self.graphrecord.query_nodes(
             lambda node: node.attribute("age").max()
         ) == (
-            "pat_3",
+            self.node_handle("pat_3"),
             96,
         )
 
@@ -3047,7 +3099,10 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             query_node(node)
             return node.attribute("age").random()
 
-        assert self.graphrecord.query_nodes(query_random) == ("pat_1", 42)
+        assert self.graphrecord.query_nodes(query_random) == (
+            self.node_handle("pat_1"),
+            42,
+        )
 
     def test_node_multiple_values_operand_datatypes(self) -> None:
         def query1(node: NodeOperand) -> NodeIndicesOperand:
@@ -3221,7 +3276,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.add(10)
             return age
 
-        assert self.graphrecord.query_nodes(query1) == {"pat_1": 52}
+        assert self.graphrecord.query_nodes(query1) == {self.node_handle("pat_1"): 52}
 
         def query2(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3229,7 +3284,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.subtract(10)
             return age
 
-        assert self.graphrecord.query_nodes(query2) == {"pat_1": 32}
+        assert self.graphrecord.query_nodes(query2) == {self.node_handle("pat_1"): 32}
 
         def query3(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3237,7 +3292,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.multiply(10)
             return age
 
-        assert self.graphrecord.query_nodes(query3) == {"pat_1": 420}
+        assert self.graphrecord.query_nodes(query3) == {self.node_handle("pat_1"): 420}
 
         def query4(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3245,7 +3300,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.divide(10)
             return age
 
-        assert self.graphrecord.query_nodes(query4) == {"pat_1": 4.2}
+        assert self.graphrecord.query_nodes(query4) == {self.node_handle("pat_1"): 4.2}
 
         def query5(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3253,7 +3308,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.modulo(10)
             return age
 
-        assert self.graphrecord.query_nodes(query5) == {"pat_1": 2}
+        assert self.graphrecord.query_nodes(query5) == {self.node_handle("pat_1"): 2}
 
         def query6(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3261,7 +3316,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.power(2)
             return age
 
-        assert self.graphrecord.query_nodes(query6) == {"pat_1": 1764}
+        assert self.graphrecord.query_nodes(query6) == {self.node_handle("pat_1"): 1764}
 
         def query7(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3270,7 +3325,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.floor()
             return age
 
-        assert self.graphrecord.query_nodes(query7) == {"pat_1": 8}
+        assert self.graphrecord.query_nodes(query7) == {self.node_handle("pat_1"): 8}
 
         def query8(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3279,7 +3334,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.ceil()
             return age
 
-        assert self.graphrecord.query_nodes(query8) == {"pat_1": 9}
+        assert self.graphrecord.query_nodes(query8) == {self.node_handle("pat_1"): 9}
 
         def query9(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3288,7 +3343,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.round()
             return age
 
-        assert self.graphrecord.query_nodes(query9) == {"pat_1": 8}
+        assert self.graphrecord.query_nodes(query9) == {self.node_handle("pat_1"): 8}
 
         def query10(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3297,7 +3352,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             return age
 
         assert self.graphrecord.query_nodes(query10) == {
-            "pat_1": pytest.approx(6.48, rel=1e-2)
+            self.node_handle("pat_1"): pytest.approx(6.48, rel=1e-2)
         }
 
         def query11(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
@@ -3307,7 +3362,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.absolute()
             return age
 
-        assert self.graphrecord.query_nodes(query11) == {"pat_1": 3}
+        assert self.graphrecord.query_nodes(query11) == {self.node_handle("pat_1"): 3}
 
         def query12(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3315,7 +3370,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.lowercase()
             return age
 
-        assert self.graphrecord.query_nodes(query12) == {"pat_1": "m"}
+        assert self.graphrecord.query_nodes(query12) == {self.node_handle("pat_1"): "m"}
 
         self.graphrecord.unfreeze_schema()
         self.graphrecord.add_nodes(("pat_6", {"spacing": " hello "}))
@@ -3325,35 +3380,45 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             age.uppercase()
             return age
 
-        assert self.graphrecord.query_nodes(query13) == {"pat_6": " HELLO "}
+        assert self.graphrecord.query_nodes(query13) == {
+            self.node_handle("pat_6"): " HELLO "
+        }
 
         def query14(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             age = node.attribute("spacing")
             age.trim()
             return age
 
-        assert self.graphrecord.query_nodes(query14) == {"pat_6": "hello"}
+        assert self.graphrecord.query_nodes(query14) == {
+            self.node_handle("pat_6"): "hello"
+        }
 
         def query15(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             age = node.attribute("spacing")
             age.trim_start()
             return age
 
-        assert self.graphrecord.query_nodes(query15) == {"pat_6": "hello "}
+        assert self.graphrecord.query_nodes(query15) == {
+            self.node_handle("pat_6"): "hello "
+        }
 
         def query16(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             age = node.attribute("spacing")
             age.trim_end()
             return age
 
-        assert self.graphrecord.query_nodes(query16) == {"pat_6": " hello"}
+        assert self.graphrecord.query_nodes(query16) == {
+            self.node_handle("pat_6"): " hello"
+        }
 
         def query17(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             age = node.attribute("spacing")
             age.slice(0, 3)
             return age
 
-        assert self.graphrecord.query_nodes(query17) == {"pat_6": " he"}
+        assert self.graphrecord.query_nodes(query17) == {
+            self.node_handle("pat_6"): " he"
+        }
 
         def query18(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             node.attribute("age").either_or(
@@ -3362,7 +3427,10 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             )
             return node.attribute("age")
 
-        assert self.graphrecord.query_nodes(query18) == {"pat_3": 96, "pat_4": 19}
+        assert self.graphrecord.query_nodes(query18) == {
+            self.node_handle("pat_3"): 96,
+            self.node_handle("pat_4"): 19,
+        }
 
         def query19(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             node.attribute("age").exclude(
@@ -3370,7 +3438,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             )
             return node.attribute("age")
 
-        assert self.graphrecord.query_nodes(query19) == {"pat_3": 96}
+        assert self.graphrecord.query_nodes(query19) == {self.node_handle("pat_3"): 96}
 
         def query20(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             query_node(node)
@@ -3378,7 +3446,7 @@ class TestNodeMultipleValuesWithIndexOperand(unittest.TestCase):
             node.attribute("age").add(10)
             return clone
 
-        assert self.graphrecord.query_nodes(query20) == {"pat_1": 42}
+        assert self.graphrecord.query_nodes(query20) == {self.node_handle("pat_1"): 42}
 
 
 class TestEdgeMultipleValuesWithIndexOperand(unittest.TestCase):
@@ -5401,6 +5469,7 @@ class TestEdgeMultipleValuesWithoutIndexOperand(unittest.TestCase):
 class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
 
     def test_node_single_value_operand_datatypes(self) -> None:
         def query1(node: NodeOperand) -> NodeIndicesOperand:
@@ -5474,77 +5543,77 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             maximum.greater_than(90)
             return maximum
 
-        assert self.graphrecord.query_nodes(query1) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query1) == (self.node_handle("pat_3"), 96)
 
         def query2(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             minimum = node.attribute("age").min()
             minimum.less_than(20)
             return minimum
 
-        assert self.graphrecord.query_nodes(query2) == ("pat_4", 19)
+        assert self.graphrecord.query_nodes(query2) == (self.node_handle("pat_4"), 19)
 
         def query3(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.equal_to(96)
             return maximum
 
-        assert self.graphrecord.query_nodes(query3) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query3) == (self.node_handle("pat_3"), 96)
 
         def query4(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.not_equal_to(42)
             return maximum
 
-        assert self.graphrecord.query_nodes(query4) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query4) == (self.node_handle("pat_3"), 96)
 
         def query5(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.is_in([96, 19])
             return maximum
 
-        assert self.graphrecord.query_nodes(query5) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query5) == (self.node_handle("pat_3"), 96)
 
         def query6(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.is_not_in([42, 19])
             return maximum
 
-        assert self.graphrecord.query_nodes(query6) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query6) == (self.node_handle("pat_3"), 96)
 
         def query7(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             minimum = node.attribute("age").min()
             minimum.less_than_or_equal_to(42)
             return minimum
 
-        assert self.graphrecord.query_nodes(query7) == ("pat_4", 19)
+        assert self.graphrecord.query_nodes(query7) == (self.node_handle("pat_4"), 19)
 
         def query8(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.greater_than_or_equal_to(96)
             return maximum
 
-        assert self.graphrecord.query_nodes(query8) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query8) == (self.node_handle("pat_3"), 96)
 
         def query9(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.starts_with(9)
             return maximum
 
-        assert self.graphrecord.query_nodes(query9) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query9) == (self.node_handle("pat_3"), 96)
 
         def query10(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.ends_with(6)
             return maximum
 
-        assert self.graphrecord.query_nodes(query10) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query10) == (self.node_handle("pat_3"), 96)
 
         def query11(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.contains(9)
             return maximum
 
-        assert self.graphrecord.query_nodes(query11) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query11) == (self.node_handle("pat_3"), 96)
 
     def test_node_single_value_operand_operations(self) -> None:
         def query1(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
@@ -5552,42 +5621,42 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             maximum.add(10)
             return maximum
 
-        assert self.graphrecord.query_nodes(query1) == ("pat_3", 106)
+        assert self.graphrecord.query_nodes(query1) == (self.node_handle("pat_3"), 106)
 
         def query2(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.subtract(10)
             return maximum
 
-        assert self.graphrecord.query_nodes(query2) == ("pat_3", 86)
+        assert self.graphrecord.query_nodes(query2) == (self.node_handle("pat_3"), 86)
 
         def query3(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.multiply(10)
             return maximum
 
-        assert self.graphrecord.query_nodes(query3) == ("pat_3", 960)
+        assert self.graphrecord.query_nodes(query3) == (self.node_handle("pat_3"), 960)
 
         def query4(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.divide(10)
             return maximum
 
-        assert self.graphrecord.query_nodes(query4) == ("pat_3", 9.6)
+        assert self.graphrecord.query_nodes(query4) == (self.node_handle("pat_3"), 9.6)
 
         def query5(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.modulo(10)
             return maximum
 
-        assert self.graphrecord.query_nodes(query5) == ("pat_3", 6)
+        assert self.graphrecord.query_nodes(query5) == (self.node_handle("pat_3"), 6)
 
         def query6(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
             maximum.power(2)
             return maximum
 
-        assert self.graphrecord.query_nodes(query6) == ("pat_3", 9216)
+        assert self.graphrecord.query_nodes(query6) == (self.node_handle("pat_3"), 9216)
 
         def query7(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
@@ -5595,7 +5664,7 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             maximum.floor()
             return maximum
 
-        assert self.graphrecord.query_nodes(query7) == ("pat_3", 19)
+        assert self.graphrecord.query_nodes(query7) == (self.node_handle("pat_3"), 19)
 
         def query8(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
@@ -5603,7 +5672,7 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             maximum.ceil()
             return maximum
 
-        assert self.graphrecord.query_nodes(query8) == ("pat_3", 20)
+        assert self.graphrecord.query_nodes(query8) == (self.node_handle("pat_3"), 20)
 
         def query9(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
@@ -5611,7 +5680,7 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             maximum.round()
             return maximum
 
-        assert self.graphrecord.query_nodes(query9) == ("pat_3", 19)
+        assert self.graphrecord.query_nodes(query9) == (self.node_handle("pat_3"), 19)
 
         def query10(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
@@ -5619,7 +5688,7 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             return maximum
 
         assert self.graphrecord.query_nodes(query10) == (
-            "pat_3",
+            self.node_handle("pat_3"),
             pytest.approx(9.8, rel=1e-2),
         )
 
@@ -5629,7 +5698,7 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             maximum.absolute()
             return maximum
 
-        assert self.graphrecord.query_nodes(query11) == ("pat_3", 4)
+        assert self.graphrecord.query_nodes(query11) == (self.node_handle("pat_3"), 4)
 
         self.graphrecord.unfreeze_schema()
         self.graphrecord.add_nodes(("pat_6", {"spacing": " Hello "}))
@@ -5639,42 +5708,60 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             maximum.lowercase()
             return maximum
 
-        assert self.graphrecord.query_nodes(query12) == ("pat_6", " hello ")
+        assert self.graphrecord.query_nodes(query12) == (
+            self.node_handle("pat_6"),
+            " hello ",
+        )
 
         def query13(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("spacing").max()
             maximum.uppercase()
             return maximum
 
-        assert self.graphrecord.query_nodes(query13) == ("pat_6", " HELLO ")
+        assert self.graphrecord.query_nodes(query13) == (
+            self.node_handle("pat_6"),
+            " HELLO ",
+        )
 
         def query14(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("spacing").max()
             maximum.trim()
             return maximum
 
-        assert self.graphrecord.query_nodes(query14) == ("pat_6", "Hello")
+        assert self.graphrecord.query_nodes(query14) == (
+            self.node_handle("pat_6"),
+            "Hello",
+        )
 
         def query15(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("spacing").max()
             maximum.trim_start()
             return maximum
 
-        assert self.graphrecord.query_nodes(query15) == ("pat_6", "Hello ")
+        assert self.graphrecord.query_nodes(query15) == (
+            self.node_handle("pat_6"),
+            "Hello ",
+        )
 
         def query16(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("spacing").max()
             maximum.trim_end()
             return maximum
 
-        assert self.graphrecord.query_nodes(query16) == ("pat_6", " Hello")
+        assert self.graphrecord.query_nodes(query16) == (
+            self.node_handle("pat_6"),
+            " Hello",
+        )
 
         def query17(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("spacing").max()
             maximum.slice(0, 3)
             return maximum
 
-        assert self.graphrecord.query_nodes(query17) == ("pat_6", " He")
+        assert self.graphrecord.query_nodes(query17) == (
+            self.node_handle("pat_6"),
+            " He",
+        )
 
         def query18(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
@@ -5684,7 +5771,7 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             )
             return maximum
 
-        assert self.graphrecord.query_nodes(query18) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query18) == (self.node_handle("pat_3"), 96)
 
         def query19(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
@@ -5693,7 +5780,7 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             )
             return maximum
 
-        assert self.graphrecord.query_nodes(query19) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query19) == (self.node_handle("pat_3"), 96)
 
         def query20(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
             maximum = node.attribute("age").max()
@@ -5701,12 +5788,13 @@ class TestNodeSingleValueWithIndexOperand(unittest.TestCase):
             maximum.add(10)
             return clone
 
-        assert self.graphrecord.query_nodes(query20) == ("pat_3", 96)
+        assert self.graphrecord.query_nodes(query20) == (self.node_handle("pat_3"), 96)
 
 
 class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
         self.graphrecord.unfreeze_schema()
         self.graphrecord.add_nodes(
             (
@@ -5741,8 +5829,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96)),
-            ("M", ("pat_1", 42)),
+            ("F", (self.node_handle("pat_3"), 96)),
+            ("M", (self.node_handle("pat_1"), 42)),
         ]
 
     def test_is_bool(self) -> None:
@@ -5757,7 +5845,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", ("pat_6", True)),
+            ("M", (self.node_handle("pat_6"), True)),
         ]
 
     def test_is_float(self) -> None:
@@ -5772,7 +5860,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", ("pat_6", 50.5)),
+            ("M", (self.node_handle("pat_6"), 50.5)),
         ]
 
     def test_is_string(self) -> None:
@@ -5787,7 +5875,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", ("pat_6", " Hello ")),
+            ("M", (self.node_handle("pat_6"), " Hello ")),
         ]
 
     def test_is_datetime(self) -> None:
@@ -5802,7 +5890,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", ("pat_6", datetime(2023, 10, 1))),
+            ("M", (self.node_handle("pat_6"), datetime(2023, 10, 1))),
         ]
 
     def test_is_duration(self) -> None:
@@ -5817,7 +5905,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", ("pat_6", timedelta(hours=2))),
+            ("M", (self.node_handle("pat_6"), timedelta(hours=2))),
         ]
 
     def test_is_null(self) -> None:
@@ -5832,7 +5920,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.graphrecord.query_nodes(query) == [
-            ("M", ("pat_6", None)),
+            ("M", (self.node_handle("pat_6"), None)),
         ]
 
     def test_greater_than(self) -> None:
@@ -5847,7 +5935,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96.0)),
+            ("F", (self.node_handle("pat_3"), 96.0)),
             ("M", None),
         ]
 
@@ -5863,8 +5951,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96.0)),
-            ("M", ("pat_1", 42)),
+            ("F", (self.node_handle("pat_3"), 96.0)),
+            ("M", (self.node_handle("pat_1"), 42)),
         ]
 
     def test_equal_to(self) -> None:
@@ -5880,7 +5968,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
             ("F", None),
-            ("M", ("pat_1", 42)),
+            ("M", (self.node_handle("pat_1"), 42)),
         ]
 
     def test_less_than(self) -> None:
@@ -5912,7 +6000,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
             ("F", None),
-            ("M", ("pat_1", 42)),
+            ("M", (self.node_handle("pat_1"), 42)),
         ]
 
     def test_not_equal_to(self) -> None:
@@ -5927,7 +6015,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96.0)),
+            ("F", (self.node_handle("pat_3"), 96.0)),
             ("M", None),
         ]
 
@@ -5943,8 +6031,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96.0)),
-            ("M", ("pat_1", 42)),
+            ("F", (self.node_handle("pat_3"), 96.0)),
+            ("M", (self.node_handle("pat_1"), 42)),
         ]
 
     def test_is_not_in(self) -> None:
@@ -5959,7 +6047,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96.0)),
+            ("F", (self.node_handle("pat_3"), 96.0)),
             ("M", None),
         ]
 
@@ -5975,7 +6063,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96.0)),
+            ("F", (self.node_handle("pat_3"), 96.0)),
             ("M", None),
         ]
 
@@ -5992,7 +6080,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
             ("F", None),
-            ("M", ("pat_1", 42)),
+            ("M", (self.node_handle("pat_1"), 42)),
         ]
 
     def test_contains(self) -> None:
@@ -6007,7 +6095,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96)),
+            ("F", (self.node_handle("pat_3"), 96)),
             ("M", None),
         ]
 
@@ -6023,8 +6111,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 106.0)),
-            ("M", ("pat_1", 52)),
+            ("F", (self.node_handle("pat_3"), 106.0)),
+            ("M", (self.node_handle("pat_1"), 52)),
         ]
 
     def test_subtract(self) -> None:
@@ -6039,8 +6127,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 86.0)),
-            ("M", ("pat_1", 32)),
+            ("F", (self.node_handle("pat_3"), 86.0)),
+            ("M", (self.node_handle("pat_1"), 32)),
         ]
 
     def test_multiply(self) -> None:
@@ -6055,8 +6143,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 192.0)),
-            ("M", ("pat_1", 84)),
+            ("F", (self.node_handle("pat_3"), 192.0)),
+            ("M", (self.node_handle("pat_1"), 84)),
         ]
 
     def test_divide(self) -> None:
@@ -6071,8 +6159,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 48.0)),
-            ("M", ("pat_1", 21)),
+            ("F", (self.node_handle("pat_3"), 48.0)),
+            ("M", (self.node_handle("pat_1"), 21)),
         ]
 
     def test_modulo(self) -> None:
@@ -6087,8 +6175,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 6.0)),
-            ("M", ("pat_1", 2)),
+            ("F", (self.node_handle("pat_3"), 6.0)),
+            ("M", (self.node_handle("pat_1"), 2)),
         ]
 
     def test_power(self) -> None:
@@ -6103,8 +6191,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 9216.0)),
-            ("M", ("pat_1", 1764)),
+            ("F", (self.node_handle("pat_3"), 9216.0)),
+            ("M", (self.node_handle("pat_1"), 1764)),
         ]
 
     def test_round(self) -> None:
@@ -6120,8 +6208,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 32)),
-            ("M", ("pat_1", 14)),
+            ("F", (self.node_handle("pat_3"), 32)),
+            ("M", (self.node_handle("pat_1"), 14)),
         ]
 
     def test_ceil(self) -> None:
@@ -6137,8 +6225,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 32)),
-            ("M", ("pat_1", 14)),
+            ("F", (self.node_handle("pat_3"), 32)),
+            ("M", (self.node_handle("pat_1"), 14)),
         ]
 
     def test_floor(self) -> None:
@@ -6154,8 +6242,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 32)),
-            ("M", ("pat_1", 14)),
+            ("F", (self.node_handle("pat_3"), 32)),
+            ("M", (self.node_handle("pat_1"), 14)),
         ]
 
     def test_absolute(self) -> None:
@@ -6171,8 +6259,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 4.0)),
-            ("M", ("pat_1", 58)),
+            ("F", (self.node_handle("pat_3"), 4.0)),
+            ("M", (self.node_handle("pat_1"), 58)),
         ]
 
     def test_sqrt(self) -> None:
@@ -6187,8 +6275,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", pytest.approx(9.8, rel=1e-2))),
-            ("M", ("pat_1", pytest.approx(6.48, rel=1e-2))),
+            ("F", (self.node_handle("pat_3"), pytest.approx(9.8, rel=1e-2))),
+            ("M", (self.node_handle("pat_1"), pytest.approx(6.48, rel=1e-2))),
         ]
 
     def test_string_operations(self) -> None:
@@ -6202,7 +6290,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("M", ("pat_6", "Hello")),
+            ("M", (self.node_handle("pat_6"), "Hello")),
         ]
 
         def query1(node: NodeOperand) -> NodeSingleValueWithIndexGroupOperand:
@@ -6215,7 +6303,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query1)) == [
-            ("M", ("pat_6", "Hello ")),
+            ("M", (self.node_handle("pat_6"), "Hello ")),
         ]
 
         def query2(node: NodeOperand) -> NodeSingleValueWithIndexGroupOperand:
@@ -6228,7 +6316,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query2)) == [
-            ("M", ("pat_6", " Hello")),
+            ("M", (self.node_handle("pat_6"), " Hello")),
         ]
 
         def query3(node: NodeOperand) -> NodeSingleValueWithIndexGroupOperand:
@@ -6241,7 +6329,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query3)) == [
-            ("M", ("pat_6", " hello ")),
+            ("M", (self.node_handle("pat_6"), " hello ")),
         ]
 
         def query4(node: NodeOperand) -> NodeSingleValueWithIndexGroupOperand:
@@ -6254,7 +6342,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query4)) == [
-            ("M", ("pat_6", " HELLO ")),
+            ("M", (self.node_handle("pat_6"), " HELLO ")),
         ]
 
         def query5(node: NodeOperand) -> NodeSingleValueWithIndexGroupOperand:
@@ -6267,7 +6355,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query5)) == [
-            ("M", ("pat_6", " He")),
+            ("M", (self.node_handle("pat_6"), " He")),
         ]
 
         def query6(node: NodeOperand) -> NodeSingleValueWithIndexGroupOperand:
@@ -6283,7 +6371,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query6)) == [
-            ("M", ("pat_6", " Hello ")),
+            ("M", (self.node_handle("pat_6"), " Hello ")),
         ]
 
         def query7(node: NodeOperand) -> NodeSingleValueWithIndexGroupOperand:
@@ -6297,7 +6385,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return clone
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query7)) == [
-            ("M", ("pat_6", " Hello ")),
+            ("M", (self.node_handle("pat_6"), " Hello ")),
         ]
 
     def test_exclude(self) -> None:
@@ -6311,7 +6399,7 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return group
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96.0)),
+            ("F", (self.node_handle("pat_3"), 96.0)),
             ("M", None),
         ]
 
@@ -6324,7 +6412,10 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
                 .ungroup()
             )
 
-        assert self.graphrecord.query_nodes(query) == {"pat_3": 96, "pat_1": 42}
+        assert self.graphrecord.query_nodes(query) == {
+            self.node_handle("pat_3"): 96,
+            self.node_handle("pat_1"): 42,
+        }
 
     def test_clone(self) -> None:
         def query(node: NodeOperand) -> NodeSingleValueWithIndexGroupOperand:
@@ -6338,8 +6429,8 @@ class TestNodeSingleValueWithIndexGroupOperand(unittest.TestCase):
             return clone
 
         assert self.sort_tuples(self.graphrecord.query_nodes(query)) == [
-            ("F", ("pat_3", 96.0)),
-            ("M", ("pat_1", 42)),
+            ("F", (self.node_handle("pat_3"), 96.0)),
+            ("M", (self.node_handle("pat_1"), 42)),
         ]
 
 
@@ -11960,25 +12051,30 @@ class TestEdgeIndexGroupOperand(unittest.TestCase):
 class TestNodeAttributesTreeOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
 
     def test_node_attributes_tree_operand_comparisons(self) -> None:
         def query1(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             query_node(node)
             return node.attributes().max()
 
-        assert self.graphrecord.query_nodes(query1) == {"pat_1": "gender"}
+        assert self.graphrecord.query_nodes(query1) == {
+            self.node_handle("pat_1"): "gender"
+        }
 
         def query2(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             query_node(node)
             return node.attributes().min()
 
-        assert self.graphrecord.query_nodes(query2) == {"pat_1": "age"}
+        assert self.graphrecord.query_nodes(query2) == {
+            self.node_handle("pat_1"): "age"
+        }
 
         def query3(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             query_node(node)
             return node.attributes().count()
 
-        assert self.graphrecord.query_nodes(query3) == {"pat_1": 2}
+        assert self.graphrecord.query_nodes(query3) == {self.node_handle("pat_1"): 2}
 
         self.graphrecord.unfreeze_schema()
         self.graphrecord.add_nodes((0, {1: "value1", 2: "value2"}))
@@ -11987,7 +12083,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             node.index().equal_to(0)
             return node.attributes().sum()
 
-        assert self.graphrecord.query_nodes(query4) == {0: 3}
+        assert self.graphrecord.query_nodes(query4) == {self.node_handle(0): 3}
 
         def query5(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().equal_to(0)
@@ -11995,7 +12091,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.equal_to(1)
             return attributes.random()
 
-        assert self.graphrecord.query_nodes(query5) == {0: 1}
+        assert self.graphrecord.query_nodes(query5) == {self.node_handle(0): 1}
 
         def query6(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(0)
@@ -12005,7 +12101,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query6)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [1, 2]}
+        assert result == {self.node_handle(0): [1, 2]}
 
         self.graphrecord.add_nodes(
             ("new_node", {1: "value1", "string_attribute": "value2"})
@@ -12018,7 +12114,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             return attributes
 
         assert self.graphrecord.query_nodes(query7) == {
-            "new_node": ["string_attribute"]
+            self.node_handle("new_node"): ["string_attribute"]
         }
 
         def query8(node: NodeOperand) -> NodeAttributesTreeOperand:
@@ -12027,7 +12123,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.is_in([1])
             return attributes
 
-        assert self.graphrecord.query_nodes(query8) == {0: [1]}
+        assert self.graphrecord.query_nodes(query8) == {self.node_handle(0): [1]}
 
         def query9(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(0)
@@ -12035,7 +12131,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.is_not_in([1])
             return attributes
 
-        assert self.graphrecord.query_nodes(query9) == {0: [2]}
+        assert self.graphrecord.query_nodes(query9) == {self.node_handle(0): [2]}
 
         def query10(node: NodeOperand) -> NodeAttributesTreeOperand:
             query_node(node)
@@ -12043,7 +12139,9 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.starts_with("ag")
             return attributes
 
-        assert self.graphrecord.query_nodes(query10) == {"pat_1": ["age"]}
+        assert self.graphrecord.query_nodes(query10) == {
+            self.node_handle("pat_1"): ["age"]
+        }
 
         def query11(node: NodeOperand) -> NodeAttributesTreeOperand:
             query_node(node)
@@ -12051,7 +12149,9 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.ends_with("ge")
             return attributes
 
-        assert self.graphrecord.query_nodes(query11) == {"pat_1": ["age"]}
+        assert self.graphrecord.query_nodes(query11) == {
+            self.node_handle("pat_1"): ["age"]
+        }
 
         def query12(node: NodeOperand) -> NodeAttributesTreeOperand:
             query_node(node)
@@ -12061,7 +12161,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query12)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {"pat_1": ["age", "gender"]}
+        assert result == {self.node_handle("pat_1"): ["age", "gender"]}
 
         def query13(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().is_int()
@@ -12069,7 +12169,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.is_max()
             return attributes
 
-        assert self.graphrecord.query_nodes(query13) == {0: [2]}
+        assert self.graphrecord.query_nodes(query13) == {self.node_handle(0): [2]}
 
         def query14(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().is_int()
@@ -12077,7 +12177,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.is_min()
             return attributes
 
-        assert self.graphrecord.query_nodes(query14) == {0: [1]}
+        assert self.graphrecord.query_nodes(query14) == {self.node_handle(0): [1]}
 
         def query15(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().is_int()
@@ -12085,7 +12185,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.greater_than(1)
             return attributes
 
-        assert self.graphrecord.query_nodes(query15) == {0: [2]}
+        assert self.graphrecord.query_nodes(query15) == {self.node_handle(0): [2]}
 
         def query16(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().is_int()
@@ -12095,7 +12195,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query16)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [1, 2]}
+        assert result == {self.node_handle(0): [1, 2]}
 
         def query17(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().is_int()
@@ -12103,7 +12203,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.less_than(2)
             return attributes
 
-        assert self.graphrecord.query_nodes(query17) == {0: [1]}
+        assert self.graphrecord.query_nodes(query17) == {self.node_handle(0): [1]}
 
         def query18(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().is_int()
@@ -12113,7 +12213,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query18)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [1, 2]}
+        assert result == {self.node_handle(0): [1, 2]}
 
         def query19(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().is_int()
@@ -12121,7 +12221,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.equal_to(1)
             return attributes
 
-        assert self.graphrecord.query_nodes(query19) == {0: [1]}
+        assert self.graphrecord.query_nodes(query19) == {self.node_handle(0): [1]}
 
         def query20(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().is_int()
@@ -12129,7 +12229,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.not_equal_to(1)
             return attributes
 
-        assert self.graphrecord.query_nodes(query20) == {0: [2]}
+        assert self.graphrecord.query_nodes(query20) == {self.node_handle(0): [2]}
 
     def test_node_attributes_tree_operand_operations(self) -> None:
         self.graphrecord.unfreeze_schema()
@@ -12143,7 +12243,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query1)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [12, 13]}
+        assert result == {self.node_handle(0): [12, 13]}
 
         def query2(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(0)
@@ -12153,7 +12253,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query2)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [8, 9]}
+        assert result == {self.node_handle(0): [8, 9]}
 
         def query3(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(0)
@@ -12163,7 +12263,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query3)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [20, 22]}
+        assert result == {self.node_handle(0): [20, 22]}
 
         def query4(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(0)
@@ -12173,7 +12273,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query4)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [0, 1]}
+        assert result == {self.node_handle(0): [0, 1]}
 
         def query5(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(0)
@@ -12183,7 +12283,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query5)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [100, 121]}
+        assert result == {self.node_handle(0): [100, 121]}
 
         def query6(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(0)
@@ -12194,7 +12294,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query6)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [1, 2]}
+        assert result == {self.node_handle(0): [1, 2]}
 
         self.graphrecord.add_nodes((1, {" Hello ": "value1"}))
 
@@ -12204,7 +12304,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.trim()
             return attributes
 
-        assert self.graphrecord.query_nodes(query7) == {1: ["Hello"]}
+        assert self.graphrecord.query_nodes(query7) == {self.node_handle(1): ["Hello"]}
 
         def query8(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(1)
@@ -12212,7 +12312,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.trim_start()
             return attributes
 
-        assert self.graphrecord.query_nodes(query8) == {1: ["Hello "]}
+        assert self.graphrecord.query_nodes(query8) == {self.node_handle(1): ["Hello "]}
 
         def query9(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(1)
@@ -12220,7 +12320,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.trim_end()
             return attributes
 
-        assert self.graphrecord.query_nodes(query9) == {1: [" Hello"]}
+        assert self.graphrecord.query_nodes(query9) == {self.node_handle(1): [" Hello"]}
 
         def query10(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(1)
@@ -12228,7 +12328,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.slice(0, 3)
             return attributes
 
-        assert self.graphrecord.query_nodes(query10) == {1: [" He"]}
+        assert self.graphrecord.query_nodes(query10) == {self.node_handle(1): [" He"]}
 
         def query11(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(1)
@@ -12236,7 +12336,9 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.lowercase()
             return attributes
 
-        assert self.graphrecord.query_nodes(query11) == {1: [" hello "]}
+        assert self.graphrecord.query_nodes(query11) == {
+            self.node_handle(1): [" hello "]
+        }
 
         def query12(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(1)
@@ -12244,7 +12346,9 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             attributes.uppercase()
             return attributes
 
-        assert self.graphrecord.query_nodes(query12) == {1: [" HELLO "]}
+        assert self.graphrecord.query_nodes(query12) == {
+            self.node_handle(1): [" HELLO "]
+        }
 
         def query13(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(0)
@@ -12255,7 +12359,7 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             )
             return attributes
 
-        assert self.graphrecord.query_nodes(query13) == {0: [10]}
+        assert self.graphrecord.query_nodes(query13) == {self.node_handle(0): [10]}
 
         def query14(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().is_int()
@@ -12265,7 +12369,10 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
             )
             return attributes
 
-        assert self.graphrecord.query_nodes(query14) == {0: [11], 1: [" Hello "]}
+        assert self.graphrecord.query_nodes(query14) == {
+            self.node_handle(0): [11],
+            self.node_handle(1): [" Hello "],
+        }
 
         def query15(node: NodeOperand) -> NodeAttributesTreeOperand:
             node.index().equal_to(0)
@@ -12276,12 +12383,13 @@ class TestNodeAttributesTreeOperand(unittest.TestCase):
 
         result = self.graphrecord.query_nodes(query15)
         result = {key: sorted(value) for key, value in result.items()}
-        assert result == {0: [10, 11]}
+        assert result == {self.node_handle(0): [10, 11]}
 
 
 class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
         self.graphrecord.unfreeze_schema()
         self.graphrecord.add_nodes(("pat_6", {10: "value1", 11: "value2"}))
 
@@ -12292,7 +12400,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         value, nodes_with_attributes = tuple_to_sort
         sorted_nodes = sorted(
             ((k, sorted(v)) for k, v in nodes_with_attributes.items()),
-            key=operator.itemgetter(0),
+            key=lambda x: str(self.graphrecord.resolve_node_handle(x[0])),
         )
         return (value, dict(sorted_nodes))
 
@@ -12302,7 +12410,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         value, nodes_with_attributes = tuple_to_sort
         sorted_nodes = sorted(
             ((k, v) for k, v in nodes_with_attributes.items()),
-            key=operator.itemgetter(0),
+            key=lambda x: str(self.graphrecord.resolve_node_handle(x[0])),
         )
         return (value, dict(sorted_nodes))
 
@@ -12321,8 +12429,21 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": "gender", "pat_3": "gender"}),
-            ("M", {"pat_1": "gender", "pat_4": "gender", "pat_5": "gender"}),
+            (
+                "F",
+                {
+                    self.node_handle("pat_2"): "gender",
+                    self.node_handle("pat_3"): "gender",
+                },
+            ),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): "gender",
+                    self.node_handle("pat_4"): "gender",
+                    self.node_handle("pat_5"): "gender",
+                },
+            ),
         ]
 
     def test_min(self) -> None:
@@ -12340,8 +12461,15 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": "age", "pat_3": "age"}),
-            ("M", {"pat_1": "age", "pat_4": "age", "pat_5": "age"}),
+            ("F", {self.node_handle("pat_2"): "age", self.node_handle("pat_3"): "age"}),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): "age",
+                    self.node_handle("pat_4"): "age",
+                    self.node_handle("pat_5"): "age",
+                },
+            ),
         ]
 
     def test_count(self) -> None:
@@ -12359,8 +12487,15 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
         )
 
         assert result == [
-            ("F", {"pat_2": 2, "pat_3": 2}),
-            ("M", {"pat_1": 2, "pat_4": 2, "pat_5": 2}),
+            ("F", {self.node_handle("pat_2"): 2, self.node_handle("pat_3"): 2}),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): 2,
+                    self.node_handle("pat_4"): 2,
+                    self.node_handle("pat_5"): 2,
+                },
+            ),
         ]
 
     def test_sum(self) -> None:
@@ -12371,7 +12506,9 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ).attributes()
             return attributes.sum()
 
-        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_6": 21})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", {self.node_handle("pat_6"): 21})
+        ]
 
     def test_random(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -12382,8 +12519,8 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             return attributes.random()
 
         assert self.graphrecord.query_nodes(query) in [
-            [("value1", {"pat_6": 10})],
-            [("value1", {"pat_6": 11})],
+            [("value1", {self.node_handle("pat_6"): 10})],
+            [("value1", {self.node_handle("pat_6"): 11})],
         ]
 
     def test_is_int(self) -> None:
@@ -12402,7 +12539,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10, 11]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [10, 11]})]
 
     def test_is_string(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12421,16 +12558,22 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             key=lambda x: (x[0] is None, x[0]),
         )
         assert result == [
-            ("F", {"pat_2": ["age", "gender"], "pat_3": ["age", "gender"]}),
+            (
+                "F",
+                {
+                    self.node_handle("pat_2"): ["age", "gender"],
+                    self.node_handle("pat_3"): ["age", "gender"],
+                },
+            ),
             (
                 "M",
                 {
-                    "pat_1": ["age", "gender"],
-                    "pat_4": ["age", "gender"],
-                    "pat_5": ["age", "gender"],
+                    self.node_handle("pat_1"): ["age", "gender"],
+                    self.node_handle("pat_4"): ["age", "gender"],
+                    self.node_handle("pat_5"): ["age", "gender"],
                 },
             ),
-            (None, {"pat_6": []}),
+            (None, {self.node_handle("pat_6"): []}),
         ]
 
     def test_is_max(self) -> None:
@@ -12450,8 +12593,21 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             key=lambda x: (x[0] is None, x[0]),
         )
         assert result == [
-            ("F", {"pat_2": ["gender"], "pat_3": ["gender"]}),
-            ("M", {"pat_1": ["gender"], "pat_4": ["gender"], "pat_5": ["gender"]}),
+            (
+                "F",
+                {
+                    self.node_handle("pat_2"): ["gender"],
+                    self.node_handle("pat_3"): ["gender"],
+                },
+            ),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): ["gender"],
+                    self.node_handle("pat_4"): ["gender"],
+                    self.node_handle("pat_5"): ["gender"],
+                },
+            ),
         ]
 
     def test_is_min(self) -> None:
@@ -12471,8 +12627,21 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             key=lambda x: (x[0] is None, x[0]),
         )
         assert result == [
-            ("F", {"pat_2": ["age"], "pat_3": ["age"]}),
-            ("M", {"pat_1": ["age"], "pat_4": ["age"], "pat_5": ["age"]}),
+            (
+                "F",
+                {
+                    self.node_handle("pat_2"): ["age"],
+                    self.node_handle("pat_3"): ["age"],
+                },
+            ),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): ["age"],
+                    self.node_handle("pat_4"): ["age"],
+                    self.node_handle("pat_5"): ["age"],
+                },
+            ),
         ]
 
     def test_is_in(self) -> None:
@@ -12492,9 +12661,22 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             key=lambda x: (x[0] is None, x[0]),
         )
         assert result == [
-            ("F", {"pat_2": ["age"], "pat_3": ["age"]}),
-            ("M", {"pat_1": ["age"], "pat_4": ["age"], "pat_5": ["age"]}),
-            (None, {"pat_6": []}),
+            (
+                "F",
+                {
+                    self.node_handle("pat_2"): ["age"],
+                    self.node_handle("pat_3"): ["age"],
+                },
+            ),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): ["age"],
+                    self.node_handle("pat_4"): ["age"],
+                    self.node_handle("pat_5"): ["age"],
+                },
+            ),
+            (None, {self.node_handle("pat_6"): []}),
         ]
 
     def test_is_not_in(self) -> None:
@@ -12514,9 +12696,22 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             key=lambda x: (x[0] is None, x[0]),
         )
         assert result == [
-            ("F", {"pat_2": ["gender"], "pat_3": ["gender"]}),
-            ("M", {"pat_1": ["gender"], "pat_4": ["gender"], "pat_5": ["gender"]}),
-            (None, {"pat_6": [10, 11]}),
+            (
+                "F",
+                {
+                    self.node_handle("pat_2"): ["gender"],
+                    self.node_handle("pat_3"): ["gender"],
+                },
+            ),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): ["gender"],
+                    self.node_handle("pat_4"): ["gender"],
+                    self.node_handle("pat_5"): ["gender"],
+                },
+            ),
+            (None, {self.node_handle("pat_6"): [10, 11]}),
         ]
 
     def test_starts_with(self) -> None:
@@ -12536,9 +12731,22 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             key=lambda x: (x[0] is None, x[0]),
         )
         assert result == [
-            ("F", {"pat_2": ["age"], "pat_3": ["age"]}),
-            ("M", {"pat_1": ["age"], "pat_4": ["age"], "pat_5": ["age"]}),
-            (None, {"pat_6": []}),
+            (
+                "F",
+                {
+                    self.node_handle("pat_2"): ["age"],
+                    self.node_handle("pat_3"): ["age"],
+                },
+            ),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): ["age"],
+                    self.node_handle("pat_4"): ["age"],
+                    self.node_handle("pat_5"): ["age"],
+                },
+            ),
+            (None, {self.node_handle("pat_6"): []}),
         ]
 
     def test_ends_with(self) -> None:
@@ -12558,9 +12766,22 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             key=lambda x: (x[0] is None, x[0]),
         )
         assert result == [
-            ("F", {"pat_2": ["age"], "pat_3": ["age"]}),
-            ("M", {"pat_1": ["age"], "pat_4": ["age"], "pat_5": ["age"]}),
-            (None, {"pat_6": []}),
+            (
+                "F",
+                {
+                    self.node_handle("pat_2"): ["age"],
+                    self.node_handle("pat_3"): ["age"],
+                },
+            ),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): ["age"],
+                    self.node_handle("pat_4"): ["age"],
+                    self.node_handle("pat_5"): ["age"],
+                },
+            ),
+            (None, {self.node_handle("pat_6"): []}),
         ]
 
     def test_contains(self) -> None:
@@ -12580,9 +12801,22 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             key=lambda x: (x[0] is None, x[0]),
         )
         assert result == [
-            ("F", {"pat_2": ["gender"], "pat_3": ["gender"]}),
-            ("M", {"pat_1": ["gender"], "pat_4": ["gender"], "pat_5": ["gender"]}),
-            (None, {"pat_6": []}),
+            (
+                "F",
+                {
+                    self.node_handle("pat_2"): ["gender"],
+                    self.node_handle("pat_3"): ["gender"],
+                },
+            ),
+            (
+                "M",
+                {
+                    self.node_handle("pat_1"): ["gender"],
+                    self.node_handle("pat_4"): ["gender"],
+                    self.node_handle("pat_5"): ["gender"],
+                },
+            ),
+            (None, {self.node_handle("pat_6"): []}),
         ]
 
     def test_greater_than(self) -> None:
@@ -12601,7 +12835,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10, 11]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [10, 11]})]
 
     def test_greater_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12619,7 +12853,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [11]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [11]})]
 
     def test_less_than(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12637,7 +12871,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [10]})]
 
     def test_less_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12655,7 +12889,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10, 11]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [10, 11]})]
 
     def test_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12673,7 +12907,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [10]})]
 
     def test_not_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12691,7 +12925,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [11]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [11]})]
 
     def test_either_or(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12712,7 +12946,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10, 11]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [10, 11]})]
 
     def test_exclude(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12730,7 +12964,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [11]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [11]})]
 
     def test_trim(self) -> None:
         self.graphrecord.add_nodes(("pat_7", {" Hello ": "value"}))
@@ -12750,7 +12984,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("value", {"pat_7": ["Hello"]})]
+        assert result == [("value", {self.node_handle("pat_7"): ["Hello"]})]
 
     def test_trim_start(self) -> None:
         self.graphrecord.add_nodes(("pat_8", {" Hello ": "value"}))
@@ -12770,7 +13004,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("value", {"pat_8": ["Hello "]})]
+        assert result == [("value", {self.node_handle("pat_8"): ["Hello "]})]
 
     def test_trim_end(self) -> None:
         self.graphrecord.add_nodes(("pat_9", {" Hello ": "value"}))
@@ -12790,7 +13024,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("value", {"pat_9": [" Hello"]})]
+        assert result == [("value", {self.node_handle("pat_9"): [" Hello"]})]
 
     def test_slice(self) -> None:
         self.graphrecord.add_nodes(("pat_10", {" Hello ": "value"}))
@@ -12810,7 +13044,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("value", {"pat_10": [" He"]})]
+        assert result == [("value", {self.node_handle("pat_10"): [" He"]})]
 
     def test_lowercase(self) -> None:
         self.graphrecord.add_nodes(("pat_11", {" Hello ": "value"}))
@@ -12830,7 +13064,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("value", {"pat_11": [" hello "]})]
+        assert result == [("value", {self.node_handle("pat_11"): [" hello "]})]
 
     def test_uppercase(self) -> None:
         self.graphrecord.add_nodes(("pat_12", {" Hello ": "value"}))
@@ -12850,7 +13084,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=lambda x: (x[0] is None, x[0]),
         )
-        assert result == [("value", {"pat_12": [" HELLO "]})]
+        assert result == [("value", {self.node_handle("pat_12"): [" HELLO "]})]
 
     def test_subtract(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12868,7 +13102,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [1, 2]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [1, 2]})]
 
     def test_multiply(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12886,7 +13120,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [20, 22]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [20, 22]})]
 
     def test_modulo(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12904,7 +13138,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [0, 1]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [0, 1]})]
 
     def test_power(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12922,7 +13156,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [100, 121]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [100, 121]})]
 
     def test_absolute(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeGroupOperand:
@@ -12941,7 +13175,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [0, 1]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [0, 1]})]
 
     def test_ungroup(self) -> None:
         def query(node: NodeOperand) -> NodeAttributesTreeOperand:
@@ -12956,15 +13190,16 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
                 {
                     key: sorted(value)
                     for key, value in self.graphrecord.query_nodes(query).items()
-                }.items()
+                }.items(),
+                key=lambda x: str(self.graphrecord.resolve_node_handle(x[0])),
             )
         )
         assert result == {
-            "pat_1": ["age", "gender"],
-            "pat_2": ["age", "gender"],
-            "pat_3": ["age", "gender"],
-            "pat_4": ["age", "gender"],
-            "pat_5": ["age", "gender"],
+            self.node_handle("pat_1"): ["age", "gender"],
+            self.node_handle("pat_2"): ["age", "gender"],
+            self.node_handle("pat_3"): ["age", "gender"],
+            self.node_handle("pat_4"): ["age", "gender"],
+            self.node_handle("pat_5"): ["age", "gender"],
         }
 
     def test_clone(self) -> None:
@@ -12984,7 +13219,7 @@ class TestNodeAttributesTreeGroupOperand(unittest.TestCase):
             ),
             key=operator.itemgetter(0),
         )
-        assert result == [("value1", {"pat_6": [10, 11]})]
+        assert result == [("value1", {self.node_handle("pat_6"): [10, 11]})]
 
 
 class TestEdgeAttributesTreeOperand(unittest.TestCase):
@@ -13934,6 +14169,7 @@ class TestEdgeAttributesTreeGroupOperand(unittest.TestCase):
 class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
 
     def test_node_multiple_attributes_operand_comparisons(self) -> None:
         self.graphrecord.unfreeze_schema()
@@ -13944,13 +14180,13 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             node.index().is_int()
             return node.attributes().max().max()
 
-        assert self.graphrecord.query_nodes(query1) == (1, 13)
+        assert self.graphrecord.query_nodes(query1) == (self.node_handle(1), 13)
 
         def query2(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
             return node.attributes().min().min()
 
-        assert self.graphrecord.query_nodes(query2) == (0, 10)
+        assert self.graphrecord.query_nodes(query2) == (self.node_handle(0), 10)
 
         def query3(node: NodeOperand) -> NodeSingleAttributeWithoutIndexOperand:
             node.index().is_int()
@@ -13970,7 +14206,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attributes.equal_to(13)
             return attributes.random()
 
-        assert self.graphrecord.query_nodes(query5) == (1, 13)
+        assert self.graphrecord.query_nodes(query5) == (self.node_handle(1), 13)
 
         def query6(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -13978,7 +14214,10 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.is_int()
             return attribute
 
-        assert self.graphrecord.query_nodes(query6) == {0: 11, 1: 13}
+        assert self.graphrecord.query_nodes(query6) == {
+            self.node_handle(0): 11,
+            self.node_handle(1): 13,
+        }
 
         def query7(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             query_node(node)
@@ -13986,7 +14225,9 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.is_string()
             return attribute
 
-        assert self.graphrecord.query_nodes(query7) == {"pat_1": "gender"}
+        assert self.graphrecord.query_nodes(query7) == {
+            self.node_handle("pat_1"): "gender"
+        }
 
         def query8(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -13994,7 +14235,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.is_max()
             return attribute
 
-        assert self.graphrecord.query_nodes(query8) == {1: 13}
+        assert self.graphrecord.query_nodes(query8) == {self.node_handle(1): 13}
 
         def query9(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14002,7 +14243,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.is_min()
             return attribute
 
-        assert self.graphrecord.query_nodes(query9) == {0: 10}
+        assert self.graphrecord.query_nodes(query9) == {self.node_handle(0): 10}
 
         def query10(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14010,7 +14251,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.greater_than(12)
             return attribute
 
-        assert self.graphrecord.query_nodes(query10) == {1: 13}
+        assert self.graphrecord.query_nodes(query10) == {self.node_handle(1): 13}
 
         def query11(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14018,7 +14259,10 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.greater_than_or_equal_to(10)
             return attribute
 
-        assert self.graphrecord.query_nodes(query11) == {0: 10, 1: 12}
+        assert self.graphrecord.query_nodes(query11) == {
+            self.node_handle(0): 10,
+            self.node_handle(1): 12,
+        }
 
         def query12(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14026,7 +14270,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.less_than(12)
             return attribute
 
-        assert self.graphrecord.query_nodes(query12) == {0: 11}
+        assert self.graphrecord.query_nodes(query12) == {self.node_handle(0): 11}
 
         def query13(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14034,7 +14278,10 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.less_than_or_equal_to(12)
             return attribute
 
-        assert self.graphrecord.query_nodes(query13) == {0: 10, 1: 12}
+        assert self.graphrecord.query_nodes(query13) == {
+            self.node_handle(0): 10,
+            self.node_handle(1): 12,
+        }
 
         def query14(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14042,7 +14289,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.equal_to(11)
             return attribute
 
-        assert self.graphrecord.query_nodes(query14) == {0: 11}
+        assert self.graphrecord.query_nodes(query14) == {self.node_handle(0): 11}
 
         def query15(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14050,7 +14297,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.not_equal_to(11)
             return attribute
 
-        assert self.graphrecord.query_nodes(query15) == {1: 13}
+        assert self.graphrecord.query_nodes(query15) == {self.node_handle(1): 13}
 
         def query16(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14058,7 +14305,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.is_in([11])
             return attribute
 
-        assert self.graphrecord.query_nodes(query16) == {0: 11}
+        assert self.graphrecord.query_nodes(query16) == {self.node_handle(0): 11}
 
         def query17(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14066,7 +14313,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.is_not_in([11])
             return attribute
 
-        assert self.graphrecord.query_nodes(query17) == {1: 13}
+        assert self.graphrecord.query_nodes(query17) == {self.node_handle(1): 13}
 
         def query18(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             query_node(node)
@@ -14074,7 +14321,9 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.starts_with("a")
             return attribute
 
-        assert self.graphrecord.query_nodes(query18) == {"pat_1": "age"}
+        assert self.graphrecord.query_nodes(query18) == {
+            self.node_handle("pat_1"): "age"
+        }
 
         def query19(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             query_node(node)
@@ -14082,7 +14331,9 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.ends_with("e")
             return attribute
 
-        assert self.graphrecord.query_nodes(query19) == {"pat_1": "age"}
+        assert self.graphrecord.query_nodes(query19) == {
+            self.node_handle("pat_1"): "age"
+        }
 
         def query20(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             query_node(node)
@@ -14090,7 +14341,9 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.contains("ge")
             return attribute
 
-        assert self.graphrecord.query_nodes(query20) == {"pat_1": "gender"}
+        assert self.graphrecord.query_nodes(query20) == {
+            self.node_handle("pat_1"): "gender"
+        }
 
     def test_node_multiple_attributes_operand_operations(self) -> None:
         self.graphrecord.unfreeze_schema()
@@ -14103,7 +14356,10 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.add(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query1) == {0: 13, 1: 15}
+        assert self.graphrecord.query_nodes(query1) == {
+            self.node_handle(0): 13,
+            self.node_handle(1): 15,
+        }
 
         def query2(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14111,7 +14367,10 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.subtract(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query2) == {1: 11, 0: 9}
+        assert self.graphrecord.query_nodes(query2) == {
+            self.node_handle(1): 11,
+            self.node_handle(0): 9,
+        }
 
         def query3(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14119,7 +14378,10 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.multiply(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query3) == {0: 22, 1: 26}
+        assert self.graphrecord.query_nodes(query3) == {
+            self.node_handle(0): 22,
+            self.node_handle(1): 26,
+        }
 
         def query4(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14127,7 +14389,10 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.modulo(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query4) == {0: 1, 1: 1}
+        assert self.graphrecord.query_nodes(query4) == {
+            self.node_handle(0): 1,
+            self.node_handle(1): 1,
+        }
 
         def query5(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14135,7 +14400,10 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.power(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query5) == {0: 121, 1: 169}
+        assert self.graphrecord.query_nodes(query5) == {
+            self.node_handle(0): 121,
+            self.node_handle(1): 169,
+        }
 
         def query6(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14144,7 +14412,10 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.absolute()
             return attribute
 
-        assert self.graphrecord.query_nodes(query6) == {0: 1, 1: 1}
+        assert self.graphrecord.query_nodes(query6) == {
+            self.node_handle(0): 1,
+            self.node_handle(1): 1,
+        }
 
         def query7(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14155,7 +14426,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query7) == {1: 13}
+        assert self.graphrecord.query_nodes(query7) == {self.node_handle(1): 13}
 
         def query8(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().is_int()
@@ -14165,7 +14436,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query8) == {0: 11}
+        assert self.graphrecord.query_nodes(query8) == {self.node_handle(0): 11}
 
         self.graphrecord.add_nodes((2, {" Hello ": "value1"}))
 
@@ -14175,7 +14446,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.trim()
             return attribute
 
-        assert self.graphrecord.query_nodes(query9) == {2: "Hello"}
+        assert self.graphrecord.query_nodes(query9) == {self.node_handle(2): "Hello"}
 
         def query10(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().equal_to(2)
@@ -14183,7 +14454,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.trim_start()
             return attribute
 
-        assert self.graphrecord.query_nodes(query10) == {2: "Hello "}
+        assert self.graphrecord.query_nodes(query10) == {self.node_handle(2): "Hello "}
 
         def query11(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().equal_to(2)
@@ -14191,7 +14462,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.trim_end()
             return attribute
 
-        assert self.graphrecord.query_nodes(query11) == {2: " Hello"}
+        assert self.graphrecord.query_nodes(query11) == {self.node_handle(2): " Hello"}
 
         def query12(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().equal_to(2)
@@ -14199,7 +14470,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.slice(0, 3)
             return attribute
 
-        assert self.graphrecord.query_nodes(query12) == {2: " He"}
+        assert self.graphrecord.query_nodes(query12) == {self.node_handle(2): " He"}
 
         def query13(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().equal_to(2)
@@ -14207,7 +14478,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.lowercase()
             return attribute
 
-        assert self.graphrecord.query_nodes(query13) == {2: " hello "}
+        assert self.graphrecord.query_nodes(query13) == {self.node_handle(2): " hello "}
 
         def query14(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
             node.index().equal_to(2)
@@ -14215,7 +14486,7 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.uppercase()
             return attribute
 
-        assert self.graphrecord.query_nodes(query14) == {2: " HELLO "}
+        assert self.graphrecord.query_nodes(query14) == {self.node_handle(2): " HELLO "}
 
         def query15(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
             node.index().is_int()
@@ -14223,9 +14494,9 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             return attribute.to_values()
 
         assert self.graphrecord.query_nodes(query15) == {
-            0: "value2",
-            1: "value4",
-            2: "value1",
+            self.node_handle(0): "value2",
+            self.node_handle(1): "value4",
+            self.node_handle(2): "value1",
         }
 
         def query16(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
@@ -14235,12 +14506,16 @@ class TestNodeMultipleAttributesWithIndexOperand(unittest.TestCase):
             attribute.add(10)
             return clone
 
-        assert self.graphrecord.query_nodes(query16) == {0: 11, 1: 13}
+        assert self.graphrecord.query_nodes(query16) == {
+            self.node_handle(0): 11,
+            self.node_handle(1): 13,
+        }
 
 
 class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
         self.graphrecord.unfreeze_schema()
         self.graphrecord.add_nodes(("pat_6", {10: "value1", 11: "value2"}))
         self.graphrecord.add_nodes(("pat_7", {10: "value1", 12: "value4"}))
@@ -14252,7 +14527,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
         value, nodes_with_attributes = tuple_to_sort
         sorted_nodes = sorted(
             ((k, v) for k, v in nodes_with_attributes.items()),
-            key=operator.itemgetter(0),
+            key=lambda x: str(self.graphrecord.resolve_node_handle(x[0])),
         )
         return (value, dict(sorted_nodes))
 
@@ -14266,7 +14541,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             )
             return attrs.max()
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_min(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -14278,7 +14555,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             )
             return attrs.min()
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_6", 11))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_6"), 11))
+        ]
 
     def test_count(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithoutIndexGroupOperand:
@@ -14315,7 +14594,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.equal_to(12)
             return attrs.random()
 
-        assert self.graphrecord.query_nodes(query5) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query5) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_is_string(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14328,7 +14609,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.is_string()
             return attrs
 
-        assert self.graphrecord.query_nodes(query) == [("value", {"pat_8": " Hello "})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value", {self.node_handle("pat_8"): " Hello "})
+        ]
 
     def test_is_int(self) -> None:
         def query6(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14342,7 +14625,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query6) == [
-            ("value1", {"pat_6": 11, "pat_7": 12})
+            ("value1", {self.node_handle("pat_6"): 11, self.node_handle("pat_7"): 12})
         ]
 
     def test_is_max(self) -> None:
@@ -14356,7 +14639,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.is_max()
             return attrs
 
-        assert self.graphrecord.query_nodes(query7) == [("value1", {"pat_7": 12})]
+        assert self.graphrecord.query_nodes(query7) == [
+            ("value1", {self.node_handle("pat_7"): 12})
+        ]
 
     def test_add(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14370,7 +14655,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 13, "pat_7": 14})
+            ("value1", {self.node_handle("pat_6"): 13, self.node_handle("pat_7"): 14})
         ]
 
     def test_subtract(self) -> None:
@@ -14385,7 +14670,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 9, "pat_7": 10})
+            ("value1", {self.node_handle("pat_6"): 9, self.node_handle("pat_7"): 10})
         ]
 
     def test_multiply(self) -> None:
@@ -14400,7 +14685,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 22, "pat_7": 24})
+            ("value1", {self.node_handle("pat_6"): 22, self.node_handle("pat_7"): 24})
         ]
 
     def test_modulo(self) -> None:
@@ -14415,7 +14700,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 1, "pat_7": 0})
+            ("value1", {self.node_handle("pat_6"): 1, self.node_handle("pat_7"): 0})
         ]
 
     def test_power(self) -> None:
@@ -14430,7 +14715,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 121, "pat_7": 144})
+            ("value1", {self.node_handle("pat_6"): 121, self.node_handle("pat_7"): 144})
         ]
 
     def test_absolute(self) -> None:
@@ -14446,7 +14731,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 1, "pat_7": 0})
+            ("value1", {self.node_handle("pat_6"): 1, self.node_handle("pat_7"): 0})
         ]
 
     def test_trim(self) -> None:
@@ -14460,7 +14745,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.trim()
             return attrs
 
-        assert self.graphrecord.query_nodes(query) == [("value", {"pat_8": "Hello"})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value", {self.node_handle("pat_8"): "Hello"})
+        ]
 
     def test_trim_start(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14473,7 +14760,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.trim_start()
             return attrs
 
-        assert self.graphrecord.query_nodes(query) == [("value", {"pat_8": "Hello "})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value", {self.node_handle("pat_8"): "Hello "})
+        ]
 
     def test_trim_end(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14486,7 +14775,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.trim_end()
             return attrs
 
-        assert self.graphrecord.query_nodes(query) == [("value", {"pat_8": " Hello"})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value", {self.node_handle("pat_8"): " Hello"})
+        ]
 
     def test_slice(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14499,7 +14790,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.slice(0, 3)
             return attrs
 
-        assert self.graphrecord.query_nodes(query) == [("value", {"pat_8": " He"})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value", {self.node_handle("pat_8"): " He"})
+        ]
 
     def test_lowercase(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14512,7 +14805,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.lowercase()
             return attrs
 
-        assert self.graphrecord.query_nodes(query) == [("value", {"pat_8": " hello "})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value", {self.node_handle("pat_8"): " hello "})
+        ]
 
     def test_uppercase(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14525,7 +14820,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.uppercase()
             return attrs
 
-        assert self.graphrecord.query_nodes(query) == [("value", {"pat_8": " HELLO "})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value", {self.node_handle("pat_8"): " HELLO "})
+        ]
 
     def test_is_min(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14543,7 +14840,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             key=operator.itemgetter(0),
         )
 
-        assert result == [("value1", {"pat_6": 10, "pat_7": 10})]
+        assert result == [
+            ("value1", {self.node_handle("pat_6"): 10, self.node_handle("pat_7"): 10})
+        ]
 
     def test_greater_than(self) -> None:
         def query9(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14556,7 +14855,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.greater_than(11)
             return attrs
 
-        assert self.graphrecord.query_nodes(query9) == [("value1", {"pat_7": 12})]
+        assert self.graphrecord.query_nodes(query9) == [
+            ("value1", {self.node_handle("pat_7"): 12})
+        ]
 
     def test_greater_than_or_equal_to(self) -> None:
         def query10(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14570,7 +14871,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query10) == [
-            ("value1", {"pat_6": 10, "pat_7": 10})
+            ("value1", {self.node_handle("pat_6"): 10, self.node_handle("pat_7"): 10})
         ]
 
     def test_less_than(self) -> None:
@@ -14584,7 +14885,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.less_than(12)
             return attrs
 
-        assert self.graphrecord.query_nodes(query11) == [("value1", {"pat_6": 11})]
+        assert self.graphrecord.query_nodes(query11) == [
+            ("value1", {self.node_handle("pat_6"): 11})
+        ]
 
     def test_less_than_or_equal_to(self) -> None:
         def query12(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14598,7 +14901,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query12) == [
-            ("value1", {"pat_6": 10, "pat_7": 10})
+            ("value1", {self.node_handle("pat_6"): 10, self.node_handle("pat_7"): 10})
         ]
 
     def test_equal_to(self) -> None:
@@ -14612,7 +14915,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.equal_to(11)
             return attrs
 
-        assert self.graphrecord.query_nodes(query13) == [("value1", {"pat_6": 11})]
+        assert self.graphrecord.query_nodes(query13) == [
+            ("value1", {self.node_handle("pat_6"): 11})
+        ]
 
     def test_not_equal_to(self) -> None:
         def query14(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14625,7 +14930,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.not_equal_to(11)
             return attrs
 
-        assert self.graphrecord.query_nodes(query14) == [("value1", {"pat_7": 12})]
+        assert self.graphrecord.query_nodes(query14) == [
+            ("value1", {self.node_handle("pat_7"): 12})
+        ]
 
     def test_is_in(self) -> None:
         def query15(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14638,7 +14945,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.is_in([11])
             return attrs
 
-        assert self.graphrecord.query_nodes(query15) == [("value1", {"pat_6": 11})]
+        assert self.graphrecord.query_nodes(query15) == [
+            ("value1", {self.node_handle("pat_6"): 11})
+        ]
 
     def test_is_not_in(self) -> None:
         def query16(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14651,7 +14960,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.is_not_in([11])
             return attrs
 
-        assert self.graphrecord.query_nodes(query16) == [("value1", {"pat_7": 12})]
+        assert self.graphrecord.query_nodes(query16) == [
+            ("value1", {self.node_handle("pat_7"): 12})
+        ]
 
     def test_starts_with(self) -> None:
         def query17(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14665,7 +14976,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query17) == [
-            ("value1", {"pat_6": 10, "pat_7": 10})
+            ("value1", {self.node_handle("pat_6"): 10, self.node_handle("pat_7"): 10})
         ]
 
     def test_ends_with(self) -> None:
@@ -14680,7 +14991,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query18) == [
-            ("value1", {"pat_6": 10, "pat_7": 10})
+            ("value1", {self.node_handle("pat_6"): 10, self.node_handle("pat_7"): 10})
         ]
 
     def test_contains(self) -> None:
@@ -14695,7 +15006,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query19) == [
-            ("value1", {"pat_6": 11, "pat_7": 12})
+            ("value1", {self.node_handle("pat_6"): 11, self.node_handle("pat_7"): 12})
         ]
 
     def test_to_values(self) -> None:
@@ -14709,7 +15020,13 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs.to_values()
 
         assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": "value2", "pat_7": "value4"})
+            (
+                "value1",
+                {
+                    self.node_handle("pat_6"): "value2",
+                    self.node_handle("pat_7"): "value4",
+                },
+            )
         ]
 
     def test_ungroup(self) -> None:
@@ -14722,7 +15039,10 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             )
             return attrs.ungroup()
 
-        assert self.graphrecord.query_nodes(query) == {"pat_6": 11, "pat_7": 12}
+        assert self.graphrecord.query_nodes(query) == {
+            self.node_handle("pat_6"): 11,
+            self.node_handle("pat_7"): 12,
+        }
 
     def test_either_or(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14739,7 +15059,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return attrs
 
         assert self.graphrecord.query_nodes(query) == [
-            ("value1", {"pat_6": 11, "pat_7": 12})
+            ("value1", {self.node_handle("pat_6"): 11, self.node_handle("pat_7"): 12})
         ]
 
     def test_exclude(self) -> None:
@@ -14753,7 +15073,9 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             attrs.exclude(lambda attr: attr.equal_to(11))
             return attrs
 
-        assert self.graphrecord.query_nodes(query) == [("value1", {"pat_7": 12})]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", {self.node_handle("pat_7"): 12})
+        ]
 
     def test_clone(self) -> None:
         def query20(node: NodeOperand) -> NodeMultipleAttributesWithIndexGroupOperand:
@@ -14768,7 +15090,7 @@ class TestNodeMultipleAttributesWithIndexGroupOperand(unittest.TestCase):
             return clone
 
         assert self.graphrecord.query_nodes(query20) == [
-            ("value1", {"pat_6": 11, "pat_7": 12})
+            ("value1", {self.node_handle("pat_6"): 11, self.node_handle("pat_7"): 12})
         ]
 
 
@@ -16697,6 +17019,7 @@ class TestEdgeMultipleAttributesWithoutIndexOperand(unittest.TestCase):
 class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
 
     def test_single_attribute_operand_comparisons(self) -> None:
         self.graphrecord.unfreeze_schema()
@@ -16709,7 +17032,10 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.is_string()
             return attribute
 
-        assert self.graphrecord.query_nodes(query1) == ("pat_1", "gender")
+        assert self.graphrecord.query_nodes(query1) == (
+            self.node_handle("pat_1"),
+            "gender",
+        )
 
         def query2(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16717,7 +17043,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.is_int()
             return attribute
 
-        assert self.graphrecord.query_nodes(query2) == (0, 10)
+        assert self.graphrecord.query_nodes(query2) == (self.node_handle(0), 10)
 
         def query3(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16725,7 +17051,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.greater_than(11)
             return attribute
 
-        assert self.graphrecord.query_nodes(query3) == (1, 13)
+        assert self.graphrecord.query_nodes(query3) == (self.node_handle(1), 13)
 
         def query4(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16733,7 +17059,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.greater_than_or_equal_to(10)
             return attribute
 
-        assert self.graphrecord.query_nodes(query4) == (0, 10)
+        assert self.graphrecord.query_nodes(query4) == (self.node_handle(0), 10)
 
         def query5(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16741,7 +17067,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.less_than(12)
             return attribute
 
-        assert self.graphrecord.query_nodes(query5) == (0, 10)
+        assert self.graphrecord.query_nodes(query5) == (self.node_handle(0), 10)
 
         def query6(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16749,7 +17075,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.less_than_or_equal_to(12)
             return attribute
 
-        assert self.graphrecord.query_nodes(query6) == (0, 10)
+        assert self.graphrecord.query_nodes(query6) == (self.node_handle(0), 10)
 
         def query7(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16757,7 +17083,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.equal_to(13)
             return attribute
 
-        assert self.graphrecord.query_nodes(query7) == (1, 13)
+        assert self.graphrecord.query_nodes(query7) == (self.node_handle(1), 13)
 
         def query8(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16765,7 +17091,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.not_equal_to(11)
             return attribute
 
-        assert self.graphrecord.query_nodes(query8) == (1, 13)
+        assert self.graphrecord.query_nodes(query8) == (self.node_handle(1), 13)
 
         def query9(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16773,7 +17099,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.is_in([13])
             return attribute
 
-        assert self.graphrecord.query_nodes(query9) == (1, 13)
+        assert self.graphrecord.query_nodes(query9) == (self.node_handle(1), 13)
 
         def query10(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16781,7 +17107,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.is_not_in([11])
             return attribute
 
-        assert self.graphrecord.query_nodes(query10) == (1, 13)
+        assert self.graphrecord.query_nodes(query10) == (self.node_handle(1), 13)
 
         def query11(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             query_node(node)
@@ -16789,7 +17115,10 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.starts_with("g")
             return attribute
 
-        assert self.graphrecord.query_nodes(query11) == ("pat_1", "gender")
+        assert self.graphrecord.query_nodes(query11) == (
+            self.node_handle("pat_1"),
+            "gender",
+        )
 
         def query12(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             query_node(node)
@@ -16797,7 +17126,10 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.ends_with("er")
             return attribute
 
-        assert self.graphrecord.query_nodes(query12) == ("pat_1", "gender")
+        assert self.graphrecord.query_nodes(query12) == (
+            self.node_handle("pat_1"),
+            "gender",
+        )
 
         def query13(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             query_node(node)
@@ -16805,7 +17137,10 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.contains("ge")
             return attribute
 
-        assert self.graphrecord.query_nodes(query13) == ("pat_1", "gender")
+        assert self.graphrecord.query_nodes(query13) == (
+            self.node_handle("pat_1"),
+            "gender",
+        )
 
         self.graphrecord.add_nodes((2, {" Hello ": "value1"}))
 
@@ -16815,7 +17150,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.trim()
             return attribute
 
-        assert self.graphrecord.query_nodes(query14) == (2, "Hello")
+        assert self.graphrecord.query_nodes(query14) == (self.node_handle(2), "Hello")
 
         def query15(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().equal_to(2)
@@ -16823,7 +17158,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.trim_start()
             return attribute
 
-        assert self.graphrecord.query_nodes(query15) == (2, "Hello ")
+        assert self.graphrecord.query_nodes(query15) == (self.node_handle(2), "Hello ")
 
         def query16(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().equal_to(2)
@@ -16831,7 +17166,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.trim_end()
             return attribute
 
-        assert self.graphrecord.query_nodes(query16) == (2, " Hello")
+        assert self.graphrecord.query_nodes(query16) == (self.node_handle(2), " Hello")
 
         def query17(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().equal_to(2)
@@ -16839,7 +17174,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.slice(0, 3)
             return attribute
 
-        assert self.graphrecord.query_nodes(query17) == (2, " He")
+        assert self.graphrecord.query_nodes(query17) == (self.node_handle(2), " He")
 
         def query18(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().equal_to(2)
@@ -16847,7 +17182,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.lowercase()
             return attribute
 
-        assert self.graphrecord.query_nodes(query18) == (2, " hello ")
+        assert self.graphrecord.query_nodes(query18) == (self.node_handle(2), " hello ")
 
         def query19(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().equal_to(2)
@@ -16855,7 +17190,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.uppercase()
             return attribute
 
-        assert self.graphrecord.query_nodes(query19) == (2, " HELLO ")
+        assert self.graphrecord.query_nodes(query19) == (self.node_handle(2), " HELLO ")
 
     def test_single_attribute_operand_operations(self) -> None:
         self.graphrecord.unfreeze_schema()
@@ -16868,7 +17203,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.add(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query1) == (1, 15)
+        assert self.graphrecord.query_nodes(query1) == (self.node_handle(1), 15)
 
         def query2(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16876,7 +17211,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.subtract(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query2) == (1, 11)
+        assert self.graphrecord.query_nodes(query2) == (self.node_handle(1), 11)
 
         def query3(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16884,7 +17219,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.multiply(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query3) == (0, 20)
+        assert self.graphrecord.query_nodes(query3) == (self.node_handle(0), 20)
 
         def query4(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16892,7 +17227,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.modulo(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query4) == (1, 1)
+        assert self.graphrecord.query_nodes(query4) == (self.node_handle(1), 1)
 
         def query5(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16900,7 +17235,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.power(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query5) == (1, 169)
+        assert self.graphrecord.query_nodes(query5) == (self.node_handle(1), 169)
 
         def query6(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16909,7 +17244,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.absolute()
             return attribute
 
-        assert self.graphrecord.query_nodes(query6) == (1, 1)
+        assert self.graphrecord.query_nodes(query6) == (self.node_handle(1), 1)
 
         def query7(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16920,7 +17255,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query7) == (1, 13)
+        assert self.graphrecord.query_nodes(query7) == (self.node_handle(1), 13)
 
         def query8(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16930,7 +17265,7 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query8) == (1, 13)
+        assert self.graphrecord.query_nodes(query8) == (self.node_handle(1), 13)
 
         def query9(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
             node.index().is_int()
@@ -16939,12 +17274,13 @@ class TestNodeSingleAttributeWithIndexOperand(unittest.TestCase):
             attribute.add(10)
             return clone
 
-        assert self.graphrecord.query_nodes(query9) == (1, 13)
+        assert self.graphrecord.query_nodes(query9) == (self.node_handle(1), 13)
 
 
 class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
     def setUp(self) -> None:
         self.graphrecord = simple_example_dataset()
+        self.node_handle = self.graphrecord.node_handle
         self.graphrecord.unfreeze_schema()
         self.graphrecord.add_nodes(("pat_6", {10: "value1", 11: "value2"}))
         self.graphrecord.add_nodes(("pat_7", {10: "value1", 12: "value2"}))
@@ -16962,7 +17298,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.is_string()
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", " Hello "))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value5", (self.node_handle("pat_8"), " Hello "))
+        ]
 
     def test_is_int(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -16976,7 +17314,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.is_int()
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_add(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -16990,7 +17330,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.add(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 14))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 14))
+        ]
 
     def test_subtract(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17004,7 +17346,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.subtract(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 10))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 10))
+        ]
 
     def test_multiply(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17018,7 +17362,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.multiply(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 24))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 24))
+        ]
 
     def test_modulo(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17032,7 +17378,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.modulo(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 0))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 0))
+        ]
 
     def test_power(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17046,7 +17394,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.power(2)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 144))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 144))
+        ]
 
     def test_absolute(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17061,7 +17411,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.absolute()
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 1))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 1))
+        ]
 
     def test_greater_than(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17075,7 +17427,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.greater_than(11)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_greater_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17089,7 +17443,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.greater_than_or_equal_to(12)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_less_than(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17103,7 +17459,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.less_than(13)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_less_than_or_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17117,7 +17475,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.less_than_or_equal_to(12)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17131,7 +17491,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.equal_to(12)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_not_equal_to(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17145,7 +17507,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.not_equal_to(11)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_is_in(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17159,7 +17523,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.is_in([12])
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_is_not_in(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17173,7 +17539,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.is_not_in([11])
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_starts_with(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17187,7 +17555,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.starts_with(" H")
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", " Hello "))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value5", (self.node_handle("pat_8"), " Hello "))
+        ]
 
     def test_ends_with(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17201,7 +17571,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.ends_with("o ")
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", " Hello "))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value5", (self.node_handle("pat_8"), " Hello "))
+        ]
 
     def test_contains(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17215,7 +17587,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.contains("ell")
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", " Hello "))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value5", (self.node_handle("pat_8"), " Hello "))
+        ]
 
     def test_trim(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17229,7 +17603,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.trim()
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", "Hello"))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value5", (self.node_handle("pat_8"), "Hello"))
+        ]
 
     def test_trim_start(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17243,7 +17619,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.trim_start()
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", "Hello "))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value5", (self.node_handle("pat_8"), "Hello "))
+        ]
 
     def test_trim_end(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17257,7 +17635,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.trim_end()
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", " Hello"))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value5", (self.node_handle("pat_8"), " Hello"))
+        ]
 
     def test_slice(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17271,7 +17651,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.slice(0, 3)
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", " He"))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value5", (self.node_handle("pat_8"), " He"))
+        ]
 
     def test_lowercase(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17285,7 +17667,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.lowercase()
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", " hello "))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value5", (self.node_handle("pat_8"), " hello "))
+        ]
 
     def test_uppercase(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17299,7 +17683,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.uppercase()
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value5", ("pat_8", " HELLO "))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value5", (self.node_handle("pat_8"), " HELLO "))
+        ]
 
     def test_either_or(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17316,7 +17702,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_exclude(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17332,7 +17720,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             )
             return attribute
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
     def test_ungroup(self) -> None:
         def query(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
@@ -17345,7 +17735,7 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             )
             return attribute.ungroup()
 
-        assert self.graphrecord.query_nodes(query) == {"pat_7": 12}
+        assert self.graphrecord.query_nodes(query) == {self.node_handle("pat_7"): 12}
 
     def test_clone(self) -> None:
         def query(node: NodeOperand) -> NodeSingleAttributeWithIndexGroupOperand:
@@ -17360,7 +17750,9 @@ class TestNodeSingleAttributeWithIndexGroupOperand(unittest.TestCase):
             attribute.add(2)
             return clone
 
-        assert self.graphrecord.query_nodes(query) == [("value1", ("pat_7", 12))]
+        assert self.graphrecord.query_nodes(query) == [
+            ("value1", (self.node_handle("pat_7"), 12))
+        ]
 
 
 class TestNodeSingleAttributeWithoutIndexOperand(unittest.TestCase):

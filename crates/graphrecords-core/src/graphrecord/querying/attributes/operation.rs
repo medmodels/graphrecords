@@ -126,8 +126,8 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     pub(crate) fn evaluate<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>>
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)> + 'a,
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>
     where
         O: 'a,
     {
@@ -174,8 +174,8 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     pub(crate) fn get_max<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>>
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
+    ) -> GraphRecordResult<impl Iterator<Item = (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -207,8 +207,8 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     pub(crate) fn get_min<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>>
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
+    ) -> GraphRecordResult<impl Iterator<Item = (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -240,8 +240,8 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     pub(crate) fn get_count<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
+    ) -> impl Iterator<Item = (O::Index, GraphRecordAttribute)>
     where
         O: 'a,
     {
@@ -251,8 +251,8 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     pub(crate) fn get_sum<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>>
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
+    ) -> GraphRecordResult<impl Iterator<Item = (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -280,8 +280,8 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     pub(crate) fn get_random<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>>
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
+    ) -> GraphRecordResult<impl Iterator<Item = (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -304,11 +304,11 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
         attributes: T,
         operand: &Wrapper<MultipleAttributesWithIndexOperand<O>>,
     ) -> GraphRecordResult<
-        impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a + use<'a, O, T>,
+        impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)> + 'a + use<'a, O, T>,
     >
     where
         O: 'a,
-        T: Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a,
+        T: Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)> + 'a,
     {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
@@ -339,10 +339,10 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     #[inline]
     fn evaluate_single_attribute_comparison_operation<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a,
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)> + 'a,
         comparison_operand: &SingleAttributeComparisonOperand,
         kind: &SingleComparisonKind,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>> {
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>> {
         let comparison_attribute = comparison_operand
             .evaluate_backward(graphrecord)?
             .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
@@ -453,10 +453,10 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     #[inline]
     fn evaluate_multiple_attributes_comparison_operation<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a,
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)> + 'a,
         comparison_operand: &MultipleAttributesComparisonOperand,
         kind: &MultipleComparisonKind,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>> {
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>> {
         let comparison_attributes = comparison_operand.evaluate_backward(graphrecord)?;
 
         match kind {
@@ -555,9 +555,9 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     fn evaluate_unary_arithmetic_operation<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
         kind: UnaryArithmeticKind,
-    ) -> impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>
+    ) -> impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>
     where
         O: 'a,
     {
@@ -581,9 +581,9 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     fn evaluate_slice<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
         range: Range<usize>,
-    ) -> impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>
+    ) -> impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>
     where
         O: 'a,
     {
@@ -600,8 +600,8 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     fn evaluate_is_string<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
+    ) -> impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>
     where
         O: 'a,
     {
@@ -618,8 +618,8 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     fn evaluate_is_int<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
+    ) -> impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>
     where
         O: 'a,
     {
@@ -636,8 +636,8 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     fn evaluate_is_max<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>>
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
+    ) -> GraphRecordResult<impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>>
     where
         O: 'a,
     {
@@ -660,8 +660,8 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
 
     #[inline]
     fn evaluate_is_min<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)>>
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>,
+    ) -> GraphRecordResult<impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)>>
     where
         O: 'a,
     {
@@ -685,10 +685,10 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     #[inline]
     fn evaluate_either_or<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a,
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)> + 'a,
         either: &Wrapper<AttributesTreeOperand<O>>,
         or: &Wrapper<AttributesTreeOperand<O>>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>
     where
         O: 'a,
     {
@@ -712,9 +712,9 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     #[inline]
     fn evaluate_exclude<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, Vec<GraphRecordAttribute>)> + 'a,
+        attributes: impl Iterator<Item = (O::Index, Vec<GraphRecordAttribute>)> + 'a,
         operand: &Wrapper<AttributesTreeOperand<O>>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>
     where
         O: 'a,
     {
@@ -743,12 +743,9 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     pub(crate) fn evaluate_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<
-            'a,
-            BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>,
-        >,
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>,
     ) -> GraphRecordResult<
-        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>>,
+        GroupedIterator<'a, BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>,
     >
     where
         O: 'a,
@@ -894,13 +891,10 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     #[allow(clippy::type_complexity)]
     pub(crate) fn evaluate_attributes_operation_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<
-            'a,
-            BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>,
-        >,
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>,
         operand: &Wrapper<MultipleAttributesWithIndexOperand<O>>,
     ) -> GraphRecordResult<
-        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>>,
+        GroupedIterator<'a, BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>,
     >
     where
         O: 'a,
@@ -961,14 +955,11 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     #[inline]
     fn evaluate_either_or_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<
-            'a,
-            BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>,
-        >,
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>,
         either: &Wrapper<AttributesTreeOperand<O>>,
         or: &Wrapper<AttributesTreeOperand<O>>,
     ) -> GraphRecordResult<
-        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>>,
+        GroupedIterator<'a, BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>,
     >
     where
         O: 'a,
@@ -1009,13 +1000,10 @@ impl<O: RootOperand> AttributesTreeOperation<O> {
     #[inline]
     fn evaluate_exclude_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<
-            'a,
-            BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>,
-        >,
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>,
         operand: &Wrapper<AttributesTreeOperand<O>>,
     ) -> GraphRecordResult<
-        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, Vec<GraphRecordAttribute>)>>,
+        GroupedIterator<'a, BoxedIterator<'a, (O::Index, Vec<GraphRecordAttribute>)>>,
     >
     where
         O: 'a,
@@ -1160,8 +1148,8 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     pub(crate) fn evaluate<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a,
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -1211,9 +1199,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     }
 
     #[inline]
-    pub(crate) fn get_max<'a>(
-        mut attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordAttribute)>> {
+    pub(crate) fn get_max(
+        mut attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)>,
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordAttribute)>> {
         let max_attribute = attributes.next();
 
         let Some(max_attribute) = max_attribute else {
@@ -1239,9 +1227,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     }
 
     #[inline]
-    pub(crate) fn get_min<'a>(
-        mut attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordAttribute)>> {
+    pub(crate) fn get_min(
+        mut attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)>,
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordAttribute)>> {
         let min_attribute = attributes.next();
 
         let Some(min_attribute) = min_attribute else {
@@ -1267,18 +1255,18 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     }
 
     #[inline]
-    pub(crate) fn get_random<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
-    ) -> Option<(&'a O::Index, GraphRecordAttribute)> {
+    pub(crate) fn get_random(
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)>,
+    ) -> Option<(O::Index, GraphRecordAttribute)> {
         attributes.choose(&mut rng())
     }
 
     #[inline]
     fn evaluate_attribute_with_index_operation<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a,
         operand: &Wrapper<SingleAttributeWithIndexOperand<O>>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -1301,9 +1289,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     #[inline]
     fn evaluate_attribute_without_index_operation<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a,
         operand: &Wrapper<SingleAttributeWithoutIndexOperand<O>>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -1339,10 +1327,10 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     #[inline]
     fn evaluate_single_attribute_comparison_operation<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a,
         comparison_operand: &SingleAttributeComparisonOperand,
         kind: &SingleComparisonKind,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>> {
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordAttribute)>> {
         let comparison_attribute = comparison_operand
             .evaluate_backward(graphrecord)?
             .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
@@ -1399,10 +1387,10 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     #[inline]
     fn evaluate_multiple_attributes_comparison_operation<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a,
         comparison_operand: &MultipleAttributesComparisonOperand,
         kind: &MultipleComparisonKind,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>> {
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordAttribute)>> {
         let comparison_attributes = comparison_operand.evaluate_backward(graphrecord)?;
 
         match kind {
@@ -1425,10 +1413,10 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
         attributes: T,
         operand: &SingleAttributeComparisonOperand,
         kind: &BinaryArithmeticKind,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + use<'a, O, T>>
+    ) -> GraphRecordResult<impl Iterator<Item = (O::Index, GraphRecordAttribute)> + use<'a, O, T>>
     where
         O: 'a,
-        T: Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
+        T: Iterator<Item = (O::Index, GraphRecordAttribute)>,
     {
         let arithmetic_attribute = operand
             .evaluate_backward(graphrecord)?
@@ -1463,9 +1451,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_unary_arithmetic_operation<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)>,
         kind: UnaryArithmeticKind,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>
+    ) -> impl Iterator<Item = (O::Index, GraphRecordAttribute)>
     where
         O: 'a,
     {
@@ -1484,8 +1472,8 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
 
     pub(crate) fn get_values<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordValue)>>
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)>,
+    ) -> GraphRecordResult<impl Iterator<Item = (O::Index, GraphRecordValue)>>
     where
         O: 'a,
     {
@@ -1496,7 +1484,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
                     .get(&attribute)
                     .ok_or_else(|| {
                         GraphRecordError::QueryError(format!(
-                            "Cannot find attribute {attribute} for index {index}"
+                            "Cannot find attribute {attribute} for index {index:?}"
                         ))
                     })?;
 
@@ -1512,11 +1500,11 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
         attributes: T,
         operand: &Wrapper<MultipleValuesWithIndexOperand<O>>,
     ) -> GraphRecordResult<
-        impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a + use<'a, O, T>,
+        impl Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a + use<'a, O, T>,
     >
     where
         O: 'a,
-        T: Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
+        T: Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a,
     {
         let (attributes_1, attributes_2) = Itertools::tee(attributes);
 
@@ -1536,9 +1524,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_slice<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)>,
         range: Range<usize>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>
+    ) -> impl Iterator<Item = (O::Index, GraphRecordAttribute)>
     where
         O: 'a,
     {
@@ -1547,8 +1535,8 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_string<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)>,
+    ) -> impl Iterator<Item = (O::Index, GraphRecordAttribute)>
     where
         O: 'a,
     {
@@ -1557,8 +1545,8 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_int<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>,
-    ) -> impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)>
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)>,
+    ) -> impl Iterator<Item = (O::Index, GraphRecordAttribute)>
     where
         O: 'a,
     {
@@ -1567,8 +1555,8 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_max<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a,
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -1587,8 +1575,8 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_min<'a>(
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a,
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -1608,10 +1596,10 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     #[inline]
     fn evaluate_either_or<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a,
         either: &Wrapper<MultipleAttributesWithIndexOperand<O>>,
         or: &Wrapper<MultipleAttributesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -1623,16 +1611,16 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
         Ok(Box::new(
             either_attributes
                 .chain(or_attributes)
-                .unique_by(|attribute| attribute.0.clone()),
+                .unique_by(|attribute| attribute.0),
         ))
     }
 
     #[inline]
     fn evaluate_exclude<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: impl Iterator<Item = (&'a O::Index, GraphRecordAttribute)> + 'a,
+        attributes: impl Iterator<Item = (O::Index, GraphRecordAttribute)> + 'a,
         operand: &Wrapper<MultipleAttributesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>
+    ) -> GraphRecordResult<BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -1654,10 +1642,8 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     pub(crate) fn evaluate_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
-    ) -> GraphRecordResult<
-        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
-    >
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>,
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>>
     where
         O: 'a,
     {
@@ -1819,11 +1805,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     #[inline]
     fn evaluate_attribute_with_index_operation_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>,
         operand: &Wrapper<SingleAttributeWithIndexOperand<O>>,
-    ) -> GraphRecordResult<
-        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
-    >
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>>
     where
         O: 'a,
     {
@@ -1866,11 +1850,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     #[inline]
     fn evaluate_attribute_without_index_operation_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>,
         operand: &Wrapper<SingleAttributeWithoutIndexOperand<O>>,
-    ) -> GraphRecordResult<
-        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
-    >
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>>
     where
         O: 'a,
     {
@@ -1927,11 +1909,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     #[inline]
     fn evaluate_to_values_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>,
         operand: &Wrapper<MultipleValuesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<
-        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
-    >
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>>
     where
         O: 'a,
     {
@@ -1976,12 +1956,10 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     #[inline]
     fn evaluate_either_or_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>,
         either: &Wrapper<MultipleAttributesWithIndexOperand<O>>,
         or: &Wrapper<MultipleAttributesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<
-        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
-    >
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>>
     where
         O: 'a,
     {
@@ -2003,7 +1981,7 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
             let attributes: BoxedIterator<_> = Box::new(
                 either_attributes
                     .chain(or_attributes)
-                    .unique_by(|attributes| attributes.0.clone()),
+                    .unique_by(|attributes| attributes.0),
             );
 
             (key, attributes)
@@ -2016,11 +1994,9 @@ impl<O: RootOperand> MultipleAttributesWithIndexOperation<O> {
     #[inline]
     fn evaluate_exclude_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
+        attributes: GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>,
         operand: &Wrapper<MultipleAttributesWithIndexOperand<O>>,
-    ) -> GraphRecordResult<
-        GroupedIterator<'a, BoxedIterator<'a, (&'a O::Index, GraphRecordAttribute)>>,
-    >
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, (O::Index, GraphRecordAttribute)>>>
     where
         O: 'a,
     {
@@ -2588,8 +2564,8 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     pub(crate) fn evaluate<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        attribute: Option<(&'a O::Index, GraphRecordAttribute)>,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordAttribute)>>
+        attribute: Option<(O::Index, GraphRecordAttribute)>,
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -2637,12 +2613,12 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_single_attribute_comparison_operation<'a>(
+    fn evaluate_single_attribute_comparison_operation(
         graphrecord: &GraphRecord,
-        attribute: (&'a O::Index, GraphRecordAttribute),
+        attribute: (O::Index, GraphRecordAttribute),
         comparison_operand: &SingleAttributeComparisonOperand,
         kind: &SingleComparisonKind,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordAttribute)>> {
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordAttribute)>> {
         let comparison_attribute = comparison_operand
             .evaluate_backward(graphrecord)?
             .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
@@ -2667,12 +2643,12 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_multiple_attributes_comparison_operation<'a>(
+    fn evaluate_multiple_attributes_comparison_operation(
         graphrecord: &GraphRecord,
-        attribute: (&'a O::Index, GraphRecordAttribute),
+        attribute: (O::Index, GraphRecordAttribute),
         comparison_operand: &MultipleAttributesComparisonOperand,
         kind: &MultipleComparisonKind,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordAttribute)>> {
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordAttribute)>> {
         let comparison_attributes = comparison_operand.evaluate_backward(graphrecord)?;
 
         let comparison_result = match kind {
@@ -2688,12 +2664,12 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_binary_arithmetic_operation<'a>(
+    fn evaluate_binary_arithmetic_operation(
         graphrecord: &GraphRecord,
-        attribute: (&'a O::Index, GraphRecordAttribute),
+        attribute: (O::Index, GraphRecordAttribute),
         operand: &SingleAttributeComparisonOperand,
         kind: &BinaryArithmeticKind,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordAttribute)>> {
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordAttribute)>> {
         let arithmetic_attribute = operand
             .evaluate_backward(graphrecord)?
             .ok_or_else(|| GraphRecordError::QueryError("No attribute to compare".to_string()))?;
@@ -2708,10 +2684,10 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_unary_arithmetic_operation<'a>(
-        attribute: (&'a O::Index, GraphRecordAttribute),
+    fn evaluate_unary_arithmetic_operation(
+        attribute: (O::Index, GraphRecordAttribute),
         kind: &UnaryArithmeticKind,
-    ) -> (&'a O::Index, GraphRecordAttribute) {
+    ) -> (O::Index, GraphRecordAttribute) {
         match kind {
             UnaryArithmeticKind::Abs => (attribute.0, attribute.1.abs()),
             UnaryArithmeticKind::Trim => (attribute.0, attribute.1.trim()),
@@ -2723,17 +2699,17 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     }
 
     #[inline]
-    fn evaluate_slice<'a>(
-        attribute: (&'a O::Index, GraphRecordAttribute),
+    fn evaluate_slice(
+        attribute: (O::Index, GraphRecordAttribute),
         range: &Range<usize>,
-    ) -> (&'a O::Index, GraphRecordAttribute) {
+    ) -> (O::Index, GraphRecordAttribute) {
         (attribute.0, attribute.1.slice(range.clone()))
     }
 
     #[inline]
     fn evaluate_is_string(
-        attribute: (&O::Index, GraphRecordAttribute),
-    ) -> Option<(&O::Index, GraphRecordAttribute)> {
+        attribute: (O::Index, GraphRecordAttribute),
+    ) -> Option<(O::Index, GraphRecordAttribute)> {
         match attribute.1 {
             GraphRecordAttribute::String(_) => Some(attribute),
             GraphRecordAttribute::Int(_) => None,
@@ -2742,8 +2718,8 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
 
     #[inline]
     fn evaluate_is_int(
-        attribute: (&O::Index, GraphRecordAttribute),
-    ) -> Option<(&O::Index, GraphRecordAttribute)> {
+        attribute: (O::Index, GraphRecordAttribute),
+    ) -> Option<(O::Index, GraphRecordAttribute)> {
         match attribute.1 {
             GraphRecordAttribute::Int(_) => Some(attribute),
             GraphRecordAttribute::String(_) => None,
@@ -2753,10 +2729,10 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     #[inline]
     fn evaluate_either_or<'a>(
         graphrecord: &'a GraphRecord,
-        attribute: (&'a O::Index, GraphRecordAttribute),
+        attribute: (O::Index, GraphRecordAttribute),
         either: &Wrapper<SingleAttributeWithIndexOperand<O>>,
         or: &Wrapper<SingleAttributeWithIndexOperand<O>>,
-    ) -> GraphRecordResult<Option<(&'a O::Index, GraphRecordAttribute)>>
+    ) -> GraphRecordResult<Option<(O::Index, GraphRecordAttribute)>>
     where
         O: 'a,
     {
@@ -2776,8 +2752,8 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     pub(crate) fn evaluate_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<'a, Option<(&'a O::Index, GraphRecordAttribute)>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, Option<(&'a O::Index, GraphRecordAttribute)>>>
+        attributes: GroupedIterator<'a, Option<(O::Index, GraphRecordAttribute)>>,
+    ) -> GraphRecordResult<GroupedIterator<'a, Option<(O::Index, GraphRecordAttribute)>>>
     where
         O: 'a,
     {
@@ -2909,10 +2885,10 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     #[inline]
     fn evaluate_either_or_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        attributes: GroupedIterator<'a, Option<(&'a O::Index, GraphRecordAttribute)>>,
+        attributes: GroupedIterator<'a, Option<(O::Index, GraphRecordAttribute)>>,
         either: &Wrapper<SingleAttributeWithIndexOperand<O>>,
         or: &Wrapper<SingleAttributeWithIndexOperand<O>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, Option<(&'a O::Index, GraphRecordAttribute)>>>
+    ) -> GraphRecordResult<GroupedIterator<'a, Option<(O::Index, GraphRecordAttribute)>>>
     where
         O: 'a,
     {
@@ -2948,9 +2924,9 @@ impl<O: RootOperand> SingleAttributeWithIndexOperation<O> {
     #[inline]
     fn evaluate_exclude_grouped<'a>(
         graphrecord: &'a GraphRecord,
-        values: GroupedIterator<'a, Option<(&'a O::Index, GraphRecordAttribute)>>,
+        values: GroupedIterator<'a, Option<(O::Index, GraphRecordAttribute)>>,
         operand: &Wrapper<SingleAttributeWithIndexOperand<O>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, Option<(&'a O::Index, GraphRecordAttribute)>>>
+    ) -> GraphRecordResult<GroupedIterator<'a, Option<(O::Index, GraphRecordAttribute)>>>
     where
         O: 'a,
     {

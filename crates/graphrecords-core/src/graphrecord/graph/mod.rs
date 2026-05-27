@@ -7,8 +7,8 @@ use super::{
     GraphRecordAttribute, GraphRecordValue,
     group_mapping::GroupMapping,
     intern_table::{
-        AttributeNameKind, AttributesView, GroupKind, HandleAttributes, InternTable,
-        NodeHandle, NodeIndexKind,
+        AttributeNameKind, AttributesView, GroupKind, HandleAttributes, InternTable, NodeHandle,
+        NodeIndexKind,
     },
 };
 use crate::errors::GraphError;
@@ -282,10 +282,7 @@ impl Graph {
         Ok(self.resolve_handle_attributes(&edge.attributes))
     }
 
-    pub fn node_attributes(
-        &self,
-        handle: NodeHandle,
-    ) -> Result<AttributesView<'_>, GraphError> {
+    pub fn node_attributes(&self, handle: NodeHandle) -> Result<AttributesView<'_>, GraphError> {
         let node = self.nodes.get(&handle).ok_or_else(|| {
             GraphError::IndexError(format!("Cannot find node for handle {handle:?}"))
         })?;

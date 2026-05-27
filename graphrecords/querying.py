@@ -62,6 +62,7 @@ from graphrecords.types import (
     GraphRecordAttribute,
     GraphRecordValue,
     Group,
+    NodeHandle,
     NodeIndex,
 )
 
@@ -159,7 +160,7 @@ QueryReturnOperand: TypeAlias = Union[
     Sequence["QueryReturnOperand"],
 ]
 
-NodeAttributesTreeQueryResult: TypeAlias = Dict[NodeIndex, List[GraphRecordAttribute]]
+NodeAttributesTreeQueryResult: TypeAlias = Dict[NodeHandle, List[GraphRecordAttribute]]
 NodeAttributesTreeGroupQueryResult: TypeAlias = List[
     Tuple[GroupKey, NodeAttributesTreeQueryResult]
 ]
@@ -169,7 +170,7 @@ EdgeAttributesTreeGroupQueryResult: TypeAlias = List[
 ]
 
 NodeMultipleAttributesWithIndexQueryResult: TypeAlias = Dict[
-    NodeIndex, GraphRecordAttribute
+    NodeHandle, GraphRecordAttribute
 ]
 NodeMultipleAttributesWithIndexGroupQueryResult: TypeAlias = List[
     Tuple[GroupKey, NodeMultipleAttributesWithIndexQueryResult]
@@ -184,7 +185,7 @@ EdgeMultipleAttributesWithIndexGroupQueryResult: TypeAlias = List[
 EdgeMultipleAttributesWithoutIndexQueryResult: TypeAlias = List[GraphRecordAttribute]
 
 NodeSingleAttributeWithIndexQueryResult: TypeAlias = Tuple[
-    NodeIndex, GraphRecordAttribute
+    NodeHandle, GraphRecordAttribute
 ]
 NodeSingleAttributeWithIndexGroupQueryResult: TypeAlias = List[
     Tuple[GroupKey, NodeSingleAttributeWithIndexQueryResult]
@@ -216,7 +217,7 @@ NodeIndicesGroupQueryResult: TypeAlias = List[Tuple[GroupKey, NodeIndicesQueryRe
 NodeIndexQueryResult: TypeAlias = Optional[NodeIndex]
 NodeIndexGroupQueryResult: TypeAlias = List[Tuple[GroupKey, NodeIndexQueryResult]]
 
-NodeMultipleValuesWithIndexQueryResult: TypeAlias = Dict[NodeIndex, GraphRecordValue]
+NodeMultipleValuesWithIndexQueryResult: TypeAlias = Dict[NodeHandle, GraphRecordValue]
 NodeMultipleValuesWithIndexGroupQueryResult: TypeAlias = List[
     Tuple[GroupKey, NodeMultipleValuesWithIndexQueryResult]
 ]
@@ -227,7 +228,7 @@ EdgeMultipleValuesWithIndexGroupQueryResult: TypeAlias = List[
 ]
 EdgeMultipleValuesWithoutIndexQueryResult: TypeAlias = List[GraphRecordValue]
 
-NodeSingleValueWithIndexQueryResult: TypeAlias = Tuple[NodeIndex, GraphRecordValue]
+NodeSingleValueWithIndexQueryResult: TypeAlias = Tuple[NodeHandle, GraphRecordValue]
 NodeSingleValueWithIndexGroupQueryResult: TypeAlias = List[
     Tuple[GroupKey, NodeSingleValueWithIndexQueryResult]
 ]

@@ -13,7 +13,7 @@ use crate::{
     GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{
-        EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex, querying::DeepClone,
+        EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeHandle, querying::DeepClone,
     },
 };
 pub use operand::{
@@ -39,7 +39,7 @@ impl<O: RootOperand> MultipleValuesWithIndexContext<O> {
     pub(crate) fn get_values<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a O::Index, GraphRecordValue)> + 'a + use<'a, O>>
+    ) -> GraphRecordResult<impl Iterator<Item = (O::Index, GraphRecordValue)> + 'a + use<'a, O>>
     where
         O: 'a,
     {
@@ -218,27 +218,27 @@ pub trait GetValues<I: Index> {
         &self,
         graphrecord: &'a GraphRecord,
         attribute: GraphRecordAttribute,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a I, GraphRecordValue)> + 'a>
+    ) -> GraphRecordResult<impl Iterator<Item = (I, GraphRecordValue)> + 'a>
     where
         I: 'a;
 
     fn get_values_from_indices<'a>(
         graphrecord: &'a GraphRecord,
         attribute: GraphRecordAttribute,
-        indices: impl Iterator<Item = &'a I> + 'a,
-    ) -> impl Iterator<Item = (&'a I, GraphRecordValue)> + 'a
+        indices: impl Iterator<Item = I> + 'a,
+    ) -> impl Iterator<Item = (I, GraphRecordValue)> + 'a
     where
         I: 'a;
 }
 
-impl GetValues<NodeIndex> for NodeOperand {
+impl GetValues<NodeHandle> for NodeOperand {
     fn get_values<'a>(
         &self,
         graphrecord: &'a GraphRecord,
         attribute: GraphRecordAttribute,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a NodeIndex, GraphRecordValue)> + 'a>
+    ) -> GraphRecordResult<impl Iterator<Item = (NodeHandle, GraphRecordValue)> + 'a>
     where
-        NodeIndex: 'a,
+        NodeHandle: 'a,
     {
         let node_indices = self.evaluate_backward(graphrecord)?;
 
@@ -252,10 +252,10 @@ impl GetValues<NodeIndex> for NodeOperand {
     fn get_values_from_indices<'a>(
         graphrecord: &'a GraphRecord,
         attribute: GraphRecordAttribute,
-        node_indices: impl Iterator<Item = &'a NodeIndex> + 'a,
-    ) -> impl Iterator<Item = (&'a NodeIndex, GraphRecordValue)> + 'a
+        node_indices: impl Iterator<Item = NodeHandle> + 'a,
+    ) -> impl Iterator<Item = (NodeHandle, GraphRecordValue)> + 'a
     where
-        NodeIndex: 'a,
+        NodeHandle: 'a,
     {
         node_indices.filter_map(move |node_index| {
             let attribute = graphrecord
@@ -274,7 +274,7 @@ impl GetValues<EdgeIndex> for EdgeOperand {
         &self,
         graphrecord: &'a GraphRecord,
         attribute: GraphRecordAttribute,
-    ) -> GraphRecordResult<impl Iterator<Item = (&'a EdgeIndex, GraphRecordValue)> + 'a>
+    ) -> GraphRecordResult<impl Iterator<Item = (EdgeIndex, GraphRecordValue)> + 'a>
     where
         EdgeIndex: 'a,
     {
@@ -290,8 +290,8 @@ impl GetValues<EdgeIndex> for EdgeOperand {
     fn get_values_from_indices<'a>(
         graphrecord: &'a GraphRecord,
         attribute: GraphRecordAttribute,
-        edge_indices: impl Iterator<Item = &'a EdgeIndex> + 'a,
-    ) -> impl Iterator<Item = (&'a EdgeIndex, GraphRecordValue)> + 'a
+        edge_indices: impl Iterator<Item = EdgeIndex> + 'a,
+    ) -> impl Iterator<Item = (EdgeIndex, GraphRecordValue)> + 'a
     where
         EdgeIndex: 'a,
     {
@@ -299,7 +299,7 @@ impl GetValues<EdgeIndex> for EdgeOperand {
             Some((
                 edge_index,
                 graphrecord
-                    .edge_attributes(edge_index)
+                    .edge_attributes(&edge_index)
                     .expect("Edge must exist")
                     .get(&attribute)?
                     .clone(),

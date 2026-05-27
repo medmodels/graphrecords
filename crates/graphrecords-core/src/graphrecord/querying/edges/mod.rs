@@ -75,9 +75,7 @@ impl<'a> EvaluateBackward<'a> for EdgeIndicesOperandContext {
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<Self::ReturnValue> {
         Ok(match self {
-            Self::EdgeOperand(operand) => {
-                Box::new(operand.evaluate_backward(graphrecord)?.copied())
-            }
+            Self::EdgeOperand(operand) => Box::new(operand.evaluate_backward(graphrecord)?),
             Self::EdgeIndexGroupByOperand(operand) => Box::new(
                 operand
                     .evaluate_backward(graphrecord)?

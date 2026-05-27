@@ -9,13 +9,16 @@ pub mod wrapper;
 use super::{EdgeIndex, GraphRecord, GraphRecordAttribute, GraphRecordValue, NodeIndex, Wrapper};
 use crate::{
     errors::GraphRecordResult,
-    graphrecord::querying::{
-        attributes::{
-            EdgeMultipleAttributesWithoutIndexOperand, EdgeSingleAttributeWithoutIndexOperand,
-            NodeMultipleAttributesWithoutIndexOperand, NodeSingleAttributeWithoutIndexOperand,
+    graphrecord::{
+        NodeHandle,
+        querying::{
+            attributes::{
+                EdgeMultipleAttributesWithoutIndexOperand, EdgeSingleAttributeWithoutIndexOperand,
+                NodeMultipleAttributesWithoutIndexOperand, NodeSingleAttributeWithoutIndexOperand,
+            },
+            group_by::{GroupBy, GroupKey, PartitionGroups},
+            values::{EdgeSingleValueWithoutIndexOperand, NodeSingleValueWithoutIndexOperand},
         },
-        group_by::{GroupBy, GroupKey, PartitionGroups},
-        values::{EdgeSingleValueWithoutIndexOperand, NodeSingleValueWithoutIndexOperand},
     },
 };
 use attributes::{
@@ -28,10 +31,7 @@ use edges::{EdgeIndexOperand, EdgeIndicesOperand, EdgeOperand};
 use group_by::{GroupOperand, GroupedOperand};
 use itertools::Itertools;
 use nodes::{NodeIndexOperand, NodeIndicesOperand, NodeOperand};
-use std::{
-    fmt::{Debug, Display},
-    hash::Hash,
-};
+use std::{fmt::Debug, hash::Hash};
 use values::{
     EdgeMultipleValuesWithIndexOperand, EdgeMultipleValuesWithoutIndexOperand,
     EdgeSingleValueWithIndexOperand, GetValues, NodeMultipleValuesWithIndexOperand,
@@ -83,9 +83,9 @@ macro_rules! impl_direct_return_operand {
     };
 }
 
-pub trait Index: Eq + Clone + Hash + Display + GetAttributes {}
+pub trait Index: Eq + Clone + Copy + Hash + GetAttributes + Debug {}
 
-impl Index for NodeIndex {}
+impl Index for NodeHandle {}
 
 impl Index for EdgeIndex {}
 
@@ -100,44 +100,44 @@ pub trait RootOperand:
     fn _evaluate_forward<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        indices: BoxedIterator<'a, &'a Self::Index>,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a Self::Index>>;
+        indices: BoxedIterator<'a, Self::Index>,
+    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index>>;
 
     fn _evaluate_forward_grouped<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-        indices: GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>>;
+        indices: GroupedIterator<'a, BoxedIterator<'a, Self::Index>>,
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, Self::Index>>>;
 
     fn _evaluate_backward<'a>(
         &self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a Self::Index>>;
+    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index>>;
 
     fn _evaluate_backward_grouped_operand<'a>(
         group_operand: &GroupOperand<Self>,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>>;
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, Self::Index>>>;
 
     fn _group_by(&mut self, discriminator: Self::Discriminator) -> Wrapper<GroupOperand<Self>>;
 
     fn _partition<'a>(
         graphrecord: &'a GraphRecord,
-        indices: BoxedIterator<'a, &'a Self::Index>,
+        indices: BoxedIterator<'a, Self::Index>,
         discriminator: &Self::Discriminator,
-    ) -> GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>;
+    ) -> GroupedIterator<'a, BoxedIterator<'a, Self::Index>>;
 
     fn _merge<'a>(
-        indices: GroupedIterator<'a, BoxedIterator<'a, &'a Self::Index>>,
-    ) -> BoxedIterator<'a, &'a Self::Index>;
+        indices: GroupedIterator<'a, BoxedIterator<'a, Self::Index>>,
+    ) -> BoxedIterator<'a, Self::Index>;
 }
 
 impl<'a, O> EvaluateForward<'a> for O
 where
     O: RootOperand + 'a,
 {
-    type InputValue = BoxedIterator<'a, &'a O::Index>;
-    type ReturnValue = BoxedIterator<'a, &'a O::Index>;
+    type InputValue = BoxedIterator<'a, O::Index>;
+    type ReturnValue = BoxedIterator<'a, O::Index>;
 
     fn evaluate_forward(
         &self,
@@ -182,8 +182,8 @@ where
     fn evaluate_forward_grouped(
         &self,
         graphrecord: &'a GraphRecord,
-        indices: GroupedIterator<'a, BoxedIterator<'a, &'a O::Index>>,
-    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, &'a O::Index>>> {
+        indices: GroupedIterator<'a, BoxedIterator<'a, O::Index>>,
+    ) -> GraphRecordResult<GroupedIterator<'a, BoxedIterator<'a, O::Index>>> {
         self._evaluate_forward_grouped(graphrecord, indices)
     }
 }
@@ -192,7 +192,7 @@ impl<'a, O> EvaluateBackward<'a> for O
 where
     O: RootOperand + 'a,
 {
-    type ReturnValue = BoxedIterator<'a, &'a O::Index>;
+    type ReturnValue = BoxedIterator<'a, O::Index>;
 
     fn evaluate_backward(
         &self,
@@ -206,7 +206,7 @@ impl<'a, O> EvaluateBackward<'a> for GroupOperand<O>
 where
     O: RootOperand + 'a,
 {
-    type ReturnValue = GroupedIterator<'a, BoxedIterator<'a, &'a O::Index>>;
+    type ReturnValue = GroupedIterator<'a, BoxedIterator<'a, O::Index>>;
 
     fn evaluate_backward(
         &self,
@@ -231,7 +231,7 @@ impl<'a, O> PartitionGroups<'a> for O
 where
     O: RootOperand + 'a,
 {
-    type Values = BoxedIterator<'a, &'a O::Index>;
+    type Values = BoxedIterator<'a, O::Index>;
 
     fn partition(
         graphrecord: &'a GraphRecord,
@@ -313,6 +313,7 @@ pub trait ReduceInput<'a>: EvaluateForward<'a> {
 
     fn reduce_input(
         &self,
+        graphrecord: &'a GraphRecord,
         values: <Self::Context as EvaluateBackward<'a>>::ReturnValue,
     ) -> GraphRecordResult<<Self as EvaluateForward<'a>>::InputValue>;
 }
@@ -320,12 +321,13 @@ pub trait ReduceInput<'a>: EvaluateForward<'a> {
 impl<'a, O> Wrapper<O> {
     pub(crate) fn reduce_input(
         &self,
+        graphrecord: &'a GraphRecord,
         values: <<O as ReduceInput<'a>>::Context as EvaluateBackward<'a>>::ReturnValue,
     ) -> GraphRecordResult<<O as EvaluateForward<'a>>::InputValue>
     where
         O: ReduceInput<'a>,
     {
-        self.0.read().reduce_input(values)
+        self.0.read().reduce_input(graphrecord, values)
     }
 }
 
@@ -397,30 +399,30 @@ pub trait ReturnOperand<'a> {
 }
 
 impl_iterator_return_operand!(
-    NodeAttributesTreeOperand                 => (&'a NodeIndex, Vec<GraphRecordAttribute>),
-    EdgeAttributesTreeOperand                 => (&'a EdgeIndex, Vec<GraphRecordAttribute>),
-    NodeMultipleAttributesWithIndexOperand    => (&'a NodeIndex, GraphRecordAttribute),
+    NodeAttributesTreeOperand                 => (NodeHandle, Vec<GraphRecordAttribute>),
+    EdgeAttributesTreeOperand                 => (EdgeIndex, Vec<GraphRecordAttribute>),
+    NodeMultipleAttributesWithIndexOperand    => (NodeHandle, GraphRecordAttribute),
     NodeMultipleAttributesWithoutIndexOperand => GraphRecordAttribute,
-    EdgeMultipleAttributesWithIndexOperand    => (&'a EdgeIndex, GraphRecordAttribute),
+    EdgeMultipleAttributesWithIndexOperand    => (EdgeIndex, GraphRecordAttribute),
     EdgeMultipleAttributesWithoutIndexOperand => GraphRecordAttribute,
     EdgeIndicesOperand                        => EdgeIndex,
     NodeIndicesOperand                        => NodeIndex,
-    NodeMultipleValuesWithIndexOperand        => (&'a NodeIndex, GraphRecordValue),
+    NodeMultipleValuesWithIndexOperand        => (NodeHandle, GraphRecordValue),
     NodeMultipleValuesWithoutIndexOperand     => GraphRecordValue,
-    EdgeMultipleValuesWithIndexOperand        => (&'a EdgeIndex, GraphRecordValue),
+    EdgeMultipleValuesWithIndexOperand        => (EdgeIndex, GraphRecordValue),
     EdgeMultipleValuesWithoutIndexOperand     => GraphRecordValue,
 );
 
 impl_direct_return_operand!(
-    NodeSingleAttributeWithIndexOperand    => Option<(&'a NodeIndex, GraphRecordAttribute)>,
+    NodeSingleAttributeWithIndexOperand    => Option<(NodeHandle, GraphRecordAttribute)>,
     NodeSingleAttributeWithoutIndexOperand => Option<GraphRecordAttribute>,
-    EdgeSingleAttributeWithIndexOperand    => Option<(&'a EdgeIndex, GraphRecordAttribute)>,
+    EdgeSingleAttributeWithIndexOperand    => Option<(EdgeIndex, GraphRecordAttribute)>,
     EdgeSingleAttributeWithoutIndexOperand => Option<GraphRecordAttribute>,
     EdgeIndexOperand                       => Option<EdgeIndex>,
     NodeIndexOperand                       => Option<NodeIndex>,
-    NodeSingleValueWithIndexOperand        => Option<(&'a NodeIndex, GraphRecordValue)>,
+    NodeSingleValueWithIndexOperand        => Option<(NodeHandle, GraphRecordValue)>,
     NodeSingleValueWithoutIndexOperand     => Option<GraphRecordValue>,
-    EdgeSingleValueWithIndexOperand        => Option<(&'a EdgeIndex, GraphRecordValue)>,
+    EdgeSingleValueWithIndexOperand        => Option<(EdgeIndex, GraphRecordValue)>,
     EdgeSingleValueWithoutIndexOperand     => Option<GraphRecordValue>,
 );
 
