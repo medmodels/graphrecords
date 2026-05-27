@@ -1497,7 +1497,6 @@ class EdgeIndexer:
 
         Raises:
             ValueError: If the key is a slice, but not ":" is provided.
-            IndexError: If the query returned no results.
         """  # noqa: W505
         index_selection, attribute_selection = key
 
@@ -1529,8 +1528,7 @@ class EdgeIndexer:
                     [query_result], attribute_selection
                 )
 
-            msg = "The query returned no results"
-            raise IndexError(msg)
+            return None
 
         if isinstance(index_selection, slice) and is_graphrecord_attribute(
             attribute_selection

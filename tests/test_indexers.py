@@ -1772,11 +1772,15 @@ class TestIndexers(unittest.TestCase):
         }
 
         graphrecord = create_graphrecord()
-        with pytest.raises(IndexError, match="The query returned no results"):
-            del graphrecord.edge[edge_max_greater_than_3, "foo"]
+        del graphrecord.edge[edge_max_greater_than_3, "foo"]
+        assert graphrecord.edge[:] == {
+            0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
+            1: {"foo": "bar", "bar": "foo"},
+            2: {"foo": "bar", "bar": "foo"},
+            3: {"foo": "bar", "bar": "test"},
+        }
 
         graphrecord = create_graphrecord()
-        # Empty query should not fail
         del graphrecord.edge[edge_greater_than_three, "foo"]
         assert graphrecord.edge[:] == {
             0: {"foo": "bar", "bar": "foo", "lorem": "ipsum"},
