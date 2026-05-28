@@ -7,6 +7,7 @@ use graphrecords_utils::aliases::GrHashMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Borrow,
     collections::{HashMap, hash_map::Entry},
     ops::Deref,
 };
@@ -315,13 +316,13 @@ impl AttributeSchema {
     }
 
     #[must_use]
-    pub fn infer(attributes: Vec<&Attributes>) -> Self {
+    pub fn infer(attributes: impl IntoIterator<Item = impl Borrow<Attributes>>) -> Self {
         let mut schema = Self::default();
 
         let mut empty = true;
 
         for attributes in attributes {
-            schema.update(attributes, empty);
+            schema.update(attributes.borrow(), empty);
 
             empty = false;
         }
@@ -353,26 +354,29 @@ impl GroupSchema {
         &self.edges
     }
 
-    pub fn validate_node<'a>(
+    pub fn validate_node(
         &self,
-        index: &'a NodeIndex,
-        attributes: &'a Attributes,
+        index: &NodeIndex,
+        attributes: &Attributes,
     ) -> Result<(), GraphError> {
         self.nodes
             .validate(attributes, &AttributeSchemaKind::Node(index))
     }
 
-    pub fn validate_edge<'a>(
+    pub fn validate_edge(
         &self,
-        index: &'a EdgeIndex,
-        attributes: &'a Attributes,
+        index: &EdgeIndex,
+        attributes: &Attributes,
     ) -> Result<(), GraphError> {
         self.edges
             .validate(attributes, &AttributeSchemaKind::Edge(index))
     }
 
     #[must_use]
-    pub fn infer(nodes: Vec<&Attributes>, edges: Vec<&Attributes>) -> Self {
+    pub fn infer(
+        nodes: impl IntoIterator<Item = impl Borrow<Attributes>>,
+        edges: impl IntoIterator<Item = impl Borrow<Attributes>>,
+    ) -> Self {
         Self {
             nodes: AttributeSchema::infer(nodes),
             edges: AttributeSchema::infer(edges),
@@ -436,7 +440,7 @@ impl Schema {
             #[expect(clippy::missing_panics_doc, reason = "infallible")]
             let mut groups_of_node = graphrecord
                 .groups_of_node(node_index)
-                .expect("Node must exist.")
+                .expect("Node must exist")
                 .peekable();
 
             if groups_of_node.peek().is_none() {
@@ -446,7 +450,7 @@ impl Schema {
 
             for group in groups_of_node {
                 #[expect(clippy::missing_panics_doc, reason = "infallible")]
-                let group_nodes = &mut group_mapping.get_mut(&group).expect("Group must exist.").0;
+                let group_nodes = &mut group_mapping.get_mut(&group).expect("Group must exist").0;
 
                 group_nodes.push(node_index);
             }
@@ -456,7 +460,7 @@ impl Schema {
             #[expect(clippy::missing_panics_doc, reason = "infallible")]
             let mut groups_of_edge = graphrecord
                 .groups_of_edge(edge_index)
-                .expect("Edge must exist.")
+                .expect("Edge must exist")
                 .peekable();
 
             if groups_of_edge.peek().is_none() {
@@ -466,28 +470,25 @@ impl Schema {
 
             for group in groups_of_edge {
                 #[expect(clippy::missing_panics_doc, reason = "infallible")]
-                let group_edges = &mut group_mapping.get_mut(&group).expect("Group must exist.").1;
+                let group_edges = &mut group_mapping.get_mut(&group).expect("Group must exist").1;
 
                 group_edges.push(edge_index);
             }
         }
 
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         let group_schemas =
             group_mapping
                 .into_iter()
                 .map(|(group, (nodes_in_group, edges_in_group))| {
-                    #[expect(clippy::missing_panics_doc, reason = "infallible")]
-                    let node_attributes: Vec<_> = nodes_in_group
-                        .into_iter()
-                        .map(|node| graphrecord.node_attributes(node).expect("Node must exist."))
-                        .collect();
-                    #[expect(clippy::missing_panics_doc, reason = "infallible")]
-                    let edge_attributes: Vec<_> = edges_in_group
-                        .into_iter()
-                        .map(|edge| graphrecord.edge_attributes(edge).expect("Edge must exist."))
-                        .collect();
-
-                    let schema = GroupSchema::infer(node_attributes, edge_attributes);
+                    let schema = GroupSchema::infer(
+                        nodes_in_group.into_iter().map(|node| {
+                            graphrecord.node_attributes(node).expect("Node must exist")
+                        }),
+                        edges_in_group.into_iter().map(|edge| {
+                            graphrecord.edge_attributes(edge).expect("Edge must exist")
+                        }),
+                    );
 
                     (group.clone(), schema)
                 });
@@ -497,13 +498,11 @@ impl Schema {
             ungrouped
                 .0
                 .into_iter()
-                .map(|node| graphrecord.node_attributes(node).expect("Node must exist."))
-                .collect::<Vec<_>>(),
+                .map(|node| graphrecord.node_attributes(node).expect("Node must exist")),
             ungrouped
                 .1
                 .into_iter()
-                .map(|edge| graphrecord.edge_attributes(edge).expect("Edge must exist."))
-                .collect::<Vec<_>>(),
+                .map(|edge| graphrecord.edge_attributes(edge).expect("Edge must exist")),
         );
 
         Self {

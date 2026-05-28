@@ -47,12 +47,6 @@ impl Graph {
         self.edge_index_counter = 0;
     }
 
-    pub fn clear_edges(&mut self) {
-        self.edges.clear();
-
-        self.edge_index_counter = 0;
-    }
-
     pub fn node_count(&self) -> usize {
         self.nodes.len()
     }
@@ -88,6 +82,8 @@ impl Graph {
             GraphError::IndexError(format!("Cannot find node with index {node_index}"))
         })?;
 
+        group_mapping.remove_node(node_index);
+
         let edge_indices = node
             .outgoing_edge_indices
             .union(&node.incoming_edge_indices);
@@ -101,9 +97,7 @@ impl Graph {
                 edge.source_node_index == *node_index,
                 edge.target_node_index == *node_index,
             ) {
-                (true, true) => {
-                    // Do nothing
-                }
+                (true, true) => {}
                 (true, false) => {
                     self.nodes
                         .get_mut(&edge.target_node_index)
@@ -135,6 +129,12 @@ impl Graph {
         target_node_index: NodeIndex,
         attributes: Attributes,
     ) -> Result<EdgeIndex, GraphError> {
+        if !self.nodes.contains_key(&source_node_index) {
+            return Err(GraphError::IndexError(format!(
+                "Cannot find node with index {source_node_index}"
+            )));
+        }
+
         if !self.nodes.contains_key(&target_node_index) {
             return Err(GraphError::IndexError(format!(
                 "Cannot find node with index {target_node_index}"
@@ -144,18 +144,17 @@ impl Graph {
         let edge_index = self.edge_index_counter;
         self.edge_index_counter += 1;
 
-        let outgoing_node = self.nodes.get_mut(&source_node_index).ok_or_else(|| {
-            GraphError::IndexError(format!("Cannot find node with index {source_node_index}"))
-        })?;
+        self.nodes
+            .get_mut(&source_node_index)
+            .expect("Node must exist")
+            .outgoing_edge_indices
+            .insert(edge_index);
 
-        outgoing_node.outgoing_edge_indices.insert(edge_index);
-
-        let incoming_node = self
-            .nodes
+        self.nodes
             .get_mut(&target_node_index)
-            .expect("Node must exist");
-
-        incoming_node.incoming_edge_indices.insert(edge_index);
+            .expect("Node must exist")
+            .incoming_edge_indices
+            .insert(edge_index);
 
         let edge = Edge::new(attributes, source_node_index, target_node_index);
 
@@ -341,49 +340,39 @@ impl Graph {
 
         let mut result = GrHashSet::new();
 
-        for source_index in &first_set {
-            let Some(node) = self.nodes.get(*source_index) else {
-                continue;
-            };
-
-            for edge_index in &node.outgoing_edge_indices {
-                let edge = self.edges.get(edge_index).expect("Edge must exist");
-
-                if second_set.contains(&edge.target_node_index) {
-                    result.insert(edge_index);
-                }
-            }
-            for edge_index in &node.incoming_edge_indices {
-                let edge = self.edges.get(edge_index).expect("Edge must exist");
-
-                if second_set.contains(&edge.source_node_index) {
-                    result.insert(edge_index);
-                }
-            }
-        }
-
-        for source_index in &second_set {
-            let Some(node) = self.nodes.get(*source_index) else {
-                continue;
-            };
-
-            for edge_index in &node.outgoing_edge_indices {
-                let edge = self.edges.get(edge_index).expect("Edge must exist");
-
-                if first_set.contains(&edge.target_node_index) {
-                    result.insert(edge_index);
-                }
-            }
-            for edge_index in &node.incoming_edge_indices {
-                let edge = self.edges.get(edge_index).expect("Edge must exist");
-
-                if first_set.contains(&edge.source_node_index) {
-                    result.insert(edge_index);
-                }
-            }
-        }
+        self.collect_edges_between(&first_set, &second_set, &mut result);
+        self.collect_edges_between(&second_set, &first_set, &mut result);
 
         result.into_iter()
+    }
+
+    fn collect_edges_between<'a>(
+        &'a self,
+        sources: &GrHashSet<&NodeIndex>,
+        targets: &GrHashSet<&NodeIndex>,
+        result: &mut GrHashSet<&'a EdgeIndex>,
+    ) {
+        for source_index in sources {
+            let Some(node) = self.nodes.get(*source_index) else {
+                continue;
+            };
+
+            for edge_index in &node.outgoing_edge_indices {
+                let edge = self.edges.get(edge_index).expect("Edge must exist");
+
+                if targets.contains(&edge.target_node_index) {
+                    result.insert(edge_index);
+                }
+            }
+
+            for edge_index in &node.incoming_edge_indices {
+                let edge = self.edges.get(edge_index).expect("Edge must exist");
+
+                if targets.contains(&edge.source_node_index) {
+                    result.insert(edge_index);
+                }
+            }
+        }
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -391,7 +380,7 @@ impl Graph {
         self.edges.contains_key(edge_index)
     }
 
-    pub fn neighbors_outgoing(
+    pub fn outgoing_neighbors(
         &self,
         node_index: &NodeIndex,
     ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
@@ -413,7 +402,7 @@ impl Graph {
     }
 
     // TODO: Add tests
-    pub fn neighbors_incoming(
+    pub fn incoming_neighbors(
         &self,
         node_index: &NodeIndex,
     ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
@@ -434,7 +423,7 @@ impl Graph {
             }))
     }
 
-    pub fn neighbors_undirected(
+    pub fn neighbors(
         &self,
         node_index: &NodeIndex,
     ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
@@ -544,16 +533,6 @@ mod test {
         graph.clear();
 
         assert_eq!(0, graph.node_count());
-        assert_eq!(0, graph.edge_count());
-    }
-
-    #[test]
-    fn test_clear_edges() {
-        let mut graph = create_graph();
-
-        graph.clear_edges();
-
-        assert_eq!(4, graph.node_count());
         assert_eq!(0, graph.edge_count());
     }
 
@@ -901,11 +880,11 @@ mod test {
 
         let edge = &create_edges()[0];
 
-        let endpoints = graph.edge_endpoints(&0).unwrap();
+        let (source_node_index, target_node_index) = graph.edge_endpoints(&0).unwrap();
 
-        assert_eq!(&edge.0, endpoints.0);
+        assert_eq!(&edge.0, source_node_index);
 
-        assert_eq!(&edge.1, endpoints.1);
+        assert_eq!(&edge.1, target_node_index);
     }
 
     #[test]
@@ -996,11 +975,33 @@ mod test {
     }
 
     #[test]
+    fn test_outgoing_neighbors() {
+        let graph = create_graph();
+
+        let neighbors = graph.outgoing_neighbors(&"0".into()).unwrap();
+
+        assert_eq!(2, neighbors.count());
+    }
+
+    #[test]
+    fn test_invalid_outgoing_neighbors() {
+        let graph = create_graph();
+
+        assert!(
+            graph
+                .outgoing_neighbors(&"50".into())
+                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+        );
+    }
+
+    #[test]
     fn test_neighbors() {
         let graph = create_graph();
 
-        let neighbors = graph.neighbors_outgoing(&"0".into()).unwrap();
+        let neighbors = graph.outgoing_neighbors(&"2".into()).unwrap();
+        assert_eq!(0, neighbors.count());
 
+        let neighbors = graph.neighbors(&"2".into()).unwrap();
         assert_eq!(2, neighbors.count());
     }
 
@@ -1010,29 +1011,7 @@ mod test {
 
         assert!(
             graph
-                .neighbors_outgoing(&"50".into())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
-        );
-    }
-
-    #[test]
-    fn test_neighbors_undirected() {
-        let graph = create_graph();
-
-        let neighbors = graph.neighbors_outgoing(&"2".into()).unwrap();
-        assert_eq!(0, neighbors.count());
-
-        let neighbors = graph.neighbors_undirected(&"2".into()).unwrap();
-        assert_eq!(2, neighbors.count());
-    }
-
-    #[test]
-    fn test_invalid_neighbors_undirected() {
-        let graph = create_graph();
-
-        assert!(
-            graph
-                .neighbors_undirected(&"50".into())
+                .neighbors(&"50".into())
                 .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
         );
     }

@@ -370,12 +370,12 @@ impl NodeOperation {
             EdgeDirection::Incoming => Box::new(node_indices_1.flat_map(|node_index| {
                 graphrecord
                     .incoming_edges(node_index)
-                    .expect("Node must exist.")
+                    .expect("Node must exist")
             })),
             EdgeDirection::Outgoing => Box::new(node_indices_1.flat_map(|node_index| {
                 graphrecord
                     .outgoing_edges(node_index)
-                    .expect("Node must exist.")
+                    .expect("Node must exist")
             })),
             EdgeDirection::Both => Box::new(node_indices_1.flat_map(|node_index| {
                 graphrecord
@@ -433,18 +433,16 @@ impl NodeOperation {
         let neighbor_indices: BoxedIterator<_> = match direction {
             EdgeDirection::Incoming => Box::new(node_indices_1.flat_map(move |node_index| {
                 graphrecord
-                    .neighbors_incoming(node_index)
+                    .incoming_neighbors(node_index)
                     .expect("Node must exist")
             })),
             EdgeDirection::Outgoing => Box::new(node_indices_1.flat_map(move |node_index| {
                 graphrecord
-                    .neighbors_outgoing(node_index)
+                    .outgoing_neighbors(node_index)
                     .expect("Node must exist")
             })),
             EdgeDirection::Both => Box::new(node_indices_1.flat_map(move |node_index| {
-                graphrecord
-                    .neighbors_undirected(node_index)
-                    .expect("Node must exist")
+                graphrecord.neighbors(node_index).expect("Node must exist")
             })),
         };
 
@@ -456,19 +454,17 @@ impl NodeOperation {
             let mut neighbors: BoxedIterator<_> = match direction {
                 EdgeDirection::Incoming => Box::new(
                     graphrecord
-                        .neighbors_incoming(node_index)
+                        .incoming_neighbors(node_index)
                         .expect("Node must exist"),
                 ),
                 EdgeDirection::Outgoing => Box::new(
                     graphrecord
-                        .neighbors_outgoing(node_index)
+                        .outgoing_neighbors(node_index)
                         .expect("Node must exist"),
                 ),
-                EdgeDirection::Both => Box::new(
-                    graphrecord
-                        .neighbors_undirected(node_index)
-                        .expect("Node must exist"),
-                ),
+                EdgeDirection::Both => {
+                    Box::new(graphrecord.neighbors(node_index).expect("Node must exist"))
+                }
             };
 
             neighbors.any(|neighbor| result.contains(&neighbor))
@@ -747,18 +743,16 @@ impl NodeOperation {
             let neighbor_indices: BoxedIterator<_> = match direction_clone {
                 EdgeDirection::Incoming => Box::new(node_indices.flat_map(move |node_index| {
                     graphrecord
-                        .neighbors_incoming(node_index)
+                        .incoming_neighbors(node_index)
                         .expect("Node must exist")
                 })),
                 EdgeDirection::Outgoing => Box::new(node_indices.flat_map(move |node_index| {
                     graphrecord
-                        .neighbors_outgoing(node_index)
+                        .outgoing_neighbors(node_index)
                         .expect("Node must exist")
                 })),
                 EdgeDirection::Both => Box::new(node_indices.flat_map(move |node_index| {
-                    graphrecord
-                        .neighbors_undirected(node_index)
-                        .expect("Node must exist")
+                    graphrecord.neighbors(node_index).expect("Node must exist")
                 })),
             };
 
@@ -786,18 +780,16 @@ impl NodeOperation {
                         match direction {
                             EdgeDirection::Incoming => Box::new(
                                 graphrecord
-                                    .neighbors_incoming(node_index)
+                                    .incoming_neighbors(node_index)
                                     .expect("Node must exist"),
                             ),
                             EdgeDirection::Outgoing => Box::new(
                                 graphrecord
-                                    .neighbors_outgoing(node_index)
+                                    .outgoing_neighbors(node_index)
                                     .expect("Node must exist"),
                             ),
                             EdgeDirection::Both => Box::new(
-                                graphrecord
-                                    .neighbors_undirected(node_index)
-                                    .expect("Node must exist"),
+                                graphrecord.neighbors(node_index).expect("Node must exist"),
                             ),
                         };
 

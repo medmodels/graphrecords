@@ -1217,23 +1217,23 @@ impl PyGraphRecord {
         }
     }
 
-    #[pyo3(signature = (group, node_index, bypass_plugins=false))]
+    #[pyo3(signature = (group, node_indices, bypass_plugins=false))]
     pub fn add_nodes_to_group(
         &self,
         group: PyGroup,
-        node_index: Vec<PyNodeIndex>,
+        node_indices: Vec<PyNodeIndex>,
         bypass_plugins: bool,
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            node_index.into_iter().try_for_each(|node_index| {
+            node_indices.into_iter().try_for_each(|node_index| {
                 Ok(graphrecord
                     .add_node_to_group_bypass_plugins(group.clone().into(), node_index.into())
                     .map_err(PyGraphRecordError::from)?)
             })
         } else {
-            node_index.into_iter().try_for_each(|node_index| {
+            node_indices.into_iter().try_for_each(|node_index| {
                 Ok(graphrecord
                     .add_node_to_group(group.clone().into(), node_index.into())
                     .map_err(PyGraphRecordError::from)?)
@@ -1287,23 +1287,23 @@ impl PyGraphRecord {
         Ok(())
     }
 
-    #[pyo3(signature = (group, edge_index, bypass_plugins=false))]
+    #[pyo3(signature = (group, edge_indices, bypass_plugins=false))]
     pub fn add_edges_to_group(
         &self,
         group: PyGroup,
-        edge_index: Vec<EdgeIndex>,
+        edge_indices: Vec<EdgeIndex>,
         bypass_plugins: bool,
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            edge_index.into_iter().try_for_each(|edge_index| {
+            edge_indices.into_iter().try_for_each(|edge_index| {
                 Ok(graphrecord
                     .add_edge_to_group_bypass_plugins(group.clone().into(), edge_index)
                     .map_err(PyGraphRecordError::from)?)
             })
         } else {
-            edge_index.into_iter().try_for_each(|edge_index| {
+            edge_indices.into_iter().try_for_each(|edge_index| {
                 Ok(graphrecord
                     .add_edge_to_group(group.clone().into(), edge_index)
                     .map_err(PyGraphRecordError::from)?)
@@ -1357,23 +1357,23 @@ impl PyGraphRecord {
         Ok(())
     }
 
-    #[pyo3(signature = (group, node_index, bypass_plugins=false))]
+    #[pyo3(signature = (group, node_indices, bypass_plugins=false))]
     pub fn remove_nodes_from_group(
         &self,
         group: PyGroup,
-        node_index: Vec<PyNodeIndex>,
+        node_indices: Vec<PyNodeIndex>,
         bypass_plugins: bool,
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            node_index.into_iter().try_for_each(|node_index| {
+            node_indices.into_iter().try_for_each(|node_index| {
                 Ok(graphrecord
                     .remove_node_from_group_bypass_plugins(&group, &node_index)
                     .map_err(PyGraphRecordError::from)?)
             })
         } else {
-            node_index.into_iter().try_for_each(|node_index| {
+            node_indices.into_iter().try_for_each(|node_index| {
                 Ok(graphrecord
                     .remove_node_from_group(&group, &node_index)
                     .map_err(PyGraphRecordError::from)?)
@@ -1429,23 +1429,23 @@ impl PyGraphRecord {
         Ok(())
     }
 
-    #[pyo3(signature = (group, edge_index, bypass_plugins=false))]
+    #[pyo3(signature = (group, edge_indices, bypass_plugins=false))]
     pub fn remove_edges_from_group(
         &self,
         group: PyGroup,
-        edge_index: Vec<EdgeIndex>,
+        edge_indices: Vec<EdgeIndex>,
         bypass_plugins: bool,
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
         if bypass_plugins {
-            edge_index.into_iter().try_for_each(|edge_index| {
+            edge_indices.into_iter().try_for_each(|edge_index| {
                 Ok(graphrecord
                     .remove_edge_from_group_bypass_plugins(&group, &edge_index)
                     .map_err(PyGraphRecordError::from)?)
             })
         } else {
-            edge_index.into_iter().try_for_each(|edge_index| {
+            edge_indices.into_iter().try_for_each(|edge_index| {
                 Ok(graphrecord
                     .remove_edge_from_group(&group, &edge_index)
                     .map_err(PyGraphRecordError::from)?)
@@ -1563,7 +1563,7 @@ impl PyGraphRecord {
                 let groups = graphrecord
                     .groups_of_node(&node_index)
                     .map_err(PyGraphRecordError::from)?
-                    .map(|node_index| node_index.clone().into())
+                    .map(|group| group.clone().into())
                     .collect();
 
                 Ok((node_index, groups))
@@ -1615,7 +1615,7 @@ impl PyGraphRecord {
         Ok(self.inner()?.contains_group(&group.into()))
     }
 
-    pub fn neighbors_outgoing(
+    pub fn outgoing_neighbors(
         &self,
         node_indices: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, Vec<PyNodeIndex>>> {
@@ -1625,7 +1625,7 @@ impl PyGraphRecord {
             .into_iter()
             .map(|node_index| {
                 let neighbors = graphrecord
-                    .neighbors_outgoing(&node_index)
+                    .outgoing_neighbors(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|neighbor| neighbor.clone().into())
                     .collect();
@@ -1635,7 +1635,7 @@ impl PyGraphRecord {
             .collect()
     }
 
-    pub fn neighbors_incoming(
+    pub fn incoming_neighbors(
         &self,
         node_indices: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, Vec<PyNodeIndex>>> {
@@ -1645,7 +1645,7 @@ impl PyGraphRecord {
             .into_iter()
             .map(|node_index| {
                 let neighbors = graphrecord
-                    .neighbors_incoming(&node_index)
+                    .incoming_neighbors(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|neighbor| neighbor.clone().into())
                     .collect();
@@ -1655,7 +1655,7 @@ impl PyGraphRecord {
             .collect()
     }
 
-    pub fn neighbors_undirected(
+    pub fn neighbors(
         &self,
         node_indices: Vec<PyNodeIndex>,
     ) -> PyResult<HashMap<PyNodeIndex, Vec<PyNodeIndex>>> {
@@ -1665,7 +1665,7 @@ impl PyGraphRecord {
             .into_iter()
             .map(|node_index| {
                 let neighbors = graphrecord
-                    .neighbors_undirected(&node_index)
+                    .neighbors(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|neighbor| neighbor.clone().into())
                     .collect();

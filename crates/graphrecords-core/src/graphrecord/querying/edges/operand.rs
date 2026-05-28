@@ -93,14 +93,14 @@ impl RootOperand for EdgeOperand {
                         Box::new(node_indices.flat_map(|node_index| {
                             graphrecord
                                 .incoming_edges(node_index)
-                                .expect("Node must exist.")
+                                .expect("Node must exist")
                         }))
                     }
                     nodes::EdgeDirection::Outgoing => {
                         Box::new(node_indices.flat_map(|node_index| {
                             graphrecord
                                 .outgoing_edges(node_index)
-                                .expect("Node must exist.")
+                                .expect("Node must exist")
                         }))
                     }
                     nodes::EdgeDirection::Both => Box::new(node_indices.flat_map(|node_index| {
@@ -152,14 +152,14 @@ impl RootOperand for EdgeOperand {
                                 Box::new(partition.flat_map(|node_index| {
                                     graphrecord
                                         .incoming_edges(node_index)
-                                        .expect("Node must exist.")
+                                        .expect("Node must exist")
                                 }))
                             }
                             nodes::EdgeDirection::Outgoing => {
                                 Box::new(partition.flat_map(|node_index| {
                                     graphrecord
                                         .outgoing_edges(node_index)
-                                        .expect("Node must exist.")
+                                        .expect("Node must exist")
                                 }))
                             }
                             nodes::EdgeDirection::Both => {
@@ -255,12 +255,12 @@ impl RootOperand for EdgeOperand {
                 > = HashMap::new();
 
                 for edge_index in edge_indices {
-                    let endpoints = graphrecord
+                    let (source, target) = graphrecord
                         .edge_endpoints(edge_index)
                         .expect("Edge must exist");
 
                     buckets
-                        .entry((endpoints.0, endpoints.1))
+                        .entry((source, target))
                         .or_default()
                         .push(edge_index);
                 }
