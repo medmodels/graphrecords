@@ -263,6 +263,7 @@ QueryResult: TypeAlias = Union[
     EdgeSingleAttributeWithIndexQueryResult,
     EdgeSingleAttributeWithIndexGroupQueryResult,
     EdgeSingleAttributeWithoutIndexQueryResult,
+    EdgeSingleAttributeWithoutIndexGroupQueryResult,
     EdgeIndicesQueryResult,
     EdgeIndicesGroupQueryResult,
     EdgeIndexQueryResult,
