@@ -188,7 +188,13 @@ impl GroupMapping {
                 GraphRecordError::AssertionError(format!(
                     "Node with index {node_index} not in group {group}"
                 ))
-            })
+            })?;
+
+        if let Some(groups) = self.groups_of_node.get_mut(node_index) {
+            groups.remove(group);
+        }
+
+        Ok(())
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -209,7 +215,13 @@ impl GroupMapping {
                 GraphRecordError::AssertionError(format!(
                     "Edge with index {edge_index} not in group {group}"
                 ))
-            })
+            })?;
+
+        if let Some(groups) = self.groups_of_edge.get_mut(edge_index) {
+            groups.remove(group);
+        }
+
+        Ok(())
     }
 
     pub fn groups(&self) -> impl Iterator<Item = &Group> {

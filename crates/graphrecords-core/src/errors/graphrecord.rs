@@ -65,5 +65,9 @@ mod test {
             "SchemaError: value",
             GraphRecordError::SchemaError("value".to_string()).to_string()
         );
+        assert_eq!(
+            "QueryError: value",
+            GraphRecordError::QueryError("value".to_string()).to_string()
+        );
     }
 }

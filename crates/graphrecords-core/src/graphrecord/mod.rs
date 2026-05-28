@@ -108,16 +108,9 @@ fn node_dataframes_to_tuples(
     Ok(nodes)
 }
 
-#[allow(clippy::type_complexity)]
-fn dataframes_to_tuples(
-    nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
+fn edge_dataframes_to_tuples(
     edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-) -> GraphRecordResult<(
-    Vec<(NodeIndex, Attributes)>,
-    Vec<(NodeIndex, NodeIndex, Attributes)>,
-)> {
-    let nodes = node_dataframes_to_tuples(nodes_dataframes)?;
-
+) -> GraphRecordResult<Vec<(NodeIndex, NodeIndex, Attributes)>> {
     let edges = edges_dataframes
         .into_iter()
         .map(|dataframe_input| {
@@ -133,6 +126,20 @@ fn dataframes_to_tuples(
         .into_iter()
         .flatten()
         .collect();
+
+    Ok(edges)
+}
+
+#[allow(clippy::type_complexity)]
+fn dataframes_to_tuples(
+    nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
+    edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
+) -> GraphRecordResult<(
+    Vec<(NodeIndex, Attributes)>,
+    Vec<(NodeIndex, NodeIndex, Attributes)>,
+)> {
+    let nodes = node_dataframes_to_tuples(nodes_dataframes)?;
+    let edges = edge_dataframes_to_tuples(edges_dataframes)?;
 
     Ok((nodes, edges))
 }
@@ -581,8 +588,6 @@ impl GraphRecord {
     }
 
     fn remove_node_impl(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
-        self.group_mapping.remove_node(node_index);
-
         self.graph
             .remove_node(node_index, &mut self.group_mapping)
             .map_err(GraphRecordError::from)
@@ -638,19 +643,7 @@ impl GraphRecord {
         &mut self,
         nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
     ) -> GraphRecordResult<()> {
-        let nodes = nodes_dataframes
-            .into_iter()
-            .map(|dataframe_input| {
-                let dataframe_input = dataframe_input.into();
-
-                dataframe_to_nodes(dataframe_input.dataframe, &dataframe_input.index_column)
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-
-        self.add_nodes_impl(nodes)
+        self.add_nodes_impl(node_dataframes_to_tuples(nodes_dataframes)?)
     }
 
     // TODO: Add tests
@@ -659,19 +652,7 @@ impl GraphRecord {
         nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
         group: Group,
     ) -> GraphRecordResult<()> {
-        let nodes = nodes_dataframes
-            .into_iter()
-            .map(|dataframe_input| {
-                let dataframe_input = dataframe_input.into();
-
-                dataframe_to_nodes(dataframe_input.dataframe, &dataframe_input.index_column)
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-
-        self.add_nodes_with_group_impl(nodes, group)
+        self.add_nodes_with_group_impl(node_dataframes_to_tuples(nodes_dataframes)?, group)
     }
 
     fn add_nodes_dataframes_with_groups_impl(
@@ -679,19 +660,7 @@ impl GraphRecord {
         nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<()> {
-        let nodes = nodes_dataframes
-            .into_iter()
-            .map(|dataframe_input| {
-                let dataframe_input = dataframe_input.into();
-
-                dataframe_to_nodes(dataframe_input.dataframe, &dataframe_input.index_column)
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-
-        self.add_nodes_with_groups_impl(nodes, groups)
+        self.add_nodes_with_groups_impl(node_dataframes_to_tuples(nodes_dataframes)?, groups)
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -886,23 +855,7 @@ impl GraphRecord {
         &mut self,
         edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        let edges = edges_dataframes
-            .into_iter()
-            .map(|dataframe_input| {
-                let dataframe_input = dataframe_input.into();
-
-                dataframe_to_edges(
-                    dataframe_input.dataframe,
-                    &dataframe_input.source_index_column,
-                    &dataframe_input.target_index_column,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-
-        self.add_edges_impl(edges)
+        self.add_edges_impl(edge_dataframes_to_tuples(edges_dataframes)?)
     }
 
     // TODO: Add tests
@@ -911,23 +864,7 @@ impl GraphRecord {
         edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
         group: &Group,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        let edges = edges_dataframes
-            .into_iter()
-            .map(|dataframe_input| {
-                let dataframe_input = dataframe_input.into();
-
-                dataframe_to_edges(
-                    dataframe_input.dataframe,
-                    &dataframe_input.source_index_column,
-                    &dataframe_input.target_index_column,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-
-        self.add_edges_with_group_impl(edges, group)
+        self.add_edges_with_group_impl(edge_dataframes_to_tuples(edges_dataframes)?, group)
     }
 
     fn add_edges_dataframes_with_groups_impl(
@@ -935,23 +872,7 @@ impl GraphRecord {
         edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        let edges = edges_dataframes
-            .into_iter()
-            .map(|dataframe_input| {
-                let dataframe_input = dataframe_input.into();
-
-                dataframe_to_edges(
-                    dataframe_input.dataframe,
-                    &dataframe_input.source_index_column,
-                    &dataframe_input.target_index_column,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-
-        self.add_edges_with_groups_impl(edges, groups)
+        self.add_edges_with_groups_impl(edge_dataframes_to_tuples(edges_dataframes)?, groups)
     }
 
     fn add_group_impl(
@@ -1247,11 +1168,10 @@ impl GraphRecord {
 
     pub fn ungrouped_nodes(&self) -> impl Iterator<Item = &NodeIndex> {
         let nodes_in_groups: GrHashSet<_> = self
-            .groups()
-            .flat_map(|group| {
-                #[expect(clippy::missing_panics_doc, reason = "infallible")]
-                self.nodes_in_group(group).expect("Group must exist")
-            })
+            .group_mapping
+            .nodes_in_group
+            .values()
+            .flat_map(|nodes| nodes.iter())
             .collect();
 
         self.graph
@@ -1268,11 +1188,10 @@ impl GraphRecord {
 
     pub fn ungrouped_edges(&self) -> impl Iterator<Item = &EdgeIndex> {
         let edges_in_groups: GrHashSet<_> = self
-            .groups()
-            .flat_map(|group| {
-                #[expect(clippy::missing_panics_doc, reason = "infallible")]
-                self.edges_in_group(group).expect("Group must exist")
-            })
+            .group_mapping
+            .edges_in_group
+            .values()
+            .flat_map(|edges| edges.iter())
             .collect();
 
         self.graph
@@ -1336,31 +1255,31 @@ impl GraphRecord {
         self.group_mapping.contains_group(group)
     }
 
-    pub fn neighbors_outgoing(
+    pub fn outgoing_neighbors(
         &self,
         node_index: &NodeIndex,
     ) -> GraphRecordResult<impl Iterator<Item = &NodeIndex> + use<'_>> {
         self.graph
-            .neighbors_outgoing(node_index)
+            .outgoing_neighbors(node_index)
             .map_err(GraphRecordError::from)
     }
 
     // TODO: Add tests
-    pub fn neighbors_incoming(
+    pub fn incoming_neighbors(
         &self,
         node_index: &NodeIndex,
     ) -> GraphRecordResult<impl Iterator<Item = &NodeIndex> + use<'_>> {
         self.graph
-            .neighbors_incoming(node_index)
+            .incoming_neighbors(node_index)
             .map_err(GraphRecordError::from)
     }
 
-    pub fn neighbors_undirected(
+    pub fn neighbors(
         &self,
         node_index: &NodeIndex,
     ) -> GraphRecordResult<impl Iterator<Item = &NodeIndex> + use<'_>> {
         self.graph
-            .neighbors_undirected(node_index)
+            .neighbors(node_index)
             .map_err(GraphRecordError::from)
     }
 
@@ -3632,7 +3551,7 @@ mod test {
     fn test_invalid_groups_of_node() {
         let graphrecord = create_graphrecord();
 
-        // Queyring the groups of a non-existing node should fail
+        // Querying the groups of a non-existing node should fail
         assert!(
             graphrecord
                 .groups_of_node(&"50".into())
@@ -3655,7 +3574,7 @@ mod test {
     fn test_invalid_groups_of_edge() {
         let graphrecord = create_graphrecord();
 
-        // Queyring the groups of a non-existing edge should fail
+        // Querying the groups of a non-existing edge should fail
         assert!(
             graphrecord
                 .groups_of_edge(&50)
@@ -3731,44 +3650,44 @@ mod test {
     }
 
     #[test]
-    fn test_neighbors() {
+    fn test_outgoing_neighbors() {
         let graphrecord = create_graphrecord();
 
-        let neighbors = graphrecord.neighbors_outgoing(&"0".into()).unwrap();
+        let neighbors = graphrecord.outgoing_neighbors(&"0".into()).unwrap();
 
         assert_eq!(2, neighbors.count());
     }
 
     #[test]
-    fn test_invalid_neighbors() {
+    fn test_invalid_outgoing_neighbors() {
         let graphrecord = GraphRecord::new();
 
-        // Querying neighbors of a non-existing node sohuld fail
+        // Querying neighbors of a non-existing node should fail
         assert!(
             graphrecord
-                .neighbors_outgoing(&"0".into())
+                .outgoing_neighbors(&"0".into())
                 .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
         );
     }
 
     #[test]
-    fn test_neighbors_undirected() {
+    fn test_neighbors() {
         let graphrecord = create_graphrecord();
 
-        let neighbors = graphrecord.neighbors_outgoing(&"2".into()).unwrap();
+        let neighbors = graphrecord.outgoing_neighbors(&"2".into()).unwrap();
         assert_eq!(0, neighbors.count());
 
-        let neighbors = graphrecord.neighbors_undirected(&"2".into()).unwrap();
+        let neighbors = graphrecord.neighbors(&"2".into()).unwrap();
         assert_eq!(2, neighbors.count());
     }
 
     #[test]
-    fn test_invalid_neighbors_undirected() {
+    fn test_invalid_neighbors() {
         let graphrecord = create_graphrecord();
 
         assert!(
             graphrecord
-                .neighbors_undirected(&"50".into())
+                .neighbors(&"50".into())
                 .is_err_and(|e| matches!(e, GraphRecordError::IndexError(_)))
         );
     }

@@ -1738,11 +1738,11 @@ class GraphRecord:
         node_indices = node if isinstance(node, list) else [node]
 
         if directed == EdgesDirection.OUTGOING:
-            neighbors = self._graphrecord.neighbors_outgoing(node_indices)
+            neighbors = self._graphrecord.outgoing_neighbors(node_indices)
         elif directed == EdgesDirection.INCOMING:
-            neighbors = self._graphrecord.neighbors_incoming(node_indices)
+            neighbors = self._graphrecord.incoming_neighbors(node_indices)
         else:
-            neighbors = self._graphrecord.neighbors_undirected(node_indices)
+            neighbors = self._graphrecord.neighbors(node_indices)
 
         if isinstance(node, list):
             return neighbors
