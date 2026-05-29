@@ -857,6 +857,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "graphrecords-query"
+version = "0.4.1"
+dependencies = [
+ "graphrecords-core",
+ "graphrecords-utils",
+]
+
+[[package]]
 name = "graphrecords-utils"
 version = "0.4.1"
 dependencies = [
