@@ -1,19 +1,17 @@
 pub mod bool;
 pub mod edges;
-pub mod group_by;
+pub mod group;
 pub mod nodes;
-mod operand_traits;
 pub mod selection;
+mod traits;
 pub mod values;
 
+pub use edges::EdgeOperand;
 use graphrecords_core::GraphRecord;
 pub use nodes::NodeOperand;
-pub use operand_traits::*;
+pub use traits::*;
 
-use crate::{
-    edges::EdgeOperand,
-    selection::{ReturnOperand, Selection},
-};
+use crate::selection::{ReturnOperand, Selection};
 
 pub type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
 

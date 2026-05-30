@@ -1,8 +1,6 @@
-mod context;
+mod in_group;
 
 use crate::{BoxedIterator, RootOperand};
-pub(crate) use context::BoolMaskContext;
-pub use context::BoolMaskOperandContext;
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use std::sync::Arc;
 
@@ -29,5 +27,30 @@ impl<O: RootOperand> BoolMaskOperand<O> {
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<BoxedIterator<'a, (<O as RootOperand>::Index<'a>, bool)>> {
         self.context.evaluate(graphrecord)
+    }
+}
+
+pub trait BoolMaskOperandContext: Send + Sync {
+    type Operand: RootOperand;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+    ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>;
+}
+
+pub(crate) enum BoolMaskContext<O: RootOperand> {
+    InGroup(Box<dyn BoolMaskOperandContext<Operand = O>>),
+    Custom(Box<dyn BoolMaskOperandContext<Operand = O>>),
+}
+
+impl<O: RootOperand> BoolMaskContext<O> {
+    pub(crate) fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+    ) -> GraphRecordResult<BoxedIterator<'a, (<O as RootOperand>::Index<'a>, bool)>> {
+        match self {
+            Self::InGroup(context) | Self::Custom(context) => context.evaluate(graphrecord),
+        }
     }
 }

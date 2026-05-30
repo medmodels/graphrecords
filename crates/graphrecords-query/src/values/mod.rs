@@ -1,9 +1,6 @@
-mod context;
-mod group_by;
+mod attribute;
 
 use crate::BoxedIterator;
-pub(crate) use context::MultipleValuesContext;
-pub use context::MultipleValuesOperandContext;
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::GraphRecordValue};
 use std::sync::Arc;
 
@@ -32,5 +29,30 @@ impl<I> MultipleValuesOperand<I> {
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<BoxedIterator<'a, (&'a I, GraphRecordValue)>> {
         self.context.evaluate(graphrecord)
+    }
+}
+
+pub trait MultipleValuesOperandContext: Send + Sync {
+    type Index;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+    ) -> GraphRecordResult<BoxedIterator<'a, (&'a Self::Index, GraphRecordValue)>>;
+}
+
+pub(crate) enum MultipleValuesContext<I> {
+    RootOperand(Box<dyn MultipleValuesOperandContext<Index = I>>),
+    Custom(Box<dyn MultipleValuesOperandContext<Index = I>>),
+}
+
+impl<I> MultipleValuesContext<I> {
+    pub(crate) fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+    ) -> GraphRecordResult<BoxedIterator<'a, (&'a I, GraphRecordValue)>> {
+        match self {
+            Self::RootOperand(context) | Self::Custom(context) => context.evaluate(graphrecord),
+        }
     }
 }

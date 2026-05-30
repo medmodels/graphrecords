@@ -2,7 +2,7 @@ use crate::{
     BoxedIterator, NodeOperand,
     bool::BoolMaskOperand,
     edges::{AllEdges, EdgeOperand},
-    group_by::{
+    group::{
         Discriminator, GroupOperand, GroupableOperand, GroupedIterator, GroupedOperandContext,
     },
     nodes::AllNodes,

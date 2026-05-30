@@ -1,4 +1,5 @@
 mod discriminator;
+mod group_by;
 
 use crate::BoxedIterator;
 pub use discriminator::{AttributeDiscriminator, Discriminator};
