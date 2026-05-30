@@ -13,6 +13,13 @@ pub struct NodeOperand {
 
 impl RootOperand for NodeOperand {
     type Index<'a> = &'a NodeIndex;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index<'a>>> {
+        self.context.evaluate(graphrecord)
+    }
 }
 
 impl NodeOperand {
@@ -26,13 +33,6 @@ impl NodeOperand {
         Self {
             context: Arc::new(NodeContext::Custom(Box::new(context))),
         }
-    }
-
-    pub fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a NodeIndex>> {
-        self.context.evaluate(graphrecord)
     }
 }
 
@@ -50,7 +50,7 @@ pub(crate) enum NodeContext {
 }
 
 impl NodeContext {
-    pub(crate) fn evaluate<'a>(
+    fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<BoxedIterator<'a, &'a NodeIndex>> {

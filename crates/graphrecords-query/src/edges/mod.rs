@@ -1,6 +1,7 @@
+mod filter;
 mod scan;
 
-use crate::{BoxedIterator, RootOperand};
+use crate::{BoxedIterator, RootOperand, edges::filter::Where};
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::EdgeIndex};
 pub(crate) use scan::AllEdges;
 use std::sync::Arc;
@@ -12,6 +13,13 @@ pub struct EdgeOperand {
 
 impl RootOperand for EdgeOperand {
     type Index<'a> = &'a EdgeIndex;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index<'a>>> {
+        self.context.evaluate(graphrecord)
+    }
 }
 
 impl EdgeOperand {
@@ -26,34 +34,29 @@ impl EdgeOperand {
             context: Arc::new(EdgeContext::Custom(Box::new(context))),
         }
     }
-
-    pub(crate) fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a EdgeIndex>> {
-        self.context.evaluate(graphrecord)
-    }
 }
 
 pub trait EdgeOperandContext: Send + Sync {
     fn evaluate<'a>(
-        &self,
+        &'a self,
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<BoxedIterator<'a, &'a EdgeIndex>>;
 }
 
 pub(crate) enum EdgeContext {
     AllEdges(AllEdges),
+    Where(Where),
     Custom(Box<dyn EdgeOperandContext>),
 }
 
 impl EdgeContext {
-    pub(crate) fn evaluate<'a>(
+    fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<BoxedIterator<'a, &'a EdgeIndex>> {
         match self {
             Self::AllEdges(context) => context.evaluate(graphrecord),
+            Self::Where(context) => context.evaluate(graphrecord),
             Self::Custom(context) => context.evaluate(graphrecord),
         }
     }

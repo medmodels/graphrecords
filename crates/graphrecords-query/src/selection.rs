@@ -11,7 +11,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     errors::GraphRecordResult,
-    graphrecord::{GraphRecordValue, NodeIndex},
+    graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex},
 };
 use std::sync::Arc;
 
@@ -90,7 +90,9 @@ pub trait ReturnOperand<'a> {
 
 impl_iterator_return_operand!(
     MultipleValuesOperand<NodeIndex> => (&'a NodeIndex, GraphRecordValue),
+    MultipleValuesOperand<EdgeIndex> => (&'a EdgeIndex, GraphRecordValue),
     BoolMaskOperand<NodeOperand>     => (&'a NodeIndex, bool),
+    BoolMaskOperand<EdgeOperand>     => (&'a EdgeIndex, bool),
 );
 
 impl_return_operand_for_tuples!(R1);

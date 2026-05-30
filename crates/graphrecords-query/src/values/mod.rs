@@ -10,7 +10,7 @@ pub struct MultipleValuesOperand<I> {
 }
 
 impl<I> MultipleValuesOperand<I> {
-    pub(crate) fn new<C: Into<MultipleValuesContext<I>>>(context: C) -> Self {
+    fn new<C: Into<MultipleValuesContext<I>>>(context: C) -> Self {
         Self {
             context: Arc::new(context.into()),
         }
@@ -41,13 +41,13 @@ pub trait MultipleValuesOperandContext: Send + Sync {
     ) -> GraphRecordResult<BoxedIterator<'a, (&'a Self::Index, GraphRecordValue)>>;
 }
 
-pub(crate) enum MultipleValuesContext<I> {
+enum MultipleValuesContext<I> {
     RootOperand(Box<dyn MultipleValuesOperandContext<Index = I>>),
     Custom(Box<dyn MultipleValuesOperandContext<Index = I>>),
 }
 
 impl<I> MultipleValuesContext<I> {
-    pub(crate) fn evaluate<'a>(
+    fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<BoxedIterator<'a, (&'a I, GraphRecordValue)>> {

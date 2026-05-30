@@ -2,21 +2,29 @@ pub mod bool;
 pub mod edges;
 pub mod group;
 pub mod nodes;
+pub mod prelude;
 pub mod selection;
 mod traits;
 pub mod values;
 
-pub use edges::EdgeOperand;
-use graphrecords_core::GraphRecord;
-pub use nodes::NodeOperand;
-pub use traits::*;
-
 use crate::selection::{ReturnOperand, Selection};
+pub use edges::EdgeOperand;
+use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
+pub use nodes::NodeOperand;
+use std::hash::Hash;
+pub use traits::*;
 
 pub type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
 
-pub trait RootOperand {
-    type Index<'a>;
+pub trait RootOperand: Send + Sync {
+    type Index<'a>: Eq + Hash
+    where
+        Self: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index<'a>>>;
 }
 
 pub trait QueryNodes {
@@ -55,7 +63,7 @@ impl QueryEdges for GraphRecord {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Attribute, InGroup, QueryNodes, Where};
+    use crate::{Attribute, InGroup, Not, QueryNodes, Where};
     use graphrecords_core::GraphRecord;
     use std::collections::HashMap;
 
@@ -87,11 +95,11 @@ mod tests {
             .unwrap();
 
         let selection = QueryNodes::query_nodes(&graphrecord, |node| {
-            let mask = node.in_group("lorem".into());
+            let mask = node.in_group("lorem".into()).not();
 
             let nodes = node.r#where(mask);
 
-            nodes.attribute("lorem".into())
+            nodes.attribute("amet".into())
         });
 
         println!("{:?}", selection.evaluate().unwrap().collect::<Vec<_>>());
