@@ -12,9 +12,9 @@ pub trait InGroup {
     fn in_group(&self, group: Group) -> Self::ReturnOperand;
 }
 
-pub trait Where {
+pub trait Filter {
     type MaskOperand;
     type ReturnOperand;
 
-    fn r#where(&self, predicate: Self::MaskOperand) -> Self::ReturnOperand;
+    fn filter(&self, mask: Self::MaskOperand) -> Self::ReturnOperand;
 }

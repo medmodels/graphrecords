@@ -6,11 +6,11 @@ use crate::{
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::NodeIndex};
 
-pub struct Where {
+pub struct Filter {
     parent: BoolMaskOperand<NodeOperand>,
 }
 
-impl NodeOperandContext for Where {
+impl NodeOperandContext for Filter {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
@@ -25,11 +25,11 @@ impl NodeOperandContext for Where {
     }
 }
 
-impl traits::Where for NodeOperand {
+impl traits::Filter for NodeOperand {
     type MaskOperand = BoolMaskOperand<Self>;
     type ReturnOperand = Self;
 
-    fn r#where(&self, predicate: Self::MaskOperand) -> Self::ReturnOperand {
-        Self::new(Where { parent: predicate })
+    fn filter(&self, mask: Self::MaskOperand) -> Self::ReturnOperand {
+        Self::new(Filter { parent: mask })
     }
 }

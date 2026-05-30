@@ -1,11 +1,11 @@
 use crate::{BoxedIterator, EdgeOperand, bool::BoolMaskOperand, edges::EdgeOperandContext, traits};
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::EdgeIndex};
 
-pub struct Where {
+pub struct Filter {
     parent: BoolMaskOperand<EdgeOperand>,
 }
 
-impl EdgeOperandContext for Where {
+impl EdgeOperandContext for Filter {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
@@ -20,11 +20,11 @@ impl EdgeOperandContext for Where {
     }
 }
 
-impl traits::Where for EdgeOperand {
+impl traits::Filter for EdgeOperand {
     type MaskOperand = BoolMaskOperand<Self>;
     type ReturnOperand = Self;
 
-    fn r#where(&self, predicate: Self::MaskOperand) -> Self::ReturnOperand {
-        Self::new(Where { parent: predicate })
+    fn filter(&self, mask: Self::MaskOperand) -> Self::ReturnOperand {
+        Self::new(Filter { parent: mask })
     }
 }

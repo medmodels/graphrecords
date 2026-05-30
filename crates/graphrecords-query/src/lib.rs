@@ -63,7 +63,7 @@ impl QueryEdges for GraphRecord {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Attribute, InGroup, Not, QueryNodes, Where};
+    use crate::{Attribute, Filter, InGroup, Not, QueryNodes};
     use graphrecords_core::GraphRecord;
     use std::collections::HashMap;
 
@@ -97,7 +97,7 @@ mod tests {
         let selection = QueryNodes::query_nodes(&graphrecord, |node| {
             let mask = node.in_group("lorem".into()).not();
 
-            let nodes = node.r#where(mask);
+            let nodes = node.filter(mask);
 
             nodes.attribute("amet".into())
         });
