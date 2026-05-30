@@ -1,20 +1,13 @@
-use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
-use graphrecords_utils::aliases::GrHashMap;
-
 use crate::{
     And, BoxedIterator, Not, Or, RootOperand,
-    bool::{BoolMaskContext, BoolMaskOperand, BoolMaskOperandContext},
+    bool::{BoolMaskOperand, BoolMaskOperandContext},
 };
+use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
+use graphrecords_utils::aliases::GrHashMap;
 
 pub(super) struct AndContext<O: RootOperand> {
     left: BoolMaskOperand<O>,
     right: BoolMaskOperand<O>,
-}
-
-impl<O: RootOperand> From<AndContext<O>> for BoolMaskContext<O> {
-    fn from(context: AndContext<O>) -> Self {
-        Self::And(context)
-    }
 }
 
 impl<O: RootOperand> BoolMaskOperandContext for AndContext<O> {
@@ -36,7 +29,7 @@ impl<O: RootOperand> BoolMaskOperandContext for AndContext<O> {
     }
 }
 
-impl<O: RootOperand> And for BoolMaskOperand<O> {
+impl<O: RootOperand + 'static> And for BoolMaskOperand<O> {
     type OtherOperand = Self;
     type ReturnOperand = Self;
 
@@ -51,12 +44,6 @@ impl<O: RootOperand> And for BoolMaskOperand<O> {
 pub(super) struct OrContext<O: RootOperand> {
     left: BoolMaskOperand<O>,
     right: BoolMaskOperand<O>,
-}
-
-impl<O: RootOperand> From<OrContext<O>> for BoolMaskContext<O> {
-    fn from(context: OrContext<O>) -> Self {
-        Self::Or(context)
-    }
 }
 
 impl<O: RootOperand> BoolMaskOperandContext for OrContext<O> {
@@ -78,7 +65,7 @@ impl<O: RootOperand> BoolMaskOperandContext for OrContext<O> {
     }
 }
 
-impl<O: RootOperand> Or for BoolMaskOperand<O> {
+impl<O: RootOperand + 'static> Or for BoolMaskOperand<O> {
     type OtherOperand = Self;
     type ReturnOperand = Self;
 
@@ -92,12 +79,6 @@ impl<O: RootOperand> Or for BoolMaskOperand<O> {
 
 pub(super) struct NotContext<O: RootOperand> {
     parent: BoolMaskOperand<O>,
-}
-
-impl<O: RootOperand> From<NotContext<O>> for BoolMaskContext<O> {
-    fn from(context: NotContext<O>) -> Self {
-        Self::Not(context)
-    }
 }
 
 impl<O: RootOperand> BoolMaskOperandContext for NotContext<O> {
@@ -116,7 +97,7 @@ impl<O: RootOperand> BoolMaskOperandContext for NotContext<O> {
     }
 }
 
-impl<O: RootOperand> Not for BoolMaskOperand<O> {
+impl<O: RootOperand + 'static> Not for BoolMaskOperand<O> {
     type ReturnOperand = Self;
 
     fn not(&self) -> Self::ReturnOperand {

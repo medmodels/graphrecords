@@ -1,20 +1,8 @@
+use crate::{BoxedIterator, EdgeOperand, bool::BoolMaskOperand, edges::EdgeOperandContext, traits};
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::EdgeIndex};
-
-use crate::{
-    BoxedIterator, EdgeOperand,
-    bool::BoolMaskOperand,
-    edges::{EdgeContext, EdgeOperandContext},
-    traits,
-};
 
 pub struct Where {
     parent: BoolMaskOperand<EdgeOperand>,
-}
-
-impl From<Where> for EdgeContext {
-    fn from(context: Where) -> Self {
-        Self::Where(context)
-    }
 }
 
 impl EdgeOperandContext for Where {

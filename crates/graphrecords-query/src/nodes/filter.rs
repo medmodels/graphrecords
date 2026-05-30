@@ -1,19 +1,13 @@
 use crate::{
     BoxedIterator,
     bool::BoolMaskOperand,
-    nodes::{NodeContext, NodeOperand, NodeOperandContext},
+    nodes::{NodeOperand, NodeOperandContext},
     traits,
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::NodeIndex};
 
 pub struct Where {
     parent: BoolMaskOperand<NodeOperand>,
-}
-
-impl From<Where> for NodeContext {
-    fn from(context: Where) -> Self {
-        Self::Where(context)
-    }
 }
 
 impl NodeOperandContext for Where {

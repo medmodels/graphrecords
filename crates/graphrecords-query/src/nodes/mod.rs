@@ -1,4 +1,6 @@
+mod attribute;
 mod filter;
+mod in_group;
 mod scan;
 
 use crate::{BoxedIterator, RootOperand};
@@ -6,9 +8,16 @@ use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::Nod
 pub(crate) use scan::AllNodes;
 use std::sync::Arc;
 
+pub trait NodeOperandContext: Send + Sync {
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+    ) -> GraphRecordResult<BoxedIterator<'a, &'a NodeIndex>>;
+}
+
 #[derive(Clone)]
 pub struct NodeOperand {
-    context: Arc<NodeContext>,
+    context: Arc<dyn NodeOperandContext>,
 }
 
 impl RootOperand for NodeOperand {
@@ -23,41 +32,9 @@ impl RootOperand for NodeOperand {
 }
 
 impl NodeOperand {
-    pub(crate) fn new<C: Into<NodeContext>>(context: C) -> Self {
+    pub fn new<C: NodeOperandContext + 'static>(context: C) -> Self {
         Self {
-            context: Arc::new(context.into()),
-        }
-    }
-
-    pub fn custom_context<C: NodeOperandContext + 'static>(context: C) -> Self {
-        Self {
-            context: Arc::new(NodeContext::Custom(Box::new(context))),
-        }
-    }
-}
-
-pub trait NodeOperandContext: Send + Sync {
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a NodeIndex>>;
-}
-
-pub(crate) enum NodeContext {
-    AllNodes(AllNodes),
-    Where(filter::Where),
-    Custom(Box<dyn NodeOperandContext>),
-}
-
-impl NodeContext {
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a NodeIndex>> {
-        match self {
-            Self::AllNodes(context) => context.evaluate(graphrecord),
-            Self::Where(context) => context.evaluate(graphrecord),
-            Self::Custom(context) => context.evaluate(graphrecord),
+            context: Arc::new(context),
         }
     }
 }
