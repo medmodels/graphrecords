@@ -16,7 +16,7 @@ pub use traits::*;
 
 pub type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
 
-pub trait RootOperand: Send + Sync {
+pub trait RootOperand: 'static + Send + Sync {
     type Index<'a>: Eq + Hash
     where
         Self: 'a;
@@ -63,7 +63,7 @@ impl QueryEdges for GraphRecord {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Attribute, Filter, InGroup, Not, QueryNodes};
+    use crate::{Attribute, Filter, InGroup, QueryNodes};
     use graphrecords_core::GraphRecord;
     use std::collections::HashMap;
 
@@ -93,11 +93,15 @@ mod tests {
         graphrecord
             .add_node_to_group("lorem".into(), "0".into())
             .unwrap();
+        graphrecord
+            .add_node_to_group("lorem".into(), "1".into())
+            .unwrap();
+        graphrecord
+            .add_node_to_group("ipsum".into(), "0".into())
+            .unwrap();
 
         let selection = QueryNodes::query_nodes(&graphrecord, |node| {
-            let mask = node.in_group("lorem".into()).not();
-
-            let nodes = node.filter(mask);
+            let nodes = node.filter(node.in_group("lorem".into()) & !node.in_group("ipsum".into()));
 
             nodes.attribute("amet".into())
         });

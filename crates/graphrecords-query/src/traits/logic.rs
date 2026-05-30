@@ -12,6 +12,13 @@ pub trait Or {
     fn or(&self, other: Self::OtherOperand) -> Self::ReturnOperand;
 }
 
+pub trait Xor {
+    type OtherOperand;
+    type ReturnOperand;
+
+    fn xor(&self, other: Self::OtherOperand) -> Self::ReturnOperand;
+}
+
 pub trait Not {
     type ReturnOperand;
 

@@ -1,23 +1,25 @@
-use crate::BoxedIterator;
+use crate::{BoxedIterator, RootOperand};
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::GraphRecordValue};
 use std::sync::Arc;
 
-pub trait MultipleValuesOperandContext: Send + Sync {
-    type Index;
+pub trait MultipleValuesOperandContext: 'static + Send + Sync {
+    type Operand: RootOperand;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a Self::Index, GraphRecordValue)>>;
+    ) -> GraphRecordResult<
+        BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, GraphRecordValue)>,
+    >;
 }
 
 #[derive(Clone)]
-pub struct MultipleValuesOperand<I> {
-    context: Arc<dyn MultipleValuesOperandContext<Index = I>>,
+pub struct MultipleValuesOperand<O: RootOperand> {
+    context: Arc<dyn MultipleValuesOperandContext<Operand = O>>,
 }
 
-impl<I> MultipleValuesOperand<I> {
-    pub fn new<C: MultipleValuesOperandContext<Index = I> + 'static>(context: C) -> Self {
+impl<O: RootOperand> MultipleValuesOperand<O> {
+    pub fn new<C: MultipleValuesOperandContext<Operand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
@@ -26,7 +28,8 @@ impl<I> MultipleValuesOperand<I> {
     pub fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a I, GraphRecordValue)>> {
+    ) -> GraphRecordResult<BoxedIterator<'a, (<O as RootOperand>::Index<'a>, GraphRecordValue)>>
+    {
         self.context.evaluate(graphrecord)
     }
 }

@@ -8,11 +8,13 @@ use std::sync::Arc;
 
 pub type GroupedIterator<'a, K, T> = BoxedIterator<'a, (K, T)>;
 
-pub trait GroupableOperand {
+pub trait GroupableOperand: 'static + Send + Sync {
     type Output<'a>;
 }
 
-pub trait GroupedOperandContext<O: GroupableOperand, D: Discriminator> {
+pub trait GroupedOperandContext<O: GroupableOperand, D: Discriminator>:
+    'static + Send + Sync
+{
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
@@ -25,7 +27,7 @@ pub struct GroupOperand<O, D: Discriminator> {
 }
 
 impl<O: GroupableOperand, D: Discriminator> GroupOperand<O, D> {
-    pub fn new<C: GroupedOperandContext<O, D> + 'static>(context: C) -> Self {
+    pub fn new<C: GroupedOperandContext<O, D>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }

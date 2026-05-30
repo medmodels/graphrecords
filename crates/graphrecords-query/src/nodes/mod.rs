@@ -8,7 +8,7 @@ use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::Nod
 pub(crate) use scan::AllNodes;
 use std::sync::Arc;
 
-pub trait NodeOperandContext: Send + Sync {
+pub trait NodeOperandContext: 'static + Send + Sync {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
@@ -32,7 +32,7 @@ impl RootOperand for NodeOperand {
 }
 
 impl NodeOperand {
-    pub fn new<C: NodeOperandContext + 'static>(context: C) -> Self {
+    pub fn new<C: NodeOperandContext>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }

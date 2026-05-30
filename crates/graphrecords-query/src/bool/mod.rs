@@ -4,7 +4,7 @@ use crate::{BoxedIterator, RootOperand};
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use std::sync::Arc;
 
-pub trait BoolMaskOperandContext: Send + Sync {
+pub trait BoolMaskOperandContext: 'static + Send + Sync {
     type Operand: RootOperand;
 
     fn evaluate<'a>(
@@ -26,7 +26,7 @@ impl<O: RootOperand> Clone for BoolMaskOperand<O> {
 }
 
 impl<O: RootOperand> BoolMaskOperand<O> {
-    pub fn new<C: BoolMaskOperandContext<Operand = O> + 'static>(context: C) -> Self {
+    pub fn new<C: BoolMaskOperandContext<Operand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }

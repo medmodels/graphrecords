@@ -7,7 +7,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     errors::GraphRecordResult,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue},
+    graphrecord::{GraphRecordAttribute, GraphRecordValue},
 };
 
 pub struct EdgeAttributeContext {
@@ -16,12 +16,14 @@ pub struct EdgeAttributeContext {
 }
 
 impl MultipleValuesOperandContext for EdgeAttributeContext {
-    type Index = EdgeIndex;
+    type Operand = EdgeOperand;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a Self::Index, GraphRecordValue)>> {
+    ) -> GraphRecordResult<
+        BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, GraphRecordValue)>,
+    > {
         let edge_indices = self.parent.evaluate(graphrecord)?;
 
         Ok(Box::new(edge_indices.filter_map(|edge_index| {
@@ -37,7 +39,7 @@ impl MultipleValuesOperandContext for EdgeAttributeContext {
 }
 
 impl Attribute for EdgeOperand {
-    type ReturnOperand = MultipleValuesOperand<EdgeIndex>;
+    type ReturnOperand = MultipleValuesOperand<Self>;
 
     fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
         MultipleValuesOperand::new(EdgeAttributeContext {

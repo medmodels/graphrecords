@@ -7,7 +7,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     errors::GraphRecordResult,
-    graphrecord::{GraphRecordAttribute, GraphRecordValue, NodeIndex},
+    graphrecord::{GraphRecordAttribute, GraphRecordValue},
 };
 
 pub struct NodeAttributeContext {
@@ -16,12 +16,14 @@ pub struct NodeAttributeContext {
 }
 
 impl MultipleValuesOperandContext for NodeAttributeContext {
-    type Index = NodeIndex;
+    type Operand = NodeOperand;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-    ) -> GraphRecordResult<BoxedIterator<'a, (&'a Self::Index, GraphRecordValue)>> {
+    ) -> GraphRecordResult<
+        BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, GraphRecordValue)>,
+    > {
         let node_indices = self.parent.evaluate(graphrecord)?;
 
         Ok(Box::new(node_indices.filter_map(|node_index| {
@@ -37,7 +39,7 @@ impl MultipleValuesOperandContext for NodeAttributeContext {
 }
 
 impl Attribute for NodeOperand {
-    type ReturnOperand = MultipleValuesOperand<NodeIndex>;
+    type ReturnOperand = MultipleValuesOperand<Self>;
 
     fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
         MultipleValuesOperand::new(NodeAttributeContext {

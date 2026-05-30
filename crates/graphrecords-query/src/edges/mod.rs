@@ -8,7 +8,7 @@ use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::Edg
 pub(crate) use scan::AllEdges;
 use std::sync::Arc;
 
-pub trait EdgeOperandContext: Send + Sync {
+pub trait EdgeOperandContext: 'static + Send + Sync {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
@@ -32,7 +32,7 @@ impl RootOperand for EdgeOperand {
 }
 
 impl EdgeOperand {
-    pub fn new<C: EdgeOperandContext + 'static>(context: C) -> Self {
+    pub fn new<C: EdgeOperandContext>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }

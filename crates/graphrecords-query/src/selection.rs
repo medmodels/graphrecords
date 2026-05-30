@@ -89,10 +89,10 @@ pub trait ReturnOperand<'a> {
 }
 
 impl_iterator_return_operand!(
-    MultipleValuesOperand<NodeIndex> => (&'a NodeIndex, GraphRecordValue),
-    MultipleValuesOperand<EdgeIndex> => (&'a EdgeIndex, GraphRecordValue),
-    BoolMaskOperand<NodeOperand>     => (&'a NodeIndex, bool),
-    BoolMaskOperand<EdgeOperand>     => (&'a EdgeIndex, bool),
+    MultipleValuesOperand<NodeOperand> => (&'a NodeIndex, GraphRecordValue),
+    MultipleValuesOperand<EdgeOperand> => (&'a EdgeIndex, GraphRecordValue),
+    BoolMaskOperand<NodeOperand>       => (&'a NodeIndex, bool),
+    BoolMaskOperand<EdgeOperand>       => (&'a EdgeIndex, bool),
 );
 
 impl_return_operand_for_tuples!(R1);
