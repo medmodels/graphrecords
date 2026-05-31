@@ -1,8 +1,13 @@
-use crate::{BoxedIterator, EdgeOperand, bool::BoolMaskOperand, edges::EdgeOperandContext, traits};
+use crate::{
+    BoxedIterator, EdgeOperand, RootOperand, bool::BoolMaskOperand, edges::EdgeOperandContext,
+    traits,
+};
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::EdgeIndex};
+use graphrecords_utils::aliases::GrHashMap;
 
 pub struct Filter {
-    parent: BoolMaskOperand<EdgeOperand>,
+    operand: EdgeOperand,
+    mask: BoolMaskOperand<EdgeOperand>,
 }
 
 impl EdgeOperandContext for Filter {
@@ -10,13 +15,13 @@ impl EdgeOperandContext for Filter {
         &'a self,
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<BoxedIterator<'a, &'a EdgeIndex>> {
-        let edge_indices_with_mask = self.parent.evaluate(graphrecord)?;
+        let edge_indices = self.operand.evaluate(graphrecord)?;
 
-        Ok(Box::new(edge_indices_with_mask.filter_map(
-            |(edge_index, mask)| {
-                if mask { Some(edge_index) } else { None }
-            },
-        )))
+        let mask_by_index: GrHashMap<_, _> = self.mask.evaluate(graphrecord)?.collect();
+
+        Ok(Box::new(edge_indices.filter(move |edge_index| {
+            mask_by_index.get(edge_index).copied().unwrap_or(false)
+        })))
     }
 }
 
@@ -25,6 +30,9 @@ impl traits::Filter for EdgeOperand {
     type ReturnOperand = Self;
 
     fn filter(&self, mask: Self::MaskOperand) -> Self::ReturnOperand {
-        Self::new(Filter { parent: mask })
+        Self::new(Filter {
+            operand: self.clone(),
+            mask,
+        })
     }
 }

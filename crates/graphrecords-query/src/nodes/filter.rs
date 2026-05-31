@@ -1,13 +1,15 @@
 use crate::{
-    BoxedIterator,
+    BoxedIterator, RootOperand,
     bool::BoolMaskOperand,
     nodes::{NodeOperand, NodeOperandContext},
     traits,
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::NodeIndex};
+use graphrecords_utils::aliases::GrHashMap;
 
 pub struct Filter {
-    parent: BoolMaskOperand<NodeOperand>,
+    operand: NodeOperand,
+    mask: BoolMaskOperand<NodeOperand>,
 }
 
 impl NodeOperandContext for Filter {
@@ -15,13 +17,13 @@ impl NodeOperandContext for Filter {
         &'a self,
         graphrecord: &'a GraphRecord,
     ) -> GraphRecordResult<BoxedIterator<'a, &'a NodeIndex>> {
-        let node_indices_with_mask = self.parent.evaluate(graphrecord)?;
+        let node_indices = self.operand.evaluate(graphrecord)?;
 
-        Ok(Box::new(node_indices_with_mask.filter_map(
-            |(node_index, mask)| {
-                if mask { Some(node_index) } else { None }
-            },
-        )))
+        let mask_by_index: GrHashMap<_, _> = self.mask.evaluate(graphrecord)?.collect();
+
+        Ok(Box::new(node_indices.filter(move |node_index| {
+            mask_by_index.get(node_index).copied().unwrap_or(false)
+        })))
     }
 }
 
@@ -30,6 +32,9 @@ impl traits::Filter for NodeOperand {
     type ReturnOperand = Self;
 
     fn filter(&self, mask: Self::MaskOperand) -> Self::ReturnOperand {
-        Self::new(Filter { parent: mask })
+        Self::new(Filter {
+            operand: self.clone(),
+            mask,
+        })
     }
 }
