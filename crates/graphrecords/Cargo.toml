@@ -10,6 +10,7 @@ readme = "../../README.md"
 [dependencies]
 graphrecords-core = { workspace = true }
 graphrecords-utils = { workspace = true }
+graphrecords-query = { workspace = true }
 
 [features]
 plugins = ["graphrecords-core/plugins"]

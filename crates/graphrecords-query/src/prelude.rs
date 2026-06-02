@@ -1,3 +1,4 @@
-pub use crate::edges::EdgeOperand;
-pub use crate::nodes::NodeOperand;
-pub use crate::traits::*;
+pub use crate::{
+    Operand, QueryEdges, QueryNodes, edges::EdgeOperand, nodes::NodeOperand, optimizer::Optimizer,
+    selection::Selection, traits::*,
+};

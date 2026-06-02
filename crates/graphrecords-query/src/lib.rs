@@ -1,22 +1,29 @@
 pub mod bool;
 pub mod edges;
+pub mod execution;
 pub mod group;
 pub mod nodes;
+pub mod optimizer;
 pub mod prelude;
 pub mod selection;
 mod traits;
 pub mod values;
 
-use crate::selection::{ReturnOperand, Selection};
+use crate::{
+    execution::ExecutionContext,
+    optimizer::{OptimizeInputs, Optimizer, PlanExplanation, PlanNode},
+    selection::{ReturnOperand, Selection},
+};
 pub use edges::EdgeOperand;
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
+pub use graphrecords_macros::Operand;
 pub use nodes::NodeOperand;
-use std::hash::Hash;
+use std::{hash::Hash, sync::Arc};
 pub use traits::*;
 
 pub type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
 
-pub trait RootOperand: 'static + Send + Sync {
+pub trait RootOperand: 'static + Operand {
     type Index<'a>: Eq + Hash
     where
         Self: 'a;
@@ -24,11 +31,39 @@ pub trait RootOperand: 'static + Send + Sync {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<BoxedIterator<'a, Self::Index<'a>>>;
+}
+
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not an operand",
+    note = "implement `Operand` for `{Self}`, or derive it with `#[derive(Operand)]` and mark the context field `#[operand(context)]`"
+)]
+pub trait Operand {
+    type Context: PlanNode + OptimizeInputs<Output = Self> + ?Sized;
+
+    fn context(&self) -> &Self::Context;
+
+    fn as_plan_node(&self) -> &dyn PlanNode;
+
+    fn from_context(context: Arc<Self::Context>) -> Self;
+
+    fn downcast<T: PlanNode>(&self) -> Option<&T> {
+        self.as_plan_node().downcast::<T>()
+    }
+
+    fn explain(&self) -> PlanExplanation<'_> {
+        PlanExplanation::new(self.as_plan_node())
+    }
 }
 
 pub trait QueryNodes {
     fn query_nodes<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
+    where
+        Q: FnOnce(&NodeOperand) -> R,
+        R: ReturnOperand<'a>;
+
+    fn query_nodes_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
     where
         Q: FnOnce(&NodeOperand) -> R,
         R: ReturnOperand<'a>;
@@ -42,10 +77,23 @@ impl QueryNodes for GraphRecord {
     {
         Selection::new_node(self, query)
     }
+
+    fn query_nodes_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
+    where
+        Q: FnOnce(&NodeOperand) -> R,
+        R: ReturnOperand<'a>,
+    {
+        Selection::new_node_with(self, optimizer, query)
+    }
 }
 
 pub trait QueryEdges {
     fn query_edges<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
+    where
+        Q: FnOnce(&EdgeOperand) -> R,
+        R: ReturnOperand<'a>;
+
+    fn query_edges_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
     where
         Q: FnOnce(&EdgeOperand) -> R,
         R: ReturnOperand<'a>;
@@ -58,6 +106,14 @@ impl QueryEdges for GraphRecord {
         R: ReturnOperand<'a>,
     {
         Selection::new_edge(self, query)
+    }
+
+    fn query_edges_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
+    where
+        Q: FnOnce(&EdgeOperand) -> R,
+        R: ReturnOperand<'a>,
+    {
+        Selection::new_edge_with(self, optimizer, query)
     }
 }
 
@@ -105,6 +161,8 @@ mod tests {
 
             nodes.attribute("amet".into())
         });
+
+        println!("{}", selection.explain());
 
         println!("{:?}", selection.evaluate().unwrap().collect::<Vec<_>>());
     }

@@ -1,6 +1,7 @@
 use crate::{
     BoxedIterator, RootOperand,
     edges::EdgeOperand,
+    execution::ExecutionContext,
     group::{
         AttributeDiscriminator, Discriminator, GroupBy, GroupOperand, GroupableOperand,
         GroupedIterator, GroupedOperandContext,
@@ -18,7 +19,7 @@ impl GroupableOperand for NodeOperand {
 }
 
 struct NodeGroupByAttributeContext {
-    parent: NodeOperand,
+    input: NodeOperand,
     discriminator: AttributeDiscriminator,
 }
 
@@ -26,6 +27,7 @@ impl GroupedOperandContext<NodeOperand, AttributeDiscriminator> for NodeGroupByA
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<
         GroupedIterator<
             'a,
@@ -33,7 +35,7 @@ impl GroupedOperandContext<NodeOperand, AttributeDiscriminator> for NodeGroupByA
             BoxedIterator<'a, <NodeOperand as GroupableOperand>::Output<'a>>,
         >,
     > {
-        let node_indices = self.parent.evaluate(graphrecord)?;
+        let node_indices = self.input.evaluate(graphrecord, context)?;
         let attribute = &self.discriminator.attribute;
 
         let mut buckets: Vec<(Option<&'a GraphRecordValue>, Vec<&'a NodeIndex>)> = Vec::new();
@@ -44,7 +46,7 @@ impl GroupedOperandContext<NodeOperand, AttributeDiscriminator> for NodeGroupByA
                 .expect("Node must exist")
                 .get(attribute);
 
-            if let Some((_, bucket)) = buckets.iter_mut().find(|(k, _)| *k == value) {
+            if let Some((_, bucket)) = buckets.iter_mut().find(|(key, _)| *key == value) {
                 bucket.push(node_index);
             } else {
                 buckets.push((value, vec![node_index]));
@@ -63,7 +65,7 @@ impl GroupBy<AttributeDiscriminator> for NodeOperand {
         discriminator: AttributeDiscriminator,
     ) -> GroupOperand<Self, AttributeDiscriminator> {
         GroupOperand::new(NodeGroupByAttributeContext {
-            parent: self.clone(),
+            input: self.clone(),
             discriminator,
         })
     }
@@ -74,7 +76,7 @@ impl GroupableOperand for EdgeOperand {
 }
 
 struct EdgeGroupByAttributeContext {
-    parent: EdgeOperand,
+    input: EdgeOperand,
     discriminator: AttributeDiscriminator,
 }
 
@@ -82,6 +84,7 @@ impl GroupedOperandContext<EdgeOperand, AttributeDiscriminator> for EdgeGroupByA
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<
         GroupedIterator<
             'a,
@@ -89,7 +92,7 @@ impl GroupedOperandContext<EdgeOperand, AttributeDiscriminator> for EdgeGroupByA
             BoxedIterator<'a, <EdgeOperand as GroupableOperand>::Output<'a>>,
         >,
     > {
-        let edge_indices = self.parent.evaluate(graphrecord)?;
+        let edge_indices = self.input.evaluate(graphrecord, context)?;
         let attribute = &self.discriminator.attribute;
 
         let mut buckets: Vec<(Option<&'a GraphRecordValue>, Vec<&'a EdgeIndex>)> = Vec::new();
@@ -100,7 +103,7 @@ impl GroupedOperandContext<EdgeOperand, AttributeDiscriminator> for EdgeGroupByA
                 .expect("Edge must exist")
                 .get(attribute);
 
-            if let Some((_, bucket)) = buckets.iter_mut().find(|(k, _)| *k == value) {
+            if let Some((_, bucket)) = buckets.iter_mut().find(|(key, _)| *key == value) {
                 bucket.push(edge_index);
             } else {
                 buckets.push((value, vec![edge_index]));
@@ -119,7 +122,7 @@ impl GroupBy<AttributeDiscriminator> for EdgeOperand {
         discriminator: AttributeDiscriminator,
     ) -> GroupOperand<Self, AttributeDiscriminator> {
         GroupOperand::new(EdgeGroupByAttributeContext {
-            parent: self.clone(),
+            input: self.clone(),
             discriminator,
         })
     }

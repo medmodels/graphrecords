@@ -32,6 +32,7 @@ graphrecords-core = { version = "0.4.1", path = "crates/graphrecords-core" }
 graphrecords-utils = { version = "0.4.1", path = "crates/graphrecords-utils" }
 graphrecords-python = { version = "0.4.1", path = "crates/graphrecords-python" }
 graphrecords-query = { version = "0.4.1", path = "crates/graphrecords-query" }
+graphrecords-macros = { version = "0.4.1", path = "crates/graphrecords-macros" }
 py-graphrecords = { version = "0.4.1", path = "crates/py-graphrecords" }
 graphrecords-pyo3-interop = { version = "0.4.1", path = "crates/graphrecords-pyo3-interop" }
 

@@ -1,6 +1,6 @@
 use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue};
 
-pub trait Discriminator: 'static + Send + Sync {
+pub trait Discriminator: 'static {
     type Key<'a>;
 }
 

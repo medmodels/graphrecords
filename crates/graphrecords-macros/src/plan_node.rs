@@ -1,0 +1,272 @@
+use crate::crate_path;
+use proc_macro2::{Span, TokenStream};
+use quote::{format_ident, quote};
+use syn::{Data, DeriveInput, Error, Fields, Index, LitStr, Result, Type};
+
+pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
+    let name = &input.ident;
+
+    let (impl_generics, type_generics, where_clause) = input.generics.split_for_impl();
+
+    let mut label: Option<LitStr> = None;
+    let mut operand: Option<Type> = None;
+    let mut commutes_with_filter = false;
+    let mut allows_limit_pushdown = false;
+    let mut is_distinct = false;
+    let mut is_volatile = false;
+    let mut empty_rule: Option<TokenStream> = None;
+
+    let crate_path = crate_path(&input.attrs, "plan_node", |meta| {
+        if meta.path.is_ident("label") {
+            label = Some(meta.value()?.parse::<LitStr>()?);
+            Ok(true)
+        } else if meta.path.is_ident("operand") {
+            operand = Some(meta.value()?.parse::<LitStr>()?.parse()?);
+            Ok(true)
+        } else if meta.path.is_ident("commutes_with_filter") {
+            commutes_with_filter = true;
+            Ok(true)
+        } else if meta.path.is_ident("allows_limit_pushdown") {
+            allows_limit_pushdown = true;
+            Ok(true)
+        } else if meta.path.is_ident("distinct") {
+            is_distinct = true;
+            Ok(true)
+        } else if meta.path.is_ident("volatile") {
+            is_volatile = true;
+            Ok(true)
+        } else if meta.path.is_ident("empty") {
+            let rule: LitStr = meta.value()?.parse()?;
+
+            empty_rule = Some(match rule.value().as_str() {
+                "never" => quote!(Never),
+                "if_any" => quote!(IfAnyInput),
+                "if_all" => quote!(IfAllInputs),
+                other => {
+                    return Err(meta.error(format!(
+                        "unknown empty rule `{other}`, expected `never`, `if_any`, or `if_all`"
+                    )));
+                }
+            });
+
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    })?;
+
+    let empty_rule = empty_rule.unwrap_or_else(|| quote!(Never));
+
+    let name_label = label.unwrap_or_else(|| LitStr::new(&name.to_string(), name.span()));
+
+    let Data::Struct(data) = &input.data else {
+        return Err(Error::new_spanned(
+            input,
+            "PlanNode can only be derived for structs",
+        ));
+    };
+
+    let mut inputs = Vec::new();
+    let mut input_types = Vec::new();
+    let mut payload = Vec::new();
+    let mut describe_names = Vec::new();
+    let mut describe_accessors = Vec::new();
+
+    for (index, field) in data.fields.iter().enumerate() {
+        let accessor = if let Some(identifier) = &field.ident {
+            quote!(#identifier)
+        } else {
+            let index = Index::from(index);
+            quote!(#index)
+        };
+
+        let mut is_input = false;
+        let mut is_describe = false;
+
+        for attribute in &field.attrs {
+            if !attribute.path().is_ident("plan_node") {
+                continue;
+            }
+
+            attribute.parse_nested_meta(|meta| {
+                if meta.path.is_ident("input") {
+                    is_input = true;
+                    Ok(())
+                } else if meta.path.is_ident("describe") {
+                    is_describe = true;
+                    Ok(())
+                } else {
+                    Err(meta.error("unknown plan_node field attribute"))
+                }
+            })?;
+        }
+
+        if is_input {
+            inputs.push(accessor);
+            input_types.push(field.ty.clone());
+
+            continue;
+        }
+
+        if is_describe {
+            let field_name = match &field.ident {
+                Some(identifier) => identifier.to_string(),
+                None => index.to_string(),
+            };
+
+            describe_names.push(LitStr::new(&field_name, Span::call_site()));
+            describe_accessors.push(accessor.clone());
+        }
+
+        payload.push(accessor);
+    }
+
+    let payload_hash = payload.clone();
+    let payload_eq = payload.clone();
+    let rebuild_payload = payload;
+    let has_inputs_accessors = inputs.clone();
+
+    let has_inputs_body = if has_inputs_accessors.is_empty() {
+        quote!()
+    } else {
+        quote!( ( #( &self.#has_inputs_accessors, )* ) )
+    };
+
+    let optimized_locals: Vec<_> = (0..inputs.len())
+        .map(|index| format_ident!("optimized_input_{index}"))
+        .collect();
+
+    let optimized_locals_changed = optimized_locals.clone();
+    let optimized_locals_value = optimized_locals.clone();
+    let inputs_to_optimize = inputs.clone();
+    let inputs_to_rebuild = inputs.clone();
+
+    let optimize_inputs_impl = match &operand {
+        Some(operand) => {
+            let body = if matches!(data.fields, Fields::Unit) {
+                quote! {
+                    #crate_path::optimizer::Transformed::unchanged(::core::clone::Clone::clone(original))
+                }
+            } else {
+                quote! {
+                    #( let #optimized_locals = session.optimize(&self.#inputs_to_optimize); )*
+
+                    let changed = false #( || #optimized_locals_changed.changed )*;
+
+                    if !changed {
+                        return #crate_path::optimizer::Transformed::unchanged(
+                            ::core::clone::Clone::clone(original),
+                        );
+                    }
+
+                    #crate_path::optimizer::Transformed {
+                        value: <#operand as #crate_path::Operand>::from_context(::std::sync::Arc::new(Self {
+                            #( #inputs_to_rebuild: #optimized_locals_value.value, )*
+                            #( #rebuild_payload: self.#rebuild_payload.clone(), )*
+                        })),
+                        changed: true,
+                    }
+                }
+            };
+
+            quote! {
+                impl #impl_generics #crate_path::optimizer::OptimizeInputs for #name #type_generics #where_clause {
+                    type Output = #operand;
+
+                    fn optimize_inputs(
+                        &self,
+                        original: &Self::Output,
+                        session: &#crate_path::optimizer::Session,
+                    ) -> #crate_path::optimizer::Transformed<Self::Output> {
+                        #body
+                    }
+                }
+            }
+        }
+        None => quote!(),
+    };
+
+    let optimizer_hints_impl = quote! {
+        impl #impl_generics #crate_path::optimizer::OptimizerHints for #name #type_generics #where_clause {
+            fn commutes_with_filter(&self) -> bool {
+                #commutes_with_filter
+            }
+
+            fn allows_limit_pushdown(&self) -> bool {
+                #allows_limit_pushdown
+            }
+
+            fn is_distinct(&self) -> bool {
+                #is_distinct
+            }
+
+            fn is_volatile(&self) -> bool {
+                #is_volatile
+            }
+
+            fn empty_rule(&self) -> #crate_path::optimizer::EmptyRule {
+                #crate_path::optimizer::EmptyRule::#empty_rule
+            }
+        }
+    };
+
+    Ok(quote! {
+
+        #optimize_inputs_impl
+
+        #optimizer_hints_impl
+
+        impl #impl_generics #crate_path::optimizer::HasInputs for #name #type_generics #where_clause {
+            type Inputs<'inputs> = ( #( &'inputs #input_types, )* );
+
+            fn inputs(&self) -> Self::Inputs<'_> {
+                #has_inputs_body
+            }
+        }
+
+        const _: () = {
+            use #crate_path::Operand as _Operand;
+            use #crate_path::optimizer::PlanNode as _PlanNode;
+
+            impl #impl_generics _PlanNode for #name #type_generics #where_clause {
+                fn inputs(&self) -> ::std::vec::Vec<&dyn _PlanNode> {
+                    let mut inputs: ::std::vec::Vec<&dyn _PlanNode> = ::std::vec::Vec::new();
+                    #( inputs.push(_Operand::context(&self.#inputs)); )*
+                    inputs
+                }
+
+                fn dyn_eq(&self, other: &dyn _PlanNode) -> bool {
+                    let ::std::option::Option::Some(other) = other.downcast::<Self>() else {
+                        return false;
+                    };
+
+                    #(
+                        if self.#payload_eq != other.#payload_eq {
+                            return false;
+                        }
+                    )*
+
+                    _PlanNode::inputs(self)
+                        .into_iter()
+                        .zip(_PlanNode::inputs(other))
+                        .all(|(self_input, other_input)| self_input.dyn_eq(other_input))
+                }
+
+                fn dyn_hash(&self, mut state: &mut dyn ::std::hash::Hasher) {
+                    ::std::hash::Hash::hash(&::std::any::Any::type_id(self), &mut state);
+                    #( ::std::hash::Hash::hash(&self.#payload_hash, &mut state); )*
+
+                    for input in _PlanNode::inputs(self) {
+                        input.dyn_hash(state);
+                    }
+                }
+
+                fn describe(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    ::core::fmt::Formatter::write_str(formatter, #name_label)?;
+                    #( ::core::write!(formatter, " {}={}", #describe_names, &self.#describe_accessors)?; )*
+                    ::core::result::Result::Ok(())
+                }
+            }
+        };
+    })
+}

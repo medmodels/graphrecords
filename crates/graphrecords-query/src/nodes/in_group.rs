@@ -1,15 +1,36 @@
 use crate::{
-    BoxedIterator, RootOperand,
+    BoxedIterator, Operand, RootOperand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
+    execution::ExecutionContext,
     nodes::NodeOperand,
+    optimizer::{NodeGroupSize, PlanNode, Selectivity, Stats},
     traits::InGroup,
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::Group};
 use graphrecords_utils::aliases::GrHashSet;
 
-struct InGroupContext {
-    parent: NodeOperand,
+#[derive(PlanNode)]
+#[plan_node(
+    crate = "crate",
+    label = "InGroup",
+    operand = "BoolMaskOperand<NodeOperand>",
+    distinct,
+    empty = "if_any"
+)]
+pub struct InGroupContext {
+    #[plan_node(input)]
+    input: NodeOperand,
+    #[plan_node(describe)]
     group: Group,
+}
+
+impl Selectivity for InGroupContext {
+    fn selectivity(&self, stats: &Stats) -> f64 {
+        let group = stats.get::<NodeGroupSize>(&self.group) as f64;
+        let input_cardinality = self.input.context().cardinality(stats).max(1) as f64;
+
+        (group / input_cardinality).min(1.0)
+    }
 }
 
 impl BoolMaskOperandContext for InGroupContext {
@@ -18,9 +39,10 @@ impl BoolMaskOperandContext for InGroupContext {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>
     {
-        let node_indices = self.parent.evaluate(graphrecord)?;
+        let node_indices = self.input.evaluate(graphrecord, context)?;
 
         let node_indices_in_group: GrHashSet<_> =
             graphrecord.nodes_in_group(&self.group)?.collect();
@@ -38,7 +60,7 @@ impl InGroup for NodeOperand {
 
     fn in_group(&self, group: Group) -> Self::ReturnOperand {
         BoolMaskOperand::new(InGroupContext {
-            parent: self.clone(),
+            input: self.clone(),
             group,
         })
     }

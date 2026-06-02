@@ -1,14 +1,26 @@
 use crate::{
-    And, BoxedIterator, Not, Or, RootOperand, Xor,
+    And, BoxedIterator, Not, Operand, Or, RootOperand, Xor,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
+    execution::ExecutionContext,
+    optimizer::{PlanNode, Selectivity, Stats},
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use graphrecords_utils::aliases::GrHashMap;
 use std::ops::{BitAnd, BitOr, BitXor, Not as BitNot};
 
-pub(super) struct AndContext<O: RootOperand> {
+#[derive(PlanNode)]
+#[plan_node(crate = "crate", label = "And", operand = "BoolMaskOperand<O>")]
+pub struct AndContext<O: RootOperand> {
+    #[plan_node(input)]
     left: BoolMaskOperand<O>,
+    #[plan_node(input)]
     right: BoolMaskOperand<O>,
+}
+
+impl<O: RootOperand> Selectivity for AndContext<O> {
+    fn selectivity(&self, stats: &Stats) -> f64 {
+        self.left.context().selectivity(stats) * self.right.context().selectivity(stats)
+    }
 }
 
 impl<O: RootOperand> BoolMaskOperandContext for AndContext<O> {
@@ -17,11 +29,12 @@ impl<O: RootOperand> BoolMaskOperandContext for AndContext<O> {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>
     {
         let right_values_by_index: GrHashMap<O::Index<'a>, bool> =
-            self.right.evaluate(graphrecord)?.collect();
-        let left_values = self.left.evaluate(graphrecord)?;
+            self.right.evaluate(graphrecord, context)?.collect();
+        let left_values = self.left.evaluate(graphrecord, context)?;
 
         Ok(Box::new(left_values.map(move |(index, left_value)| {
             let right_value = right_values_by_index.get(&index).copied().unwrap_or(false);
@@ -50,9 +63,22 @@ impl<O: RootOperand> BitAnd for BoolMaskOperand<O> {
     }
 }
 
-pub(super) struct OrContext<O: RootOperand> {
+#[derive(PlanNode)]
+#[plan_node(crate = "crate", label = "Or", operand = "BoolMaskOperand<O>")]
+pub struct OrContext<O: RootOperand> {
+    #[plan_node(input)]
     left: BoolMaskOperand<O>,
+    #[plan_node(input)]
     right: BoolMaskOperand<O>,
+}
+
+impl<O: RootOperand> Selectivity for OrContext<O> {
+    fn selectivity(&self, stats: &Stats) -> f64 {
+        let left = self.left.context().selectivity(stats);
+        let right = self.right.context().selectivity(stats);
+
+        left.mul_add(-right, left + right)
+    }
 }
 
 impl<O: RootOperand> BoolMaskOperandContext for OrContext<O> {
@@ -61,11 +87,12 @@ impl<O: RootOperand> BoolMaskOperandContext for OrContext<O> {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>
     {
         let right_values_by_index: GrHashMap<O::Index<'a>, bool> =
-            self.right.evaluate(graphrecord)?.collect();
-        let left_values = self.left.evaluate(graphrecord)?;
+            self.right.evaluate(graphrecord, context)?.collect();
+        let left_values = self.left.evaluate(graphrecord, context)?;
 
         Ok(Box::new(left_values.map(move |(index, left_value)| {
             let right_value = right_values_by_index.get(&index).copied().unwrap_or(false);
@@ -94,9 +121,22 @@ impl<O: RootOperand> BitOr for BoolMaskOperand<O> {
     }
 }
 
-pub(super) struct XorContext<O: RootOperand> {
+#[derive(PlanNode)]
+#[plan_node(crate = "crate", label = "Xor", operand = "BoolMaskOperand<O>")]
+pub struct XorContext<O: RootOperand> {
+    #[plan_node(input)]
     left: BoolMaskOperand<O>,
+    #[plan_node(input)]
     right: BoolMaskOperand<O>,
+}
+
+impl<O: RootOperand> Selectivity for XorContext<O> {
+    fn selectivity(&self, stats: &Stats) -> f64 {
+        let left = self.left.context().selectivity(stats);
+        let right = self.right.context().selectivity(stats);
+
+        (2.0 * left).mul_add(-right, left + right)
+    }
 }
 
 impl<O: RootOperand> BoolMaskOperandContext for XorContext<O> {
@@ -105,11 +145,12 @@ impl<O: RootOperand> BoolMaskOperandContext for XorContext<O> {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>
     {
         let right_values_by_index: GrHashMap<O::Index<'a>, bool> =
-            self.right.evaluate(graphrecord)?.collect();
-        let left_values = self.left.evaluate(graphrecord)?;
+            self.right.evaluate(graphrecord, context)?.collect();
+        let left_values = self.left.evaluate(graphrecord, context)?;
 
         Ok(Box::new(left_values.map(move |(index, left_value)| {
             let right_value = right_values_by_index.get(&index).copied().unwrap_or(false);
@@ -138,8 +179,17 @@ impl<O: RootOperand> BitXor for BoolMaskOperand<O> {
     }
 }
 
-pub(super) struct NotContext<O: RootOperand> {
-    parent: BoolMaskOperand<O>,
+#[derive(PlanNode)]
+#[plan_node(crate = "crate", label = "Not", operand = "BoolMaskOperand<O>")]
+pub struct NotContext<O: RootOperand> {
+    #[plan_node(input)]
+    input: BoolMaskOperand<O>,
+}
+
+impl<O: RootOperand> Selectivity for NotContext<O> {
+    fn selectivity(&self, stats: &Stats) -> f64 {
+        1.0 - self.input.context().selectivity(stats)
+    }
 }
 
 impl<O: RootOperand> BoolMaskOperandContext for NotContext<O> {
@@ -148,13 +198,12 @@ impl<O: RootOperand> BoolMaskOperandContext for NotContext<O> {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>
     {
-        let parent_values = self.parent.evaluate(graphrecord)?;
+        let input_values = self.input.evaluate(graphrecord, context)?;
 
-        Ok(Box::new(
-            parent_values.map(|(index, value)| (index, !value)),
-        ))
+        Ok(Box::new(input_values.map(|(index, value)| (index, !value))))
     }
 }
 
@@ -163,7 +212,7 @@ impl<O: RootOperand> Not for BoolMaskOperand<O> {
 
     fn not(&self) -> Self::ReturnOperand {
         Self::new(NotContext {
-            parent: self.clone(),
+            input: self.clone(),
         })
     }
 }
