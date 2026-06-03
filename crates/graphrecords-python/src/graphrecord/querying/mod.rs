@@ -124,9 +124,9 @@ impl From<GroupKey<'_>> for PyGroupKey {
 }
 
 impl<'py> IntoPyObject<'py> for PyGroupKey {
-    type Target = pyo3::PyAny;
-    type Output = Bound<'py, Self::Target>;
     type Error = PyErr;
+    type Output = Bound<'py, Self::Target>;
+    type Target = pyo3::PyAny;
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match self {
@@ -879,9 +879,9 @@ pub enum PyReturnValue<'a> {
 }
 
 impl<'py> IntoPyObject<'py> for PyReturnValue<'_> {
-    type Target = PyAny;
-    type Output = Bound<'py, Self::Target>;
     type Error = PyErr;
+    type Output = Bound<'py, Self::Target>;
+    type Target = PyAny;
 
     #[allow(clippy::too_many_lines)]
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {

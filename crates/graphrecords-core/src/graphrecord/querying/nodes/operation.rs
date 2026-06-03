@@ -1050,6 +1050,7 @@ impl NodeIndicesOperation {
 
         Ok(Some(min_index))
     }
+
     #[inline]
     pub(crate) fn get_count(indices: impl Iterator<Item = NodeIndex>) -> NodeIndex {
         GraphRecordAttribute::Int(indices.count() as i64)

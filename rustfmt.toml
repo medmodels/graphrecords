@@ -1,0 +1,11 @@
+reorder_imports = true
+reorder_modules = true
+imports_granularity = "Crate"
+group_imports = "One"
+newline_style = "Unix"
+format_code_in_doc_comments = true
+normalize_doc_attributes = true
+format_macro_matchers = true
+wrap_comments = true
+comment_width = 100
+reorder_impl_items = true

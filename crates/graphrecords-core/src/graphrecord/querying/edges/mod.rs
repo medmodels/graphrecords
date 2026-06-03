@@ -2,16 +2,15 @@ mod group_by;
 mod operand;
 mod operation;
 
+use super::{
+    DeepClone,
+    nodes::{EdgeDirection, NodeOperand},
+};
 use crate::{
     GraphRecord,
     errors::GraphRecordResult,
     graphrecord::querying::{BoxedIterator, EvaluateBackward, group_by::GroupOperand},
     prelude::EdgeIndex,
-};
-
-use super::{
-    DeepClone,
-    nodes::{EdgeDirection, NodeOperand},
 };
 pub use group_by::EdgeOperandGroupDiscriminator;
 pub use operand::{

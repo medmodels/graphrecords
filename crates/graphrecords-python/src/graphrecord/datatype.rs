@@ -151,9 +151,9 @@ impl FromPyObject<'_, '_> for PyDataType {
 }
 
 impl<'py> IntoPyObject<'py> for PyDataType {
-    type Target = pyo3::PyAny;
-    type Output = Bound<'py, Self::Target>;
     type Error = PyErr;
+    type Output = Bound<'py, Self::Target>;
+    type Target = pyo3::PyAny;
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match self.0 {

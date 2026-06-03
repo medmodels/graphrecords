@@ -11,15 +11,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
 
-      - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@v2
-
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           cache-dependency-glob: pyproject.toml
@@ -27,10 +24,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --group dev
+          uv sync --no-install-project --group dev
 
       - name: Format with ruff
-        run: uv run ruff format --check
+        run: uv run --no-sync ruff format --check
 
       - name: Format with rustfmt
-        run: cargo fmt -- --check
+        run: cargo +nightly fmt -- --check

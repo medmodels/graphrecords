@@ -1,6 +1,8 @@
 name: Lint Pull Request
 
 on:
+  push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -19,10 +21,10 @@ jobs:
         uses: taiki-e/install-action@cargo-hack
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           cache-dependency-glob: pyproject.toml
@@ -30,19 +32,19 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --group dev
+          uv sync --no-install-project --group dev
 
       - name: Lint with ruff
-        run: uv run ruff check --output-format=github .
+        run: uv run --no-sync ruff check --output-format=github .
 
       - name: Lint imports with ruff
-        run: uv run ruff check --select I --output-format=github .
+        run: uv run --no-sync ruff check --select I --output-format=github .
 
       - name: Activate venv for Pyright
         run: echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
       - name: Check typing with pyright
-        uses: jakebailey/pyright-action@v2
+        uses: jakebailey/pyright-action@6cabc0f01c4994be48fd45cd9dbacdd6e1ee6e5e # v2
         with:
           version: PATH
 

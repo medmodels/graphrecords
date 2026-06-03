@@ -115,7 +115,13 @@ impl FromPyObject<'_, '_> for PyMultipleValuesComparisonOperand {
 }
 
 macro_rules! implement_multiple_values_operand {
-    ($name:ident, $kind:ident, $generic:ty, $py_single_value_with_index_operand:ty, $py_single_value_without_index_operand:ty) => {
+    (
+        $name:ident,
+        $kind:ident,
+        $generic:ty,
+        $py_single_value_with_index_operand:ty,
+        $py_single_value_without_index_operand:ty
+    ) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
@@ -390,7 +396,14 @@ implement_multiple_values_operand!(
 );
 
 macro_rules! implement_multiple_values_grouped_operand {
-    ($name:ident, $ungrouped_name:ident, $kind:ident, $generic:ty, $py_single_value_with_index_operand:ty, $py_single_value_without_index_operand:ty) => {
+    (
+        $name:ident,
+        $ungrouped_name:ident,
+        $kind:ident,
+        $generic:ty,
+        $py_single_value_with_index_operand:ty,
+        $py_single_value_without_index_operand:ty
+    ) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
@@ -876,7 +889,9 @@ implement_single_value_operand!(
 );
 
 macro_rules! implement_single_value_group_operand {
-    ($name:ident, $ungrouped_name:ident, $ungrouped_operand_name:ident, $kind:ident, $generic:ty) => {
+    (
+        $name:ident, $ungrouped_name:ident, $ungrouped_operand_name:ident, $kind:ident, $generic:ty
+    ) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
