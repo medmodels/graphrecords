@@ -16,11 +16,10 @@ pub use self::{
     graph::{Attributes, EdgeIndex, NodeIndex},
     group_mapping::Group,
 };
-use crate::errors::GraphRecordResult;
 #[cfg(feature = "plugins")]
 use crate::graphrecord::plugins::{Plugin, PluginName};
 use crate::{
-    errors::GraphRecordError,
+    errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
         attributes::{EdgeAttributesMut, NodeAttributesMut},
         overview::{DEFAULT_TRUNCATE_DETAILS, GroupOverview, Overview},

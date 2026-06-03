@@ -5,11 +5,13 @@ ifeq ($(OS),Windows_NT)
 	VENV_BIN := $(VENV_NAME)/Scripts
 	rmrf = rmdir /s /q
 	rmf = del /q
+	ensure_built = if not exist graphrecords\*.pyd $(UV_LOC) pip install -e .
 else
 	USER_PYTHON ?= python3
 	VENV_BIN := $(VENV_NAME)/bin
 	rmrf = rm -rf
 	rmf = rm -f
+	ensure_built = ls graphrecords/*.so >/dev/null 2>&1 || $(UV_LOC) pip install -e .
 endif
 
 VENV_PYTHON := $(VENV_BIN)/python
@@ -35,19 +37,19 @@ endif
 
 install: prepare-venv
 	$(UV_LOC) sync
-	$(UV_LOC) pip install -e .
+	$(ensure_built)
 
 install-dev: prepare-venv
 	$(UV_LOC) sync --group dev
-	$(UV_LOC) pip install -e .
+	$(ensure_built)
 
 install-tests: prepare-venv
 	$(UV_LOC) sync --group tests
-	$(UV_LOC) pip install -e .
+	$(ensure_built)
 
 install-docs: prepare-venv
 	$(UV_LOC) sync --group docs
-	$(UV_LOC) pip install -e .
+	$(ensure_built)
 
 build-dev: install-dev
 	$(UV_LOC) run maturin develop
@@ -81,7 +83,7 @@ lint: install-dev
 format: install-dev
 	$(UV_LOC) run ruff check --select I --fix
 	$(UV_LOC) run ruff format
-	cargo fmt
+	cargo +nightly fmt
 	cargo hack clippy --feature-powerset --fix --allow-dirty -- -D warnings
 
 clean: docs-clean

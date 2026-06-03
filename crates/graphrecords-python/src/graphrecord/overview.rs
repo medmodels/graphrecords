@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::graphrecord::{
     attribute::PyGraphRecordAttribute,
     datatype::PyDataType,
@@ -12,6 +10,7 @@ use graphrecords_core::graphrecord::overview::{
     Overview,
 };
 use pyo3::{prelude::*, types::PyDict};
+use std::collections::HashMap;
 
 #[pyclass(frozen)]
 #[repr(transparent)]

@@ -57,7 +57,7 @@ dev = [
     "maturin>=1.6.0",
     "ruff>=0.4.9",
     "py-spy",
-    "pyright>=1.1.402",
+    "pyright>=1.1.410",
     "pandas-stubs>=2.2.2.240603",
     "scipy-stubs>=1.15.1.0",
 ]
@@ -181,6 +181,8 @@ exclude_also = [
 [tool.uv]
 cache-keys = [
     { file = "pyproject.toml" },
-    { file = "rust/Cargo.toml" },
+    { file = "Cargo.toml" },
+    { file = "Cargo.lock" },
+    { file = "crates/**/Cargo.toml" },
     { file = "crates/**/*.rs" },
 ]

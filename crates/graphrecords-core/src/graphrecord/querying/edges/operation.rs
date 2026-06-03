@@ -856,6 +856,7 @@ impl EdgeIndicesOperation {
     pub(crate) fn get_min(indices: impl Iterator<Item = EdgeIndex>) -> Option<EdgeIndex> {
         indices.min()
     }
+
     #[inline]
     pub(crate) fn get_count(indices: impl Iterator<Item = EdgeIndex>) -> EdgeIndex {
         indices.count() as EdgeIndex

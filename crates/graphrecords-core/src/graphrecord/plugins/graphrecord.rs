@@ -1,5 +1,3 @@
-use graphrecords_utils::aliases::GrHashMap;
-
 use super::{
     Plugin, PostAddEdgeContext, PostAddEdgeToGroupContext, PostAddEdgeToGroupsContext,
     PostAddEdgeWithGroupContext, PostAddEdgeWithGroupsContext, PostAddEdgesContext,
@@ -33,6 +31,7 @@ use crate::{
     graphrecord::{EdgeDataFrameInput, GraphRecord, NodeDataFrameInput},
     prelude::{Attributes, EdgeIndex, GraphRecordAttribute, Group, NodeIndex, Schema},
 };
+use graphrecords_utils::aliases::GrHashMap;
 use std::sync::Arc;
 
 pub type PluginName = GraphRecordAttribute;

@@ -148,8 +148,6 @@ pub mod _graphrecords {
 
     #[pymodule]
     pub mod overview {
-        use pyo3::prelude::*;
-
         #[pymodule_export]
         use crate::prelude::PyAttributeOverview;
         #[pymodule_export]
@@ -160,6 +158,7 @@ pub mod _graphrecords {
         use crate::prelude::PyNodeGroupOverview;
         #[pymodule_export]
         use crate::prelude::PyOverview;
+        use pyo3::prelude::*;
 
         #[pymodule_init]
         fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {

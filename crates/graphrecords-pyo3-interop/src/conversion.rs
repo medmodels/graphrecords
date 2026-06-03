@@ -41,9 +41,9 @@ impl FromPyObject<'_, '_> for PyGraphRecord {
 }
 
 impl<'py> IntoPyObject<'py> for PyGraphRecord {
-    type Target = PyAny;
-    type Output = Bound<'py, PyAny>;
     type Error = PyErr;
+    type Output = Bound<'py, PyAny>;
+    type Target = PyAny;
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         let bytes = bincode::serialize(&self.0)

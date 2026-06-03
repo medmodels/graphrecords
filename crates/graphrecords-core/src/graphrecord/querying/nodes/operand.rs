@@ -49,8 +49,8 @@ impl DeepClone for NodeOperand {
 }
 
 impl RootOperand for NodeOperand {
-    type Index = NodeIndex;
     type Discriminator = NodeOperandGroupDiscriminator;
+    type Index = NodeIndex;
 
     fn _evaluate_forward<'a>(
         &self,

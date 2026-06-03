@@ -83,22 +83,25 @@ jobs:
       - name: Create and link branch
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
-          PARENT=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/parent")
+          PARENT=$(gh api "repos/${REPOSITORY}/issues/${ISSUE_NUMBER}/parent")
           PARENT_NUMBER=$(echo "$PARENT" | jq -r '.number')
           PARENT_TITLE=$(echo "$PARENT" | jq -r '.title')
 
           PARENT_KEBAB=$(echo "$PARENT_TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
           EPIC_BRANCH="epic/${PARENT_NUMBER}-${PARENT_KEBAB}"
 
-          ISSUE_KEBAB=$(echo "${{ github.event.issue.title }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
-          BRANCH_NAME="${{ github.event.issue.number }}-${ISSUE_KEBAB}"
+          ISSUE_KEBAB=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
+          BRANCH_NAME="${ISSUE_NUMBER}-${ISSUE_KEBAB}"
 
-          if gh api "repos/${{ github.repository }}/git/ref/heads/${BRANCH_NAME}" > /dev/null 2>&1; then
+          if gh api "repos/${REPOSITORY}/git/ref/heads/${BRANCH_NAME}" > /dev/null 2>&1; then
             exit 0
           fi
 
-          gh issue develop ${{ github.event.issue.number }} --name "$BRANCH_NAME" --base "$EPIC_BRANCH"
+          gh issue develop "$ISSUE_NUMBER" --name "$BRANCH_NAME" --base "$EPIC_BRANCH"
 
   check-pr-base:
     if: github.event_name == 'pull_request' && github.event.action == 'opened'

@@ -211,6 +211,7 @@ impl PyNodeGroupOperand {
     pub fn neighbors(&self, direction: PyEdgeDirection) -> Self {
         self.0.neighbors(direction.into()).into()
     }
+
     /// # Panics
     ///
     /// Panics if the python typing was not followed.

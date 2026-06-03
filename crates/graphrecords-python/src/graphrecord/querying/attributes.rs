@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use crate::graphrecord::{
     attribute::PyGraphRecordAttribute,
     errors::PyGraphRecordError,
@@ -31,6 +29,7 @@ use pyo3::{
     Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, pyclass, pymethods,
     types::{PyAnyMethods, PyFunction},
 };
+use std::ops::Deref;
 
 #[repr(transparent)]
 pub struct PySingleAttributeComparisonOperand(SingleAttributeComparisonOperand);
@@ -549,7 +548,13 @@ implement_attributes_tree_group_operand!(
 );
 
 macro_rules! implement_multiple_attributes_operand {
-    ($name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty) => {
+    (
+        $name:ident,
+        $kind:ident,
+        $generic:ty,
+        $py_single_attribute_with_index_operand:ty,
+        $py_single_attribute_without_index_operand:ty
+    ) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
@@ -732,7 +737,14 @@ macro_rules! implement_multiple_attributes_operand {
             }
         }
     };
-    ($name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty, $py_multiple_values_operand:ty) => {
+    (
+        $name:ident,
+        $kind:ident,
+        $generic:ty,
+        $py_single_attribute_with_index_operand:ty,
+        $py_single_attribute_without_index_operand:ty,
+        $py_multiple_values_operand:ty
+    ) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
@@ -953,7 +965,15 @@ implement_multiple_attributes_operand!(
 );
 
 macro_rules! implement_multiple_attributes_grouped_operand {
-    ($name:ident, $ungrouped_name:ident, $kind:ident, $generic:ty, $py_single_attribute_with_index_operand:ty, $py_single_attribute_without_index_operand:ty, $py_multiple_values_operand:ty) => {
+    (
+        $name:ident,
+        $ungrouped_name:ident,
+        $kind:ident,
+        $generic:ty,
+        $py_single_attribute_with_index_operand:ty,
+        $py_single_attribute_without_index_operand:ty,
+        $py_multiple_values_operand:ty
+    ) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]
@@ -1345,7 +1365,9 @@ implement_single_attribute_operand!(
 );
 
 macro_rules! implement_single_attribute_grouped_operand {
-    ($name:ident, $ungrouped_name:ident, $ungrouped_operand_name:ident, $kind:ident, $generic:ty) => {
+    (
+        $name:ident, $ungrouped_name:ident, $ungrouped_operand_name:ident, $kind:ident, $generic:ty
+    ) => {
         #[pyclass(frozen)]
         #[repr(transparent)]
         #[derive(Clone)]

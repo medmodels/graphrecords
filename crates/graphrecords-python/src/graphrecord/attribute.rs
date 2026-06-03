@@ -59,9 +59,9 @@ impl FromPyObject<'_, '_> for PyGraphRecordAttribute {
 }
 
 impl<'py> IntoPyObject<'py> for PyGraphRecordAttribute {
-    type Target = PyAny;
-    type Output = Bound<'py, Self::Target>;
     type Error = PyErr;
+    type Output = Bound<'py, Self::Target>;
+    type Target = PyAny;
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match self.0 {

@@ -53,8 +53,8 @@ impl DeepClone for EdgeOperand {
 }
 
 impl RootOperand for EdgeOperand {
-    type Index = EdgeIndex;
     type Discriminator = EdgeOperandGroupDiscriminator;
+    type Index = EdgeIndex;
 
     fn _evaluate_forward<'a>(
         &self,

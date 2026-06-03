@@ -4393,6 +4393,390 @@ impl PyPostRemoveEdgesFromGroupsContext {
 
 #[typetag::serde]
 impl Plugin for PyPlugin {
+    impl_pre_hook!(pre_set_schema, PyPreSetSchemaContext, PreSetSchemaContext);
+
+    impl_post_hook!(post_set_schema);
+
+    impl_post_hook!(pre_freeze_schema);
+
+    impl_post_hook!(post_freeze_schema);
+
+    impl_post_hook!(pre_unfreeze_schema);
+
+    impl_post_hook!(post_unfreeze_schema);
+
+    impl_pre_hook!(pre_add_node, PyPreAddNodeContext, PreAddNodeContext);
+
+    impl_post_hook!(post_add_node, PyPostAddNodeContext, PostAddNodeContext);
+
+    impl_pre_hook!(
+        pre_add_node_with_group,
+        PyPreAddNodeWithGroupContext,
+        PreAddNodeWithGroupContext
+    );
+
+    impl_post_hook!(
+        post_add_node_with_group,
+        PyPostAddNodeWithGroupContext,
+        PostAddNodeWithGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_add_node_with_groups,
+        PyPreAddNodeWithGroupsContext,
+        PreAddNodeWithGroupsContext
+    );
+
+    impl_post_hook!(
+        post_add_node_with_groups,
+        PyPostAddNodeWithGroupsContext,
+        PostAddNodeWithGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_remove_node,
+        PyPreRemoveNodeContext,
+        PreRemoveNodeContext
+    );
+
+    impl_post_hook!(
+        post_remove_node,
+        PyPostRemoveNodeContext,
+        PostRemoveNodeContext
+    );
+
+    impl_pre_hook!(pre_add_nodes, PyPreAddNodesContext, PreAddNodesContext);
+
+    impl_post_hook!(post_add_nodes, PyPostAddNodesContext, PostAddNodesContext);
+
+    impl_pre_hook!(
+        pre_add_nodes_with_group,
+        PyPreAddNodesWithGroupContext,
+        PreAddNodesWithGroupContext
+    );
+
+    impl_post_hook!(
+        post_add_nodes_with_group,
+        PyPostAddNodesWithGroupContext,
+        PostAddNodesWithGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_add_nodes_with_groups,
+        PyPreAddNodesWithGroupsContext,
+        PreAddNodesWithGroupsContext
+    );
+
+    impl_post_hook!(
+        post_add_nodes_with_groups,
+        PyPostAddNodesWithGroupsContext,
+        PostAddNodesWithGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_add_nodes_dataframes,
+        PyPreAddNodesDataframesContext,
+        PreAddNodesDataframesContext
+    );
+
+    impl_post_hook!(
+        post_add_nodes_dataframes,
+        PyPostAddNodesDataframesContext,
+        PostAddNodesDataframesContext
+    );
+
+    impl_pre_hook!(
+        pre_add_nodes_dataframes_with_group,
+        PyPreAddNodesDataframesWithGroupContext,
+        PreAddNodesDataframesWithGroupContext
+    );
+
+    impl_post_hook!(
+        post_add_nodes_dataframes_with_group,
+        PyPostAddNodesDataframesWithGroupContext,
+        PostAddNodesDataframesWithGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_add_nodes_dataframes_with_groups,
+        PyPreAddNodesDataframesWithGroupsContext,
+        PreAddNodesDataframesWithGroupsContext
+    );
+
+    impl_post_hook!(
+        post_add_nodes_dataframes_with_groups,
+        PyPostAddNodesDataframesWithGroupsContext,
+        PostAddNodesDataframesWithGroupsContext
+    );
+
+    impl_pre_hook!(pre_add_edge, PyPreAddEdgeContext, PreAddEdgeContext);
+
+    impl_post_hook!(post_add_edge, PyPostAddEdgeContext, PostAddEdgeContext);
+
+    impl_pre_hook!(
+        pre_add_edge_with_group,
+        PyPreAddEdgeWithGroupContext,
+        PreAddEdgeWithGroupContext
+    );
+
+    impl_post_hook!(
+        post_add_edge_with_group,
+        PyPostAddEdgeWithGroupContext,
+        PostAddEdgeWithGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_add_edge_with_groups,
+        PyPreAddEdgeWithGroupsContext,
+        PreAddEdgeWithGroupsContext
+    );
+
+    impl_post_hook!(
+        post_add_edge_with_groups,
+        PyPostAddEdgeWithGroupsContext,
+        PostAddEdgeWithGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_remove_edge,
+        PyPreRemoveEdgeContext,
+        PreRemoveEdgeContext
+    );
+
+    impl_post_hook!(
+        post_remove_edge,
+        PyPostRemoveEdgeContext,
+        PostRemoveEdgeContext
+    );
+
+    impl_pre_hook!(pre_add_edges, PyPreAddEdgesContext, PreAddEdgesContext);
+
+    impl_post_hook!(post_add_edges, PyPostAddEdgesContext, PostAddEdgesContext);
+
+    impl_pre_hook!(
+        pre_add_edges_with_group,
+        PyPreAddEdgesWithGroupContext,
+        PreAddEdgesWithGroupContext
+    );
+
+    impl_post_hook!(
+        post_add_edges_with_group,
+        PyPostAddEdgesWithGroupContext,
+        PostAddEdgesWithGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_add_edges_with_groups,
+        PyPreAddEdgesWithGroupsContext,
+        PreAddEdgesWithGroupsContext
+    );
+
+    impl_post_hook!(
+        post_add_edges_with_groups,
+        PyPostAddEdgesWithGroupsContext,
+        PostAddEdgesWithGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_add_edges_dataframes,
+        PyPreAddEdgesDataframesContext,
+        PreAddEdgesDataframesContext
+    );
+
+    impl_post_hook!(
+        post_add_edges_dataframes,
+        PyPostAddEdgesDataframesContext,
+        PostAddEdgesDataframesContext
+    );
+
+    impl_pre_hook!(
+        pre_add_edges_dataframes_with_group,
+        PyPreAddEdgesDataframesWithGroupContext,
+        PreAddEdgesDataframesWithGroupContext
+    );
+
+    impl_post_hook!(
+        post_add_edges_dataframes_with_group,
+        PyPostAddEdgesDataframesWithGroupContext,
+        PostAddEdgesDataframesWithGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_add_edges_dataframes_with_groups,
+        PyPreAddEdgesDataframesWithGroupsContext,
+        PreAddEdgesDataframesWithGroupsContext
+    );
+
+    impl_post_hook!(
+        post_add_edges_dataframes_with_groups,
+        PyPostAddEdgesDataframesWithGroupsContext,
+        PostAddEdgesDataframesWithGroupsContext
+    );
+
+    impl_pre_hook!(pre_add_group, PyPreAddGroupContext, PreAddGroupContext);
+
+    impl_post_hook!(post_add_group, PyPostAddGroupContext, PostAddGroupContext);
+
+    impl_pre_hook!(
+        pre_remove_group,
+        PyPreRemoveGroupContext,
+        PreRemoveGroupContext
+    );
+
+    impl_post_hook!(
+        post_remove_group,
+        PyPostRemoveGroupContext,
+        PostRemoveGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_add_node_to_group,
+        PyPreAddNodeToGroupContext,
+        PreAddNodeToGroupContext
+    );
+
+    impl_post_hook!(
+        post_add_node_to_group,
+        PyPostAddNodeToGroupContext,
+        PostAddNodeToGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_add_node_to_groups,
+        PyPreAddNodeToGroupsContext,
+        PreAddNodeToGroupsContext
+    );
+
+    impl_post_hook!(
+        post_add_node_to_groups,
+        PyPostAddNodeToGroupsContext,
+        PostAddNodeToGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_add_nodes_to_groups,
+        PyPreAddNodesToGroupsContext,
+        PreAddNodesToGroupsContext
+    );
+
+    impl_post_hook!(
+        post_add_nodes_to_groups,
+        PyPostAddNodesToGroupsContext,
+        PostAddNodesToGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_add_edge_to_group,
+        PyPreAddEdgeToGroupContext,
+        PreAddEdgeToGroupContext
+    );
+
+    impl_post_hook!(
+        post_add_edge_to_group,
+        PyPostAddEdgeToGroupContext,
+        PostAddEdgeToGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_add_edge_to_groups,
+        PyPreAddEdgeToGroupsContext,
+        PreAddEdgeToGroupsContext
+    );
+
+    impl_post_hook!(
+        post_add_edge_to_groups,
+        PyPostAddEdgeToGroupsContext,
+        PostAddEdgeToGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_add_edges_to_groups,
+        PyPreAddEdgesToGroupsContext,
+        PreAddEdgesToGroupsContext
+    );
+
+    impl_post_hook!(
+        post_add_edges_to_groups,
+        PyPostAddEdgesToGroupsContext,
+        PostAddEdgesToGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_remove_node_from_group,
+        PyPreRemoveNodeFromGroupContext,
+        PreRemoveNodeFromGroupContext
+    );
+
+    impl_post_hook!(
+        post_remove_node_from_group,
+        PyPostRemoveNodeFromGroupContext,
+        PostRemoveNodeFromGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_remove_node_from_groups,
+        PyPreRemoveNodeFromGroupsContext,
+        PreRemoveNodeFromGroupsContext
+    );
+
+    impl_post_hook!(
+        post_remove_node_from_groups,
+        PyPostRemoveNodeFromGroupsContext,
+        PostRemoveNodeFromGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_remove_nodes_from_groups,
+        PyPreRemoveNodesFromGroupsContext,
+        PreRemoveNodesFromGroupsContext
+    );
+
+    impl_post_hook!(
+        post_remove_nodes_from_groups,
+        PyPostRemoveNodesFromGroupsContext,
+        PostRemoveNodesFromGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_remove_edge_from_group,
+        PyPreRemoveEdgeFromGroupContext,
+        PreRemoveEdgeFromGroupContext
+    );
+
+    impl_post_hook!(
+        post_remove_edge_from_group,
+        PyPostRemoveEdgeFromGroupContext,
+        PostRemoveEdgeFromGroupContext
+    );
+
+    impl_pre_hook!(
+        pre_remove_edge_from_groups,
+        PyPreRemoveEdgeFromGroupsContext,
+        PreRemoveEdgeFromGroupsContext
+    );
+
+    impl_post_hook!(
+        post_remove_edge_from_groups,
+        PyPostRemoveEdgeFromGroupsContext,
+        PostRemoveEdgeFromGroupsContext
+    );
+
+    impl_pre_hook!(
+        pre_remove_edges_from_groups,
+        PyPreRemoveEdgesFromGroupsContext,
+        PreRemoveEdgesFromGroupsContext
+    );
+
+    impl_post_hook!(
+        post_remove_edges_from_groups,
+        PyPostRemoveEdgesFromGroupsContext,
+        PostRemoveEdgesFromGroupsContext
+    );
+
+    impl_post_hook!(pre_clear);
+
+    impl_post_hook!(post_clear);
+
     fn clone_box(&self) -> Box<dyn Plugin> {
         Python::attach(|py| Box::new(Self(self.0.clone_ref(py))))
     }
@@ -4420,313 +4804,4 @@ impl Plugin for PyPlugin {
             })
         })
     }
-
-    impl_pre_hook!(pre_set_schema, PyPreSetSchemaContext, PreSetSchemaContext);
-    impl_post_hook!(post_set_schema);
-    impl_post_hook!(pre_freeze_schema);
-    impl_post_hook!(post_freeze_schema);
-    impl_post_hook!(pre_unfreeze_schema);
-    impl_post_hook!(post_unfreeze_schema);
-    impl_pre_hook!(pre_add_node, PyPreAddNodeContext, PreAddNodeContext);
-    impl_post_hook!(post_add_node, PyPostAddNodeContext, PostAddNodeContext);
-    impl_pre_hook!(
-        pre_add_node_with_group,
-        PyPreAddNodeWithGroupContext,
-        PreAddNodeWithGroupContext
-    );
-    impl_post_hook!(
-        post_add_node_with_group,
-        PyPostAddNodeWithGroupContext,
-        PostAddNodeWithGroupContext
-    );
-    impl_pre_hook!(
-        pre_add_node_with_groups,
-        PyPreAddNodeWithGroupsContext,
-        PreAddNodeWithGroupsContext
-    );
-    impl_post_hook!(
-        post_add_node_with_groups,
-        PyPostAddNodeWithGroupsContext,
-        PostAddNodeWithGroupsContext
-    );
-    impl_pre_hook!(
-        pre_remove_node,
-        PyPreRemoveNodeContext,
-        PreRemoveNodeContext
-    );
-    impl_post_hook!(
-        post_remove_node,
-        PyPostRemoveNodeContext,
-        PostRemoveNodeContext
-    );
-    impl_pre_hook!(pre_add_nodes, PyPreAddNodesContext, PreAddNodesContext);
-    impl_post_hook!(post_add_nodes, PyPostAddNodesContext, PostAddNodesContext);
-    impl_pre_hook!(
-        pre_add_nodes_with_group,
-        PyPreAddNodesWithGroupContext,
-        PreAddNodesWithGroupContext
-    );
-    impl_post_hook!(
-        post_add_nodes_with_group,
-        PyPostAddNodesWithGroupContext,
-        PostAddNodesWithGroupContext
-    );
-    impl_pre_hook!(
-        pre_add_nodes_with_groups,
-        PyPreAddNodesWithGroupsContext,
-        PreAddNodesWithGroupsContext
-    );
-    impl_post_hook!(
-        post_add_nodes_with_groups,
-        PyPostAddNodesWithGroupsContext,
-        PostAddNodesWithGroupsContext
-    );
-    impl_pre_hook!(
-        pre_add_nodes_dataframes,
-        PyPreAddNodesDataframesContext,
-        PreAddNodesDataframesContext
-    );
-    impl_post_hook!(
-        post_add_nodes_dataframes,
-        PyPostAddNodesDataframesContext,
-        PostAddNodesDataframesContext
-    );
-    impl_pre_hook!(
-        pre_add_nodes_dataframes_with_group,
-        PyPreAddNodesDataframesWithGroupContext,
-        PreAddNodesDataframesWithGroupContext
-    );
-    impl_post_hook!(
-        post_add_nodes_dataframes_with_group,
-        PyPostAddNodesDataframesWithGroupContext,
-        PostAddNodesDataframesWithGroupContext
-    );
-    impl_pre_hook!(
-        pre_add_nodes_dataframes_with_groups,
-        PyPreAddNodesDataframesWithGroupsContext,
-        PreAddNodesDataframesWithGroupsContext
-    );
-    impl_post_hook!(
-        post_add_nodes_dataframes_with_groups,
-        PyPostAddNodesDataframesWithGroupsContext,
-        PostAddNodesDataframesWithGroupsContext
-    );
-    impl_pre_hook!(pre_add_edge, PyPreAddEdgeContext, PreAddEdgeContext);
-    impl_post_hook!(post_add_edge, PyPostAddEdgeContext, PostAddEdgeContext);
-    impl_pre_hook!(
-        pre_add_edge_with_group,
-        PyPreAddEdgeWithGroupContext,
-        PreAddEdgeWithGroupContext
-    );
-    impl_post_hook!(
-        post_add_edge_with_group,
-        PyPostAddEdgeWithGroupContext,
-        PostAddEdgeWithGroupContext
-    );
-    impl_pre_hook!(
-        pre_add_edge_with_groups,
-        PyPreAddEdgeWithGroupsContext,
-        PreAddEdgeWithGroupsContext
-    );
-    impl_post_hook!(
-        post_add_edge_with_groups,
-        PyPostAddEdgeWithGroupsContext,
-        PostAddEdgeWithGroupsContext
-    );
-    impl_pre_hook!(
-        pre_remove_edge,
-        PyPreRemoveEdgeContext,
-        PreRemoveEdgeContext
-    );
-    impl_post_hook!(
-        post_remove_edge,
-        PyPostRemoveEdgeContext,
-        PostRemoveEdgeContext
-    );
-    impl_pre_hook!(pre_add_edges, PyPreAddEdgesContext, PreAddEdgesContext);
-    impl_post_hook!(post_add_edges, PyPostAddEdgesContext, PostAddEdgesContext);
-    impl_pre_hook!(
-        pre_add_edges_with_group,
-        PyPreAddEdgesWithGroupContext,
-        PreAddEdgesWithGroupContext
-    );
-    impl_post_hook!(
-        post_add_edges_with_group,
-        PyPostAddEdgesWithGroupContext,
-        PostAddEdgesWithGroupContext
-    );
-    impl_pre_hook!(
-        pre_add_edges_with_groups,
-        PyPreAddEdgesWithGroupsContext,
-        PreAddEdgesWithGroupsContext
-    );
-    impl_post_hook!(
-        post_add_edges_with_groups,
-        PyPostAddEdgesWithGroupsContext,
-        PostAddEdgesWithGroupsContext
-    );
-    impl_pre_hook!(
-        pre_add_edges_dataframes,
-        PyPreAddEdgesDataframesContext,
-        PreAddEdgesDataframesContext
-    );
-    impl_post_hook!(
-        post_add_edges_dataframes,
-        PyPostAddEdgesDataframesContext,
-        PostAddEdgesDataframesContext
-    );
-    impl_pre_hook!(
-        pre_add_edges_dataframes_with_group,
-        PyPreAddEdgesDataframesWithGroupContext,
-        PreAddEdgesDataframesWithGroupContext
-    );
-    impl_post_hook!(
-        post_add_edges_dataframes_with_group,
-        PyPostAddEdgesDataframesWithGroupContext,
-        PostAddEdgesDataframesWithGroupContext
-    );
-    impl_pre_hook!(
-        pre_add_edges_dataframes_with_groups,
-        PyPreAddEdgesDataframesWithGroupsContext,
-        PreAddEdgesDataframesWithGroupsContext
-    );
-    impl_post_hook!(
-        post_add_edges_dataframes_with_groups,
-        PyPostAddEdgesDataframesWithGroupsContext,
-        PostAddEdgesDataframesWithGroupsContext
-    );
-    impl_pre_hook!(pre_add_group, PyPreAddGroupContext, PreAddGroupContext);
-    impl_post_hook!(post_add_group, PyPostAddGroupContext, PostAddGroupContext);
-    impl_pre_hook!(
-        pre_remove_group,
-        PyPreRemoveGroupContext,
-        PreRemoveGroupContext
-    );
-    impl_post_hook!(
-        post_remove_group,
-        PyPostRemoveGroupContext,
-        PostRemoveGroupContext
-    );
-    impl_pre_hook!(
-        pre_add_node_to_group,
-        PyPreAddNodeToGroupContext,
-        PreAddNodeToGroupContext
-    );
-    impl_post_hook!(
-        post_add_node_to_group,
-        PyPostAddNodeToGroupContext,
-        PostAddNodeToGroupContext
-    );
-    impl_pre_hook!(
-        pre_add_node_to_groups,
-        PyPreAddNodeToGroupsContext,
-        PreAddNodeToGroupsContext
-    );
-    impl_post_hook!(
-        post_add_node_to_groups,
-        PyPostAddNodeToGroupsContext,
-        PostAddNodeToGroupsContext
-    );
-    impl_pre_hook!(
-        pre_add_nodes_to_groups,
-        PyPreAddNodesToGroupsContext,
-        PreAddNodesToGroupsContext
-    );
-    impl_post_hook!(
-        post_add_nodes_to_groups,
-        PyPostAddNodesToGroupsContext,
-        PostAddNodesToGroupsContext
-    );
-    impl_pre_hook!(
-        pre_add_edge_to_group,
-        PyPreAddEdgeToGroupContext,
-        PreAddEdgeToGroupContext
-    );
-    impl_post_hook!(
-        post_add_edge_to_group,
-        PyPostAddEdgeToGroupContext,
-        PostAddEdgeToGroupContext
-    );
-    impl_pre_hook!(
-        pre_add_edge_to_groups,
-        PyPreAddEdgeToGroupsContext,
-        PreAddEdgeToGroupsContext
-    );
-    impl_post_hook!(
-        post_add_edge_to_groups,
-        PyPostAddEdgeToGroupsContext,
-        PostAddEdgeToGroupsContext
-    );
-    impl_pre_hook!(
-        pre_add_edges_to_groups,
-        PyPreAddEdgesToGroupsContext,
-        PreAddEdgesToGroupsContext
-    );
-    impl_post_hook!(
-        post_add_edges_to_groups,
-        PyPostAddEdgesToGroupsContext,
-        PostAddEdgesToGroupsContext
-    );
-    impl_pre_hook!(
-        pre_remove_node_from_group,
-        PyPreRemoveNodeFromGroupContext,
-        PreRemoveNodeFromGroupContext
-    );
-    impl_post_hook!(
-        post_remove_node_from_group,
-        PyPostRemoveNodeFromGroupContext,
-        PostRemoveNodeFromGroupContext
-    );
-    impl_pre_hook!(
-        pre_remove_node_from_groups,
-        PyPreRemoveNodeFromGroupsContext,
-        PreRemoveNodeFromGroupsContext
-    );
-    impl_post_hook!(
-        post_remove_node_from_groups,
-        PyPostRemoveNodeFromGroupsContext,
-        PostRemoveNodeFromGroupsContext
-    );
-    impl_pre_hook!(
-        pre_remove_nodes_from_groups,
-        PyPreRemoveNodesFromGroupsContext,
-        PreRemoveNodesFromGroupsContext
-    );
-    impl_post_hook!(
-        post_remove_nodes_from_groups,
-        PyPostRemoveNodesFromGroupsContext,
-        PostRemoveNodesFromGroupsContext
-    );
-    impl_pre_hook!(
-        pre_remove_edge_from_group,
-        PyPreRemoveEdgeFromGroupContext,
-        PreRemoveEdgeFromGroupContext
-    );
-    impl_post_hook!(
-        post_remove_edge_from_group,
-        PyPostRemoveEdgeFromGroupContext,
-        PostRemoveEdgeFromGroupContext
-    );
-    impl_pre_hook!(
-        pre_remove_edge_from_groups,
-        PyPreRemoveEdgeFromGroupsContext,
-        PreRemoveEdgeFromGroupsContext
-    );
-    impl_post_hook!(
-        post_remove_edge_from_groups,
-        PyPostRemoveEdgeFromGroupsContext,
-        PostRemoveEdgeFromGroupsContext
-    );
-    impl_pre_hook!(
-        pre_remove_edges_from_groups,
-        PyPreRemoveEdgesFromGroupsContext,
-        PreRemoveEdgesFromGroupsContext
-    );
-    impl_post_hook!(
-        post_remove_edges_from_groups,
-        PyPostRemoveEdgesFromGroupsContext,
-        PostRemoveEdgesFromGroupsContext
-    );
-    impl_post_hook!(pre_clear);
-    impl_post_hook!(post_clear);
 }
