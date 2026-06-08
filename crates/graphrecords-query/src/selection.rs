@@ -266,7 +266,7 @@ where
     O: GroupableOperand + ReturnOperand<'a>,
     Arc<dyn GroupedOperandContext<O, D>>: 'a,
 {
-    type ReturnValue = GroupedIterator<'a, D::Key<'a>, BoxedIterator<'a, O::Output<'a>>>;
+    type ReturnValue = GroupedIterator<'a, D::Key<'a>, O::Grouped<'a>>;
 
     fn evaluate(
         &'a self,
@@ -274,5 +274,13 @@ where
         context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<Self::ReturnValue> {
         Self::evaluate(self, graphrecord, context)
+    }
+
+    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
+        optimizer.run_reported(stats, &self)
+    }
+
+    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", PlanExplanation::new(self.as_plan_node()))
     }
 }

@@ -7,6 +7,8 @@ use crate::{
         GroupedIterator, GroupedOperandContext,
     },
     nodes::NodeOperand,
+    optimizer::PlanNode,
+    values::MultipleValuesOperand,
 };
 use graphrecords_core::{
     GraphRecord,
@@ -15,11 +17,27 @@ use graphrecords_core::{
 };
 
 impl GroupableOperand for NodeOperand {
-    type Output<'a> = &'a NodeIndex;
+    type Grouped<'a> = BoxedIterator<'a, &'a NodeIndex>;
 }
 
+impl GroupableOperand for EdgeOperand {
+    type Grouped<'a> = BoxedIterator<'a, &'a EdgeIndex>;
+}
+
+impl<O: RootOperand> GroupableOperand for MultipleValuesOperand<O> {
+    type Grouped<'a> = BoxedIterator<'a, (<O as RootOperand>::Index<'a>, GraphRecordValue)>;
+}
+
+#[derive(PlanNode)]
+#[plan_node(
+    crate = "crate",
+    label = "GroupBy",
+    operand = "GroupOperand<NodeOperand, AttributeDiscriminator>"
+)]
 struct NodeGroupByAttributeContext {
+    #[plan_node(input)]
     input: NodeOperand,
+    #[plan_node(describe)]
     discriminator: AttributeDiscriminator,
 }
 
@@ -32,7 +50,7 @@ impl GroupedOperandContext<NodeOperand, AttributeDiscriminator> for NodeGroupByA
         GroupedIterator<
             'a,
             <AttributeDiscriminator as Discriminator>::Key<'a>,
-            BoxedIterator<'a, <NodeOperand as GroupableOperand>::Output<'a>>,
+            <NodeOperand as GroupableOperand>::Grouped<'a>,
         >,
     > {
         let node_indices = self.input.evaluate(graphrecord, context)?;
@@ -71,12 +89,16 @@ impl GroupBy<AttributeDiscriminator> for NodeOperand {
     }
 }
 
-impl GroupableOperand for EdgeOperand {
-    type Output<'a> = &'a EdgeIndex;
-}
-
+#[derive(PlanNode)]
+#[plan_node(
+    crate = "crate",
+    label = "GroupBy",
+    operand = "GroupOperand<EdgeOperand, AttributeDiscriminator>"
+)]
 struct EdgeGroupByAttributeContext {
+    #[plan_node(input)]
     input: EdgeOperand,
+    #[plan_node(describe)]
     discriminator: AttributeDiscriminator,
 }
 
@@ -89,7 +111,7 @@ impl GroupedOperandContext<EdgeOperand, AttributeDiscriminator> for EdgeGroupByA
         GroupedIterator<
             'a,
             <AttributeDiscriminator as Discriminator>::Key<'a>,
-            BoxedIterator<'a, <EdgeOperand as GroupableOperand>::Output<'a>>,
+            <EdgeOperand as GroupableOperand>::Grouped<'a>,
         >,
     > {
         let edge_indices = self.input.evaluate(graphrecord, context)?;
