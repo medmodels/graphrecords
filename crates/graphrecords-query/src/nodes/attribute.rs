@@ -1,7 +1,9 @@
 use crate::{
     BoxedIterator, Operand, RootOperand,
     execution::ExecutionContext,
-    group::{Discriminator, GroupOperand, GroupableOperand, GroupedIterator, GroupedOperandContext},
+    group::{
+        Discriminator, GroupOperand, GroupableOperand, GroupedIterator, GroupedOperandContext,
+    },
     nodes::NodeOperand,
     optimizer::{Cardinality, PlanNode, Stats},
     traits::Attribute,
@@ -33,7 +35,7 @@ fn attribute_values<'a>(
 #[plan_node(
     crate = "crate",
     label = "Attribute",
-    operand = "MultipleValuesOperand<NodeOperand>",
+    operand = MultipleValuesOperand<NodeOperand>,
     distinct,
     empty = "if_any"
 )]
@@ -70,7 +72,7 @@ impl MultipleValuesOperandContext for AttributeContext {
 #[plan_node(
     crate = "crate",
     label = "Attribute",
-    operand = "GroupOperand<MultipleValuesOperand<NodeOperand>, D>"
+    operand = GroupOperand<MultipleValuesOperand<NodeOperand>, D>
 )]
 pub struct GroupedAttributeContext<D: Discriminator> {
     #[plan_node(input)]
@@ -96,7 +98,10 @@ impl<D: Discriminator> GroupedOperandContext<MultipleValuesOperand<NodeOperand>,
         let partitions = self.input.evaluate(graphrecord, context)?;
 
         Ok(Box::new(partitions.map(move |(key, partition)| {
-            (key, attribute_values(graphrecord, partition, &self.attribute))
+            (
+                key,
+                attribute_values(graphrecord, partition, &self.attribute),
+            )
         })))
     }
 }

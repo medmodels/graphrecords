@@ -13,7 +13,7 @@ use graphrecords_utils::aliases::GrHashMap;
 #[plan_node(
     crate = "crate",
     label = "Filter",
-    operand = "NodeOperand",
+    operand = NodeOperand,
     commutes_with_filter,
     distinct,
     empty = "if_any"

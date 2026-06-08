@@ -21,7 +21,7 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
             label = Some(meta.value()?.parse::<LitStr>()?);
             Ok(true)
         } else if meta.path.is_ident("operand") {
-            operand = Some(meta.value()?.parse::<LitStr>()?.parse()?);
+            operand = Some(meta.value()?.parse::<Type>()?);
             Ok(true)
         } else if meta.path.is_ident("commutes_with_filter") {
             commutes_with_filter = true;

@@ -9,7 +9,7 @@ use graphrecords_utils::aliases::GrHashMap;
 use std::ops::{BitAnd, BitOr, BitXor, Not as BitNot};
 
 #[derive(PlanNode)]
-#[plan_node(crate = "crate", label = "And", operand = "BoolMaskOperand<O>")]
+#[plan_node(crate = "crate", label = "And", operand = BoolMaskOperand<O>)]
 pub struct AndContext<O: RootOperand> {
     #[plan_node(input)]
     left: BoolMaskOperand<O>,
@@ -64,7 +64,7 @@ impl<O: RootOperand> BitAnd for BoolMaskOperand<O> {
 }
 
 #[derive(PlanNode)]
-#[plan_node(crate = "crate", label = "Or", operand = "BoolMaskOperand<O>")]
+#[plan_node(crate = "crate", label = "Or", operand = BoolMaskOperand<O>)]
 pub struct OrContext<O: RootOperand> {
     #[plan_node(input)]
     left: BoolMaskOperand<O>,
@@ -122,7 +122,7 @@ impl<O: RootOperand> BitOr for BoolMaskOperand<O> {
 }
 
 #[derive(PlanNode)]
-#[plan_node(crate = "crate", label = "Xor", operand = "BoolMaskOperand<O>")]
+#[plan_node(crate = "crate", label = "Xor", operand = BoolMaskOperand<O>)]
 pub struct XorContext<O: RootOperand> {
     #[plan_node(input)]
     left: BoolMaskOperand<O>,
@@ -180,7 +180,7 @@ impl<O: RootOperand> BitXor for BoolMaskOperand<O> {
 }
 
 #[derive(PlanNode)]
-#[plan_node(crate = "crate", label = "Not", operand = "BoolMaskOperand<O>")]
+#[plan_node(crate = "crate", label = "Not", operand = BoolMaskOperand<O>)]
 pub struct NotContext<O: RootOperand> {
     #[plan_node(input)]
     input: BoolMaskOperand<O>,

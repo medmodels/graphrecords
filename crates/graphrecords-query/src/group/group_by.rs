@@ -32,7 +32,7 @@ impl<O: RootOperand> GroupableOperand for MultipleValuesOperand<O> {
 #[plan_node(
     crate = "crate",
     label = "GroupBy",
-    operand = "GroupOperand<NodeOperand, AttributeDiscriminator>"
+    operand = GroupOperand<NodeOperand, AttributeDiscriminator>
 )]
 struct NodeGroupByAttributeContext {
     #[plan_node(input)]
@@ -93,7 +93,7 @@ impl GroupBy<AttributeDiscriminator> for NodeOperand {
 #[plan_node(
     crate = "crate",
     label = "GroupBy",
-    operand = "GroupOperand<EdgeOperand, AttributeDiscriminator>"
+    operand = GroupOperand<EdgeOperand, AttributeDiscriminator>
 )]
 struct EdgeGroupByAttributeContext {
     #[plan_node(input)]

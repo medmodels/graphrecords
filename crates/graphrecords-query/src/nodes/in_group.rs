@@ -13,7 +13,7 @@ use graphrecords_utils::aliases::GrHashSet;
 #[plan_node(
     crate = "crate",
     label = "InGroup",
-    operand = "BoolMaskOperand<NodeOperand>",
+    operand = BoolMaskOperand<NodeOperand>,
     distinct,
     empty = "if_any"
 )]
