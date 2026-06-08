@@ -2,14 +2,15 @@ use crate::{
     And, BoxedIterator, Not, Operand, Or, RootOperand, Xor,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
-    optimizer::{PlanNode, Selectivity, Stats},
+    optimizer::{OptimizerHints, PlanNode, Selectivity, Stats},
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use graphrecords_utils::aliases::GrHashMap;
 use std::ops::{BitAnd, BitOr, BitXor, Not as BitNot};
 
-#[derive(PlanNode)]
+#[derive(PlanNode, OptimizerHints)]
 #[plan_node(crate = "crate", label = "And", operand = BoolMaskOperand<O>)]
+#[optimizer_hints(crate = "crate")]
 pub struct AndContext<O: RootOperand> {
     #[plan_node(input)]
     left: BoolMaskOperand<O>,
@@ -63,8 +64,9 @@ impl<O: RootOperand> BitAnd for BoolMaskOperand<O> {
     }
 }
 
-#[derive(PlanNode)]
+#[derive(PlanNode, OptimizerHints)]
 #[plan_node(crate = "crate", label = "Or", operand = BoolMaskOperand<O>)]
+#[optimizer_hints(crate = "crate")]
 pub struct OrContext<O: RootOperand> {
     #[plan_node(input)]
     left: BoolMaskOperand<O>,
@@ -121,8 +123,9 @@ impl<O: RootOperand> BitOr for BoolMaskOperand<O> {
     }
 }
 
-#[derive(PlanNode)]
+#[derive(PlanNode, OptimizerHints)]
 #[plan_node(crate = "crate", label = "Xor", operand = BoolMaskOperand<O>)]
+#[optimizer_hints(crate = "crate")]
 pub struct XorContext<O: RootOperand> {
     #[plan_node(input)]
     left: BoolMaskOperand<O>,
@@ -179,8 +182,9 @@ impl<O: RootOperand> BitXor for BoolMaskOperand<O> {
     }
 }
 
-#[derive(PlanNode)]
+#[derive(PlanNode, OptimizerHints)]
 #[plan_node(crate = "crate", label = "Not", operand = BoolMaskOperand<O>)]
+#[optimizer_hints(crate = "crate")]
 pub struct NotContext<O: RootOperand> {
     #[plan_node(input)]
     input: BoolMaskOperand<O>,

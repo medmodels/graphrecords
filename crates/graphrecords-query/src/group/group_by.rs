@@ -7,7 +7,7 @@ use crate::{
         GroupedIterator, GroupedOperandContext,
     },
     nodes::NodeOperand,
-    optimizer::PlanNode,
+    optimizer::{OptimizerHints, PlanNode},
     values::MultipleValuesOperand,
 };
 use graphrecords_core::{
@@ -28,12 +28,13 @@ impl<O: RootOperand> GroupableOperand for MultipleValuesOperand<O> {
     type Grouped<'a> = BoxedIterator<'a, (<O as RootOperand>::Index<'a>, GraphRecordValue)>;
 }
 
-#[derive(PlanNode)]
+#[derive(PlanNode, OptimizerHints)]
 #[plan_node(
     crate = "crate",
     label = "GroupBy",
     operand = GroupOperand<NodeOperand, AttributeDiscriminator>
 )]
+#[optimizer_hints(crate = "crate")]
 struct NodeGroupByAttributeContext {
     #[plan_node(input)]
     input: NodeOperand,
@@ -89,12 +90,13 @@ impl GroupBy<AttributeDiscriminator> for NodeOperand {
     }
 }
 
-#[derive(PlanNode)]
+#[derive(PlanNode, OptimizerHints)]
 #[plan_node(
     crate = "crate",
     label = "GroupBy",
     operand = GroupOperand<EdgeOperand, AttributeDiscriminator>
 )]
+#[optimizer_hints(crate = "crate")]
 struct EdgeGroupByAttributeContext {
     #[plan_node(input)]
     input: EdgeOperand,

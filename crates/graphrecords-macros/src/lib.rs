@@ -1,4 +1,5 @@
 mod operand;
+mod optimizer_hints;
 mod phase_label;
 mod plan_node;
 
@@ -13,6 +14,15 @@ pub fn derive_plan_node(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     plan_node::expand(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro_derive(OptimizerHints, attributes(optimizer_hints))]
+pub fn derive_optimizer_hints(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    optimizer_hints::expand(&input)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }

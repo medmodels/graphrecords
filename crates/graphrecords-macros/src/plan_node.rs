@@ -10,11 +10,6 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
 
     let mut label: Option<LitStr> = None;
     let mut operand: Option<Type> = None;
-    let mut commutes_with_filter = false;
-    let mut allows_limit_pushdown = false;
-    let mut is_distinct = false;
-    let mut is_volatile = false;
-    let mut empty_rule: Option<TokenStream> = None;
 
     let crate_path = crate_path(&input.attrs, "plan_node", |meta| {
         if meta.path.is_ident("label") {
@@ -23,39 +18,10 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
         } else if meta.path.is_ident("operand") {
             operand = Some(meta.value()?.parse::<Type>()?);
             Ok(true)
-        } else if meta.path.is_ident("commutes_with_filter") {
-            commutes_with_filter = true;
-            Ok(true)
-        } else if meta.path.is_ident("allows_limit_pushdown") {
-            allows_limit_pushdown = true;
-            Ok(true)
-        } else if meta.path.is_ident("distinct") {
-            is_distinct = true;
-            Ok(true)
-        } else if meta.path.is_ident("volatile") {
-            is_volatile = true;
-            Ok(true)
-        } else if meta.path.is_ident("empty") {
-            let rule: LitStr = meta.value()?.parse()?;
-
-            empty_rule = Some(match rule.value().as_str() {
-                "never" => quote!(Never),
-                "if_any" => quote!(IfAnyInput),
-                "if_all" => quote!(IfAllInputs),
-                other => {
-                    return Err(meta.error(format!(
-                        "unknown empty rule `{other}`, expected `never`, `if_any`, or `if_all`"
-                    )));
-                }
-            });
-
-            Ok(true)
         } else {
             Ok(false)
         }
     })?;
-
-    let empty_rule = empty_rule.unwrap_or_else(|| quote!(Never));
 
     let name_label = label.unwrap_or_else(|| LitStr::new(&name.to_string(), name.span()));
 
@@ -186,35 +152,9 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
         None => quote!(),
     };
 
-    let optimizer_hints_impl = quote! {
-        impl #impl_generics #crate_path::optimizer::OptimizerHints for #name #type_generics #where_clause {
-            fn commutes_with_filter(&self) -> bool {
-                #commutes_with_filter
-            }
-
-            fn allows_limit_pushdown(&self) -> bool {
-                #allows_limit_pushdown
-            }
-
-            fn is_distinct(&self) -> bool {
-                #is_distinct
-            }
-
-            fn is_volatile(&self) -> bool {
-                #is_volatile
-            }
-
-            fn empty_rule(&self) -> #crate_path::optimizer::EmptyRule {
-                #crate_path::optimizer::EmptyRule::#empty_rule
-            }
-        }
-    };
-
     Ok(quote! {
 
         #optimize_inputs_impl
-
-        #optimizer_hints_impl
 
         impl #impl_generics #crate_path::optimizer::HasInputs for #name #type_generics #where_clause {
             type Inputs<'inputs> = ( #( &'inputs #input_types, )* );

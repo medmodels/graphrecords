@@ -5,7 +5,7 @@ use crate::{
         Discriminator, GroupOperand, GroupableOperand, GroupedIterator, GroupedOperandContext,
     },
     nodes::NodeOperand,
-    optimizer::{Cardinality, PlanNode, Stats},
+    optimizer::{Cardinality, OptimizerHints, PlanNode, Stats},
     traits::Attribute,
     values::{MultipleValuesOperand, MultipleValuesOperandContext},
 };
@@ -31,14 +31,13 @@ fn attribute_values<'a>(
     }))
 }
 
-#[derive(PlanNode)]
+#[derive(PlanNode, OptimizerHints)]
 #[plan_node(
     crate = "crate",
     label = "Attribute",
-    operand = MultipleValuesOperand<NodeOperand>,
-    distinct,
-    empty = "if_any"
+    operand = MultipleValuesOperand<NodeOperand>
 )]
+#[optimizer_hints(crate = "crate", distinct, empty = if_any)]
 pub struct AttributeContext {
     #[plan_node(input)]
     input: NodeOperand,
@@ -68,12 +67,13 @@ impl MultipleValuesOperandContext for AttributeContext {
     }
 }
 
-#[derive(PlanNode)]
+#[derive(PlanNode, OptimizerHints)]
 #[plan_node(
     crate = "crate",
     label = "Attribute",
     operand = GroupOperand<MultipleValuesOperand<NodeOperand>, D>
 )]
+#[optimizer_hints(crate = "crate")]
 pub struct GroupedAttributeContext<D: Discriminator> {
     #[plan_node(input)]
     input: GroupOperand<NodeOperand, D>,

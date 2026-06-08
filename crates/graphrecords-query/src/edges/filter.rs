@@ -3,21 +3,19 @@ use crate::{
     bool::BoolMaskOperand,
     edges::EdgeOperandContext,
     execution::ExecutionContext,
-    optimizer::{Cardinality, PlanNode, Stats},
+    optimizer::{Cardinality, OptimizerHints, PlanNode, Stats},
     traits::Filter,
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::EdgeIndex};
 use graphrecords_utils::aliases::GrHashMap;
 
-#[derive(PlanNode)]
+#[derive(PlanNode, OptimizerHints)]
 #[plan_node(
     crate = "crate",
     label = "Filter",
-    operand = EdgeOperand,
-    commutes_with_filter,
-    distinct,
-    empty = "if_any"
+    operand = EdgeOperand
 )]
+#[optimizer_hints(crate = "crate", commutes_with_filter, distinct, empty = if_any)]
 pub struct FilterContext {
     #[plan_node(input)]
     input: EdgeOperand,

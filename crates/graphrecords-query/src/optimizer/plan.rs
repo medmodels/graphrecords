@@ -1,6 +1,6 @@
 use super::{engine::Session, rule::Transformed};
 use crate::Operand;
-pub use graphrecords_macros::PlanNode;
+pub use graphrecords_macros::{OptimizerHints, PlanNode};
 use std::{
     any::Any,
     fmt::{self, Display, Formatter},

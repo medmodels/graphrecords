@@ -2,20 +2,19 @@ use crate::{
     BoxedIterator, EdgeOperand, Operand, RootOperand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
-    optimizer::{EdgeGroupSize, PlanNode, Selectivity, Stats},
+    optimizer::{EdgeGroupSize, OptimizerHints, PlanNode, Selectivity, Stats},
     traits::InGroup,
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::Group};
 use graphrecords_utils::aliases::GrHashSet;
 
-#[derive(PlanNode)]
+#[derive(PlanNode, OptimizerHints)]
 #[plan_node(
     crate = "crate",
     label = "InGroup",
-    operand = BoolMaskOperand<EdgeOperand>,
-    distinct,
-    empty = "if_any"
+    operand = BoolMaskOperand<EdgeOperand>
 )]
+#[optimizer_hints(crate = "crate", distinct, empty = if_any)]
 pub struct InGroupContext {
     #[plan_node(input)]
     input: EdgeOperand,
