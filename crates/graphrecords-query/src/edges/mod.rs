@@ -1,19 +1,15 @@
-mod attribute;
-mod filter;
-mod in_group;
 mod scan;
+mod structure;
 
 use crate::{
     BoxedIterator, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
-pub use attribute::AttributeContext;
-pub use filter::FilterContext;
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::EdgeIndex};
-pub use in_group::InGroupContext;
 pub use scan::AllEdges;
 use std::sync::Arc;
+pub use structure::{AttributeContext, FilterContext, GroupedAttributeContext, InGroupContext};
 
 pub trait EdgeOperandContext:
     PlanNode + OptimizeInputs<Output = EdgeOperand> + Cardinality
