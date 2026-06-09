@@ -7,7 +7,7 @@ use crate::{
     },
     optimizer::{Cardinality, OptimizerHints, PlanNode, Stats},
     traits::Attribute,
-    values::{MultipleValuesOperand, MultipleValuesOperandContext},
+    values::{ValuesOperand, ValuesOperandContext},
 };
 use graphrecords_core::{
     GraphRecord,
@@ -35,7 +35,7 @@ fn attribute_values<'a>(
 #[plan_node(
     crate = "crate",
     label = "Attribute",
-    operand = MultipleValuesOperand<EdgeOperand>
+    operand = ValuesOperand<EdgeOperand>
 )]
 #[optimizer_hints(crate = "crate", distinct, empty = if_any)]
 pub struct AttributeContext {
@@ -51,7 +51,7 @@ impl Cardinality for AttributeContext {
     }
 }
 
-impl MultipleValuesOperandContext for AttributeContext {
+impl ValuesOperandContext for AttributeContext {
     type Operand = EdgeOperand;
 
     fn evaluate<'a>(
@@ -71,7 +71,7 @@ impl MultipleValuesOperandContext for AttributeContext {
 #[plan_node(
     crate = "crate",
     label = "Attribute",
-    operand = GroupOperand<MultipleValuesOperand<EdgeOperand>, D>
+    operand = GroupOperand<ValuesOperand<EdgeOperand>, D>
 )]
 #[optimizer_hints(crate = "crate")]
 pub struct GroupedAttributeContext<D: Discriminator> {
@@ -81,7 +81,7 @@ pub struct GroupedAttributeContext<D: Discriminator> {
     attribute: GraphRecordAttribute,
 }
 
-impl<D: Discriminator> GroupedOperandContext<MultipleValuesOperand<EdgeOperand>, D>
+impl<D: Discriminator> GroupedOperandContext<ValuesOperand<EdgeOperand>, D>
     for GroupedAttributeContext<D>
 {
     fn evaluate<'a>(
@@ -92,7 +92,7 @@ impl<D: Discriminator> GroupedOperandContext<MultipleValuesOperand<EdgeOperand>,
         GroupedIterator<
             'a,
             D::Key<'a>,
-            <MultipleValuesOperand<EdgeOperand> as GroupableOperand>::Grouped<'a>,
+            <ValuesOperand<EdgeOperand> as GroupableOperand>::Grouped<'a>,
         >,
     > {
         let partitions = self.input.evaluate(graphrecord, context)?;
@@ -107,10 +107,10 @@ impl<D: Discriminator> GroupedOperandContext<MultipleValuesOperand<EdgeOperand>,
 }
 
 impl Attribute for EdgeOperand {
-    type ReturnOperand = MultipleValuesOperand<Self>;
+    type ReturnOperand = ValuesOperand<Self>;
 
     fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
-        MultipleValuesOperand::new(AttributeContext {
+        ValuesOperand::new(AttributeContext {
             input: self.clone(),
             attribute,
         })
@@ -118,7 +118,7 @@ impl Attribute for EdgeOperand {
 }
 
 impl<D: Discriminator> Attribute for GroupOperand<EdgeOperand, D> {
-    type ReturnOperand = GroupOperand<MultipleValuesOperand<EdgeOperand>, D>;
+    type ReturnOperand = GroupOperand<ValuesOperand<EdgeOperand>, D>;
 
     fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
         GroupOperand::new(GroupedAttributeContext {

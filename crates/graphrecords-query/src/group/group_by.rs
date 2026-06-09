@@ -8,7 +8,7 @@ use crate::{
     },
     nodes::NodeOperand,
     optimizer::{OptimizerHints, PlanNode},
-    values::MultipleValuesOperand,
+    values::ValuesOperand,
 };
 use graphrecords_core::{
     GraphRecord,
@@ -24,7 +24,7 @@ impl GroupableOperand for EdgeOperand {
     type Grouped<'a> = BoxedIterator<'a, &'a EdgeIndex>;
 }
 
-impl<O: RootOperand> GroupableOperand for MultipleValuesOperand<O> {
+impl<O: RootOperand> GroupableOperand for ValuesOperand<O> {
     type Grouped<'a> = BoxedIterator<'a, (<O as RootOperand>::Index<'a>, GraphRecordValue)>;
 }
 

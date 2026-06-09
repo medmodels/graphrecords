@@ -7,7 +7,7 @@ use crate::{
     nodes::NodeOperand,
     optimizer::{Cardinality, OptimizerHints, PlanNode, Stats},
     traits::Attribute,
-    values::{MultipleValuesOperand, MultipleValuesOperandContext},
+    values::{ValuesOperand, ValuesOperandContext},
 };
 use graphrecords_core::{
     GraphRecord,
@@ -35,7 +35,7 @@ fn attribute_values<'a>(
 #[plan_node(
     crate = "crate",
     label = "Attribute",
-    operand = MultipleValuesOperand<NodeOperand>
+    operand = ValuesOperand<NodeOperand>
 )]
 #[optimizer_hints(crate = "crate", distinct, empty = if_any)]
 pub struct AttributeContext {
@@ -51,7 +51,7 @@ impl Cardinality for AttributeContext {
     }
 }
 
-impl MultipleValuesOperandContext for AttributeContext {
+impl ValuesOperandContext for AttributeContext {
     type Operand = NodeOperand;
 
     fn evaluate<'a>(
@@ -71,7 +71,7 @@ impl MultipleValuesOperandContext for AttributeContext {
 #[plan_node(
     crate = "crate",
     label = "Attribute",
-    operand = GroupOperand<MultipleValuesOperand<NodeOperand>, D>
+    operand = GroupOperand<ValuesOperand<NodeOperand>, D>
 )]
 #[optimizer_hints(crate = "crate")]
 pub struct GroupedAttributeContext<D: Discriminator> {
@@ -81,7 +81,7 @@ pub struct GroupedAttributeContext<D: Discriminator> {
     attribute: GraphRecordAttribute,
 }
 
-impl<D: Discriminator> GroupedOperandContext<MultipleValuesOperand<NodeOperand>, D>
+impl<D: Discriminator> GroupedOperandContext<ValuesOperand<NodeOperand>, D>
     for GroupedAttributeContext<D>
 {
     fn evaluate<'a>(
@@ -92,7 +92,7 @@ impl<D: Discriminator> GroupedOperandContext<MultipleValuesOperand<NodeOperand>,
         GroupedIterator<
             'a,
             D::Key<'a>,
-            <MultipleValuesOperand<NodeOperand> as GroupableOperand>::Grouped<'a>,
+            <ValuesOperand<NodeOperand> as GroupableOperand>::Grouped<'a>,
         >,
     > {
         let partitions = self.input.evaluate(graphrecord, context)?;
@@ -107,10 +107,10 @@ impl<D: Discriminator> GroupedOperandContext<MultipleValuesOperand<NodeOperand>,
 }
 
 impl Attribute for NodeOperand {
-    type ReturnOperand = MultipleValuesOperand<Self>;
+    type ReturnOperand = ValuesOperand<Self>;
 
     fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
-        MultipleValuesOperand::new(AttributeContext {
+        ValuesOperand::new(AttributeContext {
             input: self.clone(),
             attribute,
         })
@@ -118,7 +118,7 @@ impl Attribute for NodeOperand {
 }
 
 impl<D: Discriminator> Attribute for GroupOperand<NodeOperand, D> {
-    type ReturnOperand = GroupOperand<MultipleValuesOperand<NodeOperand>, D>;
+    type ReturnOperand = GroupOperand<ValuesOperand<NodeOperand>, D>;
 
     fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
         GroupOperand::new(GroupedAttributeContext {

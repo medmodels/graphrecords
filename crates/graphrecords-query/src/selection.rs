@@ -8,7 +8,7 @@ use crate::{
     },
     nodes::AllNodes,
     optimizer::{OptimizationReport, Optimizer, PlanExplanation, Stats},
-    values::MultipleValuesOperand,
+    values::ValuesOperand,
 };
 use graphrecords_core::{
     GraphRecord,
@@ -220,8 +220,8 @@ pub trait ReturnOperand<'a>: Clone {
 }
 
 impl_iterator_return_operand!(
-    MultipleValuesOperand<NodeOperand> => (&'a NodeIndex, GraphRecordValue),
-    MultipleValuesOperand<EdgeOperand> => (&'a EdgeIndex, GraphRecordValue),
+    ValuesOperand<NodeOperand> => (&'a NodeIndex, GraphRecordValue),
+    ValuesOperand<EdgeOperand> => (&'a EdgeIndex, GraphRecordValue),
     BoolMaskOperand<NodeOperand>       => (&'a NodeIndex, bool),
     BoolMaskOperand<EdgeOperand>       => (&'a EdgeIndex, bool),
 );

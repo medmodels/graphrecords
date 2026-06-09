@@ -1,5 +1,21 @@
+mod aggregation;
+mod arithmetic;
+mod comparison;
+mod indexing;
+mod is_type;
 mod logic;
+mod membership;
+mod numeric;
+mod string_operations;
 mod structure;
 
+pub use aggregation::*;
+pub use arithmetic::*;
+pub use comparison::*;
+pub use indexing::*;
+pub use is_type::*;
 pub use logic::*;
+pub use membership::*;
+pub use numeric::*;
+pub use string_operations::*;
 pub use structure::*;

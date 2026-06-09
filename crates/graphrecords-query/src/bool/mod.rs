@@ -6,8 +6,59 @@ use crate::{
     optimizer::{OptimizeInputs, PlanNode, Selectivity},
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
+use graphrecords_utils::aliases::GrHashMap;
 pub use logic::{AndContext, NotContext, OrContext, XorContext};
 use std::sync::Arc;
+
+pub type NestedBoolMaskIterator<'a, O, T> =
+    BoxedIterator<'a, (<O as RootOperand>::Index<'a>, GrHashMap<T, bool>)>;
+
+pub trait NestedBoolMaskOperandContext:
+    PlanNode
+    + OptimizeInputs<Output = NestedBoolMaskOperand<Self::Operand, Self::TreeType>>
+    + Selectivity
+{
+    type Operand: RootOperand;
+    type TreeType;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<NestedBoolMaskIterator<'a, Self::Operand, Self::TreeType>>;
+}
+
+#[derive(Operand)]
+#[operand(crate = "crate")]
+pub struct NestedBoolMaskOperand<O: RootOperand, T: 'static> {
+    #[operand(context)]
+    context: Arc<dyn NestedBoolMaskOperandContext<Operand = O, TreeType = T, Output = Self>>,
+}
+
+impl<O: RootOperand, T: 'static> Clone for NestedBoolMaskOperand<O, T> {
+    fn clone(&self) -> Self {
+        Self {
+            context: Arc::clone(&self.context),
+        }
+    }
+}
+
+impl<O: RootOperand, T: 'static> NestedBoolMaskOperand<O, T> {
+    #[must_use]
+    pub fn new<C: NestedBoolMaskOperandContext<Operand = O, TreeType = T>>(context: C) -> Self {
+        Self {
+            context: Arc::new(context),
+        }
+    }
+
+    pub fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<NestedBoolMaskIterator<'a, O, T>> {
+        self.context.evaluate(graphrecord, context)
+    }
+}
 
 pub trait BoolMaskOperandContext:
     PlanNode + OptimizeInputs<Output = BoolMaskOperand<Self::Operand>> + Selectivity
