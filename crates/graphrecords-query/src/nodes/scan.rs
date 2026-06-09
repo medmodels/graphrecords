@@ -2,13 +2,14 @@ use crate::{
     BoxedIterator, NodeOperand,
     execution::ExecutionContext,
     nodes::NodeOperandContext,
-    optimizer::{Cardinality, Count, CountKind, OptimizerHints, PlanNode, Stats},
+    optimizer::{Cardinality, Count, CountKind, Explain, OptimizerHints, PlanNode, Stats},
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::NodeIndex};
 
-#[derive(PlanNode, OptimizerHints)]
+#[derive(PlanNode, OptimizerHints, Explain)]
 #[plan_node(crate = "crate", operand = NodeOperand)]
 #[optimizer_hints(crate = "crate", distinct)]
+#[explain(crate = "crate")]
 pub struct AllNodes;
 
 impl Cardinality for AllNodes {

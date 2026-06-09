@@ -5,7 +5,7 @@ use crate::{
     group::{
         Discriminator, GroupOperand, GroupableOperand, GroupedIterator, GroupedOperandContext,
     },
-    optimizer::{Cardinality, OptimizerHints, PlanNode, Stats},
+    optimizer::{Cardinality, Explain, OptimizerHints, PlanNode, Stats},
     traits::Attribute,
     values::{ValuesOperand, ValuesOperandContext},
 };
@@ -31,17 +31,14 @@ fn attribute_values<'a>(
     }))
 }
 
-#[derive(PlanNode, OptimizerHints)]
-#[plan_node(
-    crate = "crate",
-    label = "Attribute",
-    operand = ValuesOperand<EdgeOperand>
-)]
+#[derive(PlanNode, OptimizerHints, Explain)]
+#[plan_node(crate = "crate", operand = ValuesOperand<EdgeOperand>)]
 #[optimizer_hints(crate = "crate", distinct, empty = if_any)]
+#[explain(crate = "crate", label = "Attribute")]
 pub struct AttributeContext {
     #[plan_node(input)]
     input: EdgeOperand,
-    #[plan_node(describe)]
+    #[explain]
     attribute: GraphRecordAttribute,
 }
 
@@ -67,17 +64,14 @@ impl ValuesOperandContext for AttributeContext {
     }
 }
 
-#[derive(PlanNode, OptimizerHints)]
-#[plan_node(
-    crate = "crate",
-    label = "Attribute",
-    operand = GroupOperand<ValuesOperand<EdgeOperand>, D>
-)]
+#[derive(PlanNode, OptimizerHints, Explain)]
+#[plan_node(crate = "crate", operand = GroupOperand<ValuesOperand<EdgeOperand>, D>)]
 #[optimizer_hints(crate = "crate")]
+#[explain(crate = "crate", label = "Attribute")]
 pub struct GroupedAttributeContext<D: Discriminator> {
     #[plan_node(input)]
     input: GroupOperand<EdgeOperand, D>,
-    #[plan_node(describe)]
+    #[explain]
     attribute: GraphRecordAttribute,
 }
 

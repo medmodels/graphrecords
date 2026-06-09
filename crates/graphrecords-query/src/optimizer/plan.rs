@@ -1,6 +1,6 @@
 use super::{engine::Session, rule::Transformed};
 use crate::Operand;
-pub use graphrecords_macros::{OptimizerHints, PlanNode};
+pub use graphrecords_macros::{Explain, OptimizerHints, PlanNode};
 use std::{
     any::Any,
     fmt::{self, Display, Formatter},
@@ -37,10 +37,20 @@ pub trait OptimizerHints {
 }
 
 #[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot explain itself",
+    note = "implement `Explain` for `{Self}`, or derive it with `#[derive(Explain)]`"
+)]
+pub trait Explain {
+    fn describe(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str("<plan node>")
+    }
+}
+
+#[diagnostic::on_unimplemented(
     message = "`{Self}` is not a plan node",
     note = "implement `PlanNode` for `{Self}`, or derive it with `#[derive(PlanNode)]`"
 )]
-pub trait PlanNode: Any + OptimizerHints {
+pub trait PlanNode: Any + OptimizerHints + Explain {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         Vec::new()
     }
@@ -52,10 +62,6 @@ pub trait PlanNode: Any + OptimizerHints {
 
     fn dyn_hash(&self, mut state: &mut dyn Hasher) {
         self.type_id().hash(&mut state);
-    }
-
-    fn describe(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        formatter.write_str("<plan node>")
     }
 }
 

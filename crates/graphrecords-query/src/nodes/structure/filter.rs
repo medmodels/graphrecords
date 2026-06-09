@@ -3,19 +3,16 @@ use crate::{
     bool::BoolMaskOperand,
     execution::ExecutionContext,
     nodes::{NodeOperand, NodeOperandContext},
-    optimizer::{Cardinality, OptimizerHints, PlanNode, Stats},
+    optimizer::{Cardinality, Explain, OptimizerHints, PlanNode, Stats},
     traits::Filter,
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::NodeIndex};
 use graphrecords_utils::aliases::GrHashMap;
 
-#[derive(PlanNode, OptimizerHints)]
-#[plan_node(
-    crate = "crate",
-    label = "Filter",
-    operand = NodeOperand
-)]
+#[derive(PlanNode, OptimizerHints, Explain)]
+#[plan_node(crate = "crate", operand = NodeOperand)]
 #[optimizer_hints(crate = "crate", commutes_with_filter, distinct, empty = if_any)]
+#[explain(crate = "crate", label = "Filter")]
 pub struct FilterContext {
     #[plan_node(input)]
     input: NodeOperand,

@@ -1,29 +1,23 @@
 use crate::crate_path;
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Data, DeriveInput, Error, Fields, Index, LitStr, Result, Type};
+use syn::{Data, DeriveInput, Error, Fields, Index, Result, Type};
 
 pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
     let name = &input.ident;
 
     let (impl_generics, type_generics, where_clause) = input.generics.split_for_impl();
 
-    let mut label: Option<LitStr> = None;
     let mut operand: Option<Type> = None;
 
     let crate_path = crate_path(&input.attrs, "plan_node", |meta| {
-        if meta.path.is_ident("label") {
-            label = Some(meta.value()?.parse::<LitStr>()?);
-            Ok(true)
-        } else if meta.path.is_ident("operand") {
+        if meta.path.is_ident("operand") {
             operand = Some(meta.value()?.parse::<Type>()?);
             Ok(true)
         } else {
             Ok(false)
         }
     })?;
-
-    let name_label = label.unwrap_or_else(|| LitStr::new(&name.to_string(), name.span()));
 
     let Data::Struct(data) = &input.data else {
         return Err(Error::new_spanned(
@@ -35,8 +29,6 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
     let mut inputs = Vec::new();
     let mut input_types = Vec::new();
     let mut payload = Vec::new();
-    let mut describe_names = Vec::new();
-    let mut describe_accessors = Vec::new();
 
     for (index, field) in data.fields.iter().enumerate() {
         let accessor = if let Some(identifier) = &field.ident {
@@ -47,7 +39,6 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
         };
 
         let mut is_input = false;
-        let mut is_describe = false;
 
         for attribute in &field.attrs {
             if !attribute.path().is_ident("plan_node") {
@@ -57,9 +48,6 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
             attribute.parse_nested_meta(|meta| {
                 if meta.path.is_ident("input") {
                     is_input = true;
-                    Ok(())
-                } else if meta.path.is_ident("describe") {
-                    is_describe = true;
                     Ok(())
                 } else {
                     Err(meta.error("unknown plan_node field attribute"))
@@ -72,16 +60,6 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
             input_types.push(field.ty.clone());
 
             continue;
-        }
-
-        if is_describe {
-            let field_name = match &field.ident {
-                Some(identifier) => identifier.to_string(),
-                None => index.to_string(),
-            };
-
-            describe_names.push(LitStr::new(&field_name, Span::call_site()));
-            describe_accessors.push(accessor.clone());
         }
 
         payload.push(accessor);
@@ -199,12 +177,6 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
                     for input in _PlanNode::inputs(self) {
                         input.dyn_hash(state);
                     }
-                }
-
-                fn describe(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    ::core::fmt::Formatter::write_str(formatter, #name_label)?;
-                    #( ::core::write!(formatter, " {}={}", #describe_names, &self.#describe_accessors)?; )*
-                    ::core::result::Result::Ok(())
                 }
             }
         };

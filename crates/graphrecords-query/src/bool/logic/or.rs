@@ -2,15 +2,16 @@ use crate::{
     BoxedIterator, Operand, Or, RootOperand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
-    optimizer::{OptimizerHints, PlanNode, Selectivity, Stats},
+    optimizer::{Explain, OptimizerHints, PlanNode, Selectivity, Stats},
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use graphrecords_utils::aliases::GrHashMap;
 use std::ops::BitOr;
 
-#[derive(PlanNode, OptimizerHints)]
-#[plan_node(crate = "crate", label = "Or", operand = BoolMaskOperand<O>)]
+#[derive(PlanNode, OptimizerHints, Explain)]
+#[plan_node(crate = "crate", operand = BoolMaskOperand<O>)]
 #[optimizer_hints(crate = "crate")]
+#[explain(crate = "crate", label = "Or")]
 pub struct OrContext<O: RootOperand> {
     #[plan_node(input)]
     left: BoolMaskOperand<O>,
