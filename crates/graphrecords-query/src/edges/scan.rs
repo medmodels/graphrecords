@@ -7,9 +7,8 @@ use crate::{
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::EdgeIndex};
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = EdgeOperand)]
-#[optimizer_hints(crate = "crate", distinct)]
-#[explain(crate = "crate")]
+#[plan_node(operand = EdgeOperand)]
+#[optimizer_hints(distinct)]
 pub struct AllEdges;
 
 impl Cardinality for AllEdges {

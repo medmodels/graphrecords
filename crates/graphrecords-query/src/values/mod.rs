@@ -21,7 +21,6 @@ pub trait ValuesOperandContext:
 }
 
 #[derive(Operand)]
-#[operand(crate = "crate")]
 pub struct ValuesOperand<O: RootOperand> {
     #[operand(context)]
     context: Arc<dyn ValuesOperandContext<Operand = O, Output = Self>>,
@@ -64,7 +63,6 @@ pub trait BareValuesOperandContext:
 }
 
 #[derive(Clone, Operand)]
-#[operand(crate = "crate")]
 pub struct BareValuesOperand {
     #[operand(context)]
     context: Arc<dyn BareValuesOperandContext<Output = Self>>,
@@ -100,7 +98,6 @@ pub trait ValueOperandContext:
 }
 
 #[derive(Operand)]
-#[operand(crate = "crate")]
 pub struct ValueOperand<O: RootOperand> {
     #[operand(context)]
     context: Arc<dyn ValueOperandContext<Operand = O, Output = Self>>,
@@ -142,7 +139,6 @@ pub trait BareValueOperandContext:
 }
 
 #[derive(Clone, Operand)]
-#[operand(crate = "crate")]
 pub struct BareValueOperand {
     #[operand(context)]
     context: Arc<dyn BareValueOperandContext<Output = Self>>,

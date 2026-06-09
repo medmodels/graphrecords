@@ -5,7 +5,6 @@ use crate::{
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PhaseLabel)]
-#[phase_label(crate = "crate")]
 pub enum BuiltinPhase {
     Source,
     Simplify,

@@ -10,9 +10,9 @@ use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::Edg
 use graphrecords_utils::aliases::GrHashMap;
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = EdgeOperand)]
-#[optimizer_hints(crate = "crate", commutes_with_filter, distinct, empty = if_any)]
-#[explain(crate = "crate", label = "Filter")]
+#[plan_node(operand = EdgeOperand)]
+#[optimizer_hints(commutes_with_filter, distinct, empty = if_any)]
+#[explain(label = "Filter")]
 pub struct FilterContext {
     #[plan_node(input)]
     input: EdgeOperand,

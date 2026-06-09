@@ -9,9 +9,8 @@ use graphrecords_utils::aliases::GrHashMap;
 use std::ops::BitOr;
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = BoolMaskOperand<O>)]
-#[optimizer_hints(crate = "crate")]
-#[explain(crate = "crate", label = "Or")]
+#[plan_node(operand = BoolMaskOperand<O>)]
+#[explain(label = "Or")]
 pub struct OrContext<O: RootOperand> {
     #[plan_node(input)]
     left: BoolMaskOperand<O>,

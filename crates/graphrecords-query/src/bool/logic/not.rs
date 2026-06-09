@@ -8,9 +8,8 @@ use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use std::ops::Not as BitNot;
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = BoolMaskOperand<O>)]
-#[optimizer_hints(crate = "crate")]
-#[explain(crate = "crate", label = "Not")]
+#[plan_node(operand = BoolMaskOperand<O>)]
+#[explain(label = "Not")]
 pub struct NotContext<O: RootOperand> {
     #[plan_node(input)]
     input: BoolMaskOperand<O>,

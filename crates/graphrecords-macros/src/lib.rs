@@ -5,6 +5,8 @@ mod phase_label;
 mod plan_node;
 
 use proc_macro::TokenStream;
+use proc_macro_crate::{FoundCrate, crate_name};
+use proc_macro2::Span;
 use syn::{
     Attribute, DeriveInput, Error, Field, LitStr, Path, Result, meta::ParseNestedMeta,
     parse_macro_input, parse_str,
@@ -81,7 +83,22 @@ pub(crate) fn crate_path(
 
     match crate_path {
         Some(path) => Ok(path),
-        None => parse_str("::graphrecords::query"),
+        None => resolve_crate_path(),
+    }
+}
+
+fn resolve_crate_path() -> Result<Path> {
+    match crate_name("graphrecords-query") {
+        Ok(FoundCrate::Itself) => parse_str("crate"),
+        Ok(FoundCrate::Name(name)) => parse_str(&format!("::{name}")),
+        Err(_) => match crate_name("graphrecords") {
+            Ok(FoundCrate::Itself) => parse_str("crate::query"),
+            Ok(FoundCrate::Name(name)) => parse_str(&format!("::{name}::query")),
+            Err(error) => Err(Error::new(
+                Span::call_site(),
+                format!("`graphrecords` must be a dependency to derive this macro: {error}"),
+            )),
+        },
     }
 }
 

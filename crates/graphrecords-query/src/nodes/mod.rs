@@ -22,7 +22,6 @@ pub trait NodeOperandContext:
 }
 
 #[derive(Clone, Operand)]
-#[operand(crate = "crate")]
 pub struct NodeOperand {
     #[operand(context)]
     context: Arc<dyn NodeOperandContext>,

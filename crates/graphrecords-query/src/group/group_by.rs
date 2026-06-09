@@ -29,9 +29,8 @@ impl<O: RootOperand> GroupableOperand for ValuesOperand<O> {
 }
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = GroupOperand<NodeOperand, AttributeDiscriminator>)]
-#[optimizer_hints(crate = "crate")]
-#[explain(crate = "crate", label = "GroupBy")]
+#[plan_node(operand = GroupOperand<NodeOperand, AttributeDiscriminator>)]
+#[explain(label = "GroupBy")]
 struct NodeGroupByAttributeContext {
     #[plan_node(input)]
     input: NodeOperand,
@@ -88,9 +87,8 @@ impl GroupBy<AttributeDiscriminator> for NodeOperand {
 }
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = GroupOperand<EdgeOperand, AttributeDiscriminator>)]
-#[optimizer_hints(crate = "crate")]
-#[explain(crate = "crate", label = "GroupBy")]
+#[plan_node(operand = GroupOperand<EdgeOperand, AttributeDiscriminator>)]
+#[explain(label = "GroupBy")]
 struct EdgeGroupByAttributeContext {
     #[plan_node(input)]
     input: EdgeOperand,

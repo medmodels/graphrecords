@@ -30,7 +30,6 @@ pub trait NestedAttributesOperandContext:
 }
 
 #[derive(Operand)]
-#[operand(crate = "crate")]
 pub struct NestedAttributesOperand<O: RootOperand> {
     #[operand(context)]
     context: Arc<dyn NestedAttributesOperandContext<Operand = O, Output = Self>>,
@@ -81,7 +80,6 @@ pub trait AttributesOperandContext:
 }
 
 #[derive(Operand)]
-#[operand(crate = "crate")]
 pub struct AttributesOperand<O: RootOperand> {
     #[operand(context)]
     context: Arc<dyn AttributesOperandContext<Operand = O, Output = Self>>,
@@ -123,7 +121,6 @@ pub trait BareAttributesOperandContext:
 }
 
 #[derive(Clone, Operand)]
-#[operand(crate = "crate")]
 pub struct BareAttributesOperand {
     #[operand(context)]
     context: Arc<dyn BareAttributesOperandContext<Output = Self>>,
@@ -163,7 +160,6 @@ pub trait AttributeOperandContext:
 }
 
 #[derive(Operand)]
-#[operand(crate = "crate")]
 pub struct AttributeOperand<O: RootOperand> {
     #[operand(context)]
     context: Arc<dyn AttributeOperandContext<Operand = O, Output = Self>>,
@@ -204,7 +200,6 @@ pub trait BareAttributeOperandContext:
 }
 
 #[derive(Clone, Operand)]
-#[operand(crate = "crate")]
 pub struct BareAttributeOperand {
     #[operand(context)]
     context: Arc<dyn BareAttributeOperandContext<Output = Self>>,

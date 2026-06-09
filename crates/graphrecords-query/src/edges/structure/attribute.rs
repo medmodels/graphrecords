@@ -32,9 +32,9 @@ fn attribute_values<'a>(
 }
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = ValuesOperand<EdgeOperand>)]
-#[optimizer_hints(crate = "crate", distinct, empty = if_any)]
-#[explain(crate = "crate", label = "Attribute")]
+#[plan_node(operand = ValuesOperand<EdgeOperand>)]
+#[optimizer_hints(distinct, empty = if_any)]
+#[explain(label = "Attribute")]
 pub struct AttributeContext {
     #[plan_node(input)]
     input: EdgeOperand,
@@ -65,9 +65,8 @@ impl ValuesOperandContext for AttributeContext {
 }
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = GroupOperand<ValuesOperand<EdgeOperand>, D>)]
-#[optimizer_hints(crate = "crate")]
-#[explain(crate = "crate", label = "Attribute")]
+#[plan_node(operand = GroupOperand<ValuesOperand<EdgeOperand>, D>)]
+#[explain(label = "Attribute")]
 pub struct GroupedAttributeContext<D: Discriminator> {
     #[plan_node(input)]
     input: GroupOperand<EdgeOperand, D>,

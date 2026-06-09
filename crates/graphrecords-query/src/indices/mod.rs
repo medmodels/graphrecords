@@ -19,7 +19,6 @@ pub trait IndicesOperandContext:
 }
 
 #[derive(Operand)]
-#[operand(crate = "crate")]
 pub struct IndicesOperand<O: RootOperand> {
     #[operand(context)]
     context: Arc<dyn IndicesOperandContext<Operand = O, Output = Self>>,
@@ -55,7 +54,6 @@ pub trait IndexOperandContext:
 }
 
 #[derive(Operand)]
-#[operand(crate = "crate")]
 pub struct IndexOperand<O: RootOperand> {
     #[operand(context)]
     context: Arc<dyn IndexOperandContext<Operand = O, Output = Self>>,

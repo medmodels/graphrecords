@@ -9,9 +9,9 @@ use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::Gro
 use graphrecords_utils::aliases::GrHashSet;
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = BoolMaskOperand<EdgeOperand>)]
-#[optimizer_hints(crate = "crate", distinct, empty = if_any)]
-#[explain(crate = "crate", label = "InGroup")]
+#[plan_node(operand = BoolMaskOperand<EdgeOperand>)]
+#[optimizer_hints(distinct, empty = if_any)]
+#[explain(label = "InGroup")]
 pub struct InGroupContext {
     #[plan_node(input)]
     input: EdgeOperand,

@@ -22,7 +22,6 @@ pub trait EdgeOperandContext:
 }
 
 #[derive(Clone, Operand)]
-#[operand(crate = "crate")]
 pub struct EdgeOperand {
     #[operand(context)]
     context: Arc<dyn EdgeOperandContext>,

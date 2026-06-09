@@ -9,9 +9,8 @@ use graphrecords_utils::aliases::GrHashMap;
 use std::ops::BitXor;
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = BoolMaskOperand<O>)]
-#[optimizer_hints(crate = "crate")]
-#[explain(crate = "crate", label = "Xor")]
+#[plan_node(operand = BoolMaskOperand<O>)]
+#[explain(label = "Xor")]
 pub struct XorContext<O: RootOperand> {
     #[plan_node(input)]
     left: BoolMaskOperand<O>,

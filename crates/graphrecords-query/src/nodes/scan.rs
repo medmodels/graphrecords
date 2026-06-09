@@ -7,9 +7,8 @@ use crate::{
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::NodeIndex};
 
 #[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(crate = "crate", operand = NodeOperand)]
-#[optimizer_hints(crate = "crate", distinct)]
-#[explain(crate = "crate")]
+#[plan_node(operand = NodeOperand)]
+#[optimizer_hints(distinct)]
 pub struct AllNodes;
 
 impl Cardinality for AllNodes {

@@ -29,7 +29,6 @@ pub trait NestedBoolMaskOperandContext:
 }
 
 #[derive(Operand)]
-#[operand(crate = "crate")]
 pub struct NestedBoolMaskOperand<O: RootOperand, T: 'static> {
     #[operand(context)]
     context: Arc<dyn NestedBoolMaskOperandContext<Operand = O, TreeType = T, Output = Self>>,
@@ -73,7 +72,6 @@ pub trait BoolMaskOperandContext:
 }
 
 #[derive(Operand)]
-#[operand(crate = "crate")]
 pub struct BoolMaskOperand<O: RootOperand> {
     #[operand(context)]
     context: Arc<dyn BoolMaskOperandContext<Operand = O, Output = Self>>,
@@ -117,7 +115,6 @@ pub trait BoolOperandContext:
 }
 
 #[derive(Operand)]
-#[operand(crate = "crate")]
 pub struct BoolOperand<O: RootOperand> {
     #[operand(context)]
     context: Arc<dyn BoolOperandContext<Operand = O, Output = Self>>,
