@@ -1,7 +1,7 @@
 mod logic;
 
 use crate::{
-    BoxedIterator, Explain, Operand, RootOperand,
+    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{OptimizeInputs, PlanNode, Selectivity},
 };
@@ -43,20 +43,24 @@ impl<O: RootOperand, T: 'static> Clone for NestedBoolMaskOperand<O, T> {
     }
 }
 
+impl<O: RootOperand, T: 'static> Evaluate for NestedBoolMaskOperand<O, T> {
+    type ReturnValue<'a> = NestedBoolMaskIterator<'a, O, T>;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<Self::ReturnValue<'a>> {
+        self.context.evaluate(graphrecord, context)
+    }
+}
+
 impl<O: RootOperand, T: 'static> NestedBoolMaskOperand<O, T> {
     #[must_use]
     pub fn new<C: NestedBoolMaskOperandContext<Operand = O, TreeType = T>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
-    }
-
-    pub fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<NestedBoolMaskIterator<'a, O, T>> {
-        self.context.evaluate(graphrecord, context)
     }
 }
 
@@ -86,20 +90,24 @@ impl<O: RootOperand> Clone for BoolMaskOperand<O> {
     }
 }
 
+impl<O: RootOperand> Evaluate for BoolMaskOperand<O> {
+    type ReturnValue<'a> = BoxedIterator<'a, (<O as RootOperand>::Index<'a>, bool)>;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<Self::ReturnValue<'a>> {
+        self.context.evaluate(graphrecord, context)
+    }
+}
+
 impl<O: RootOperand> BoolMaskOperand<O> {
     #[must_use]
     pub fn new<C: BoolMaskOperandContext<Operand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
-    }
-
-    pub fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (<O as RootOperand>::Index<'a>, bool)>> {
-        self.context.evaluate(graphrecord, context)
     }
 }
 
@@ -129,18 +137,22 @@ impl<O: RootOperand> Clone for BoolOperand<O> {
     }
 }
 
+impl<O: RootOperand> Evaluate for BoolOperand<O> {
+    type ReturnValue<'a> = (<O as RootOperand>::Index<'a>, bool);
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<Self::ReturnValue<'a>> {
+        self.context.evaluate(graphrecord, context)
+    }
+}
+
 impl<O: RootOperand> BoolOperand<O> {
     pub fn new<C: BoolOperandContext<Operand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
-    }
-
-    pub fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<(<O as RootOperand>::Index<'a>, bool)> {
-        self.context.evaluate(graphrecord, context)
     }
 }

@@ -4,6 +4,7 @@ pub mod edges;
 pub mod execution;
 pub mod explain;
 pub mod group;
+pub mod group_new;
 pub mod indices;
 pub mod nodes;
 pub mod optimizer;
@@ -27,8 +28,18 @@ pub use traits::*;
 
 pub type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
 
-pub trait RootOperand: 'static + Operand {
+pub trait RootOperand:
+    'static
+    + Operand
+    + for<'a> Evaluate<ReturnValue<'a> = BoxedIterator<'a, <Self as RootOperand>::Index<'a>>>
+{
     type Index<'a>: Eq + Hash
+    where
+        Self: 'a;
+}
+
+pub trait Evaluate {
+    type ReturnValue<'a>
     where
         Self: 'a;
 
@@ -36,14 +47,14 @@ pub trait RootOperand: 'static + Operand {
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index<'a>>>;
+    ) -> GraphRecordResult<Self::ReturnValue<'a>>;
 }
 
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not an operand",
     note = "implement `Operand` for `{Self}`, or derive it with `#[derive(Operand)]` and mark the context field `#[operand(context)]`"
 )]
-pub trait Operand {
+pub trait Operand: 'static + Evaluate {
     type Context: PlanNode + OptimizeInputs<Output = Self> + Explain + ?Sized;
 
     fn context(&self) -> &Self::Context;

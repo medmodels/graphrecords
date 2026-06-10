@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, Explain, Operand, RootOperand,
+    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
@@ -43,19 +43,23 @@ impl<O: RootOperand> Clone for NestedAttributesOperand<O> {
     }
 }
 
+impl<O: RootOperand> Evaluate for NestedAttributesOperand<O> {
+    type ReturnValue<'a> = NestedAttributesIterator<'a, O>;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<Self::ReturnValue<'a>> {
+        self.context.evaluate(graphrecord, context)
+    }
+}
+
 impl<O: RootOperand> NestedAttributesOperand<O> {
     pub fn new<C: NestedAttributesOperandContext<Operand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
-    }
-
-    pub fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<NestedAttributesIterator<'a, O>> {
-        self.context.evaluate(graphrecord, context)
     }
 }
 
@@ -93,20 +97,23 @@ impl<O: RootOperand> Clone for AttributesOperand<O> {
     }
 }
 
+impl<O: RootOperand> Evaluate for AttributesOperand<O> {
+    type ReturnValue<'a> = BoxedIterator<'a, (<O as RootOperand>::Index<'a>, GraphRecordAttribute)>;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<Self::ReturnValue<'a>> {
+        self.context.evaluate(graphrecord, context)
+    }
+}
+
 impl<O: RootOperand> AttributesOperand<O> {
     pub fn new<C: AttributesOperandContext<Operand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
-    }
-
-    pub fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (<O as RootOperand>::Index<'a>, GraphRecordAttribute)>>
-    {
-        self.context.evaluate(graphrecord, context)
     }
 }
 
@@ -126,19 +133,23 @@ pub struct BareAttributesOperand {
     context: Arc<dyn BareAttributesOperandContext<Output = Self>>,
 }
 
+impl Evaluate for BareAttributesOperand {
+    type ReturnValue<'a> = BoxedIterator<'a, GraphRecordAttribute>;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<Self::ReturnValue<'a>> {
+        self.context.evaluate(graphrecord, context)
+    }
+}
+
 impl BareAttributesOperand {
     pub fn new<C: BareAttributesOperandContext>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
-    }
-
-    pub fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, GraphRecordAttribute>> {
-        self.context.evaluate(graphrecord, context)
     }
 }
 
@@ -173,19 +184,23 @@ impl<O: RootOperand> Clone for AttributeOperand<O> {
     }
 }
 
+impl<O: RootOperand> Evaluate for AttributeOperand<O> {
+    type ReturnValue<'a> = Option<(<O as RootOperand>::Index<'a>, GraphRecordAttribute)>;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<Self::ReturnValue<'a>> {
+        self.context.evaluate(graphrecord, context)
+    }
+}
+
 impl<O: RootOperand> AttributeOperand<O> {
     pub fn new<C: AttributeOperandContext<Operand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
-    }
-
-    pub fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<Option<(<O as RootOperand>::Index<'a>, GraphRecordAttribute)>> {
-        self.context.evaluate(graphrecord, context)
     }
 }
 
@@ -205,18 +220,22 @@ pub struct BareAttributeOperand {
     context: Arc<dyn BareAttributeOperandContext<Output = Self>>,
 }
 
+impl Evaluate for BareAttributeOperand {
+    type ReturnValue<'a> = Option<GraphRecordAttribute>;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<Self::ReturnValue<'a>> {
+        self.context.evaluate(graphrecord, context)
+    }
+}
+
 impl BareAttributeOperand {
     pub fn new<C: BareAttributeOperandContext>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
-    }
-
-    pub fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<Option<GraphRecordAttribute>> {
-        self.context.evaluate(graphrecord, context)
     }
 }

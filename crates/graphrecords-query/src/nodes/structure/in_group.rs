@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, Explain, Operand, RootOperand,
+    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
     nodes::NodeOperand,

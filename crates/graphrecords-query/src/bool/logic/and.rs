@@ -1,5 +1,5 @@
 use crate::{
-    And, BoxedIterator, Explain, Operand, RootOperand,
+    And, BoxedIterator, Evaluate, Explain, Operand, RootOperand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
     optimizer::{HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Selectivity, Stats},

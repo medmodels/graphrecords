@@ -2,7 +2,7 @@ mod scan;
 mod structure;
 
 use crate::{
-    BoxedIterator, Explain, Operand, RootOperand,
+    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
@@ -29,12 +29,16 @@ pub struct NodeOperand {
 
 impl RootOperand for NodeOperand {
     type Index<'a> = &'a NodeIndex;
+}
+
+impl Evaluate for NodeOperand {
+    type ReturnValue<'a> = BoxedIterator<'a, &'a NodeIndex>;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index<'a>>> {
+    ) -> GraphRecordResult<Self::ReturnValue<'a>> {
         self.context.evaluate(graphrecord, context)
     }
 }

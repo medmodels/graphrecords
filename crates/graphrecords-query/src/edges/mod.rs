@@ -2,7 +2,7 @@ mod scan;
 mod structure;
 
 use crate::{
-    BoxedIterator, Explain, Operand, RootOperand,
+    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
@@ -29,12 +29,16 @@ pub struct EdgeOperand {
 
 impl RootOperand for EdgeOperand {
     type Index<'a> = &'a EdgeIndex;
+}
+
+impl Evaluate for EdgeOperand {
+    type ReturnValue<'a> = BoxedIterator<'a, &'a EdgeIndex>;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, Self::Index<'a>>> {
+    ) -> GraphRecordResult<Self::ReturnValue<'a>> {
         self.context.evaluate(graphrecord, context)
     }
 }
