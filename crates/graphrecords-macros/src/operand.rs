@@ -1,59 +1,128 @@
-use crate::{crate_path, has_flag};
+use crate::{attribute::FromAttributes, resolve_query_crate_path};
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Error, Index, Result};
+use syn::{
+    Data, DeriveInput, Error, Generics, Ident, Index, LitStr, Path, Result, Type,
+    meta::ParseNestedMeta,
+};
+
+#[derive(Default)]
+struct OperandAttributes {
+    crate_path: Option<Path>,
+}
+
+impl FromAttributes for OperandAttributes {
+    const NAMESPACE: &'static str = "operand";
+
+    fn parse_meta(&mut self, meta: ParseNestedMeta) -> Result<()> {
+        if meta.path.is_ident("crate") {
+            self.crate_path = Some(meta.value()?.parse::<LitStr>()?.parse()?);
+            Ok(())
+        } else {
+            Err(meta.error("unknown operand attribute"))
+        }
+    }
+}
+
+#[derive(Default)]
+struct OperandFieldAttributes {
+    context: bool,
+}
+
+impl FromAttributes for OperandFieldAttributes {
+    const NAMESPACE: &'static str = "operand";
+
+    fn parse_meta(&mut self, meta: ParseNestedMeta) -> Result<()> {
+        if meta.path.is_ident("context") {
+            self.context = true;
+            Ok(())
+        } else {
+            Err(meta.error("unknown operand attribute"))
+        }
+    }
+}
+
+struct OperandModel {
+    ident: Ident,
+    generics: Generics,
+    crate_path: Path,
+    context_index: usize,
+    context_name: Option<Ident>,
+    context_type: Type,
+}
+
+impl OperandModel {
+    fn parse(input: &DeriveInput) -> Result<Self> {
+        let crate_path = match OperandAttributes::from_attributes(&input.attrs)?.crate_path {
+            Some(path) => path,
+            None => resolve_query_crate_path()?,
+        };
+
+        let Data::Struct(data) = &input.data else {
+            return Err(Error::new_spanned(
+                input,
+                "Operand can only be derived for structs",
+            ));
+        };
+
+        let mut context = None;
+
+        for (index, field) in data.fields.iter().enumerate() {
+            if !OperandFieldAttributes::from_attributes(&field.attrs)?.context {
+                continue;
+            }
+
+            if context.is_some() {
+                return Err(Error::new_spanned(
+                    &field.ty,
+                    "only one field may be marked `#[operand(context)]`",
+                ));
+            }
+
+            context = Some((index, field));
+        }
+
+        let Some((index, field)) = context else {
+            return Err(Error::new_spanned(
+                input,
+                "`#[derive(Operand)]` requires one field marked `#[operand(context)]`",
+            ));
+        };
+
+        Ok(Self {
+            ident: input.ident.clone(),
+            generics: input.generics.clone(),
+            crate_path,
+            context_index: index,
+            context_name: field.ident.clone(),
+            context_type: field.ty.clone(),
+        })
+    }
+}
 
 pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
-    let name = &input.ident;
+    let OperandModel {
+        ident,
+        generics,
+        crate_path,
+        context_index,
+        context_name,
+        context_type,
+    } = OperandModel::parse(input)?;
 
-    let (impl_generics, type_generics, where_clause) = input.generics.split_for_impl();
+    let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
-    let crate_path = crate_path(&input.attrs, "operand", |_| Ok(false))?;
-
-    let Data::Struct(data) = &input.data else {
-        return Err(Error::new_spanned(
-            input,
-            "Operand can only be derived for structs",
-        ));
-    };
-
-    let mut context = None;
-
-    for (index, field) in data.fields.iter().enumerate() {
-        if !has_flag(field, "operand", "context")? {
-            continue;
-        }
-
-        if context.is_some() {
-            return Err(Error::new_spanned(
-                field,
-                "only one field may be marked `#[operand(context)]`",
-            ));
-        }
-
-        context = Some((index, field));
-    }
-
-    let Some((index, field)) = context else {
-        return Err(Error::new_spanned(
-            input,
-            "`#[derive(Operand)]` requires one field marked `#[operand(context)]`",
-        ));
-    };
-
-    let field_type = &field.ty;
-
-    let (accessor, from_context) = if let Some(identifier) = &field.ident {
+    let (accessor, from_context) = if let Some(name) = context_name {
         (
-            quote!(#identifier),
+            quote!(#name),
             quote! {
-                fn from_context(#identifier: ::std::sync::Arc<Self::Context>) -> Self {
-                    Self { #identifier }
+                fn from_context(#name: ::std::sync::Arc<Self::Context>) -> Self {
+                    Self { #name }
                 }
             },
         )
     } else {
-        let index = Index::from(index);
+        let index = Index::from(context_index);
         (
             quote!(#index),
             quote! {
@@ -65,8 +134,8 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
     };
 
     Ok(quote! {
-        impl #impl_generics #crate_path::Operand for #name #type_generics #where_clause {
-            type Context = <#field_type as ::core::ops::Deref>::Target;
+        impl #impl_generics #crate_path::Operand for #ident #type_generics #where_clause {
+            type Context = <#context_type as ::core::ops::Deref>::Target;
 
             fn context(&self) -> &Self::Context {
                 self.#accessor.as_ref()

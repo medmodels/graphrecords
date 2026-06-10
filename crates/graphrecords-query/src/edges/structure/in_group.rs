@@ -1,21 +1,22 @@
 use crate::{
-    BoxedIterator, EdgeOperand, Operand, RootOperand,
+    BoxedIterator, EdgeOperand, Explain, Operand, RootOperand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
-    optimizer::{EdgeGroupSize, Explain, OptimizerHints, PlanNode, Selectivity, Stats},
+    optimizer::{
+        EdgeGroupSize, HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Selectivity, Stats,
+    },
     traits::InGroup,
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::Group};
 use graphrecords_utils::aliases::GrHashSet;
 
-#[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(operand = BoolMaskOperand<EdgeOperand>)]
-#[optimizer_hints(distinct, empty = if_any)]
+#[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
+#[plan(operand = BoolMaskOperand<EdgeOperand>, optimizer_hints(distinct, empty = if_any))]
 #[explain(label = "InGroup")]
 pub struct InGroupContext {
-    #[plan_node(input)]
+    #[input]
     input: EdgeOperand,
-    #[explain]
+    #[explain(label)]
     group: Group,
 }
 

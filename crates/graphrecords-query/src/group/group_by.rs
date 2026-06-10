@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, RootOperand,
+    BoxedIterator, Explain, RootOperand,
     edges::EdgeOperand,
     execution::ExecutionContext,
     group::{
@@ -7,7 +7,7 @@ use crate::{
         GroupedIterator, GroupedOperandContext,
     },
     nodes::NodeOperand,
-    optimizer::{Explain, OptimizerHints, PlanNode},
+    optimizer::{HasInputs, OptimizeInputs, OptimizerHints, PlanNode},
     values::ValuesOperand,
 };
 use graphrecords_core::{
@@ -28,13 +28,13 @@ impl<O: RootOperand> GroupableOperand for ValuesOperand<O> {
     type Grouped<'a> = BoxedIterator<'a, (<O as RootOperand>::Index<'a>, GraphRecordValue)>;
 }
 
-#[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(operand = GroupOperand<NodeOperand, AttributeDiscriminator>)]
+#[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
+#[plan(operand = GroupOperand<NodeOperand, AttributeDiscriminator>)]
 #[explain(label = "GroupBy")]
 struct NodeGroupByAttributeContext {
-    #[plan_node(input)]
+    #[input]
     input: NodeOperand,
-    #[explain]
+    #[explain(label)]
     discriminator: AttributeDiscriminator,
 }
 
@@ -86,13 +86,13 @@ impl GroupBy<AttributeDiscriminator> for NodeOperand {
     }
 }
 
-#[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(operand = GroupOperand<EdgeOperand, AttributeDiscriminator>)]
+#[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
+#[plan(operand = GroupOperand<EdgeOperand, AttributeDiscriminator>)]
 #[explain(label = "GroupBy")]
 struct EdgeGroupByAttributeContext {
-    #[plan_node(input)]
+    #[input]
     input: EdgeOperand,
-    #[explain]
+    #[explain(label)]
     discriminator: AttributeDiscriminator,
 }
 

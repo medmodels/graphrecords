@@ -1,22 +1,21 @@
 use crate::{
-    BoxedIterator, EdgeOperand, Operand, RootOperand,
+    BoxedIterator, EdgeOperand, Explain, Operand, RootOperand,
     bool::BoolMaskOperand,
     edges::EdgeOperandContext,
     execution::ExecutionContext,
-    optimizer::{Cardinality, Explain, OptimizerHints, PlanNode, Stats},
+    optimizer::{Cardinality, HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Stats},
     traits::Filter,
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::EdgeIndex};
 use graphrecords_utils::aliases::GrHashMap;
 
-#[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(operand = EdgeOperand)]
-#[optimizer_hints(commutes_with_filter, distinct, empty = if_any)]
+#[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
+#[plan(operand = EdgeOperand, optimizer_hints(commutes_with_filter, distinct, empty = if_any))]
 #[explain(label = "Filter")]
 pub struct FilterContext {
-    #[plan_node(input)]
+    #[input]
     input: EdgeOperand,
-    #[plan_node(input)]
+    #[input]
     mask: BoolMaskOperand<EdgeOperand>,
 }
 

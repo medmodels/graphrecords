@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, Operand, RootOperand,
+    BoxedIterator, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
@@ -7,7 +7,7 @@ use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::Gra
 use std::sync::Arc;
 
 pub trait ValuesOperandContext:
-    PlanNode + OptimizeInputs<Output = ValuesOperand<Self::Operand>> + Cardinality
+    PlanNode + OptimizeInputs<Output = ValuesOperand<Self::Operand>> + Cardinality + Explain
 {
     type Operand: RootOperand;
 
@@ -53,7 +53,7 @@ impl<O: RootOperand> ValuesOperand<O> {
 }
 
 pub trait BareValuesOperandContext:
-    PlanNode + OptimizeInputs<Output = BareValuesOperand> + Cardinality
+    PlanNode + OptimizeInputs<Output = BareValuesOperand> + Cardinality + Explain
 {
     fn evaluate<'a>(
         &'a self,
@@ -86,7 +86,7 @@ impl BareValuesOperand {
 }
 
 pub trait ValueOperandContext:
-    PlanNode + OptimizeInputs<Output = ValueOperand<Self::Operand>> + Cardinality
+    PlanNode + OptimizeInputs<Output = ValueOperand<Self::Operand>> + Cardinality + Explain
 {
     type Operand: RootOperand;
 
@@ -129,7 +129,7 @@ impl<O: RootOperand> ValueOperand<O> {
 }
 
 pub trait BareValueOperandContext:
-    PlanNode + OptimizeInputs<Output = BareValueOperand> + Cardinality
+    PlanNode + OptimizeInputs<Output = BareValueOperand> + Cardinality + Explain
 {
     fn evaluate<'a>(
         &'a self,

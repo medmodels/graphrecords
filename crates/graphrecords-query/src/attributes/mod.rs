@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, Operand, RootOperand,
+    BoxedIterator, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{OptimizeInputs, PlanNode},
 };
@@ -18,7 +18,7 @@ pub type NestedAttributesIterator<'a, O> = BoxedIterator<
 >;
 
 pub trait NestedAttributesOperandContext:
-    PlanNode + OptimizeInputs<Output = NestedAttributesOperand<Self::Operand>>
+    PlanNode + OptimizeInputs<Output = NestedAttributesOperand<Self::Operand>> + Explain
 {
     type Operand: RootOperand;
 
@@ -60,7 +60,7 @@ impl<O: RootOperand> NestedAttributesOperand<O> {
 }
 
 pub trait AttributesOperandContext:
-    PlanNode + OptimizeInputs<Output = AttributesOperand<Self::Operand>>
+    PlanNode + OptimizeInputs<Output = AttributesOperand<Self::Operand>> + Explain
 {
     type Operand: RootOperand;
 
@@ -111,7 +111,7 @@ impl<O: RootOperand> AttributesOperand<O> {
 }
 
 pub trait BareAttributesOperandContext:
-    PlanNode + OptimizeInputs<Output = BareAttributesOperand>
+    PlanNode + OptimizeInputs<Output = BareAttributesOperand> + Explain
 {
     fn evaluate<'a>(
         &'a self,
@@ -143,7 +143,7 @@ impl BareAttributesOperand {
 }
 
 pub trait AttributeOperandContext:
-    PlanNode + OptimizeInputs<Output = AttributeOperand<Self::Operand>>
+    PlanNode + OptimizeInputs<Output = AttributeOperand<Self::Operand>> + Explain
 {
     type Operand: RootOperand;
 
@@ -190,7 +190,7 @@ impl<O: RootOperand> AttributeOperand<O> {
 }
 
 pub trait BareAttributeOperandContext:
-    PlanNode + OptimizeInputs<Output = BareAttributeOperand>
+    PlanNode + OptimizeInputs<Output = BareAttributeOperand> + Explain
 {
     fn evaluate<'a>(
         &'a self,

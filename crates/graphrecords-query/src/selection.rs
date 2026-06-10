@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, NodeOperand, Operand,
+    BoxedIterator, Explanation, NodeOperand,
     bool::BoolMaskOperand,
     edges::{AllEdges, EdgeOperand},
     execution::ExecutionContext,
@@ -7,7 +7,7 @@ use crate::{
         Discriminator, GroupOperand, GroupableOperand, GroupedIterator, GroupedOperandContext,
     },
     nodes::AllNodes,
-    optimizer::{OptimizationReport, Optimizer, PlanExplanation, Stats},
+    optimizer::{OptimizationReport, Optimizer, Stats},
     values::ValuesOperand,
 };
 use graphrecords_core::{
@@ -35,7 +35,7 @@ macro_rules! impl_iterator_return_operand {
                 }
 
                 fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                    write!(formatter, "{}", PlanExplanation::new(self.as_plan_node()))
+                    write!(formatter, "{}", Explanation::new(self))
                 }
             }
         )*
@@ -281,6 +281,6 @@ where
     }
 
     fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}", PlanExplanation::new(self.as_plan_node()))
+        write!(formatter, "{}", Explanation::new(self))
     }
 }

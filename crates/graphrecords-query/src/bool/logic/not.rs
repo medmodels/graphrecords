@@ -1,17 +1,17 @@
 use crate::{
-    BoxedIterator, Not, Operand, RootOperand,
+    BoxedIterator, Explain, Not, Operand, RootOperand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
-    optimizer::{Explain, OptimizerHints, PlanNode, Selectivity, Stats},
+    optimizer::{HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Selectivity, Stats},
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use std::ops::Not as BitNot;
 
-#[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(operand = BoolMaskOperand<O>)]
+#[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
+#[plan(operand = BoolMaskOperand<O>)]
 #[explain(label = "Not")]
 pub struct NotContext<O: RootOperand> {
-    #[plan_node(input)]
+    #[input]
     input: BoolMaskOperand<O>,
 }
 

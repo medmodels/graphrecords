@@ -1,22 +1,21 @@
 use crate::{
-    BoxedIterator, Operand, RootOperand,
+    BoxedIterator, Explain, Operand, RootOperand,
     bool::BoolMaskOperand,
     execution::ExecutionContext,
     nodes::{NodeOperand, NodeOperandContext},
-    optimizer::{Cardinality, Explain, OptimizerHints, PlanNode, Stats},
+    optimizer::{Cardinality, HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Stats},
     traits::Filter,
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::NodeIndex};
 use graphrecords_utils::aliases::GrHashMap;
 
-#[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(operand = NodeOperand)]
-#[optimizer_hints(commutes_with_filter, distinct, empty = if_any)]
+#[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
+#[plan(operand = NodeOperand, optimizer_hints(commutes_with_filter, distinct, empty = if_any))]
 #[explain(label = "Filter")]
 pub struct FilterContext {
-    #[plan_node(input)]
+    #[input]
     input: NodeOperand,
-    #[plan_node(input)]
+    #[input]
     mask: BoolMaskOperand<NodeOperand>,
 }
 

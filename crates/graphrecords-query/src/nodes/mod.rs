@@ -2,7 +2,7 @@ mod scan;
 mod structure;
 
 use crate::{
-    BoxedIterator, Operand, RootOperand,
+    BoxedIterator, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub use structure::{AttributeContext, FilterContext, GroupedAttributeContext, InGroupContext};
 
 pub trait NodeOperandContext:
-    PlanNode + OptimizeInputs<Output = NodeOperand> + Cardinality
+    PlanNode + OptimizeInputs<Output = NodeOperand> + Cardinality + Explain
 {
     fn evaluate<'a>(
         &'a self,

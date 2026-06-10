@@ -1,7 +1,7 @@
 mod logic;
 
 use crate::{
-    BoxedIterator, Operand, RootOperand,
+    BoxedIterator, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{OptimizeInputs, PlanNode, Selectivity},
 };
@@ -17,6 +17,7 @@ pub trait NestedBoolMaskOperandContext:
     PlanNode
     + OptimizeInputs<Output = NestedBoolMaskOperand<Self::Operand, Self::TreeType>>
     + Selectivity
+    + Explain
 {
     type Operand: RootOperand;
     type TreeType;
@@ -60,7 +61,7 @@ impl<O: RootOperand, T: 'static> NestedBoolMaskOperand<O, T> {
 }
 
 pub trait BoolMaskOperandContext:
-    PlanNode + OptimizeInputs<Output = BoolMaskOperand<Self::Operand>> + Selectivity
+    PlanNode + OptimizeInputs<Output = BoolMaskOperand<Self::Operand>> + Selectivity + Explain
 {
     type Operand: RootOperand;
 
@@ -103,7 +104,7 @@ impl<O: RootOperand> BoolMaskOperand<O> {
 }
 
 pub trait BoolOperandContext:
-    PlanNode + OptimizeInputs<Output = BoolOperand<Self::Operand>> + Selectivity
+    PlanNode + OptimizeInputs<Output = BoolOperand<Self::Operand>> + Selectivity + Explain
 {
     type Operand: RootOperand;
 

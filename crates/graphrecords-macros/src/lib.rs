@@ -1,18 +1,19 @@
+mod attribute;
 mod explain;
+mod has_inputs;
 mod operand;
+mod optimize_inputs;
 mod optimizer_hints;
 mod phase_label;
+mod plan;
 mod plan_node;
 
 use proc_macro::TokenStream;
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::Span;
-use syn::{
-    Attribute, DeriveInput, Error, Field, LitStr, Path, Result, meta::ParseNestedMeta,
-    parse_macro_input, parse_str,
-};
+use syn::{DeriveInput, Error, Path, Result, parse_macro_input, parse_str};
 
-#[proc_macro_derive(PlanNode, attributes(plan_node))]
+#[proc_macro_derive(PlanNode, attributes(plan, input))]
 pub fn derive_plan_node(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -21,7 +22,25 @@ pub fn derive_plan_node(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(Explain, attributes(explain))]
+#[proc_macro_derive(HasInputs, attributes(plan, input))]
+pub fn derive_has_inputs(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    has_inputs::expand(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro_derive(OptimizeInputs, attributes(plan, input))]
+pub fn derive_optimize_inputs(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    optimize_inputs::expand(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro_derive(Explain, attributes(explain, input))]
 pub fn derive_explain(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -30,7 +49,7 @@ pub fn derive_explain(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(OptimizerHints, attributes(optimizer_hints))]
+#[proc_macro_derive(OptimizerHints, attributes(plan, input))]
 pub fn derive_optimizer_hints(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -57,68 +76,25 @@ pub fn derive_phase_label(input: TokenStream) -> TokenStream {
         .into()
 }
 
-pub(crate) fn crate_path(
-    attributes: &[Attribute],
-    attribute_name: &str,
-    mut handle: impl FnMut(&ParseNestedMeta) -> Result<bool>,
-) -> Result<Path> {
-    let mut crate_path = None;
-
-    for attribute in attributes {
-        if !attribute.path().is_ident(attribute_name) {
-            continue;
-        }
-
-        attribute.parse_nested_meta(|meta| {
-            if meta.path.is_ident("crate") {
-                crate_path = Some(meta.value()?.parse::<LitStr>()?.parse()?);
-                Ok(())
-            } else if handle(&meta)? {
-                Ok(())
-            } else {
-                Err(meta.error(format!("unknown {attribute_name} attribute")))
-            }
-        })?;
-    }
-
-    match crate_path {
-        Some(path) => Ok(path),
-        None => resolve_crate_path(),
-    }
+pub(crate) fn resolve_query_crate_path() -> Result<Path> {
+    resolve_crate_path("graphrecords-query", "query")
 }
 
-fn resolve_crate_path() -> Result<Path> {
-    match crate_name("graphrecords-query") {
+pub(crate) fn resolve_crate_path(package: &str, facade_module: &str) -> Result<Path> {
+    const FACADE: &str = "graphrecords";
+
+    match crate_name(package) {
         Ok(FoundCrate::Itself) => parse_str("crate"),
         Ok(FoundCrate::Name(name)) => parse_str(&format!("::{name}")),
-        Err(_) => match crate_name("graphrecords") {
-            Ok(FoundCrate::Itself) => parse_str("crate::query"),
-            Ok(FoundCrate::Name(name)) => parse_str(&format!("::{name}::query")),
+        Err(_) => match crate_name(FACADE) {
+            Ok(FoundCrate::Itself) => parse_str(&format!("crate::{facade_module}")),
+            Ok(FoundCrate::Name(name)) => parse_str(&format!("::{name}::{facade_module}")),
             Err(error) => Err(Error::new(
                 Span::call_site(),
-                format!("`graphrecords` must be a dependency to derive this macro: {error}"),
+                format!(
+                    "`{FACADE}` or `{package}` must be a dependency to derive this macro: {error}"
+                ),
             )),
         },
     }
-}
-
-pub(crate) fn has_flag(field: &Field, attribute_name: &str, flag: &str) -> Result<bool> {
-    let mut present = false;
-
-    for attribute in &field.attrs {
-        if !attribute.path().is_ident(attribute_name) {
-            continue;
-        }
-
-        attribute.parse_nested_meta(|meta| {
-            if meta.path.is_ident(flag) {
-                present = true;
-                Ok(())
-            } else {
-                Err(meta.error(format!("unknown {attribute_name} attribute")))
-            }
-        })?;
-    }
-
-    Ok(present)
 }

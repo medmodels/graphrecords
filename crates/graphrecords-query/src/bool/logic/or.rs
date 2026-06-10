@@ -1,20 +1,20 @@
 use crate::{
-    BoxedIterator, Operand, Or, RootOperand,
+    BoxedIterator, Explain, Operand, Or, RootOperand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
-    optimizer::{Explain, OptimizerHints, PlanNode, Selectivity, Stats},
+    optimizer::{HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Selectivity, Stats},
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use graphrecords_utils::aliases::GrHashMap;
 use std::ops::BitOr;
 
-#[derive(PlanNode, OptimizerHints, Explain)]
-#[plan_node(operand = BoolMaskOperand<O>)]
+#[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
+#[plan(operand = BoolMaskOperand<O>)]
 #[explain(label = "Or")]
 pub struct OrContext<O: RootOperand> {
-    #[plan_node(input)]
+    #[input]
     left: BoolMaskOperand<O>,
-    #[plan_node(input)]
+    #[input]
     right: BoolMaskOperand<O>,
 }
 

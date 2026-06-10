@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, Operand, RootOperand,
+    BoxedIterator, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{OptimizeInputs, PlanNode},
 };
@@ -7,7 +7,7 @@ use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use std::sync::Arc;
 
 pub trait IndicesOperandContext:
-    PlanNode + OptimizeInputs<Output = IndicesOperand<Self::Operand>>
+    PlanNode + OptimizeInputs<Output = IndicesOperand<Self::Operand>> + Explain
 {
     type Operand: RootOperand;
 
@@ -42,7 +42,7 @@ impl<O: RootOperand> IndicesOperand<O> {
 }
 
 pub trait IndexOperandContext:
-    PlanNode + OptimizeInputs<Output = IndexOperand<Self::Operand>>
+    PlanNode + OptimizeInputs<Output = IndexOperand<Self::Operand>> + Explain
 {
     type Operand: RootOperand;
 

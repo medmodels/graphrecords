@@ -1,9 +1,8 @@
 use super::{engine::Session, rule::Transformed};
 use crate::Operand;
-pub use graphrecords_macros::{Explain, OptimizerHints, PlanNode};
+pub use graphrecords_macros::{HasInputs, OptimizeInputs, OptimizerHints, PlanNode};
 use std::{
     any::Any,
-    fmt::{self, Display, Formatter},
     hash::{Hash, Hasher},
 };
 
@@ -37,20 +36,10 @@ pub trait OptimizerHints {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "`{Self}` cannot explain itself",
-    note = "implement `Explain` for `{Self}`, or derive it with `#[derive(Explain)]`"
-)]
-pub trait Explain {
-    fn describe(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        formatter.write_str("<plan node>")
-    }
-}
-
-#[diagnostic::on_unimplemented(
     message = "`{Self}` is not a plan node",
     note = "implement `PlanNode` for `{Self}`, or derive it with `#[derive(PlanNode)]`"
 )]
-pub trait PlanNode: Any + OptimizerHints + Explain {
+pub trait PlanNode: Any + OptimizerHints {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         Vec::new()
     }
@@ -69,46 +58,6 @@ impl dyn PlanNode {
     pub fn downcast<T: PlanNode>(&self) -> Option<&T> {
         (self as &dyn Any).downcast_ref::<T>()
     }
-}
-
-pub struct PlanExplanation<'a> {
-    root: &'a dyn PlanNode,
-}
-
-impl<'a> PlanExplanation<'a> {
-    #[must_use]
-    pub fn new(root: &'a dyn PlanNode) -> Self {
-        Self { root }
-    }
-}
-
-impl Display for PlanExplanation<'_> {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        self.root.describe(formatter)?;
-        write_plan_children(self.root, formatter, "")
-    }
-}
-
-fn write_plan_children(
-    node: &dyn PlanNode,
-    formatter: &mut Formatter<'_>,
-    prefix: &str,
-) -> fmt::Result {
-    let children = node.inputs();
-    let count = children.len();
-
-    for (index, child) in children.into_iter().enumerate() {
-        let last = index + 1 == count;
-
-        write!(formatter, "\n{prefix}{}", if last { "└─ " } else { "├─ " })?;
-        child.describe(formatter)?;
-
-        let mut child_prefix = String::from(prefix);
-        child_prefix.push_str(if last { "   " } else { "│  " });
-        write_plan_children(child, formatter, &child_prefix)?;
-    }
-
-    Ok(())
 }
 
 #[diagnostic::on_unimplemented(

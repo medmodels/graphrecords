@@ -19,7 +19,5 @@ pub use phase::{
     FixpointPolicy, OptimizationReport, PhaseId, PhaseLabel, PhaseOutcome, ReportDisplay,
     StopReason,
 };
-pub use plan::{
-    EmptyRule, Explain, HasInputs, OptimizeInputs, OptimizerHints, PlanExplanation, PlanNode,
-};
+pub use plan::{EmptyRule, HasInputs, OptimizeInputs, OptimizerHints, PlanNode};
 pub use rule::{Rule, Transformed, rule};

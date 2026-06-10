@@ -2,6 +2,7 @@ pub mod attributes;
 pub mod bool;
 pub mod edges;
 pub mod execution;
+pub mod explain;
 pub mod group;
 pub mod indices;
 pub mod nodes;
@@ -13,10 +14,11 @@ pub mod values;
 
 use crate::{
     execution::ExecutionContext,
-    optimizer::{OptimizeInputs, Optimizer, PlanExplanation, PlanNode},
+    optimizer::{OptimizeInputs, Optimizer, PlanNode},
     selection::{ReturnOperand, Selection},
 };
 pub use edges::EdgeOperand;
+pub use explain::{Explain, Explanation};
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 pub use graphrecords_macros::Operand;
 pub use nodes::NodeOperand;
@@ -42,7 +44,7 @@ pub trait RootOperand: 'static + Operand {
     note = "implement `Operand` for `{Self}`, or derive it with `#[derive(Operand)]` and mark the context field `#[operand(context)]`"
 )]
 pub trait Operand {
-    type Context: PlanNode + OptimizeInputs<Output = Self> + ?Sized;
+    type Context: PlanNode + OptimizeInputs<Output = Self> + Explain + ?Sized;
 
     fn context(&self) -> &Self::Context;
 
@@ -54,8 +56,11 @@ pub trait Operand {
         self.as_plan_node().downcast::<T>()
     }
 
-    fn explain(&self) -> PlanExplanation<'_> {
-        PlanExplanation::new(self.as_plan_node())
+    fn explain(&self) -> Explanation<'_>
+    where
+        Self: Sized,
+    {
+        Explanation::new(self)
     }
 }
 

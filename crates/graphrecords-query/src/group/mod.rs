@@ -2,7 +2,7 @@ mod discriminator;
 mod group_by;
 
 use crate::{
-    BoxedIterator, Operand,
+    BoxedIterator, Explain, Operand,
     execution::ExecutionContext,
     optimizer::{OptimizeInputs, PlanNode},
 };
@@ -17,7 +17,7 @@ pub trait GroupableOperand: Operand + Clone + 'static {
 }
 
 pub trait GroupedOperandContext<O: GroupableOperand, D: Discriminator>:
-    PlanNode + OptimizeInputs<Output = GroupOperand<O, D>>
+    PlanNode + OptimizeInputs<Output = GroupOperand<O, D>> + Explain
 {
     fn evaluate<'a>(
         &'a self,
