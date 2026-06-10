@@ -8,7 +8,8 @@ mod rule;
 
 pub use builtins::{BuiltinPhase, EliminateDoubleNegation, register_builtins};
 pub use cost::{
-    Cardinality, Count, CountKind, EdgeGroupSize, NodeGroupSize, Selectivity, Statistic, Stats,
+    Cardinality, Count, CountKind, EdgeAttributeCardinality, EdgeGroupSize,
+    NodeAttributeCardinality, NodeGroupSize, Selectivity, Statistic, Stats,
 };
 pub use engine::{Direction, Optimizer, OptimizerError, PhaseHandle, RuleHandle, Session};
 pub use pattern::{

@@ -86,7 +86,7 @@ impl BareValuesOperand {
 }
 
 pub trait ValueOperandContext:
-    PlanNode + OptimizeInputs<Output = ValueOperand<Self::Operand>> + Cardinality + Explain
+    PlanNode + OptimizeInputs<Output = ValueOperand<Self::Operand>> + Explain
 {
     type Operand: RootOperand;
 
@@ -129,7 +129,7 @@ impl<O: RootOperand> ValueOperand<O> {
 }
 
 pub trait BareValueOperandContext:
-    PlanNode + OptimizeInputs<Output = BareValueOperand> + Cardinality + Explain
+    PlanNode + OptimizeInputs<Output = BareValueOperand> + Explain
 {
     fn evaluate<'a>(
         &'a self,

@@ -7,7 +7,10 @@ use crate::{
         GroupedIterator, GroupedOperandContext,
     },
     nodes::NodeOperand,
-    optimizer::{HasInputs, OptimizeInputs, OptimizerHints, PlanNode},
+    optimizer::{
+        Cardinality, EdgeAttributeCardinality, HasInputs, NodeAttributeCardinality, OptimizeInputs,
+        OptimizerHints, PlanNode, Stats,
+    },
     values::ValuesOperand,
 };
 use graphrecords_core::{
@@ -36,6 +39,12 @@ struct NodeGroupByAttributeContext {
     input: NodeOperand,
     #[explain(label)]
     discriminator: AttributeDiscriminator,
+}
+
+impl Cardinality for NodeGroupByAttributeContext {
+    fn cardinality(&self, stats: &Stats) -> usize {
+        stats.get::<NodeAttributeCardinality>(&self.discriminator.attribute)
+    }
 }
 
 impl GroupedOperandContext<NodeOperand, AttributeDiscriminator> for NodeGroupByAttributeContext {
@@ -94,6 +103,12 @@ struct EdgeGroupByAttributeContext {
     input: EdgeOperand,
     #[explain(label)]
     discriminator: AttributeDiscriminator,
+}
+
+impl Cardinality for EdgeGroupByAttributeContext {
+    fn cardinality(&self, stats: &Stats) -> usize {
+        stats.get::<EdgeAttributeCardinality>(&self.discriminator.attribute)
+    }
 }
 
 impl GroupedOperandContext<EdgeOperand, AttributeDiscriminator> for EdgeGroupByAttributeContext {

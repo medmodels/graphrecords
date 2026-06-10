@@ -73,6 +73,12 @@ pub struct GroupedAttributeContext<D: Discriminator> {
     attribute: GraphRecordAttribute,
 }
 
+impl<D: Discriminator> Cardinality for GroupedAttributeContext<D> {
+    fn cardinality(&self, stats: &Stats) -> usize {
+        self.input.context().cardinality(stats)
+    }
+}
+
 impl<D: Discriminator> GroupedOperandContext<ValuesOperand<EdgeOperand>, D>
     for GroupedAttributeContext<D>
 {

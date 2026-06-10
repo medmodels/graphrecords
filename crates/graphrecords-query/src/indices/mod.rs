@@ -1,13 +1,13 @@
 use crate::{
     BoxedIterator, Explain, Operand, RootOperand,
     execution::ExecutionContext,
-    optimizer::{OptimizeInputs, PlanNode},
+    optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
 use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use std::sync::Arc;
 
 pub trait IndicesOperandContext:
-    PlanNode + OptimizeInputs<Output = IndicesOperand<Self::Operand>> + Explain
+    PlanNode + OptimizeInputs<Output = IndicesOperand<Self::Operand>> + Cardinality + Explain
 {
     type Operand: RootOperand;
 

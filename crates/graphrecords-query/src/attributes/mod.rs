@@ -1,7 +1,7 @@
 use crate::{
     BoxedIterator, Explain, Operand, RootOperand,
     execution::ExecutionContext,
-    optimizer::{OptimizeInputs, PlanNode},
+    optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
 use graphrecords_core::{
     GraphRecord, errors::GraphRecordResult, graphrecord::GraphRecordAttribute,
@@ -18,7 +18,7 @@ pub type NestedAttributesIterator<'a, O> = BoxedIterator<
 >;
 
 pub trait NestedAttributesOperandContext:
-    PlanNode + OptimizeInputs<Output = NestedAttributesOperand<Self::Operand>> + Explain
+    PlanNode + OptimizeInputs<Output = NestedAttributesOperand<Self::Operand>> + Cardinality + Explain
 {
     type Operand: RootOperand;
 
@@ -60,7 +60,7 @@ impl<O: RootOperand> NestedAttributesOperand<O> {
 }
 
 pub trait AttributesOperandContext:
-    PlanNode + OptimizeInputs<Output = AttributesOperand<Self::Operand>> + Explain
+    PlanNode + OptimizeInputs<Output = AttributesOperand<Self::Operand>> + Cardinality + Explain
 {
     type Operand: RootOperand;
 
@@ -111,7 +111,7 @@ impl<O: RootOperand> AttributesOperand<O> {
 }
 
 pub trait BareAttributesOperandContext:
-    PlanNode + OptimizeInputs<Output = BareAttributesOperand> + Explain
+    PlanNode + OptimizeInputs<Output = BareAttributesOperand> + Cardinality + Explain
 {
     fn evaluate<'a>(
         &'a self,

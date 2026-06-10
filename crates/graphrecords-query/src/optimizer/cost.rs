@@ -1,5 +1,8 @@
-use graphrecords_core::{GraphRecord, graphrecord::Group};
-use graphrecords_utils::aliases::GrHashMap;
+use graphrecords_core::{
+    GraphRecord,
+    graphrecord::{GraphRecordAttribute, GraphRecordValue, Group},
+};
+use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use std::{
     any::{Any, TypeId},
     cell::RefCell,
@@ -62,6 +65,48 @@ impl Statistic for EdgeGroupSize {
 
     fn compute(graphrecord: &GraphRecord, group: &Self::Key) -> usize {
         graphrecord.edges_in_group(group).map_or(0, Iterator::count)
+    }
+}
+
+pub struct NodeAttributeCardinality;
+
+impl Statistic for NodeAttributeCardinality {
+    type Key = GraphRecordAttribute;
+    type Value = usize;
+
+    fn compute(graphrecord: &GraphRecord, attribute: &Self::Key) -> usize {
+        graphrecord
+            .node_indices()
+            .filter_map(|node_index| {
+                graphrecord
+                    .node_attributes(node_index)
+                    .ok()?
+                    .get(attribute)
+                    .cloned()
+            })
+            .collect::<GrHashSet<GraphRecordValue>>()
+            .len()
+    }
+}
+
+pub struct EdgeAttributeCardinality;
+
+impl Statistic for EdgeAttributeCardinality {
+    type Key = GraphRecordAttribute;
+    type Value = usize;
+
+    fn compute(graphrecord: &GraphRecord, attribute: &Self::Key) -> usize {
+        graphrecord
+            .edge_indices()
+            .filter_map(|edge_index| {
+                graphrecord
+                    .edge_attributes(edge_index)
+                    .ok()?
+                    .get(attribute)
+                    .cloned()
+            })
+            .collect::<GrHashSet<GraphRecordValue>>()
+            .len()
     }
 }
 
