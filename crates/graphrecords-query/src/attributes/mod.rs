@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
+    BoxedIterator, EvaluateContext, EvaluateOperand, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
@@ -18,21 +18,20 @@ pub type NestedAttributesIterator<'a, O> = BoxedIterator<
 >;
 
 pub trait NestedAttributesOperandContext:
-    PlanNode + OptimizeInputs<Output = NestedAttributesOperand<Self::Operand>> + Cardinality + Explain
+    PlanNode
+    + OptimizeInputs<Output = NestedAttributesOperand<Self::RootOperand>>
+    + Cardinality
+    + Explain
+    + EvaluateContext<Operand = NestedAttributesOperand<Self::RootOperand>>
 {
-    type Operand: RootOperand;
-
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<NestedAttributesIterator<'a, Self::Operand>>;
+    type RootOperand: RootOperand;
 }
 
 #[derive(Operand)]
 pub struct NestedAttributesOperand<O: RootOperand> {
     #[operand(context)]
-    context: Arc<dyn NestedAttributesOperandContext<Operand = O, Output = Self>>,
+    context:
+        Arc<dyn NestedAttributesOperandContext<Output = Self, RootOperand = O, Operand = Self>>,
 }
 
 impl<O: RootOperand> Clone for NestedAttributesOperand<O> {
@@ -43,7 +42,7 @@ impl<O: RootOperand> Clone for NestedAttributesOperand<O> {
     }
 }
 
-impl<O: RootOperand> Evaluate for NestedAttributesOperand<O> {
+impl<O: RootOperand> EvaluateOperand for NestedAttributesOperand<O> {
     type ReturnValue<'a> = NestedAttributesIterator<'a, O>;
 
     fn evaluate<'a>(
@@ -56,7 +55,7 @@ impl<O: RootOperand> Evaluate for NestedAttributesOperand<O> {
 }
 
 impl<O: RootOperand> NestedAttributesOperand<O> {
-    pub fn new<C: NestedAttributesOperandContext<Operand = O>>(context: C) -> Self {
+    pub fn new<C: NestedAttributesOperandContext<RootOperand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
@@ -64,29 +63,19 @@ impl<O: RootOperand> NestedAttributesOperand<O> {
 }
 
 pub trait AttributesOperandContext:
-    PlanNode + OptimizeInputs<Output = AttributesOperand<Self::Operand>> + Cardinality + Explain
+    PlanNode
+    + OptimizeInputs<Output = AttributesOperand<Self::RootOperand>>
+    + Cardinality
+    + Explain
+    + EvaluateContext<Operand = AttributesOperand<Self::RootOperand>>
 {
-    type Operand: RootOperand;
-
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<
-        BoxedIterator<
-            'a,
-            (
-                <Self::Operand as RootOperand>::Index<'a>,
-                GraphRecordAttribute,
-            ),
-        >,
-    >;
+    type RootOperand: RootOperand;
 }
 
 #[derive(Operand)]
 pub struct AttributesOperand<O: RootOperand> {
     #[operand(context)]
-    context: Arc<dyn AttributesOperandContext<Operand = O, Output = Self>>,
+    context: Arc<dyn AttributesOperandContext<RootOperand = O, Output = Self, Operand = Self>>,
 }
 
 impl<O: RootOperand> Clone for AttributesOperand<O> {
@@ -97,7 +86,7 @@ impl<O: RootOperand> Clone for AttributesOperand<O> {
     }
 }
 
-impl<O: RootOperand> Evaluate for AttributesOperand<O> {
+impl<O: RootOperand> EvaluateOperand for AttributesOperand<O> {
     type ReturnValue<'a> = BoxedIterator<'a, (<O as RootOperand>::Index<'a>, GraphRecordAttribute)>;
 
     fn evaluate<'a>(
@@ -110,7 +99,7 @@ impl<O: RootOperand> Evaluate for AttributesOperand<O> {
 }
 
 impl<O: RootOperand> AttributesOperand<O> {
-    pub fn new<C: AttributesOperandContext<Operand = O>>(context: C) -> Self {
+    pub fn new<C: AttributesOperandContext<RootOperand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
@@ -118,13 +107,12 @@ impl<O: RootOperand> AttributesOperand<O> {
 }
 
 pub trait BareAttributesOperandContext:
-    PlanNode + OptimizeInputs<Output = BareAttributesOperand> + Cardinality + Explain
+    PlanNode
+    + OptimizeInputs<Output = BareAttributesOperand>
+    + Cardinality
+    + Explain
+    + EvaluateContext<Operand = BareAttributesOperand>
 {
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, GraphRecordAttribute>>;
 }
 
 #[derive(Clone, Operand)]
@@ -133,7 +121,7 @@ pub struct BareAttributesOperand {
     context: Arc<dyn BareAttributesOperandContext<Output = Self>>,
 }
 
-impl Evaluate for BareAttributesOperand {
+impl EvaluateOperand for BareAttributesOperand {
     type ReturnValue<'a> = BoxedIterator<'a, GraphRecordAttribute>;
 
     fn evaluate<'a>(
@@ -154,26 +142,18 @@ impl BareAttributesOperand {
 }
 
 pub trait AttributeOperandContext:
-    PlanNode + OptimizeInputs<Output = AttributeOperand<Self::Operand>> + Explain
+    PlanNode
+    + OptimizeInputs<Output = AttributeOperand<Self::RootOperand>>
+    + Explain
+    + EvaluateContext<Operand = AttributeOperand<Self::RootOperand>>
 {
-    type Operand: RootOperand;
-
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<
-        Option<(
-            <Self::Operand as RootOperand>::Index<'a>,
-            GraphRecordAttribute,
-        )>,
-    >;
+    type RootOperand: RootOperand;
 }
 
 #[derive(Operand)]
 pub struct AttributeOperand<O: RootOperand> {
     #[operand(context)]
-    context: Arc<dyn AttributeOperandContext<Operand = O, Output = Self>>,
+    context: Arc<dyn AttributeOperandContext<RootOperand = O, Output = Self, Operand = Self>>,
 }
 
 impl<O: RootOperand> Clone for AttributeOperand<O> {
@@ -184,7 +164,7 @@ impl<O: RootOperand> Clone for AttributeOperand<O> {
     }
 }
 
-impl<O: RootOperand> Evaluate for AttributeOperand<O> {
+impl<O: RootOperand> EvaluateOperand for AttributeOperand<O> {
     type ReturnValue<'a> = Option<(<O as RootOperand>::Index<'a>, GraphRecordAttribute)>;
 
     fn evaluate<'a>(
@@ -197,7 +177,7 @@ impl<O: RootOperand> Evaluate for AttributeOperand<O> {
 }
 
 impl<O: RootOperand> AttributeOperand<O> {
-    pub fn new<C: AttributeOperandContext<Operand = O>>(context: C) -> Self {
+    pub fn new<C: AttributeOperandContext<RootOperand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
@@ -205,13 +185,11 @@ impl<O: RootOperand> AttributeOperand<O> {
 }
 
 pub trait BareAttributeOperandContext:
-    PlanNode + OptimizeInputs<Output = BareAttributeOperand> + Explain
+    PlanNode
+    + OptimizeInputs<Output = BareAttributeOperand>
+    + Explain
+    + EvaluateContext<Operand = BareAttributeOperand>
 {
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<Option<GraphRecordAttribute>>;
 }
 
 #[derive(Clone, Operand)]
@@ -220,7 +198,7 @@ pub struct BareAttributeOperand {
     context: Arc<dyn BareAttributeOperandContext<Output = Self>>,
 }
 
-impl Evaluate for BareAttributeOperand {
+impl EvaluateOperand for BareAttributeOperand {
     type ReturnValue<'a> = Option<GraphRecordAttribute>;
 
     fn evaluate<'a>(

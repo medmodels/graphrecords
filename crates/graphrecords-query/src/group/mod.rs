@@ -2,7 +2,7 @@ mod discriminator;
 mod group_by;
 
 use crate::{
-    BoxedIterator, Evaluate, Explain, Operand,
+    BoxedIterator, EvaluateContext, EvaluateOperand, Explain, Operand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
@@ -17,13 +17,12 @@ pub trait GroupableOperand: Operand + Clone + 'static {
 }
 
 pub trait GroupedOperandContext<O: GroupableOperand, D: Discriminator>:
-    PlanNode + OptimizeInputs<Output = GroupOperand<O, D>> + Cardinality + Explain
+    PlanNode
+    + OptimizeInputs<Output = GroupOperand<O, D>>
+    + Cardinality
+    + Explain
+    + EvaluateContext<Operand = GroupOperand<O, D>>
 {
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<GroupedIterator<'a, D::Key<'a>, O::Grouped<'a>>>;
 }
 
 pub struct GroupOperand<O: GroupableOperand, D: Discriminator> {
@@ -54,7 +53,7 @@ impl<O: GroupableOperand, D: Discriminator> Operand for GroupOperand<O, D> {
     }
 }
 
-impl<O: GroupableOperand, D: Discriminator> Evaluate for GroupOperand<O, D> {
+impl<O: GroupableOperand, D: Discriminator> EvaluateOperand for GroupOperand<O, D> {
     type ReturnValue<'a> = GroupedIterator<'a, D::Key<'a>, O::Grouped<'a>>;
 
     fn evaluate<'a>(

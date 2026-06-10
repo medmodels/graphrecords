@@ -1,7 +1,7 @@
 mod logic;
 
 use crate::{
-    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
+    BoxedIterator, EvaluateContext, EvaluateOperand, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{OptimizeInputs, PlanNode, Selectivity},
 };
@@ -15,24 +15,26 @@ pub type NestedBoolMaskIterator<'a, O, T> =
 
 pub trait NestedBoolMaskOperandContext:
     PlanNode
-    + OptimizeInputs<Output = NestedBoolMaskOperand<Self::Operand, Self::TreeType>>
+    + OptimizeInputs<Output = NestedBoolMaskOperand<Self::RootOperand, Self::TreeType>>
     + Selectivity
     + Explain
+    + EvaluateContext<Operand = NestedBoolMaskOperand<Self::RootOperand, Self::TreeType>>
 {
-    type Operand: RootOperand;
+    type RootOperand: RootOperand;
     type TreeType;
-
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<NestedBoolMaskIterator<'a, Self::Operand, Self::TreeType>>;
 }
 
 #[derive(Operand)]
 pub struct NestedBoolMaskOperand<O: RootOperand, T: 'static> {
     #[operand(context)]
-    context: Arc<dyn NestedBoolMaskOperandContext<Operand = O, TreeType = T, Output = Self>>,
+    context: Arc<
+        dyn NestedBoolMaskOperandContext<
+                RootOperand = O,
+                TreeType = T,
+                Output = Self,
+                Operand = Self,
+            >,
+    >,
 }
 
 impl<O: RootOperand, T: 'static> Clone for NestedBoolMaskOperand<O, T> {
@@ -43,7 +45,7 @@ impl<O: RootOperand, T: 'static> Clone for NestedBoolMaskOperand<O, T> {
     }
 }
 
-impl<O: RootOperand, T: 'static> Evaluate for NestedBoolMaskOperand<O, T> {
+impl<O: RootOperand, T: 'static> EvaluateOperand for NestedBoolMaskOperand<O, T> {
     type ReturnValue<'a> = NestedBoolMaskIterator<'a, O, T>;
 
     fn evaluate<'a>(
@@ -57,7 +59,7 @@ impl<O: RootOperand, T: 'static> Evaluate for NestedBoolMaskOperand<O, T> {
 
 impl<O: RootOperand, T: 'static> NestedBoolMaskOperand<O, T> {
     #[must_use]
-    pub fn new<C: NestedBoolMaskOperandContext<Operand = O, TreeType = T>>(context: C) -> Self {
+    pub fn new<C: NestedBoolMaskOperandContext<RootOperand = O, TreeType = T>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
@@ -65,21 +67,19 @@ impl<O: RootOperand, T: 'static> NestedBoolMaskOperand<O, T> {
 }
 
 pub trait BoolMaskOperandContext:
-    PlanNode + OptimizeInputs<Output = BoolMaskOperand<Self::Operand>> + Selectivity + Explain
+    PlanNode
+    + OptimizeInputs<Output = BoolMaskOperand<Self::RootOperand>>
+    + Selectivity
+    + Explain
+    + EvaluateContext<Operand = BoolMaskOperand<Self::RootOperand>>
 {
-    type Operand: RootOperand;
-
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>;
+    type RootOperand: RootOperand;
 }
 
 #[derive(Operand)]
 pub struct BoolMaskOperand<O: RootOperand> {
     #[operand(context)]
-    context: Arc<dyn BoolMaskOperandContext<Operand = O, Output = Self>>,
+    context: Arc<dyn BoolMaskOperandContext<RootOperand = O, Output = Self, Operand = Self>>,
 }
 
 impl<O: RootOperand> Clone for BoolMaskOperand<O> {
@@ -90,7 +90,7 @@ impl<O: RootOperand> Clone for BoolMaskOperand<O> {
     }
 }
 
-impl<O: RootOperand> Evaluate for BoolMaskOperand<O> {
+impl<O: RootOperand> EvaluateOperand for BoolMaskOperand<O> {
     type ReturnValue<'a> = BoxedIterator<'a, (<O as RootOperand>::Index<'a>, bool)>;
 
     fn evaluate<'a>(
@@ -104,7 +104,7 @@ impl<O: RootOperand> Evaluate for BoolMaskOperand<O> {
 
 impl<O: RootOperand> BoolMaskOperand<O> {
     #[must_use]
-    pub fn new<C: BoolMaskOperandContext<Operand = O>>(context: C) -> Self {
+    pub fn new<C: BoolMaskOperandContext<RootOperand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
@@ -112,21 +112,19 @@ impl<O: RootOperand> BoolMaskOperand<O> {
 }
 
 pub trait BoolOperandContext:
-    PlanNode + OptimizeInputs<Output = BoolOperand<Self::Operand>> + Selectivity + Explain
+    PlanNode
+    + OptimizeInputs<Output = BoolOperand<Self::RootOperand>>
+    + Selectivity
+    + Explain
+    + EvaluateContext<Operand = BoolOperand<Self::RootOperand>>
 {
-    type Operand: RootOperand;
-
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<(<Self::Operand as RootOperand>::Index<'a>, bool)>;
+    type RootOperand: RootOperand;
 }
 
 #[derive(Operand)]
 pub struct BoolOperand<O: RootOperand> {
     #[operand(context)]
-    context: Arc<dyn BoolOperandContext<Operand = O, Output = Self>>,
+    context: Arc<dyn BoolOperandContext<RootOperand = O, Output = Self, Operand = Self>>,
 }
 
 impl<O: RootOperand> Clone for BoolOperand<O> {
@@ -137,7 +135,7 @@ impl<O: RootOperand> Clone for BoolOperand<O> {
     }
 }
 
-impl<O: RootOperand> Evaluate for BoolOperand<O> {
+impl<O: RootOperand> EvaluateOperand for BoolOperand<O> {
     type ReturnValue<'a> = (<O as RootOperand>::Index<'a>, bool);
 
     fn evaluate<'a>(
@@ -150,7 +148,7 @@ impl<O: RootOperand> Evaluate for BoolOperand<O> {
 }
 
 impl<O: RootOperand> BoolOperand<O> {
-    pub fn new<C: BoolOperandContext<Operand = O>>(context: C) -> Self {
+    pub fn new<C: BoolOperandContext<RootOperand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }

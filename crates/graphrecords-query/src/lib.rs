@@ -4,7 +4,6 @@ pub mod edges;
 pub mod execution;
 pub mod explain;
 pub mod group;
-pub mod group_new;
 pub mod indices;
 pub mod nodes;
 pub mod optimizer;
@@ -15,6 +14,7 @@ pub mod values;
 
 use crate::{
     execution::ExecutionContext,
+    group::{Discriminator, GroupedIterator},
     optimizer::{OptimizeInputs, Optimizer, PlanNode},
     selection::{ReturnOperand, Selection},
 };
@@ -31,14 +31,38 @@ pub type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
 pub trait RootOperand:
     'static
     + Operand
-    + for<'a> Evaluate<ReturnValue<'a> = BoxedIterator<'a, <Self as RootOperand>::Index<'a>>>
+    + for<'a> EvaluateOperand<ReturnValue<'a> = BoxedIterator<'a, <Self as RootOperand>::Index<'a>>>
 {
     type Index<'a>: Eq + Hash
     where
         Self: 'a;
 }
 
-pub trait Evaluate {
+pub trait EvaluateContext {
+    type Operand: Operand;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>>;
+}
+
+pub trait EvaluateContextGrouped: EvaluateContext {
+    fn evaluate_grouped<'a, D: Discriminator>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        context: &'a ExecutionContext<'a>,
+    ) -> GraphRecordResult<
+        GroupedIterator<
+            'a,
+            <D as Discriminator>::Key<'a>,
+            <Self::Operand as EvaluateOperand>::ReturnValue<'a>,
+        >,
+    >;
+}
+
+pub trait EvaluateOperand {
     type ReturnValue<'a>
     where
         Self: 'a;
@@ -54,8 +78,12 @@ pub trait Evaluate {
     message = "`{Self}` is not an operand",
     note = "implement `Operand` for `{Self}`, or derive it with `#[derive(Operand)]` and mark the context field `#[operand(context)]`"
 )]
-pub trait Operand: 'static + Evaluate {
-    type Context: PlanNode + OptimizeInputs<Output = Self> + Explain + ?Sized;
+pub trait Operand: 'static + EvaluateOperand {
+    type Context: PlanNode
+        + OptimizeInputs<Output = Self>
+        + Explain
+        + EvaluateContext<Operand = Self>
+        + ?Sized;
 
     fn context(&self) -> &Self::Context;
 

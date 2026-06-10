@@ -1,12 +1,12 @@
 use crate::{
-    BoxedIterator, EdgeOperand, Evaluate, Explain, Operand,
+    EdgeOperand, EvaluateContext, EvaluateOperand, Explain, Operand,
     bool::BoolMaskOperand,
     edges::EdgeOperandContext,
     execution::ExecutionContext,
     optimizer::{Cardinality, HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Stats},
     traits::Filter,
 };
-use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::EdgeIndex};
+use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use graphrecords_utils::aliases::GrHashMap;
 
 #[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
@@ -27,12 +27,14 @@ impl Cardinality for FilterContext {
     }
 }
 
-impl EdgeOperandContext for FilterContext {
+impl EvaluateContext for FilterContext {
+    type Operand = EdgeOperand;
+
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a EdgeIndex>> {
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let edge_indices = self.input.evaluate(graphrecord, context)?;
 
         let mask_by_index: GrHashMap<_, _> = self.mask.evaluate(graphrecord, context)?.collect();
@@ -42,6 +44,8 @@ impl EdgeOperandContext for FilterContext {
         })))
     }
 }
+
+impl EdgeOperandContext for FilterContext {}
 
 impl Filter for EdgeOperand {
     type MaskOperand = BoolMaskOperand<Self>;

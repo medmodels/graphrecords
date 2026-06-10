@@ -1,12 +1,12 @@
 use crate::{
-    BoxedIterator, Explain, NodeOperand,
+    EvaluateContext, Explain, NodeOperand,
     execution::ExecutionContext,
     nodes::NodeOperandContext,
     optimizer::{
         Cardinality, Count, CountKind, HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Stats,
     },
 };
-use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::NodeIndex};
+use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 
 #[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
 #[plan(operand = NodeOperand, optimizer_hints(distinct))]
@@ -18,12 +18,16 @@ impl Cardinality for AllNodes {
     }
 }
 
-impl NodeOperandContext for AllNodes {
+impl EvaluateContext for AllNodes {
+    type Operand = NodeOperand;
+
     fn evaluate<'a>(
-        &self,
+        &'a self,
         graphrecord: &'a GraphRecord,
         _context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a NodeIndex>> {
+    ) -> GraphRecordResult<<Self::Operand as crate::EvaluateOperand>::ReturnValue<'a>> {
         Ok(Box::new(graphrecord.node_indices()))
     }
 }
+
+impl NodeOperandContext for AllNodes {}

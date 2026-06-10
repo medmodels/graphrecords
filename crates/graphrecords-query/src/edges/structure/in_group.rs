@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, EdgeOperand, Evaluate, Explain, Operand, RootOperand,
+    EdgeOperand, EvaluateContext, EvaluateOperand, Explain, Operand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
     optimizer::{
@@ -29,15 +29,14 @@ impl Selectivity for InGroupContext {
     }
 }
 
-impl BoolMaskOperandContext for InGroupContext {
-    type Operand = EdgeOperand;
+impl EvaluateContext for InGroupContext {
+    type Operand = BoolMaskOperand<EdgeOperand>;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>
-    {
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let edge_indices = self.input.evaluate(graphrecord, context)?;
 
         let edge_indices_in_group: GrHashSet<_> =
@@ -49,6 +48,10 @@ impl BoolMaskOperandContext for InGroupContext {
             (edge_index, in_group)
         })))
     }
+}
+
+impl BoolMaskOperandContext for InGroupContext {
+    type RootOperand = EdgeOperand;
 }
 
 impl InGroup for EdgeOperand {

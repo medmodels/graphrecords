@@ -1,5 +1,5 @@
 use crate::{
-    And, BoxedIterator, Evaluate, Explain, Operand, RootOperand,
+    And, EvaluateContext, EvaluateOperand, Explain, Operand, RootOperand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
     optimizer::{HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Selectivity, Stats},
@@ -24,15 +24,14 @@ impl<O: RootOperand> Selectivity for AndContext<O> {
     }
 }
 
-impl<O: RootOperand> BoolMaskOperandContext for AndContext<O> {
-    type Operand = O;
+impl<O: RootOperand> EvaluateContext for AndContext<O> {
+    type Operand = BoolMaskOperand<O>;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>
-    {
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let right_values_by_index: GrHashMap<O::Index<'a>, bool> =
             self.right.evaluate(graphrecord, context)?.collect();
         let left_values = self.left.evaluate(graphrecord, context)?;
@@ -42,6 +41,10 @@ impl<O: RootOperand> BoolMaskOperandContext for AndContext<O> {
             (index, left_value && right_value)
         })))
     }
+}
+
+impl<O: RootOperand> BoolMaskOperandContext for AndContext<O> {
+    type RootOperand = O;
 }
 
 impl<O: RootOperand> And for BoolMaskOperand<O> {

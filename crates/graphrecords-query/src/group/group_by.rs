@@ -1,10 +1,9 @@
 use crate::{
-    BoxedIterator, Evaluate, Explain, RootOperand,
+    BoxedIterator, EvaluateContext, EvaluateOperand, Explain, RootOperand,
     edges::EdgeOperand,
     execution::ExecutionContext,
     group::{
-        AttributeDiscriminator, Discriminator, GroupBy, GroupOperand, GroupableOperand,
-        GroupedIterator, GroupedOperandContext,
+        AttributeDiscriminator, GroupBy, GroupOperand, GroupableOperand, GroupedOperandContext,
     },
     nodes::NodeOperand,
     optimizer::{
@@ -47,18 +46,16 @@ impl Cardinality for NodeGroupByAttributeContext {
     }
 }
 
-impl GroupedOperandContext<NodeOperand, AttributeDiscriminator> for NodeGroupByAttributeContext {
+impl GroupedOperandContext<NodeOperand, AttributeDiscriminator> for NodeGroupByAttributeContext {}
+
+impl EvaluateContext for NodeGroupByAttributeContext {
+    type Operand = GroupOperand<NodeOperand, AttributeDiscriminator>;
+
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<
-        GroupedIterator<
-            'a,
-            <AttributeDiscriminator as Discriminator>::Key<'a>,
-            <NodeOperand as GroupableOperand>::Grouped<'a>,
-        >,
-    > {
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let node_indices = self.input.evaluate(graphrecord, context)?;
         let attribute = &self.discriminator.attribute;
 
@@ -111,18 +108,16 @@ impl Cardinality for EdgeGroupByAttributeContext {
     }
 }
 
-impl GroupedOperandContext<EdgeOperand, AttributeDiscriminator> for EdgeGroupByAttributeContext {
+impl GroupedOperandContext<EdgeOperand, AttributeDiscriminator> for EdgeGroupByAttributeContext {}
+
+impl EvaluateContext for EdgeGroupByAttributeContext {
+    type Operand = GroupOperand<EdgeOperand, AttributeDiscriminator>;
+
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<
-        GroupedIterator<
-            'a,
-            <AttributeDiscriminator as Discriminator>::Key<'a>,
-            <EdgeOperand as GroupableOperand>::Grouped<'a>,
-        >,
-    > {
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let edge_indices = self.input.evaluate(graphrecord, context)?;
         let attribute = &self.discriminator.attribute;
 

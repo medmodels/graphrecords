@@ -2,7 +2,7 @@ mod scan;
 mod structure;
 
 use crate::{
-    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
+    BoxedIterator, EvaluateContext, EvaluateOperand, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
@@ -12,13 +12,12 @@ use std::sync::Arc;
 pub use structure::{AttributeContext, FilterContext, GroupedAttributeContext, InGroupContext};
 
 pub trait EdgeOperandContext:
-    PlanNode + OptimizeInputs<Output = EdgeOperand> + Cardinality + Explain
+    PlanNode
+    + OptimizeInputs<Output = EdgeOperand>
+    + Cardinality
+    + Explain
+    + EvaluateContext<Operand = EdgeOperand>
 {
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a EdgeIndex>>;
 }
 
 #[derive(Clone, Operand)]
@@ -31,7 +30,7 @@ impl RootOperand for EdgeOperand {
     type Index<'a> = &'a EdgeIndex;
 }
 
-impl Evaluate for EdgeOperand {
+impl EvaluateOperand for EdgeOperand {
     type ReturnValue<'a> = BoxedIterator<'a, &'a EdgeIndex>;
 
     fn evaluate<'a>(

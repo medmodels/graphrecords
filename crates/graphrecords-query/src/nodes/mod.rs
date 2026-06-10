@@ -2,7 +2,7 @@ mod scan;
 mod structure;
 
 use crate::{
-    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
+    BoxedIterator, EvaluateContext, EvaluateOperand, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
@@ -12,13 +12,12 @@ use std::sync::Arc;
 pub use structure::{AttributeContext, FilterContext, GroupedAttributeContext, InGroupContext};
 
 pub trait NodeOperandContext:
-    PlanNode + OptimizeInputs<Output = NodeOperand> + Cardinality + Explain
+    PlanNode
+    + OptimizeInputs<Output = NodeOperand>
+    + Cardinality
+    + Explain
+    + EvaluateContext<Operand = NodeOperand>
 {
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a NodeIndex>>;
 }
 
 #[derive(Clone, Operand)]
@@ -31,7 +30,7 @@ impl RootOperand for NodeOperand {
     type Index<'a> = &'a NodeIndex;
 }
 
-impl Evaluate for NodeOperand {
+impl EvaluateOperand for NodeOperand {
     type ReturnValue<'a> = BoxedIterator<'a, &'a NodeIndex>;
 
     fn evaluate<'a>(

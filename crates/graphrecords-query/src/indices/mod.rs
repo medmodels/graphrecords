@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
+    BoxedIterator, EvaluateContext, EvaluateOperand, Explain, Operand, RootOperand,
     execution::ExecutionContext,
     optimizer::{Cardinality, OptimizeInputs, PlanNode},
 };
@@ -7,21 +7,19 @@ use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use std::sync::Arc;
 
 pub trait IndicesOperandContext:
-    PlanNode + OptimizeInputs<Output = IndicesOperand<Self::Operand>> + Cardinality + Explain
+    PlanNode
+    + OptimizeInputs<Output = IndicesOperand<Self::RootOperand>>
+    + Cardinality
+    + Explain
+    + EvaluateContext<Operand = IndicesOperand<Self::RootOperand>>
 {
-    type Operand: RootOperand;
-
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, <Self::Operand as RootOperand>::Index<'a>>>;
+    type RootOperand: RootOperand;
 }
 
 #[derive(Operand)]
 pub struct IndicesOperand<O: RootOperand> {
     #[operand(context)]
-    context: Arc<dyn IndicesOperandContext<Operand = O, Output = Self>>,
+    context: Arc<dyn IndicesOperandContext<RootOperand = O, Output = Self, Operand = Self>>,
 }
 
 impl<O: RootOperand> Clone for IndicesOperand<O> {
@@ -32,7 +30,7 @@ impl<O: RootOperand> Clone for IndicesOperand<O> {
     }
 }
 
-impl<O: RootOperand> Evaluate for IndicesOperand<O> {
+impl<O: RootOperand> EvaluateOperand for IndicesOperand<O> {
     type ReturnValue<'a> = BoxedIterator<'a, <O as RootOperand>::Index<'a>>;
 
     fn evaluate<'a>(
@@ -46,7 +44,7 @@ impl<O: RootOperand> Evaluate for IndicesOperand<O> {
 
 impl<O: RootOperand> IndicesOperand<O> {
     #[must_use]
-    pub fn new<C: IndicesOperandContext<Operand = O>>(context: C) -> Self {
+    pub fn new<C: IndicesOperandContext<RootOperand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }
@@ -54,21 +52,18 @@ impl<O: RootOperand> IndicesOperand<O> {
 }
 
 pub trait IndexOperandContext:
-    PlanNode + OptimizeInputs<Output = IndexOperand<Self::Operand>> + Explain
+    PlanNode
+    + OptimizeInputs<Output = IndexOperand<Self::RootOperand>>
+    + Explain
+    + EvaluateContext<Operand = IndexOperand<Self::RootOperand>>
 {
-    type Operand: RootOperand;
-
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<Option<<Self::Operand as RootOperand>::Index<'a>>>;
+    type RootOperand: RootOperand;
 }
 
 #[derive(Operand)]
 pub struct IndexOperand<O: RootOperand> {
     #[operand(context)]
-    context: Arc<dyn IndexOperandContext<Operand = O, Output = Self>>,
+    context: Arc<dyn IndexOperandContext<RootOperand = O, Output = Self, Operand = Self>>,
 }
 
 impl<O: RootOperand> Clone for IndexOperand<O> {
@@ -79,7 +74,7 @@ impl<O: RootOperand> Clone for IndexOperand<O> {
     }
 }
 
-impl<O: RootOperand> Evaluate for IndexOperand<O> {
+impl<O: RootOperand> EvaluateOperand for IndexOperand<O> {
     type ReturnValue<'a> = Option<<O as RootOperand>::Index<'a>>;
 
     fn evaluate<'a>(
@@ -93,7 +88,7 @@ impl<O: RootOperand> Evaluate for IndexOperand<O> {
 
 impl<O: RootOperand> IndexOperand<O> {
     #[must_use]
-    pub fn new<C: IndexOperandContext<Operand = O>>(context: C) -> Self {
+    pub fn new<C: IndexOperandContext<RootOperand = O>>(context: C) -> Self {
         Self {
             context: Arc::new(context),
         }

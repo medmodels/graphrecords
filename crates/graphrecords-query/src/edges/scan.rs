@@ -1,12 +1,12 @@
 use crate::{
-    BoxedIterator, EdgeOperand, Explain,
+    EdgeOperand, EvaluateContext, Explain,
     edges::EdgeOperandContext,
     execution::ExecutionContext,
     optimizer::{
         Cardinality, Count, CountKind, HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Stats,
     },
 };
-use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::EdgeIndex};
+use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 
 #[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
 #[plan(operand = EdgeOperand, optimizer_hints(distinct))]
@@ -18,12 +18,16 @@ impl Cardinality for AllEdges {
     }
 }
 
-impl EdgeOperandContext for AllEdges {
+impl EvaluateContext for AllEdges {
+    type Operand = EdgeOperand;
+
     fn evaluate<'a>(
-        &self,
+        &'a self,
         graphrecord: &'a GraphRecord,
         _context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a EdgeIndex>> {
+    ) -> GraphRecordResult<<Self::Operand as crate::EvaluateOperand>::ReturnValue<'a>> {
         Ok(Box::new(graphrecord.edge_indices()))
     }
 }
+
+impl EdgeOperandContext for AllEdges {}

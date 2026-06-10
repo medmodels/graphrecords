@@ -1,12 +1,12 @@
 use crate::{
-    BoxedIterator, Evaluate, Explain, Operand,
+    EvaluateContext, EvaluateOperand, Explain, Operand,
     bool::BoolMaskOperand,
     execution::ExecutionContext,
     nodes::{NodeOperand, NodeOperandContext},
     optimizer::{Cardinality, HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Stats},
     traits::Filter,
 };
-use graphrecords_core::{GraphRecord, errors::GraphRecordResult, graphrecord::NodeIndex};
+use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use graphrecords_utils::aliases::GrHashMap;
 
 #[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
@@ -27,12 +27,14 @@ impl Cardinality for FilterContext {
     }
 }
 
-impl NodeOperandContext for FilterContext {
+impl EvaluateContext for FilterContext {
+    type Operand = NodeOperand;
+
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, &'a NodeIndex>> {
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let node_indices = self.input.evaluate(graphrecord, context)?;
 
         let mask_by_index: GrHashMap<_, _> = self.mask.evaluate(graphrecord, context)?.collect();
@@ -42,6 +44,8 @@ impl NodeOperandContext for FilterContext {
         })))
     }
 }
+
+impl NodeOperandContext for FilterContext {}
 
 impl Filter for NodeOperand {
     type MaskOperand = BoolMaskOperand<Self>;

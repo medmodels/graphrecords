@@ -1,9 +1,7 @@
 use crate::{
-    BoxedIterator, Evaluate, Explain, Operand, RootOperand,
+    BoxedIterator, EvaluateContext, EvaluateOperand, Explain, Operand,
     execution::ExecutionContext,
-    group::{
-        Discriminator, GroupOperand, GroupableOperand, GroupedIterator, GroupedOperandContext,
-    },
+    group::{Discriminator, GroupOperand, GroupedOperandContext},
     nodes::NodeOperand,
     optimizer::{Cardinality, HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Stats},
     traits::Attribute,
@@ -47,20 +45,22 @@ impl Cardinality for AttributeContext {
     }
 }
 
-impl ValuesOperandContext for AttributeContext {
-    type Operand = NodeOperand;
+impl EvaluateContext for AttributeContext {
+    type Operand = ValuesOperand<NodeOperand>;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<
-        BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, GraphRecordValue)>,
-    > {
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let node_indices = self.input.evaluate(graphrecord, context)?;
 
         Ok(attribute_values(graphrecord, node_indices, &self.attribute))
     }
+}
+
+impl ValuesOperandContext for AttributeContext {
+    type RootOperand = NodeOperand;
 }
 
 #[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
@@ -79,20 +79,14 @@ impl<D: Discriminator> Cardinality for GroupedAttributeContext<D> {
     }
 }
 
-impl<D: Discriminator> GroupedOperandContext<ValuesOperand<NodeOperand>, D>
-    for GroupedAttributeContext<D>
-{
+impl<D: Discriminator> EvaluateContext for GroupedAttributeContext<D> {
+    type Operand = GroupOperand<ValuesOperand<NodeOperand>, D>;
+
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<
-        GroupedIterator<
-            'a,
-            D::Key<'a>,
-            <ValuesOperand<NodeOperand> as GroupableOperand>::Grouped<'a>,
-        >,
-    > {
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let partitions = self.input.evaluate(graphrecord, context)?;
 
         Ok(Box::new(partitions.map(move |(key, partition)| {
@@ -102,6 +96,11 @@ impl<D: Discriminator> GroupedOperandContext<ValuesOperand<NodeOperand>, D>
             )
         })))
     }
+}
+
+impl<D: Discriminator> GroupedOperandContext<ValuesOperand<NodeOperand>, D>
+    for GroupedAttributeContext<D>
+{
 }
 
 impl Attribute for NodeOperand {

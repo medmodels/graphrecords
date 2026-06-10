@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, Evaluate, Explain, Operand, RootOperand, Xor,
+    EvaluateContext, EvaluateOperand, Explain, Operand, RootOperand, Xor,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
     optimizer::{HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Selectivity, Stats},
@@ -27,15 +27,14 @@ impl<O: RootOperand> Selectivity for XorContext<O> {
     }
 }
 
-impl<O: RootOperand> BoolMaskOperandContext for XorContext<O> {
-    type Operand = O;
+impl<O: RootOperand> EvaluateContext for XorContext<O> {
+    type Operand = BoolMaskOperand<O>;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>
-    {
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let right_values_by_index: GrHashMap<O::Index<'a>, bool> =
             self.right.evaluate(graphrecord, context)?.collect();
         let left_values = self.left.evaluate(graphrecord, context)?;
@@ -45,6 +44,10 @@ impl<O: RootOperand> BoolMaskOperandContext for XorContext<O> {
             (index, left_value ^ right_value)
         })))
     }
+}
+
+impl<O: RootOperand> BoolMaskOperandContext for XorContext<O> {
+    type RootOperand = O;
 }
 
 impl<O: RootOperand> Xor for BoolMaskOperand<O> {

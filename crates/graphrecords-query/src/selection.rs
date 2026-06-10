@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, Explanation, NodeOperand,
+    BoxedIterator, EvaluateOperand, Explanation, NodeOperand,
     bool::BoolMaskOperand,
     edges::{AllEdges, EdgeOperand},
     execution::ExecutionContext,
@@ -27,7 +27,7 @@ macro_rules! impl_iterator_return_operand {
                 type ReturnValue = BoxedIterator<'a, $Item>;
 
                 fn evaluate(&'a self, graphrecord: &'a GraphRecord, context: &'a ExecutionContext<'a>) -> GraphRecordResult<Self::ReturnValue> {
-                    self.evaluate(graphrecord, context)
+                    <Self as EvaluateOperand>::evaluate(self, graphrecord, context)
                 }
 
                 fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
@@ -273,7 +273,7 @@ where
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<Self::ReturnValue> {
-        Self::evaluate(self, graphrecord, context)
+        EvaluateOperand::evaluate(self, graphrecord, context)
     }
 
     fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {

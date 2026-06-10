@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, Evaluate, Explain, Not, Operand, RootOperand,
+    EvaluateContext, EvaluateOperand, Explain, Not, Operand, RootOperand,
     bool::{BoolMaskOperand, BoolMaskOperandContext},
     execution::ExecutionContext,
     optimizer::{HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Selectivity, Stats},
@@ -21,19 +21,22 @@ impl<O: RootOperand> Selectivity for NotContext<O> {
     }
 }
 
-impl<O: RootOperand> BoolMaskOperandContext for NotContext<O> {
-    type Operand = O;
+impl<O: RootOperand> EvaluateContext for NotContext<O> {
+    type Operand = BoolMaskOperand<O>;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<BoxedIterator<'a, (<Self::Operand as RootOperand>::Index<'a>, bool)>>
-    {
+    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let input_values = self.input.evaluate(graphrecord, context)?;
 
         Ok(Box::new(input_values.map(|(index, value)| (index, !value))))
     }
+}
+
+impl<O: RootOperand> BoolMaskOperandContext for NotContext<O> {
+    type RootOperand = O;
 }
 
 impl<O: RootOperand> Not for BoolMaskOperand<O> {
