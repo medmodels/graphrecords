@@ -1,8 +1,10 @@
-use super::{Capture, Direction, Optimizer, Pattern, PhaseLabel, Rule, matching};
+use super::{Direction, Optimizer, OptimizerBuilder, Pattern, PhaseLabel, Rule, capture, matching};
 use crate::{
-    EdgeOperand, NodeOperand, RootOperand,
-    bool::{BoolMaskOperand, NotContext},
+    IndexDomain,
+    operands::BoolMaskOperand,
+    operations::{NotOperation, OperationContext},
 };
+use graphrecords_core::graphrecord::{EdgeIndex, NodeIndex};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PhaseLabel)]
 pub enum BuiltinPhase {
@@ -17,67 +19,71 @@ pub enum BuiltinPhase {
 
 pub struct EliminateDoubleNegation;
 
-fn eliminate_double_negation<O: RootOperand>() -> impl Rule<BoolMaskOperand<O>> {
-    let inner = Capture::new();
-
-    matching::<NotContext<O>, _>((matching::<NotContext<O>, _>((inner.bind(),)),))
-        .rewrite(move |_stats| Some(inner.get()))
+fn eliminate_double_negation<I: IndexDomain>() -> impl Rule<BoolMaskOperand<I>> {
+    matching::<OperationContext<BoolMaskOperand<I>, NotOperation>, _>((matching::<
+        OperationContext<BoolMaskOperand<I>, NotOperation>,
+        _,
+    >((capture(),)),))
+    .rewrite(|((inner,),), _stats| Some(inner))
 }
 
 impl Optimizer {
     #[must_use]
     pub fn builtin() -> Self {
-        let mut optimizer = Self::new();
+        let mut builder = Self::builder();
 
-        register_builtins(&mut optimizer);
+        register_builtins(&mut builder);
 
-        optimizer
+        #[allow(clippy::missing_panics_doc)]
+        builder
+            .build()
+            .expect("Builtin phases and rules must form a valid optimizer")
     }
 }
 
-pub fn register_builtins(optimizer: &mut Optimizer) {
+pub fn register_builtins(builder: &mut OptimizerBuilder) {
     use BuiltinPhase::{Cse, Graph, Limit, Pushdown, Reorder, Simplify, Source};
 
-    optimizer
+    builder
         .add_phase(Source)
         .direction(Direction::TopDown)
         .fixpoint();
-    optimizer
+    builder
         .add_phase(Simplify)
         .direction(Direction::BottomUp)
         .fixpoint()
         .after(Source);
-    optimizer
+    builder
         .add_phase(Reorder)
         .direction(Direction::BottomUp)
         .fixpoint()
         .after(Simplify);
-    optimizer
+    builder
         .add_phase(Pushdown)
         .direction(Direction::TopDown)
         .fixpoint()
         .after(Reorder);
-    optimizer
+    builder
         .add_phase(Cse)
         .direction(Direction::Manual)
         .once()
         .after(Pushdown);
-    optimizer
+    builder
         .add_phase(Limit)
         .direction(Direction::TopDown)
         .fixpoint()
         .after(Cse);
-    optimizer
+    builder
         .add_phase(Graph)
         .direction(Direction::BottomUp)
         .fixpoint()
         .after(Limit);
 
-    optimizer
-        .add_rule(Simplify, eliminate_double_negation::<NodeOperand>())
+    builder
+        .add_rule(Simplify, eliminate_double_negation::<NodeIndex>())
         .label::<EliminateDoubleNegation>();
 
-    optimizer
-        .add_rule(Simplify, eliminate_double_negation::<EdgeOperand>())
+    builder
+        .add_rule(Simplify, eliminate_double_negation::<EdgeIndex>())
         .label::<EliminateDoubleNegation>();
 }

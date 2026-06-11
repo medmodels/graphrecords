@@ -13,7 +13,7 @@ pub mod schema;
 
 pub use self::{
     datatypes::{GraphRecordAttribute, GraphRecordValue},
-    graph::{Attributes, EdgeIndex, NodeIndex},
+    graph::{AttributeMap, EdgeIndex, NodeIndex},
     group_mapping::Group,
 };
 #[cfg(feature = "plugins")]
@@ -91,7 +91,7 @@ where
 
 fn node_dataframes_to_tuples(
     nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-) -> GraphRecordResult<Vec<(NodeIndex, Attributes)>> {
+) -> GraphRecordResult<Vec<(NodeIndex, AttributeMap)>> {
     let nodes = nodes_dataframes
         .into_iter()
         .map(|dataframe_input| {
@@ -109,7 +109,7 @@ fn node_dataframes_to_tuples(
 
 fn edge_dataframes_to_tuples(
     edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-) -> GraphRecordResult<Vec<(NodeIndex, NodeIndex, Attributes)>> {
+) -> GraphRecordResult<Vec<(NodeIndex, NodeIndex, AttributeMap)>> {
     let edges = edges_dataframes
         .into_iter()
         .map(|dataframe_input| {
@@ -134,8 +134,8 @@ fn dataframes_to_tuples(
     nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
     edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
 ) -> GraphRecordResult<(
-    Vec<(NodeIndex, Attributes)>,
-    Vec<(NodeIndex, NodeIndex, Attributes)>,
+    Vec<(NodeIndex, AttributeMap)>,
+    Vec<(NodeIndex, NodeIndex, AttributeMap)>,
 )> {
     let nodes = node_dataframes_to_tuples(nodes_dataframes)?;
     let edges = edge_dataframes_to_tuples(edges_dataframes)?;
@@ -189,8 +189,8 @@ impl GraphRecord {
     }
 
     pub fn from_tuples(
-        nodes: Vec<(NodeIndex, Attributes)>,
-        edges: Option<Vec<(NodeIndex, NodeIndex, Attributes)>>,
+        nodes: Vec<(NodeIndex, AttributeMap)>,
+        edges: Option<Vec<(NodeIndex, NodeIndex, AttributeMap)>>,
         schema: Option<Schema>,
     ) -> GraphRecordResult<Self> {
         let mut graphrecord = Self::with_capacity(
@@ -422,7 +422,7 @@ impl GraphRecord {
         self.graph.node_indices()
     }
 
-    pub fn node_attributes(&self, node_index: &NodeIndex) -> GraphRecordResult<&Attributes> {
+    pub fn node_attributes(&self, node_index: &NodeIndex) -> GraphRecordResult<&AttributeMap> {
         self.graph
             .node_attributes(node_index)
             .map_err(GraphRecordError::from)
@@ -457,7 +457,7 @@ impl GraphRecord {
         self.graph.edge_indices()
     }
 
-    pub fn edge_attributes(&self, edge_index: &EdgeIndex) -> GraphRecordResult<&Attributes> {
+    pub fn edge_attributes(&self, edge_index: &EdgeIndex) -> GraphRecordResult<&AttributeMap> {
         self.graph
             .edge_attributes(edge_index)
             .map_err(GraphRecordError::from)
@@ -500,7 +500,7 @@ impl GraphRecord {
     fn add_node_impl(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
     ) -> GraphRecordResult<()> {
         match self.schema.schema_type() {
             SchemaType::Inferred => {
@@ -526,7 +526,7 @@ impl GraphRecord {
     fn add_node_with_group_impl(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         group: Group,
     ) -> GraphRecordResult<()> {
         match self.schema.schema_type() {
@@ -562,7 +562,7 @@ impl GraphRecord {
     fn add_node_with_groups_impl(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<()> {
         let groups = groups.as_ref();
@@ -586,13 +586,13 @@ impl GraphRecord {
         }
     }
 
-    fn remove_node_impl(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
+    fn remove_node_impl(&mut self, node_index: &NodeIndex) -> GraphRecordResult<AttributeMap> {
         self.graph
             .remove_node(node_index, &mut self.group_mapping)
             .map_err(GraphRecordError::from)
     }
 
-    fn add_nodes_impl(&mut self, nodes: Vec<(NodeIndex, Attributes)>) -> GraphRecordResult<()> {
+    fn add_nodes_impl(&mut self, nodes: Vec<(NodeIndex, AttributeMap)>) -> GraphRecordResult<()> {
         for (node_index, attributes) in nodes {
             self.add_node_impl(node_index, attributes)?;
         }
@@ -604,7 +604,7 @@ impl GraphRecord {
     #[allow(clippy::needless_pass_by_value)]
     fn add_nodes_with_group_impl(
         &mut self,
-        nodes: Vec<(NodeIndex, Attributes)>,
+        nodes: Vec<(NodeIndex, AttributeMap)>,
         group: Group,
     ) -> GraphRecordResult<()> {
         if !self.contains_group(&group) {
@@ -620,7 +620,7 @@ impl GraphRecord {
 
     fn add_nodes_with_groups_impl(
         &mut self,
-        nodes: Vec<(NodeIndex, Attributes)>,
+        nodes: Vec<(NodeIndex, AttributeMap)>,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<()> {
         let groups = groups.as_ref();
@@ -667,7 +667,7 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
     ) -> GraphRecordResult<EdgeIndex> {
         let edge_index = self
             .graph
@@ -706,7 +706,7 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         group: Group,
     ) -> GraphRecordResult<EdgeIndex> {
         let edge_index = self
@@ -751,7 +751,7 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<EdgeIndex> {
         let groups = groups.as_ref();
@@ -781,7 +781,7 @@ impl GraphRecord {
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn remove_edge_impl(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<Attributes> {
+    fn remove_edge_impl(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<AttributeMap> {
         self.group_mapping.remove_edge(edge_index);
 
         self.graph
@@ -791,7 +791,7 @@ impl GraphRecord {
 
     fn add_edges_impl(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         edges
             .into_iter()
@@ -804,7 +804,7 @@ impl GraphRecord {
     // TODO: Add tests
     fn add_edges_with_group_impl(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
         group: &Group,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         if !self.contains_group(group) {
@@ -826,7 +826,7 @@ impl GraphRecord {
 
     fn add_edges_with_groups_impl(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         let groups = groups.as_ref();
@@ -1337,7 +1337,7 @@ impl GraphRecord {
     pub fn add_node(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
     ) -> GraphRecordResult<()> {
         self.add_node_impl(node_index, attributes)
     }
@@ -1346,7 +1346,7 @@ impl GraphRecord {
     pub fn add_node_with_group(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         group: Group,
     ) -> GraphRecordResult<()> {
         self.add_node_with_group_impl(node_index, attributes, group)
@@ -1355,24 +1355,24 @@ impl GraphRecord {
     pub fn add_node_with_groups(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<()> {
         self.add_node_with_groups_impl(node_index, attributes, groups)
     }
 
-    pub fn remove_node(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
+    pub fn remove_node(&mut self, node_index: &NodeIndex) -> GraphRecordResult<AttributeMap> {
         self.remove_node_impl(node_index)
     }
 
-    pub fn add_nodes(&mut self, nodes: Vec<(NodeIndex, Attributes)>) -> GraphRecordResult<()> {
+    pub fn add_nodes(&mut self, nodes: Vec<(NodeIndex, AttributeMap)>) -> GraphRecordResult<()> {
         self.add_nodes_impl(nodes)
     }
 
     #[allow(clippy::needless_pass_by_value)]
     pub fn add_nodes_with_group(
         &mut self,
-        nodes: Vec<(NodeIndex, Attributes)>,
+        nodes: Vec<(NodeIndex, AttributeMap)>,
         group: Group,
     ) -> GraphRecordResult<()> {
         self.add_nodes_with_group_impl(nodes, group)
@@ -1380,7 +1380,7 @@ impl GraphRecord {
 
     pub fn add_nodes_with_groups(
         &mut self,
-        nodes: Vec<(NodeIndex, Attributes)>,
+        nodes: Vec<(NodeIndex, AttributeMap)>,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<()> {
         self.add_nodes_with_groups_impl(nodes, groups)
@@ -1414,7 +1414,7 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
     ) -> GraphRecordResult<EdgeIndex> {
         self.add_edge_impl(source_node_index, target_node_index, attributes)
     }
@@ -1424,7 +1424,7 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         group: Group,
     ) -> GraphRecordResult<EdgeIndex> {
         self.add_edge_with_group_impl(source_node_index, target_node_index, attributes, group)
@@ -1434,26 +1434,26 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<EdgeIndex> {
         self.add_edge_with_groups_impl(source_node_index, target_node_index, attributes, groups)
     }
 
-    pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<Attributes> {
+    pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<AttributeMap> {
         self.remove_edge_impl(edge_index)
     }
 
     pub fn add_edges(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         self.add_edges_impl(edges)
     }
 
     pub fn add_edges_with_group(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
         group: &Group,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         self.add_edges_with_group_impl(edges, group)
@@ -1461,7 +1461,7 @@ impl GraphRecord {
 
     pub fn add_edges_with_groups(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         self.add_edges_with_groups_impl(edges, groups)
@@ -1609,7 +1609,7 @@ impl GraphRecord {
 #[cfg(test)]
 mod test {
     use super::{
-        Attributes, EdgeDataFrameInput, GraphRecord, GraphRecordAttribute, NodeDataFrameInput,
+        AttributeMap, EdgeDataFrameInput, GraphRecord, GraphRecordAttribute, NodeDataFrameInput,
         NodeIndex,
     };
     use crate::{
@@ -1625,7 +1625,7 @@ mod test {
     #[cfg(feature = "serde")]
     use std::fs;
 
-    fn create_nodes() -> Vec<(NodeIndex, Attributes)> {
+    fn create_nodes() -> Vec<(NodeIndex, AttributeMap)> {
         vec![
             (
                 "0".into(),
@@ -1643,7 +1643,7 @@ mod test {
         ]
     }
 
-    fn create_edges() -> Vec<(NodeIndex, NodeIndex, Attributes)> {
+    fn create_edges() -> Vec<(NodeIndex, NodeIndex, AttributeMap)> {
         vec![
             (
                 "0".into(),

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 pub type NodeIndex = GraphRecordAttribute;
 pub type EdgeIndex = u32;
-pub type Attributes = HashMap<GraphRecordAttribute, GraphRecordValue>;
+pub type AttributeMap = HashMap<GraphRecordAttribute, GraphRecordValue>;
 
 #[derive(Default, Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -58,7 +58,7 @@ impl Graph {
     pub fn add_node(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
     ) -> Result<(), GraphError> {
         if self.nodes.contains_key(&node_index) {
             return Err(GraphError::AssertionError(format!(
@@ -77,7 +77,7 @@ impl Graph {
         &mut self,
         node_index: &NodeIndex,
         group_mapping: &mut GroupMapping,
-    ) -> Result<Attributes, GraphError> {
+    ) -> Result<AttributeMap, GraphError> {
         let node = self.nodes.remove(node_index).ok_or_else(|| {
             GraphError::IndexError(format!("Cannot find node with index {node_index}"))
         })?;
@@ -127,7 +127,7 @@ impl Graph {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
     ) -> Result<EdgeIndex, GraphError> {
         if !self.nodes.contains_key(&source_node_index) {
             return Err(GraphError::IndexError(format!(
@@ -164,7 +164,7 @@ impl Graph {
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> Result<Attributes, GraphError> {
+    pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> Result<AttributeMap, GraphError> {
         let edge = self.edges.remove(edge_index).ok_or_else(|| {
             GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
         })?;
@@ -184,7 +184,7 @@ impl Graph {
         Ok(edge.attributes)
     }
 
-    pub fn node_attributes(&self, node_index: &NodeIndex) -> Result<&Attributes, GraphError> {
+    pub fn node_attributes(&self, node_index: &NodeIndex) -> Result<&AttributeMap, GraphError> {
         Ok(&self
             .nodes
             .get(node_index)
@@ -197,7 +197,7 @@ impl Graph {
     pub fn node_attributes_mut(
         &mut self,
         node_index: &NodeIndex,
-    ) -> Result<&mut Attributes, GraphError> {
+    ) -> Result<&mut AttributeMap, GraphError> {
         Ok(&mut self
             .nodes
             .get_mut(node_index)
@@ -207,11 +207,11 @@ impl Graph {
             .attributes)
     }
 
-    pub fn nodes_attributes(&self) -> impl Iterator<Item = &Attributes> {
+    pub fn nodes_attributes(&self) -> impl Iterator<Item = &AttributeMap> {
         self.nodes.values().map(|node| &node.attributes)
     }
 
-    pub fn nodes_attributes_mut(&mut self) -> impl Iterator<Item = &mut Attributes> {
+    pub fn nodes_attributes_mut(&mut self) -> impl Iterator<Item = &mut AttributeMap> {
         self.nodes.iter_mut().map(|(_, node)| &mut node.attributes)
     }
 
@@ -220,7 +220,7 @@ impl Graph {
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub fn edge_attributes(&self, edge_index: &EdgeIndex) -> Result<&Attributes, GraphError> {
+    pub fn edge_attributes(&self, edge_index: &EdgeIndex) -> Result<&AttributeMap, GraphError> {
         Ok(&self
             .edges
             .get(edge_index)
@@ -234,7 +234,7 @@ impl Graph {
     pub fn edge_attributes_mut(
         &mut self,
         edge_index: &EdgeIndex,
-    ) -> Result<&mut Attributes, GraphError> {
+    ) -> Result<&mut AttributeMap, GraphError> {
         Ok(&mut self
             .edges
             .get_mut(edge_index)
@@ -244,11 +244,11 @@ impl Graph {
             .attributes)
     }
 
-    pub fn edges_attributes(&self) -> impl Iterator<Item = &Attributes> {
+    pub fn edges_attributes(&self) -> impl Iterator<Item = &AttributeMap> {
         self.edges.values().map(|edge| &edge.attributes)
     }
 
-    pub fn edges_attributes_mut(&mut self) -> impl Iterator<Item = &mut Attributes> {
+    pub fn edges_attributes_mut(&mut self) -> impl Iterator<Item = &mut AttributeMap> {
         self.edges.values_mut().map(|edge| &mut edge.attributes)
     }
 
@@ -455,11 +455,11 @@ impl Graph {
 
 #[cfg(test)]
 mod test {
-    use super::{Attributes, Graph, NodeIndex};
+    use super::{AttributeMap, Graph, NodeIndex};
     use crate::{errors::GraphError, graphrecord::group_mapping::GroupMapping};
     use std::collections::HashMap;
 
-    fn create_nodes() -> Vec<(NodeIndex, Attributes)> {
+    fn create_nodes() -> Vec<(NodeIndex, AttributeMap)> {
         vec![
             (
                 "0".into(),
@@ -480,7 +480,7 @@ mod test {
         ]
     }
 
-    fn create_edges() -> Vec<(NodeIndex, NodeIndex, Attributes)> {
+    fn create_edges() -> Vec<(NodeIndex, NodeIndex, AttributeMap)> {
         vec![
             (
                 "0".into(),

@@ -26,7 +26,7 @@ use errors::PyGraphRecordError;
 use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{
-        Attributes, EdgeDataFrameInput, EdgeIndex, GraphRecord, GraphRecordAttribute,
+        AttributeMap, EdgeDataFrameInput, EdgeIndex, GraphRecord, GraphRecordAttribute,
         GraphRecordValue, Group, NodeDataFrameInput, connector::ConnectedGraphRecord,
         plugins::Plugin,
     },
@@ -704,7 +704,7 @@ impl PyGraphRecord {
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        let attributes: Attributes = attributes.deep_into();
+        let attributes: AttributeMap = attributes.deep_into();
 
         for node_index in node_indices {
             let mut current_attributes = graphrecord
@@ -951,7 +951,7 @@ impl PyGraphRecord {
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        let attributes: Attributes = attributes.deep_into();
+        let attributes: AttributeMap = attributes.deep_into();
 
         for edge_index in edge_indices {
             let mut current_attributes = graphrecord

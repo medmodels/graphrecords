@@ -4,7 +4,6 @@ use super::{
         FixpointPolicy, OptimizationReport, PhaseId, PhaseLabel, PhaseOutcome, RunCondition,
         StopReason,
     },
-    plan::OptimizeInputs,
     rule::{ErasedRule, Rule, Transformed},
 };
 use crate::Operand;
@@ -77,18 +76,44 @@ struct Phase {
     rules: Vec<RuleEntry>,
 }
 
-pub struct Optimizer {
+impl Phase {
+    fn group_rules(
+        &self,
+        excluded: &GrHashSet<TypeId>,
+    ) -> GrHashMap<Direction, GrHashMap<TypeId, Vec<&RuleEntry>>> {
+        let mut groups: GrHashMap<Direction, GrHashMap<TypeId, Vec<&RuleEntry>>> =
+            GrHashMap::default();
+
+        for entry in &self.rules {
+            if entry.excludable && excluded.contains(&entry.identity) {
+                continue;
+            }
+
+            let direction = entry.direction.unwrap_or(self.direction);
+            groups
+                .entry(direction)
+                .or_default()
+                .entry(entry.operand_type)
+                .or_default()
+                .push(entry);
+        }
+
+        groups
+    }
+}
+
+pub struct OptimizerBuilder {
     phases: Vec<Phase>,
     excluded: GrHashSet<TypeId>,
 }
 
-impl Default for Optimizer {
+impl Default for OptimizerBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Optimizer {
+impl OptimizerBuilder {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -97,15 +122,10 @@ impl Optimizer {
         }
     }
 
-    #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        self.phases.is_empty()
-    }
-
     pub fn add_phase(&mut self, label: impl PhaseLabel) -> PhaseHandle<'_> {
         let index = self.phase_entry(PhaseId::new(label));
         PhaseHandle {
-            optimizer: self,
+            builder: self,
             index,
         }
     }
@@ -136,7 +156,7 @@ impl Optimizer {
         let rule_index = phase.rules.len() - 1;
 
         RuleHandle {
-            optimizer: self,
+            builder: self,
             phase_index,
             rule_index,
         }
@@ -145,6 +165,27 @@ impl Optimizer {
     pub fn exclude<R: 'static>(&mut self) -> &mut Self {
         self.excluded.insert(TypeId::of::<R>());
         self
+    }
+
+    pub fn build(self) -> Result<Optimizer, OptimizerError> {
+        let order = self.validate()?;
+
+        let mut slots: Vec<Option<Phase>> = self.phases.into_iter().map(Some).collect();
+
+        #[allow(clippy::missing_panics_doc)]
+        let phases = order
+            .into_iter()
+            .map(|index| {
+                slots[index]
+                    .take()
+                    .expect("Each phase must appear exactly once in the execution order")
+            })
+            .collect();
+
+        Ok(Optimizer {
+            phases,
+            excluded: self.excluded,
+        })
     }
 
     fn phase_entry(&mut self, id: PhaseId) -> usize {
@@ -164,8 +205,8 @@ impl Optimizer {
         self.phases.len() - 1
     }
 
-    pub fn validate(&self) -> Result<(), OptimizerError> {
-        self.ordered_phase_indices().map_err(|cycle| {
+    fn validate(&self) -> Result<Vec<usize>, OptimizerError> {
+        let order = self.ordered_phase_indices().map_err(|cycle| {
             let labels = cycle
                 .iter()
                 .map(|&index| self.phases[index].id.clone())
@@ -181,7 +222,7 @@ impl Optimizer {
                 }
             }
 
-            for groups in self.group_rules(phase).values() {
+            for groups in phase.group_rules(&self.excluded).values() {
                 for entries in groups.values() {
                     rule_order(entries).map_err(|cycle| {
                         let names = cycle.iter().map(|&index| entries[index].name).collect();
@@ -192,7 +233,52 @@ impl Optimizer {
             }
         }
 
-        Ok(())
+        Ok(order)
+    }
+
+    fn ordered_phase_indices(&self) -> Result<Vec<usize>, Vec<usize>> {
+        let mut edges = Vec::new();
+
+        for (index, phase) in self.phases.iter().enumerate() {
+            for id in &phase.before {
+                if let Some(other) = self.phases.iter().position(|phase| &phase.id == id) {
+                    edges.push((index, other));
+                }
+            }
+
+            for id in &phase.after {
+                if let Some(other) = self.phases.iter().position(|phase| &phase.id == id) {
+                    edges.push((other, index));
+                }
+            }
+        }
+
+        toposort(self.phases.len(), &edges)
+    }
+}
+
+pub struct Optimizer {
+    phases: Vec<Phase>,
+    excluded: GrHashSet<TypeId>,
+}
+
+impl Optimizer {
+    #[must_use]
+    pub fn builder() -> OptimizerBuilder {
+        OptimizerBuilder::new()
+    }
+
+    #[must_use]
+    pub fn none() -> Self {
+        Self {
+            phases: Vec::new(),
+            excluded: GrHashSet::default(),
+        }
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.phases.is_empty()
     }
 
     pub fn run<'a, O: Operand + Clone + 'static>(&'a self, stats: &'a Stats<'a>, root: &O) -> O {
@@ -204,12 +290,10 @@ impl Optimizer {
         stats: &'a Stats<'a>,
         root: &O,
     ) -> (O, OptimizationReport) {
-        let order = self.resolve_phase_order();
         let mut current = root.clone();
-        let mut phases = Vec::with_capacity(order.len());
+        let mut phases = Vec::with_capacity(self.phases.len());
 
-        for &phase_index in &order {
-            let phase = &self.phases[phase_index];
+        for phase in &self.phases {
             let (next, stop) = self.run_phase(phase, stats, current);
 
             current = next;
@@ -295,7 +379,7 @@ impl Optimizer {
     }
 
     fn compile_phase<'p>(&self, phase: &'p Phase, stats: &Stats) -> Vec<Pass<'p>> {
-        let mut by_direction = self.group_rules(phase);
+        let mut by_direction = phase.group_rules(&self.excluded);
 
         DIRECTION_ORDER
             .into_iter()
@@ -318,8 +402,8 @@ impl Optimizer {
                 }
 
                 for entries in rules.values_mut() {
-                    let order =
-                        rule_order(entries).unwrap_or_else(|_| (0..entries.len()).collect());
+                    let order = rule_order(entries)
+                        .expect("Built optimizer rules must form an acyclic order");
                     *entries = order.into_iter().map(|index| entries[index]).collect();
                 }
 
@@ -327,65 +411,16 @@ impl Optimizer {
             })
             .collect()
     }
-
-    fn group_rules<'p>(
-        &self,
-        phase: &'p Phase,
-    ) -> GrHashMap<Direction, GrHashMap<TypeId, Vec<&'p RuleEntry>>> {
-        let mut groups: GrHashMap<Direction, GrHashMap<TypeId, Vec<&RuleEntry>>> =
-            GrHashMap::default();
-
-        for entry in &phase.rules {
-            if entry.excludable && self.excluded.contains(&entry.identity) {
-                continue;
-            }
-
-            let direction = entry.direction.unwrap_or(phase.direction);
-            groups
-                .entry(direction)
-                .or_default()
-                .entry(entry.operand_type)
-                .or_default()
-                .push(entry);
-        }
-
-        groups
-    }
-
-    fn resolve_phase_order(&self) -> Vec<usize> {
-        self.ordered_phase_indices()
-            .unwrap_or_else(|_| (0..self.phases.len()).collect())
-    }
-
-    fn ordered_phase_indices(&self) -> Result<Vec<usize>, Vec<usize>> {
-        let mut edges = Vec::new();
-
-        for (index, phase) in self.phases.iter().enumerate() {
-            for id in &phase.before {
-                if let Some(other) = self.phases.iter().position(|phase| &phase.id == id) {
-                    edges.push((index, other));
-                }
-            }
-
-            for id in &phase.after {
-                if let Some(other) = self.phases.iter().position(|phase| &phase.id == id) {
-                    edges.push((other, index));
-                }
-            }
-        }
-
-        toposort(self.phases.len(), &edges)
-    }
 }
 
 pub struct PhaseHandle<'a> {
-    optimizer: &'a mut Optimizer,
+    builder: &'a mut OptimizerBuilder,
     index: usize,
 }
 
 impl PhaseHandle<'_> {
     fn phase(&mut self) -> &mut Phase {
-        &mut self.optimizer.phases[self.index]
+        &mut self.builder.phases[self.index]
     }
 
     pub fn direction(&mut self, direction: Direction) -> &mut Self {
@@ -423,14 +458,14 @@ impl PhaseHandle<'_> {
 }
 
 pub struct RuleHandle<'a> {
-    optimizer: &'a mut Optimizer,
+    builder: &'a mut OptimizerBuilder,
     phase_index: usize,
     rule_index: usize,
 }
 
 impl RuleHandle<'_> {
     fn entry(&mut self) -> &mut RuleEntry {
-        &mut self.optimizer.phases[self.phase_index].rules[self.rule_index]
+        &mut self.builder.phases[self.phase_index].rules[self.rule_index]
     }
 
     pub fn direction(&mut self, direction: Direction) -> &mut Self {
@@ -510,7 +545,7 @@ impl Session<'_> {
     pub fn optimize<O: Operand + Clone + 'static>(&self, operand: &O) -> Transformed<O> {
         match self.direction {
             Direction::BottomUp => {
-                let rebuilt = operand.context().optimize_inputs(operand, self);
+                let rebuilt = operand.context().optimize(operand, self);
                 let applied = self.apply_rules(rebuilt.value);
 
                 Transformed {
@@ -520,10 +555,7 @@ impl Session<'_> {
             }
             Direction::TopDown => {
                 let rewritten = self.apply_rules(operand.clone());
-                let rebuilt = rewritten
-                    .value
-                    .context()
-                    .optimize_inputs(&rewritten.value, self);
+                let rebuilt = rewritten.value.context().optimize(&rewritten.value, self);
 
                 Transformed {
                     changed: rewritten.changed || rebuilt.changed,

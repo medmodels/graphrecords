@@ -2,7 +2,8 @@ use crate::{
     GraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
     prelude::{
-        Attributes, EdgeIndex, GraphRecordAttribute, GraphRecordValue, Group, NodeIndex, SchemaType,
+        AttributeMap, EdgeIndex, GraphRecordAttribute, GraphRecordValue, Group, NodeIndex,
+        SchemaType,
     },
 };
 
@@ -52,7 +53,7 @@ macro_rules! impl_attributes_mut {
 
             fn handle_schema(
                 &mut self,
-                attributes: &Attributes,
+                attributes: &AttributeMap,
                 groups: &[Group],
             ) -> GraphRecordResult<()> {
                 let schema = &mut self.graphrecord.schema;
@@ -85,7 +86,7 @@ macro_rules! impl_attributes_mut {
                 Ok(())
             }
 
-            fn set_attributes(&mut self, attributes: Attributes) {
+            fn set_attributes(&mut self, attributes: AttributeMap) {
                 *self
                     .graphrecord
                     .graph
@@ -93,7 +94,10 @@ macro_rules! impl_attributes_mut {
                     .expect(concat!($entity, " must exist.")) = attributes;
             }
 
-            pub fn replace_attributes(&mut self, attributes: Attributes) -> GraphRecordResult<()> {
+            pub fn replace_attributes(
+                &mut self,
+                attributes: AttributeMap,
+            ) -> GraphRecordResult<()> {
                 let groups = self.get_groups();
                 self.handle_schema(&attributes, &groups)?;
                 self.set_attributes(attributes);

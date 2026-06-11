@@ -1,21 +1,21 @@
 use super::{
     cost::Stats,
-    plan::{HasInputs, OptimizeInputs, PlanNode},
+    plan::{MatchInputs, OptimizePlan, PlanNode},
     rule::{Rule, Transformed},
 };
 use crate::Operand;
-use std::{cell::RefCell, marker::PhantomData, rc::Rc};
+use std::marker::PhantomData;
 
 pub trait Pattern<O: Operand> {
-    fn matches(&self, operand: &O) -> bool;
+    type Bindings;
 
-    fn reset(&self) {}
+    fn try_match(&self, operand: &O) -> Option<Self::Bindings>;
 
     fn rewrite<F>(self, rewrite: F) -> impl Rule<O>
     where
         Self: Sized + 'static,
         O: 'static,
-        F: Fn(&Stats) -> Option<O> + 'static,
+        F: Fn(Self::Bindings, &Stats) -> Option<O> + 'static,
     {
         PatternRule {
             pattern: self,
@@ -34,10 +34,10 @@ pub trait Pattern<O: Operand> {
         }
     }
 
-    fn or<Q>(self, other: Q) -> impl Pattern<O>
+    fn or<Q>(self, other: Q) -> impl Pattern<O, Bindings = Self::Bindings>
     where
         Self: Sized,
-        Q: Pattern<O>,
+        Q: Pattern<O, Bindings = Self::Bindings>,
     {
         OrPattern {
             left: self,
@@ -55,16 +55,14 @@ impl<O, P, F> Rule<O> for PatternRule<P, F>
 where
     O: Operand,
     P: Pattern<O> + 'static,
-    F: Fn(&Stats) -> Option<O> + 'static,
+    F: Fn(P::Bindings, &Stats) -> Option<O> + 'static,
 {
     fn apply(&self, operand: O, stats: &Stats) -> Transformed<O> {
-        self.pattern.reset();
-
-        if !self.pattern.matches(&operand) {
+        let Some(bindings) = self.pattern.try_match(&operand) else {
             return Transformed::unchanged(operand);
-        }
+        };
 
-        match (self.rewrite)(stats) {
+        match (self.rewrite)(bindings, stats) {
             Some(rewritten) => Transformed::changed(rewritten),
             None => Transformed::unchanged(operand),
         }
@@ -82,20 +80,21 @@ impl<P, G> GuardedPattern<P, G> {
         O: Operand + 'static,
         P: Pattern<O> + 'static,
         G: Fn(&Stats) -> bool + 'static,
-        F: Fn(&Stats) -> Option<O> + 'static,
+        F: Fn(P::Bindings, &Stats) -> Option<O> + 'static,
     {
+        let guard = self.guard;
+
         PatternRule {
             pattern: self.pattern,
-            rewrite: guarded_rewrite(self.guard, rewrite),
+            rewrite: move |bindings: P::Bindings, stats: &Stats| {
+                if guard(stats) {
+                    rewrite(bindings, stats)
+                } else {
+                    None
+                }
+            },
         }
     }
-}
-
-fn guarded_rewrite<O>(
-    guard: impl Fn(&Stats) -> bool + 'static,
-    rewrite: impl Fn(&Stats) -> Option<O> + 'static,
-) -> impl Fn(&Stats) -> Option<O> {
-    move |stats| if guard(stats) { rewrite(stats) } else { None }
 }
 
 struct OrPattern<P, Q> {
@@ -107,21 +106,14 @@ impl<O, P, Q> Pattern<O> for OrPattern<P, Q>
 where
     O: Operand,
     P: Pattern<O>,
-    Q: Pattern<O>,
+    Q: Pattern<O, Bindings = P::Bindings>,
 {
-    fn matches(&self, operand: &O) -> bool {
-        if self.left.matches(operand) {
-            return true;
-        }
+    type Bindings = P::Bindings;
 
-        self.left.reset();
-
-        self.right.matches(operand)
-    }
-
-    fn reset(&self) {
-        self.left.reset();
-        self.right.reset();
+    fn try_match(&self, operand: &O) -> Option<Self::Bindings> {
+        self.left
+            .try_match(operand)
+            .or_else(|| self.right.try_match(operand))
     }
 }
 
@@ -139,16 +131,10 @@ where
     O: Operand,
     P: Pattern<O>,
 {
-    fn matches(&self, operand: &O) -> bool {
-        let matched = self.inner.matches(operand);
+    type Bindings = ();
 
-        self.inner.reset();
-
-        !matched
-    }
-
-    fn reset(&self) {
-        self.inner.reset();
+    fn try_match(&self, operand: &O) -> Option<Self::Bindings> {
+        self.inner.try_match(operand).is_none().then_some(())
     }
 }
 
@@ -160,95 +146,62 @@ pub const fn any() -> Wildcard {
 }
 
 impl<O: Operand> Pattern<O> for Wildcard {
-    fn matches(&self, _operand: &O) -> bool {
-        true
+    type Bindings = ();
+
+    fn try_match(&self, _operand: &O) -> Option<Self::Bindings> {
+        Some(())
     }
 }
 
-pub struct Capture<O>(Rc<RefCell<Option<O>>>);
+pub struct Capture;
 
-impl<O: Operand + Clone> Default for Capture<O> {
-    fn default() -> Self {
-        Self::new()
+#[must_use]
+pub const fn capture() -> Capture {
+    Capture
+}
+
+impl<O: Operand> Pattern<O> for Capture {
+    type Bindings = O;
+
+    fn try_match(&self, operand: &O) -> Option<Self::Bindings> {
+        Some(operand.clone())
     }
 }
 
-impl<O: Operand + Clone> Capture<O> {
-    #[must_use]
-    pub fn new() -> Self {
-        Self(Rc::new(RefCell::new(None)))
-    }
-
-    #[must_use]
-    pub fn bind(&self) -> Self {
-        Self(Rc::clone(&self.0))
-    }
-
-    /// # Panics
-    ///
-    /// Panics if called before a successful match has populated the capture.
-    #[must_use]
-    pub fn get(&self) -> O {
-        self.0
-            .borrow()
-            .clone()
-            .expect("capture is populated after a successful match")
-    }
-}
-
-impl<O: Operand + Clone> Pattern<O> for Capture<O> {
-    fn matches(&self, operand: &O) -> bool {
-        let mut slot = self.0.borrow_mut();
-
-        if let Some(existing) = &*slot {
-            existing.as_plan_node().dyn_eq(operand.as_plan_node())
-        } else {
-            *slot = Some(operand.clone());
-            true
-        }
-    }
-
-    fn reset(&self) {
-        *self.0.borrow_mut() = None;
-    }
-}
-
-pub struct Matching<C, Children> {
-    children: Children,
+pub struct Matching<C, P> {
+    patterns: P,
     matched: PhantomData<C>,
 }
 
 #[must_use]
-pub const fn matching<C, Children>(children: Children) -> Matching<C, Children> {
+pub const fn matching<C, P>(patterns: P) -> Matching<C, P> {
     Matching {
-        children,
+        patterns,
         matched: PhantomData,
     }
 }
 
-impl<C, Children> Pattern<C::Output> for Matching<C, Children>
+impl<C, P, B> Pattern<C::Output> for Matching<C, P>
 where
-    C: PlanNode + HasInputs + OptimizeInputs,
-    Children: for<'a> MatchAgainst<C::Inputs<'a>>,
+    C: PlanNode + MatchInputs + OptimizePlan,
+    P: for<'a> MatchAgainst<C::Inputs<'a>, Bindings = B>,
 {
-    fn matches(&self, operand: &C::Output) -> bool {
-        match operand.downcast::<C>() {
-            Some(context) => self.children.match_against(HasInputs::inputs(context)),
-            None => false,
-        }
-    }
+    type Bindings = B;
 
-    fn reset(&self) {
-        self.children.reset_all();
+    fn try_match(&self, operand: &C::Output) -> Option<Self::Bindings> {
+        let context = operand.downcast::<C>()?;
+
+        self.patterns.match_against(MatchInputs::inputs(context))
     }
 }
 
-impl<C, Children> Matching<C, Children> {
-    pub fn rewrite_matched<F>(self, rewrite: F) -> impl Rule<C::Output>
+impl<C, P> Matching<C, P> {
+    pub fn rewrite_matched<B, F>(self, rewrite: F) -> impl Rule<C::Output>
     where
-        C: PlanNode + HasInputs + OptimizeInputs,
-        Children: for<'a> MatchAgainst<C::Inputs<'a>> + 'static,
-        F: Fn(&C, &Stats) -> Option<C::Output> + 'static,
+        C: PlanNode + MatchInputs + OptimizePlan,
+        P: for<'a> MatchAgainst<C::Inputs<'a>, Bindings = B> + 'static,
+        B: 'static,
+        F: Fn(&C, B, &Stats) -> Option<C::Output> + 'static,
     {
         MatchingRewriteRule {
             pattern: self,
@@ -257,63 +210,64 @@ impl<C, Children> Matching<C, Children> {
     }
 }
 
-struct MatchingRewriteRule<C, Children, F> {
-    pattern: Matching<C, Children>,
+struct MatchingRewriteRule<C, P, F> {
+    pattern: Matching<C, P>,
     rewrite: F,
 }
 
-impl<C, Children, F> Rule<C::Output> for MatchingRewriteRule<C, Children, F>
+impl<C, P, B, F> Rule<C::Output> for MatchingRewriteRule<C, P, F>
 where
-    C: PlanNode + HasInputs + OptimizeInputs,
-    Children: for<'a> MatchAgainst<C::Inputs<'a>> + 'static,
-    F: Fn(&C, &Stats) -> Option<C::Output> + 'static,
+    C: PlanNode + MatchInputs + OptimizePlan,
+    P: for<'a> MatchAgainst<C::Inputs<'a>, Bindings = B> + 'static,
+    B: 'static,
+    F: Fn(&C, B, &Stats) -> Option<C::Output> + 'static,
 {
     fn apply(&self, operand: C::Output, stats: &Stats) -> Transformed<C::Output> {
-        self.pattern.reset();
-
-        if !self.pattern.matches(&operand) {
-            return Transformed::unchanged(operand);
-        }
-
         let Some(context) = operand.downcast::<C>() else {
             return Transformed::unchanged(operand);
         };
 
-        match (self.rewrite)(context, stats) {
+        let Some(bindings) = self
+            .pattern
+            .patterns
+            .match_against(MatchInputs::inputs(context))
+        else {
+            return Transformed::unchanged(operand);
+        };
+
+        match (self.rewrite)(context, bindings, stats) {
             Some(rewritten) => Transformed::changed(rewritten),
             None => Transformed::unchanged(operand),
         }
     }
 }
 
-pub trait MatchAgainst<Children> {
-    fn match_against(&self, children: Children) -> bool;
+pub trait MatchAgainst<I> {
+    type Bindings;
 
-    fn reset_all(&self);
+    fn match_against(&self, inputs: I) -> Option<Self::Bindings>;
 }
 
 impl MatchAgainst<()> for () {
-    fn match_against(&self, _children: ()) -> bool {
-        true
-    }
+    type Bindings = ();
 
-    fn reset_all(&self) {}
+    fn match_against(&self, _inputs: ()) -> Option<Self::Bindings> {
+        Some(())
+    }
 }
 
 macro_rules! impl_match_against {
     ($($index:tt $operand:ident $pattern:ident),+) => {
-        impl<'children, $($operand,)+ $($pattern,)+> MatchAgainst<($(&'children $operand,)+)>
+        impl<'inputs, $($operand,)+ $($pattern,)+> MatchAgainst<($(&'inputs $operand,)+)>
             for ($($pattern,)+)
         where
             $($operand: Operand,)+
             $($pattern: Pattern<$operand>,)+
         {
-            fn match_against(&self, children: ($(&$operand,)+)) -> bool {
-                true $( && self.$index.matches(children.$index) )+
-            }
+            type Bindings = ($(<$pattern as Pattern<$operand>>::Bindings,)+);
 
-            fn reset_all(&self) {
-                $( self.$index.reset(); )+
+            fn match_against(&self, inputs: ($(&$operand,)+)) -> Option<Self::Bindings> {
+                Some(($( self.$index.try_match(inputs.$index)?, )+))
             }
         }
     };

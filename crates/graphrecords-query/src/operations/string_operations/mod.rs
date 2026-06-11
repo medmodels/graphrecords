@@ -1,0 +1,9 @@
+mod contains;
+mod ends_with;
+mod lowercase;
+mod slice;
+mod starts_with;
+mod trim;
+mod trim_end;
+mod trim_start;
+mod uppercase;

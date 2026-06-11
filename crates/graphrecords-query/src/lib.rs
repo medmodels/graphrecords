@@ -1,91 +1,58 @@
-pub mod attributes;
-pub mod bool;
-pub mod edges;
+mod context;
+pub mod error;
 pub mod execution;
 pub mod explain;
-pub mod group;
-pub mod indices;
-pub mod nodes;
+pub mod operands;
+pub mod operations;
 pub mod optimizer;
 pub mod prelude;
 pub mod selection;
 mod traits;
-pub mod values;
 
 use crate::{
-    execution::ExecutionContext,
-    optimizer::{OptimizeInputs, Optimizer, PlanNode},
+    optimizer::Optimizer,
     selection::{ReturnOperand, Selection},
 };
-pub use edges::EdgeOperand;
-pub use explain::{Explain, Explanation};
-use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
-pub use graphrecords_macros::Operand;
-pub use nodes::NodeOperand;
-use std::{hash::Hash, sync::Arc};
+pub use context::{EvaluateContext, OperandContext};
+pub use error::{Failure, IncomparableValues, QueryResult};
+pub use explain::{Explain, Explanation, Labeled};
+use graphrecords_core::{
+    GraphRecord,
+    graphrecord::{EdgeIndex, NodeIndex},
+};
+pub use operands::{
+    Arity, AttributeName, AttributeSet, Bare, Definite, EdgeOperand, ElementShape, EvaluateOperand,
+    IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand, Operand, Return, Scalar, Single,
+    Unit, ValueType,
+};
+use std::{fmt::Display, hash::Hash};
 pub use traits::*;
 
 pub type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
 
-pub trait RootOperand:
-    'static
-    + Operand
-    + for<'a> EvaluateOperand<ReturnValue<'a> = BoxedIterator<'a, <Self as RootOperand>::Index<'a>>>
-{
-    type Index<'a>: Eq + Hash
+pub trait IndexDomain: 'static + Clone {
+    type Index<'a>: Clone + Display + Eq + Hash
     where
         Self: 'a;
 }
 
-pub trait EvaluateContext {
-    type Operand: Operand;
+#[derive(Clone)]
+pub struct Positional;
 
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>>;
+impl IndexDomain for Positional {
+    type Index<'a> = usize;
 }
 
-pub trait EvaluateOperand {
-    type ReturnValue<'a>
-    where
-        Self: 'a;
-
-    fn evaluate<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<Self::ReturnValue<'a>>;
+impl IndexDomain for EdgeIndex {
+    type Index<'a> = &'a Self;
 }
 
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` is not an operand",
-    note = "implement `Operand` for `{Self}`, or derive it with `#[derive(Operand)]` and mark the context field `#[operand(context)]`"
-)]
-pub trait Operand: 'static + EvaluateOperand {
-    type Context: PlanNode
-        + OptimizeInputs<Output = Self>
-        + Explain
-        + EvaluateContext<Operand = Self>
-        + ?Sized;
+impl IndexDomain for NodeIndex {
+    type Index<'a> = &'a Self;
+}
 
-    fn context(&self) -> &Self::Context;
-
-    fn as_plan_node(&self) -> &dyn PlanNode;
-
-    fn from_context(context: Arc<Self::Context>) -> Self;
-
-    fn downcast<T: PlanNode>(&self) -> Option<&T> {
-        self.as_plan_node().downcast::<T>()
-    }
-
-    fn explain(&self) -> Explanation<'_>
-    where
-        Self: Sized,
-    {
-        Explanation::new(self)
-    }
+mod sealed {
+    pub trait Sealed {}
 }
 
 pub trait QueryNodes {
@@ -150,8 +117,8 @@ impl QueryEdges for GraphRecord {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Attribute, Filter, InGroup, QueryNodes};
-    use graphrecords_core::GraphRecord;
+    use crate::{Attribute, Filter, InGroup, Index, NodeOperand, QueryNodes, QueryResult};
+    use graphrecords_core::{GraphRecord, graphrecord::NodeIndex};
     use std::collections::HashMap;
 
     #[test]
@@ -196,5 +163,32 @@ mod tests {
         println!("{}", selection.explain());
 
         println!("{:?}", selection.evaluate().unwrap().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_query_node_indices() {
+        let graphrecord = GraphRecord::from_tuples(
+            vec![
+                ("0".into(), HashMap::new()),
+                ("1".into(), HashMap::new()),
+                ("2".into(), HashMap::new()),
+            ],
+            None,
+            None,
+        )
+        .unwrap();
+
+        let selection = QueryNodes::query_nodes(&graphrecord, NodeOperand::index);
+
+        let indices = selection
+            .evaluate()
+            .unwrap()
+            .collect::<QueryResult<Vec<NodeIndex>>>()
+            .unwrap();
+
+        assert_eq!(3, indices.len());
+        assert!(indices.contains(&"0".into()));
+        assert!(indices.contains(&"1".into()));
+        assert!(indices.contains(&"2".into()));
     }
 }

@@ -1,0 +1,91 @@
+use super::combine_masks;
+use crate::{
+    EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Mask, Multiple, Operand, Or,
+    QueryResult,
+    execution::EvaluationCache,
+    operands::BoolMaskOperand,
+    operations::{
+        Apply, ArgumentSource, Kernel, KeyedStream, Operation, OperationContext, Prepare,
+    },
+    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+};
+use graphrecords_core::GraphRecord;
+use std::ops::BitOr;
+
+#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[explain(label = "Or")]
+pub struct OrOperation<M> {
+    #[argument]
+    other: M,
+}
+
+impl<M: Prepare> Prepare for OrOperation<M> {
+    type Prepared<'a> = M::Prepared<'a>;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        self.other.prepare(graphrecord, cache)
+    }
+}
+
+impl<I, M> Kernel<Indexed<I, Mask>, Multiple> for OrOperation<M>
+where
+    I: IndexDomain,
+    M: ArgumentSource<I, Value = bool>,
+{
+    type Output = BoolMaskOperand<I>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, I, Mask, Multiple>,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(combine_masks::<I, M>(
+            values,
+            prepared,
+            <Self as Labeled>::LABEL,
+            |left, right| left || right,
+        ))
+    }
+}
+
+impl<I: IndexDomain, M> EstimateCost<OrOperation<M>> for BoolMaskOperand<I>
+where
+    M: ArgumentSource<I, Value = bool>,
+{
+    type OutputCost = <Self as Operand>::Cost;
+
+    fn estimate(
+        _operation: &OrOperation<M>,
+        input_cost: <Self as Operand>::Cost,
+        _stats: &Stats,
+    ) -> Self::OutputCost {
+        input_cost
+    }
+}
+
+impl<O, M> Or<M> for O
+where
+    OrOperation<M>: Operation,
+    O: Apply<OrOperation<M>>,
+{
+    type ReturnOperand = <O as Apply<OrOperation<M>>>::Output;
+
+    fn or(&self, other: M) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), OrOperation { other }))
+    }
+}
+
+impl<I: IndexDomain, M> BitOr<M> for BoolMaskOperand<I>
+where
+    M: ArgumentSource<I, Value = bool>,
+{
+    type Output = Self;
+
+    fn bitor(self, rhs: M) -> Self::Output {
+        self.or(rhs)
+    }
+}

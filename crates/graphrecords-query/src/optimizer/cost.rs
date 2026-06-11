@@ -1,3 +1,4 @@
+use crate::{Operand, operations::Operation};
 use graphrecords_core::{
     GraphRecord,
     graphrecord::{GraphRecordAttribute, GraphRecordValue, Group},
@@ -52,7 +53,7 @@ impl Statistic for NodeGroupSize {
     type Key = Group;
     type Value = usize;
 
-    fn compute(graphrecord: &GraphRecord, group: &Self::Key) -> usize {
+    fn compute(graphrecord: &GraphRecord, group: &Self::Key) -> Self::Value {
         graphrecord.nodes_in_group(group).map_or(0, Iterator::count)
     }
 }
@@ -63,7 +64,7 @@ impl Statistic for EdgeGroupSize {
     type Key = Group;
     type Value = usize;
 
-    fn compute(graphrecord: &GraphRecord, group: &Self::Key) -> usize {
+    fn compute(graphrecord: &GraphRecord, group: &Self::Key) -> Self::Value {
         graphrecord.edges_in_group(group).map_or(0, Iterator::count)
     }
 }
@@ -74,7 +75,7 @@ impl Statistic for NodeAttributeCardinality {
     type Key = GraphRecordAttribute;
     type Value = usize;
 
-    fn compute(graphrecord: &GraphRecord, attribute: &Self::Key) -> usize {
+    fn compute(graphrecord: &GraphRecord, attribute: &Self::Key) -> Self::Value {
         graphrecord
             .node_indices()
             .filter_map(|node_index| {
@@ -95,7 +96,7 @@ impl Statistic for EdgeAttributeCardinality {
     type Key = GraphRecordAttribute;
     type Value = usize;
 
-    fn compute(graphrecord: &GraphRecord, attribute: &Self::Key) -> usize {
+    fn compute(graphrecord: &GraphRecord, attribute: &Self::Key) -> Self::Value {
         graphrecord
             .edge_indices()
             .filter_map(|edge_index| {
@@ -122,7 +123,7 @@ impl Statistic for Count {
     type Key = CountKind;
     type Value = usize;
 
-    fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> usize {
+    fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
         match key {
             CountKind::Nodes => graphrecord.node_indices().count(),
             CountKind::Edges => graphrecord.edge_indices().count(),
@@ -130,24 +131,61 @@ impl Statistic for Count {
     }
 }
 
-pub trait Cardinality {
-    fn cardinality(&self, stats: &Stats) -> usize;
+pub trait Cost<O: Operand> {
+    fn cost(&self, stats: &Stats) -> O::Cost;
 }
 
-pub trait Selectivity {
-    fn selectivity(&self, stats: &Stats) -> f64;
+pub trait EstimateCost<P: Operation>: Operand {
+    type OutputCost;
+
+    fn estimate(
+        operation: &P,
+        input_cost: <Self as Operand>::Cost,
+        stats: &Stats,
+    ) -> Self::OutputCost;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Cardinality(pub usize);
 
-    #[test]
-    fn test_stats() {
-        let graphrecord = GraphRecord::default();
-        let stats = Stats::new(&graphrecord);
+impl Cardinality {
+    #[must_use]
+    pub fn scaled(self, selectivity: Selectivity) -> Self {
+        Self((self.0 as f64 * selectivity.0).round() as usize)
+    }
+}
 
-        assert_eq!(stats.get::<NodeGroupSize>(&Group::from("0")), 0);
-        assert_eq!(stats.get::<EdgeGroupSize>(&Group::from("1")), 0);
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct Selectivity(f64);
+
+impl Selectivity {
+    #[must_use]
+    pub const fn new(value: f64) -> Self {
+        Self(value.clamp(0.0, 1.0))
+    }
+
+    #[must_use]
+    pub fn ratio(part: Cardinality, whole: Cardinality) -> Self {
+        Self::new(part.0 as f64 / whole.0.max(1) as f64)
+    }
+
+    #[must_use]
+    pub fn negated(self) -> Self {
+        Self::new(1.0 - self.0)
+    }
+
+    #[must_use]
+    pub fn and(self, other: Self) -> Self {
+        Self::new(self.0 * other.0)
+    }
+
+    #[must_use]
+    pub fn or(self, other: Self) -> Self {
+        Self::new(self.0.mul_add(-other.0, self.0 + other.0))
+    }
+
+    #[must_use]
+    pub fn xor(self, other: Self) -> Self {
+        Self::new((2.0 * self.0).mul_add(-other.0, self.0 + other.0))
     }
 }

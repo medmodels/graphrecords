@@ -1,7 +1,7 @@
 use crate::{
     GraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
-    graphrecord::{Attributes, GraphRecordAttribute, GraphRecordValue, NodeIndex},
+    graphrecord::{AttributeMap, GraphRecordAttribute, GraphRecordValue, NodeIndex},
     prelude::{EdgeIndex, Group},
 };
 use chrono::{DateTime, TimeDelta};
@@ -127,7 +127,7 @@ impl From<GraphRecordAttribute> for AnyValue<'_> {
 pub fn dataframe_to_nodes(
     mut nodes: DataFrame,
     index_column_name: &str,
-) -> GraphRecordResult<Vec<(NodeIndex, Attributes)>> {
+) -> GraphRecordResult<Vec<(NodeIndex, AttributeMap)>> {
     if nodes.max_n_chunks() > 1 {
         nodes.rechunk_mut();
     }
@@ -181,7 +181,7 @@ pub fn dataframe_to_edges(
     mut edges: DataFrame,
     source_index_column_name: &str,
     target_index_column_name: &str,
-) -> GraphRecordResult<Vec<(NodeIndex, NodeIndex, Attributes)>> {
+) -> GraphRecordResult<Vec<(NodeIndex, NodeIndex, AttributeMap)>> {
     if edges.max_n_chunks() > 1 {
         edges.rechunk_mut();
     }

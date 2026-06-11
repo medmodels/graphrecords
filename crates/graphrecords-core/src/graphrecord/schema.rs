@@ -1,4 +1,4 @@
-use super::{Attributes, EdgeIndex, GraphRecord, Group, NodeIndex};
+use super::{AttributeMap, EdgeIndex, GraphRecord, Group, NodeIndex};
 use crate::{
     errors::GraphError,
     graphrecord::{GraphRecordAttribute, datatypes::DataType},
@@ -238,7 +238,7 @@ impl AttributeSchema {
 
     fn validate(
         &self,
-        attributes: &Attributes,
+        attributes: &AttributeMap,
         kind: &AttributeSchemaKind,
     ) -> Result<(), GraphError> {
         let mut matched_count = 0;
@@ -285,7 +285,7 @@ impl AttributeSchema {
         Ok(())
     }
 
-    fn update(&mut self, attributes: &Attributes, empty: bool) {
+    fn update(&mut self, attributes: &AttributeMap, empty: bool) {
         for (attribute, data_type) in &mut self.0 {
             if !attributes.contains_key(attribute) {
                 data_type.data_type = data_type.data_type.merge(&DataType::Null);
@@ -316,7 +316,7 @@ impl AttributeSchema {
     }
 
     #[must_use]
-    pub fn infer(attributes: impl IntoIterator<Item = impl Borrow<Attributes>>) -> Self {
+    pub fn infer(attributes: impl IntoIterator<Item = impl Borrow<AttributeMap>>) -> Self {
         let mut schema = Self::default();
 
         let mut empty = true;
@@ -357,7 +357,7 @@ impl GroupSchema {
     pub fn validate_node(
         &self,
         index: &NodeIndex,
-        attributes: &Attributes,
+        attributes: &AttributeMap,
     ) -> Result<(), GraphError> {
         self.nodes
             .validate(attributes, &AttributeSchemaKind::Node(index))
@@ -366,7 +366,7 @@ impl GroupSchema {
     pub fn validate_edge(
         &self,
         index: &EdgeIndex,
-        attributes: &Attributes,
+        attributes: &AttributeMap,
     ) -> Result<(), GraphError> {
         self.edges
             .validate(attributes, &AttributeSchemaKind::Edge(index))
@@ -374,8 +374,8 @@ impl GroupSchema {
 
     #[must_use]
     pub fn infer(
-        nodes: impl IntoIterator<Item = impl Borrow<Attributes>>,
-        edges: impl IntoIterator<Item = impl Borrow<Attributes>>,
+        nodes: impl IntoIterator<Item = impl Borrow<AttributeMap>>,
+        edges: impl IntoIterator<Item = impl Borrow<AttributeMap>>,
     ) -> Self {
         Self {
             nodes: AttributeSchema::infer(nodes),
@@ -383,11 +383,11 @@ impl GroupSchema {
         }
     }
 
-    pub(crate) fn update_node(&mut self, attributes: &Attributes, empty: bool) {
+    pub(crate) fn update_node(&mut self, attributes: &AttributeMap, empty: bool) {
         self.nodes.update(attributes, empty);
     }
 
-    pub(crate) fn update_edge(&mut self, attributes: &Attributes, empty: bool) {
+    pub(crate) fn update_edge(&mut self, attributes: &AttributeMap, empty: bool) {
         self.edges.update(attributes, empty);
     }
 }
@@ -536,7 +536,7 @@ impl Schema {
     pub fn validate_node<'a>(
         &self,
         index: &'a NodeIndex,
-        attributes: &'a Attributes,
+        attributes: &'a AttributeMap,
         group: Option<&'a Group>,
     ) -> Result<(), GraphError> {
         match group {
@@ -554,7 +554,7 @@ impl Schema {
     pub fn validate_edge<'a>(
         &self,
         index: &'a EdgeIndex,
-        attributes: &'a Attributes,
+        attributes: &'a AttributeMap,
         group: Option<&'a Group>,
     ) -> Result<(), GraphError> {
         match group {
@@ -571,7 +571,7 @@ impl Schema {
 
     pub(crate) fn update_node(
         &mut self,
-        attributes: &Attributes,
+        attributes: &AttributeMap,
         group: Option<&Group>,
         empty: bool,
     ) {
@@ -588,7 +588,7 @@ impl Schema {
 
     pub(crate) fn update_edge(
         &mut self,
-        attributes: &Attributes,
+        attributes: &AttributeMap,
         group: Option<&Group>,
         empty: bool,
     ) {
@@ -788,7 +788,7 @@ mod test {
     use crate::{
         GraphRecord,
         graphrecord::{
-            Attributes, Schema, SchemaType,
+            AttributeMap, Schema, SchemaType,
             datatypes::DataType,
             schema::{AttributeSchema, AttributeSchemaKind, AttributeType},
         },
@@ -1224,7 +1224,7 @@ mod test {
             .collect(),
         );
 
-        let attributes: Attributes = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
             .into_iter()
             .collect();
 
@@ -1234,7 +1234,7 @@ mod test {
                 .is_ok()
         );
 
-        let attributes: Attributes = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
             .into_iter()
             .collect();
 
@@ -1244,7 +1244,7 @@ mod test {
                 .is_err_and(|error| { matches!(error, crate::errors::GraphError::SchemaError(_)) })
         );
 
-        let attributes: Attributes = vec![
+        let attributes: AttributeMap = vec![
             ("key1".into(), 0.into()),
             ("key2".into(), 0.0.into()),
             ("key3".into(), 0.0.into()),
@@ -1262,7 +1262,7 @@ mod test {
     #[test]
     fn test_attribute_schema_update() {
         let mut schema = AttributeSchema::default();
-        let attributes: Attributes =
+        let attributes: AttributeMap =
             vec![("key1".into(), 0.into()), ("key2".into(), "test".into())]
                 .into_iter()
                 .collect();
@@ -1279,7 +1279,7 @@ mod test {
             &DataType::String
         );
 
-        let new_attributes: Attributes =
+        let new_attributes: AttributeMap =
             vec![("key1".into(), 0.5.into()), ("key3".into(), true.into())]
                 .into_iter()
                 .collect();
@@ -1303,14 +1303,15 @@ mod test {
 
     #[test]
     fn test_attribute_schema_infer() {
-        let attributes1: Attributes =
+        let attributes1: AttributeMap =
             vec![("key1".into(), 0.into()), ("key2".into(), "test".into())]
                 .into_iter()
                 .collect();
 
-        let attributes2: Attributes = vec![("key1".into(), 1.into()), ("key3".into(), true.into())]
-            .into_iter()
-            .collect();
+        let attributes2: AttributeMap =
+            vec![("key1".into(), 1.into()), ("key3".into(), true.into())]
+                .into_iter()
+                .collect();
 
         let schema = AttributeSchema::infer(vec![&attributes1, &attributes2]);
 
@@ -1398,13 +1399,13 @@ mod test {
 
         let group_schema = GroupSchema::new(nodes, AttributeSchema::default());
 
-        let attributes: Attributes = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
             .into_iter()
             .collect();
 
         assert!(group_schema.validate_node(&0.into(), &attributes).is_ok());
 
-        let attributes: Attributes = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
             .into_iter()
             .collect();
 
@@ -1436,13 +1437,13 @@ mod test {
 
         let group_schema = GroupSchema::new(AttributeSchema::default(), edges);
 
-        let attributes: Attributes = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
             .into_iter()
             .collect();
 
         assert!(group_schema.validate_edge(&0, &attributes).is_ok());
 
-        let attributes: Attributes = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
             .into_iter()
             .collect();
 
@@ -1455,17 +1456,17 @@ mod test {
 
     #[test]
     fn test_group_schema_infer() {
-        let node_attributes1: Attributes =
+        let node_attributes1: AttributeMap =
             vec![("key1".into(), 0.into()), ("key2".into(), "test".into())]
                 .into_iter()
                 .collect();
 
-        let node_attributes2: Attributes =
+        let node_attributes2: AttributeMap =
             vec![("key1".into(), 1.into()), ("key3".into(), true.into())]
                 .into_iter()
                 .collect();
 
-        let edge_attributes: Attributes =
+        let edge_attributes: AttributeMap =
             vec![("key4".into(), 0.5.into()), ("key5".into(), "edge".into())]
                 .into_iter()
                 .collect();
@@ -1524,7 +1525,8 @@ mod test {
     #[test]
     fn test_group_schema_update_node() {
         let mut group_schema = GroupSchema::default();
-        let attributes = Attributes::from([("key1".into(), 0.into()), ("key2".into(), 0.0.into())]);
+        let attributes =
+            AttributeMap::from([("key1".into(), 0.into()), ("key2".into(), 0.0.into())]);
 
         group_schema.update_node(&attributes, true);
 
@@ -1551,7 +1553,7 @@ mod test {
     fn test_group_schema_update_edge() {
         let mut group_schema = GroupSchema::default();
         let attributes =
-            Attributes::from([("key3".into(), true.into()), ("key4".into(), "test".into())]);
+            AttributeMap::from([("key3".into(), true.into()), ("key4".into(), "test".into())]);
 
         group_schema.update_edge(&attributes, true);
 
@@ -1578,16 +1580,16 @@ mod test {
     fn test_schema_infer() {
         let mut graphrecord = GraphRecord::new();
         graphrecord
-            .add_node(0.into(), Attributes::from([("key1".into(), 0.into())]))
+            .add_node(0.into(), AttributeMap::from([("key1".into(), 0.into())]))
             .unwrap();
         graphrecord
-            .add_node(1.into(), Attributes::from([("key2".into(), 0.0.into())]))
+            .add_node(1.into(), AttributeMap::from([("key2".into(), 0.0.into())]))
             .unwrap();
         graphrecord
             .add_edge(
                 0.into(),
                 1.into(),
-                Attributes::from([("key3".into(), true.into())]),
+                AttributeMap::from([("key3".into(), true.into())]),
             )
             .unwrap();
 
@@ -1659,10 +1661,10 @@ mod test {
             )
             .unwrap();
 
-        let attributes = Attributes::from([("key1".into(), 0.into())]);
+        let attributes = AttributeMap::from([("key1".into(), 0.into())]);
         assert!(schema.validate_node(&0.into(), &attributes, None).is_ok());
 
-        let invalid_attributes = Attributes::from([("key1".into(), "invalid".into())]);
+        let invalid_attributes = AttributeMap::from([("key1".into(), "invalid".into())]);
         assert!(
             schema
                 .validate_node(&0.into(), &invalid_attributes, None)
@@ -1685,10 +1687,10 @@ mod test {
             )
             .unwrap();
 
-        let attributes = Attributes::from([("key1".into(), true.into())]);
+        let attributes = AttributeMap::from([("key1".into(), true.into())]);
         assert!(schema.validate_edge(&0, &attributes, None).is_ok());
 
-        let invalid_attributes = Attributes::from([("key1".into(), 0.into())]);
+        let invalid_attributes = AttributeMap::from([("key1".into(), 0.into())]);
         assert!(schema.validate_edge(&0, &invalid_attributes, None).is_err());
     }
 
@@ -1698,7 +1700,8 @@ mod test {
             HashMap::new(),
             GroupSchema::new(AttributeSchema::default(), AttributeSchema::default()),
         );
-        let attributes = Attributes::from([("key1".into(), 0.into()), ("key2".into(), 0.0.into())]);
+        let attributes =
+            AttributeMap::from([("key1".into(), 0.into()), ("key2".into(), 0.0.into())]);
 
         schema.update_node(&attributes, None, true);
 
@@ -1730,7 +1733,7 @@ mod test {
             GroupSchema::new(AttributeSchema::default(), AttributeSchema::default()),
         );
         let attributes =
-            Attributes::from([("key3".into(), true.into()), ("key4".into(), "test".into())]);
+            AttributeMap::from([("key3".into(), true.into()), ("key4".into(), "test".into())]);
 
         schema.update_edge(&attributes, None, true);
 

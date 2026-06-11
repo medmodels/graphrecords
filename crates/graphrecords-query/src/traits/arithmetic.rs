@@ -33,11 +33,10 @@ pub trait Power {
     fn power<O: Into<Self::ExponentOperand>>(&mut self, exponent: O) -> Self::ReturnOperand;
 }
 
-pub trait Modulo {
-    type OtherOperand;
-    type ReturnOperand;
+pub trait Modulo<Argument> {
+    type Output;
 
-    fn modulo<O: Into<Self::OtherOperand>>(&mut self, other: O) -> Self::ReturnOperand;
+    fn modulo(&self, argument: Argument) -> Self::Output;
 }
 
 pub trait Absolute {

@@ -4,7 +4,7 @@ use crate::{
     GraphRecord,
     errors::GraphRecordResult,
     graphrecord::{EdgeDataFrameInput, NodeDataFrameInput},
-    prelude::{Attributes, EdgeIndex, Group, NodeIndex, Schema},
+    prelude::{AttributeMap, EdgeIndex, Group, NodeIndex, Schema},
 };
 pub use graphrecord::PluginName;
 use std::fmt::Debug;
@@ -17,7 +17,7 @@ pub struct PreSetSchemaContext {
 #[derive(Debug, Clone)]
 pub struct PreAddNodeContext {
     pub node_index: NodeIndex,
-    pub attributes: Attributes,
+    pub attributes: AttributeMap,
 }
 
 #[derive(Debug, Clone)]
@@ -28,7 +28,7 @@ pub struct PostAddNodeContext {
 #[derive(Debug, Clone)]
 pub struct PreAddNodeWithGroupContext {
     pub node_index: NodeIndex,
-    pub attributes: Attributes,
+    pub attributes: AttributeMap,
     pub group: Group,
 }
 
@@ -41,7 +41,7 @@ pub struct PostAddNodeWithGroupContext {
 #[derive(Debug, Clone)]
 pub struct PreAddNodeWithGroupsContext {
     pub node_index: NodeIndex,
-    pub attributes: Attributes,
+    pub attributes: AttributeMap,
     pub groups: Vec<Group>,
 }
 
@@ -63,35 +63,35 @@ pub struct PostRemoveNodeContext {
 
 #[derive(Debug, Clone)]
 pub struct PreAddNodesContext {
-    pub nodes: Vec<(NodeIndex, Attributes)>,
+    pub nodes: Vec<(NodeIndex, AttributeMap)>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodesContext {
-    pub nodes: Vec<(NodeIndex, Attributes)>,
+    pub nodes: Vec<(NodeIndex, AttributeMap)>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddNodesWithGroupContext {
-    pub nodes: Vec<(NodeIndex, Attributes)>,
+    pub nodes: Vec<(NodeIndex, AttributeMap)>,
     pub group: Group,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodesWithGroupContext {
-    pub nodes: Vec<(NodeIndex, Attributes)>,
+    pub nodes: Vec<(NodeIndex, AttributeMap)>,
     pub group: Group,
 }
 
 #[derive(Debug, Clone)]
 pub struct PreAddNodesWithGroupsContext {
-    pub nodes: Vec<(NodeIndex, Attributes)>,
+    pub nodes: Vec<(NodeIndex, AttributeMap)>,
     pub groups: Vec<Group>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PostAddNodesWithGroupsContext {
-    pub nodes: Vec<(NodeIndex, Attributes)>,
+    pub nodes: Vec<(NodeIndex, AttributeMap)>,
     pub groups: Vec<Group>,
 }
 
@@ -133,7 +133,7 @@ pub struct PostAddNodesDataframesWithGroupsContext {
 pub struct PreAddEdgeContext {
     pub source_node_index: NodeIndex,
     pub target_node_index: NodeIndex,
-    pub attributes: Attributes,
+    pub attributes: AttributeMap,
 }
 
 #[derive(Debug, Clone)]
@@ -145,7 +145,7 @@ pub struct PostAddEdgeContext {
 pub struct PreAddEdgeWithGroupContext {
     pub source_node_index: NodeIndex,
     pub target_node_index: NodeIndex,
-    pub attributes: Attributes,
+    pub attributes: AttributeMap,
     pub group: Group,
 }
 
@@ -158,7 +158,7 @@ pub struct PostAddEdgeWithGroupContext {
 pub struct PreAddEdgeWithGroupsContext {
     pub source_node_index: NodeIndex,
     pub target_node_index: NodeIndex,
-    pub attributes: Attributes,
+    pub attributes: AttributeMap,
     pub groups: Vec<Group>,
 }
 
@@ -180,7 +180,7 @@ pub struct PostRemoveEdgeContext {
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgesContext {
-    pub edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+    pub edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
 }
 
 #[derive(Debug, Clone)]
@@ -190,7 +190,7 @@ pub struct PostAddEdgesContext {
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgesWithGroupContext {
-    pub edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+    pub edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
     pub group: Group,
 }
 
@@ -201,7 +201,7 @@ pub struct PostAddEdgesWithGroupContext {
 
 #[derive(Debug, Clone)]
 pub struct PreAddEdgesWithGroupsContext {
-    pub edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+    pub edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
     pub groups: Vec<Group>,
 }
 

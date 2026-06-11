@@ -8,17 +8,22 @@ mod rule;
 
 pub use builtins::{BuiltinPhase, EliminateDoubleNegation, register_builtins};
 pub use cost::{
-    Cardinality, Count, CountKind, EdgeAttributeCardinality, EdgeGroupSize,
+    Cardinality, Cost, Count, CountKind, EdgeAttributeCardinality, EdgeGroupSize, EstimateCost,
     NodeAttributeCardinality, NodeGroupSize, Selectivity, Statistic, Stats,
 };
-pub use engine::{Direction, Optimizer, OptimizerError, PhaseHandle, RuleHandle, Session};
+pub use engine::{
+    Direction, Optimizer, OptimizerBuilder, OptimizerError, PhaseHandle, RuleHandle, Session,
+};
 pub use pattern::{
-    Capture, GuardedPattern, MatchAgainst, Matching, NotPattern, Pattern, Wildcard, any, matching,
-    not,
+    Capture, GuardedPattern, MatchAgainst, Matching, NotPattern, Pattern, Wildcard, any, capture,
+    matching, not,
 };
 pub use phase::{
     FixpointPolicy, OptimizationReport, PhaseId, PhaseLabel, PhaseOutcome, ReportDisplay,
     StopReason,
 };
-pub use plan::{EmptyRule, HasInputs, OptimizeInputs, OptimizerHints, PlanNode};
+pub use plan::{
+    EmptyRule, MatchInputs, OperationInputs, OptimizePlan, OptimizerHints, PlanIdentity,
+    PlanInputs, PlanNode,
+};
 pub use rule::{Rule, Transformed, rule};

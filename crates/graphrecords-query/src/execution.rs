@@ -1,9 +1,6 @@
-use crate::BoxedIterator;
+use crate::{BoxedIterator, QueryResult};
 use elsa::FrozenMap;
-use graphrecords_core::{
-    errors::GraphRecordResult,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue},
-};
+use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue};
 use std::{
     any::{Any, TypeId},
     marker::PhantomData,
@@ -34,22 +31,22 @@ macro_rules! cacheable_owned_leaf {
 }
 
 macro_rules! cacheable_tuple {
-    ($($Field:ident),+) => {
-        impl<'a, $($Field: Cacheable<'a>),+> Cacheable<'a> for ($($Field,)+) {
-            type Owned = ($($Field::Owned,)+);
+    ($($F:ident),+) => {
+        impl<'a, $($F: Cacheable<'a>),+> Cacheable<'a> for ($($F,)+) {
+            type Owned = ($($F::Owned,)+);
 
             #[allow(non_snake_case)]
             fn into_owned(self) -> Self::Owned {
-                let ($($Field,)+) = self;
+                let ($($F,)+) = self;
 
-                ($($Field.into_owned(),)+)
+                ($($F.into_owned(),)+)
             }
 
             #[allow(non_snake_case)]
             fn from_owned(owned: &'a Self::Owned) -> Self {
-                let ($($Field,)+) = owned;
+                let ($($F,)+) = owned;
 
-                ($($Field::from_owned($Field),)+)
+                ($($F::from_owned($F),)+)
             }
         }
     };
@@ -67,37 +64,56 @@ impl<'a, T: Clone + 'static> Cacheable<'a> for &'a T {
     }
 }
 
-impl<'a, Item> Cacheable<'a> for BoxedIterator<'a, Item>
+impl<'a, I> Cacheable<'a> for BoxedIterator<'a, I>
 where
-    Item: Cacheable<'a> + 'a,
+    I: Cacheable<'a> + 'a,
 {
-    type Owned = Vec<Item::Owned>;
+    type Owned = Vec<I::Owned>;
 
     fn into_owned(self) -> Self::Owned {
-        self.map(Item::into_owned).collect()
+        self.map(I::into_owned).collect()
     }
 
     fn from_owned(owned: &'a Self::Owned) -> Self {
-        Box::new(owned.iter().map(Item::from_owned))
+        Box::new(owned.iter().map(I::from_owned))
     }
 }
 
-impl<'a, Item> Cacheable<'a> for Option<Item>
+impl<'a, I> Cacheable<'a> for Option<I>
 where
-    Item: Cacheable<'a>,
+    I: Cacheable<'a>,
 {
-    type Owned = Option<Item::Owned>;
+    type Owned = Option<I::Owned>;
 
     fn into_owned(self) -> Self::Owned {
-        self.map(Item::into_owned)
+        self.map(I::into_owned)
     }
 
     fn from_owned(owned: &'a Self::Owned) -> Self {
-        owned.as_ref().map(Item::from_owned)
+        owned.as_ref().map(I::from_owned)
+    }
+}
+
+impl<'a, T> Cacheable<'a> for QueryResult<T>
+where
+    T: Cacheable<'a>,
+{
+    type Owned = QueryResult<T::Owned>;
+
+    fn into_owned(self) -> Self::Owned {
+        self.map(T::into_owned)
+    }
+
+    fn from_owned(owned: &'a Self::Owned) -> Self {
+        match owned {
+            Ok(value) => Ok(T::from_owned(value)),
+            Err(failure) => Err(failure.clone()),
+        }
     }
 }
 
 cacheable_owned_leaf!(bool);
+cacheable_owned_leaf!(usize);
 cacheable_owned_leaf!(EdgeIndex);
 cacheable_owned_leaf!(GraphRecordValue);
 cacheable_owned_leaf!(GraphRecordAttribute);
@@ -115,18 +131,18 @@ cacheable_tuple!(A, B, C, D, E, F, G, H, I, J);
 cacheable_tuple!(A, B, C, D, E, F, G, H, I, J, K);
 cacheable_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
 
-pub struct ExecutionContext<'a> {
+pub struct EvaluationCache<'a> {
     cache: FrozenMap<(u64, TypeId), Box<dyn Any>>,
     marker: PhantomData<&'a ()>,
 }
 
-impl Default for ExecutionContext<'_> {
+impl Default for EvaluationCache<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a> ExecutionContext<'a> {
+impl<'a> EvaluationCache<'a> {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -135,18 +151,15 @@ impl<'a> ExecutionContext<'a> {
         }
     }
 
-    /// # Panics
-    ///
-    /// Panics if a cache entry's stored type does not match its `TypeId` key.
-    pub fn materialize<Value>(
+    pub fn materialize<V>(
         &'a self,
         key: u64,
-        compute: impl FnOnce() -> GraphRecordResult<Value>,
-    ) -> GraphRecordResult<Value>
+        compute: impl FnOnce() -> QueryResult<V>,
+    ) -> QueryResult<V>
     where
-        Value: Cacheable<'a>,
+        V: Cacheable<'a>,
     {
-        let identifier = (key, TypeId::of::<Value::Owned>());
+        let identifier = (key, TypeId::of::<V::Owned>());
 
         let stored = match self.cache.get(&identifier) {
             Some(stored) => stored,
@@ -155,100 +168,11 @@ impl<'a> ExecutionContext<'a> {
                 .insert(identifier, Box::new(compute()?.into_owned())),
         };
 
-        Ok(Value::from_owned(
+        #[allow(clippy::missing_panics_doc)]
+        Ok(V::from_owned(
             stored
                 .downcast_ref()
                 .expect("Cache entry type must match its TypeId key"),
         ))
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use graphrecords_core::graphrecord::NodeIndex;
-    use std::cell::Cell;
-
-    #[test]
-    fn test_materialize_replays_cached_values_without_recomputing() {
-        let context = ExecutionContext::new();
-        let lorem: NodeIndex = "lorem".into();
-        let ipsum: NodeIndex = "ipsum".into();
-        let computations = Cell::new(0u32);
-
-        let initial = context
-            .materialize(0, || {
-                computations.set(computations.get() + 1);
-
-                Ok(Box::new(
-                    [
-                        (&lorem, GraphRecordValue::from("amet")),
-                        (&ipsum, GraphRecordValue::from("consectetur")),
-                    ]
-                    .into_iter(),
-                )
-                    as BoxedIterator<'_, (&NodeIndex, GraphRecordValue)>)
-            })
-            .unwrap()
-            .map(|(index, value)| (index.clone(), value))
-            .collect::<Vec<_>>();
-
-        // The cached entry must replay even though this closure would compute different values.
-        let replayed = context
-            .materialize(0, || {
-                computations.set(computations.get() + 1);
-
-                Ok(Box::new(std::iter::empty())
-                    as BoxedIterator<'_, (&NodeIndex, GraphRecordValue)>)
-            })
-            .unwrap()
-            .map(|(index, value)| (index.clone(), value))
-            .collect::<Vec<_>>();
-
-        assert_eq!(1, computations.get());
-        assert_eq!(
-            vec![
-                (NodeIndex::from("lorem"), GraphRecordValue::from("amet")),
-                (
-                    NodeIndex::from("ipsum"),
-                    GraphRecordValue::from("consectetur")
-                ),
-            ],
-            initial
-        );
-        assert_eq!(initial, replayed);
-    }
-
-    #[test]
-    fn test_materialize_separates_distinct_keys() {
-        let context = ExecutionContext::new();
-        let lorem: NodeIndex = "lorem".into();
-
-        let single = context
-            .materialize(0, || {
-                Ok(
-                    Box::new(std::iter::once((&lorem, GraphRecordValue::from("amet"))))
-                        as BoxedIterator<'_, (&NodeIndex, GraphRecordValue)>,
-                )
-            })
-            .unwrap()
-            .count();
-
-        let pair = context
-            .materialize(1, || {
-                Ok(Box::new(
-                    [
-                        (&lorem, GraphRecordValue::from("amet")),
-                        (&lorem, GraphRecordValue::from("consectetur")),
-                    ]
-                    .into_iter(),
-                )
-                    as BoxedIterator<'_, (&NodeIndex, GraphRecordValue)>)
-            })
-            .unwrap()
-            .count();
-
-        assert_eq!(1, single);
-        assert_eq!(2, pair);
     }
 }

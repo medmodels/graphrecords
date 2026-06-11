@@ -1,68 +1,88 @@
 mod attribute;
-mod explain;
-mod has_inputs;
-mod operand;
-mod optimize_inputs;
-mod optimizer_hints;
-mod phase_label;
-mod plan;
-mod plan_node;
+mod query;
 
 use proc_macro::TokenStream;
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::Span;
 use syn::{DeriveInput, Error, Path, Result, parse_macro_input, parse_str};
 
-#[proc_macro_derive(PlanNode, attributes(plan, input))]
+#[proc_macro_derive(PlanNode, attributes(plan, input, argument))]
 pub fn derive_plan_node(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    plan_node::expand(&input)
+    query::optimizer::plan::node::expand(&input)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }
 
-#[proc_macro_derive(HasInputs, attributes(plan, input))]
-pub fn derive_has_inputs(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(MatchInputs, attributes(plan, input, argument))]
+pub fn derive_match_inputs(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    has_inputs::expand(&input)
+    query::optimizer::plan::match_inputs::expand(&input)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }
 
-#[proc_macro_derive(OptimizeInputs, attributes(plan, input))]
-pub fn derive_optimize_inputs(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(PlanIdentity, attributes(plan, input, argument))]
+pub fn derive_plan_identity(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    optimize_inputs::expand(&input)
+    query::optimizer::plan::plan_identity::expand(&input)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }
 
-#[proc_macro_derive(Explain, attributes(explain, input))]
+#[proc_macro_derive(PlanInputs, attributes(plan, input, argument))]
+pub fn derive_plan_inputs(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    query::optimizer::plan::plan_inputs::expand(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro_derive(OperationInputs, attributes(plan, input, argument))]
+pub fn derive_operation_inputs(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    query::optimizer::plan::operation_inputs::expand(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro_derive(OptimizePlan, attributes(plan, input, argument))]
+pub fn derive_optimize_plan(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    query::optimizer::plan::optimize_inputs::expand(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro_derive(Explain, attributes(explain, input, argument))]
 pub fn derive_explain(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    explain::expand(&input)
+    query::explain::expand(&input)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }
 
-#[proc_macro_derive(OptimizerHints, attributes(plan, input))]
+#[proc_macro_derive(OptimizerHints, attributes(plan, input, argument))]
 pub fn derive_optimizer_hints(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    optimizer_hints::expand(&input)
+    query::optimizer::plan::optimizer_hints::expand(&input)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }
 
-#[proc_macro_derive(Operand, attributes(operand))]
-pub fn derive_operand(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Operation, attributes(plan, input, argument))]
+pub fn derive_operation(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    operand::expand(&input)
+    query::operation::expand(&input)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }
@@ -71,13 +91,9 @@ pub fn derive_operand(input: TokenStream) -> TokenStream {
 pub fn derive_phase_label(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    phase_label::expand(&input)
+    query::optimizer::phase_label::expand(&input)
         .unwrap_or_else(Error::into_compile_error)
         .into()
-}
-
-pub(crate) fn resolve_query_crate_path() -> Result<Path> {
-    resolve_crate_path("graphrecords-query", "query")
 }
 
 pub(crate) fn resolve_crate_path(package: &str, facade_module: &str) -> Result<Path> {

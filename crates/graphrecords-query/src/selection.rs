@@ -1,16 +1,15 @@
 use crate::{
-    BoxedIterator, EvaluateOperand, Explanation, NodeOperand, Operand,
-    bool::BoolMaskOperand,
-    edges::{AllEdges, EdgeOperand},
-    execution::ExecutionContext,
-    group::{Discriminator, GroupOperand, GroupedIterator, GroupedOperandContext},
-    nodes::AllNodes,
+    BoxedIterator, EvaluateOperand, Explanation, NodeOperand, Operand, OperandContext, QueryResult,
+    execution::EvaluationCache,
+    operands::{
+        AllEdges, AllNodes, BoolMaskOperand, EdgeOperand, GroupOperand, GroupedIterator,
+        IndicesOperand, ValueOperand, ValuesOperand,
+    },
+    operations::GroupKey,
     optimizer::{OptimizationReport, Optimizer, Stats},
-    values::ValuesOperand,
 };
 use graphrecords_core::{
     GraphRecord,
-    errors::GraphRecordResult,
     graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex},
 };
 use std::{
@@ -18,14 +17,14 @@ use std::{
     sync::Arc,
 };
 
-macro_rules! impl_iterator_return_operand {
-    ($( $Operand:ty => $Item:ty ),* $(,)?) => {
+macro_rules! impl_return_operand {
+    ($( $Operand:ty => $ReturnValue:ty ),* $(,)?) => {
         $(
             impl<'a> ReturnOperand<'a> for $Operand {
-                type ReturnValue = BoxedIterator<'a, $Item>;
+                type ReturnValue = $ReturnValue;
 
-                fn evaluate(&'a self, graphrecord: &'a GraphRecord, context: &'a ExecutionContext<'a>) -> GraphRecordResult<Self::ReturnValue> {
-                    <Self as EvaluateOperand>::evaluate(self, graphrecord, context)
+                fn evaluate(&'a self, graphrecord: &'a GraphRecord, cache: &'a EvaluationCache<'a>) -> QueryResult<Self::ReturnValue> {
+                    <Self as EvaluateOperand>::evaluate(self, graphrecord, cache)
                 }
 
                 fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
@@ -46,10 +45,10 @@ macro_rules! impl_return_operand_for_tuples {
             type ReturnValue = ($($T::ReturnValue,)+);
 
             #[allow(non_snake_case)]
-            fn evaluate(&'a self, graphrecord: &'a GraphRecord, context: &'a ExecutionContext<'a>) -> GraphRecordResult<Self::ReturnValue> {
+            fn evaluate(&'a self, graphrecord: &'a GraphRecord, cache: &'a EvaluationCache<'a>) -> QueryResult<Self::ReturnValue> {
                 let ($($T,)+) = self;
 
-                $(let $T = $T.evaluate(graphrecord, context)?;)+
+                $(let $T = $T.evaluate(graphrecord, cache)?;)+
 
                 Ok(($($T,)+))
             }
@@ -90,7 +89,7 @@ macro_rules! impl_return_operand_for_tuples {
 
 pub struct Selection<'a, R: ReturnOperand<'a>> {
     graphrecord: &'a GraphRecord,
-    context: ExecutionContext<'a>,
+    cache: EvaluationCache<'a>,
     unoptimized_return_operand: R,
     optimized_return_operand: R,
     report: OptimizationReport,
@@ -115,7 +114,7 @@ impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
 
         Self {
             graphrecord,
-            context: ExecutionContext::new(),
+            cache: EvaluationCache::new(),
             unoptimized_return_operand,
             optimized_return_operand,
             report,
@@ -140,16 +139,16 @@ impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
 
         Self {
             graphrecord,
-            context: ExecutionContext::new(),
+            cache: EvaluationCache::new(),
             unoptimized_return_operand,
             optimized_return_operand,
             report,
         }
     }
 
-    pub fn evaluate(&'a self) -> GraphRecordResult<R::ReturnValue> {
+    pub fn evaluate(&'a self) -> QueryResult<R::ReturnValue> {
         self.optimized_return_operand
-            .evaluate(self.graphrecord, &self.context)
+            .evaluate(self.graphrecord, &self.cache)
     }
 
     pub const fn explain(&'a self) -> QueryExplanation<'a, R> {
@@ -203,8 +202,8 @@ pub trait ReturnOperand<'a>: Clone {
     fn evaluate(
         &'a self,
         graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<Self::ReturnValue>;
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::ReturnValue>;
 
     #[allow(unused_variables)]
     fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport)
@@ -217,12 +216,58 @@ pub trait ReturnOperand<'a>: Clone {
     fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result;
 }
 
-impl_iterator_return_operand!(
-    ValuesOperand<NodeOperand> => (&'a NodeIndex, GraphRecordValue),
-    ValuesOperand<EdgeOperand> => (&'a EdgeIndex, GraphRecordValue),
-    BoolMaskOperand<NodeOperand>       => (&'a NodeIndex, bool),
-    BoolMaskOperand<EdgeOperand>       => (&'a EdgeIndex, bool),
+impl_return_operand!(
+    ValuesOperand<NodeIndex> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<GraphRecordValue>)>,
+    ValuesOperand<EdgeIndex> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<GraphRecordValue>)>,
+    BoolMaskOperand<NodeIndex> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<bool>)>,
+    BoolMaskOperand<EdgeIndex> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<bool>)>,
+    ValueOperand<NodeIndex> => Option<(&'a NodeIndex, QueryResult<GraphRecordValue>)>,
+    ValueOperand<EdgeIndex> => Option<(&'a EdgeIndex, QueryResult<GraphRecordValue>)>,
 );
+
+impl<'a> ReturnOperand<'a> for IndicesOperand<NodeIndex> {
+    type ReturnValue = BoxedIterator<'a, QueryResult<NodeIndex>>;
+
+    fn evaluate(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::ReturnValue> {
+        Ok(Box::new(
+            EvaluateOperand::evaluate(self, graphrecord, cache)?.map(|(_index, value)| value),
+        ))
+    }
+
+    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
+        optimizer.run_reported(stats, &self)
+    }
+
+    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", Explanation::new(self))
+    }
+}
+
+impl<'a> ReturnOperand<'a> for IndicesOperand<EdgeIndex> {
+    type ReturnValue = BoxedIterator<'a, QueryResult<EdgeIndex>>;
+
+    fn evaluate(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::ReturnValue> {
+        Ok(Box::new(
+            EvaluateOperand::evaluate(self, graphrecord, cache)?.map(|(_index, value)| value),
+        ))
+    }
+
+    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
+        optimizer.run_reported(stats, &self)
+    }
+
+    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", Explanation::new(self))
+    }
+}
 
 impl_return_operand_for_tuples!(R1);
 impl_return_operand_for_tuples!(R1, R2);
@@ -248,9 +293,9 @@ impl<'a, R: ReturnOperand<'a>> ReturnOperand<'a> for &R {
     fn evaluate(
         &'a self,
         graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<Self::ReturnValue> {
-        R::evaluate(self, graphrecord, context)
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::ReturnValue> {
+        R::evaluate(self, graphrecord, cache)
     }
 
     fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
@@ -258,20 +303,21 @@ impl<'a, R: ReturnOperand<'a>> ReturnOperand<'a> for &R {
     }
 }
 
-impl<'a, O, D> ReturnOperand<'a> for GroupOperand<O, D>
+impl<'a, O, K> ReturnOperand<'a> for GroupOperand<O, K>
 where
-    D: Discriminator,
+    K: GroupKey,
     O: Operand + ReturnOperand<'a>,
-    Arc<dyn GroupedOperandContext<O, D>>: 'a,
+    Arc<dyn OperandContext<Self>>: 'a,
 {
-    type ReturnValue = GroupedIterator<'a, D::Key<'a>, <O as EvaluateOperand>::ReturnValue<'a>>;
+    type ReturnValue =
+        GroupedIterator<'a, K::Key, QueryResult<<O as EvaluateOperand>::ReturnValue<'a>>>;
 
     fn evaluate(
         &'a self,
         graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<Self::ReturnValue> {
-        EvaluateOperand::evaluate(self, graphrecord, context)
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::ReturnValue> {
+        EvaluateOperand::evaluate(self, graphrecord, cache)
     }
 
     fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {

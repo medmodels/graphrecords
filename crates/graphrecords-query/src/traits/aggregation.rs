@@ -1,7 +1,7 @@
 pub trait Max {
     type ReturnOperand;
 
-    fn max(&mut self) -> Self::ReturnOperand;
+    fn max(&self) -> Self::ReturnOperand;
 }
 
 pub trait Min {
@@ -50,4 +50,10 @@ pub trait Var {
     type ReturnOperand;
 
     fn var(&mut self) -> Self::ReturnOperand;
+}
+
+pub trait Random {
+    type ReturnOperand;
+
+    fn random(&self) -> Self::ReturnOperand;
 }

@@ -1,18 +1,18 @@
-use super::{Attributes, NodeIndex};
+use super::{AttributeMap, NodeIndex};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Edge {
-    pub(crate) attributes: Attributes,
+    pub(crate) attributes: AttributeMap,
     pub(crate) source_node_index: NodeIndex,
     pub(crate) target_node_index: NodeIndex,
 }
 
 impl Edge {
     pub const fn new(
-        attributes: Attributes,
+        attributes: AttributeMap,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
     ) -> Self {

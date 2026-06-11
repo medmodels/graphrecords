@@ -4,10 +4,14 @@ use std::fmt::{self, Display, Formatter, Write};
 
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot explain itself",
-    note = "implement `Explain` for `{Self}`, or derive it with `#[derive(Explain)]`"
+    note = "implement `Explain` for `{Self}` or derive it with `#[derive(Explain)]`"
 )]
 pub trait Explain {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result;
+}
+
+pub trait Labeled {
+    const LABEL: &'static str;
 }
 
 impl<O: Operand> Explain for O {
