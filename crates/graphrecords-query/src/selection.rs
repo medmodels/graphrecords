@@ -1,11 +1,9 @@
 use crate::{
-    BoxedIterator, EvaluateOperand, Explanation, NodeOperand,
+    BoxedIterator, EvaluateOperand, Explanation, NodeOperand, Operand,
     bool::BoolMaskOperand,
     edges::{AllEdges, EdgeOperand},
     execution::ExecutionContext,
-    group::{
-        Discriminator, GroupOperand, GroupableOperand, GroupedIterator, GroupedOperandContext,
-    },
+    group::{Discriminator, GroupOperand, GroupedIterator, GroupedOperandContext},
     nodes::AllNodes,
     optimizer::{OptimizationReport, Optimizer, Stats},
     values::ValuesOperand,
@@ -263,10 +261,10 @@ impl<'a, R: ReturnOperand<'a>> ReturnOperand<'a> for &R {
 impl<'a, O, D> ReturnOperand<'a> for GroupOperand<O, D>
 where
     D: Discriminator,
-    O: GroupableOperand + ReturnOperand<'a>,
+    O: Operand + ReturnOperand<'a>,
     Arc<dyn GroupedOperandContext<O, D>>: 'a,
 {
-    type ReturnValue = GroupedIterator<'a, D::Key<'a>, O::Grouped<'a>>;
+    type ReturnValue = GroupedIterator<'a, D::Key<'a>, <O as EvaluateOperand>::ReturnValue<'a>>;
 
     fn evaluate(
         &'a self,

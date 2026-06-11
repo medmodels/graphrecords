@@ -14,7 +14,6 @@ pub mod values;
 
 use crate::{
     execution::ExecutionContext,
-    group::{Discriminator, GroupedIterator},
     optimizer::{OptimizeInputs, Optimizer, PlanNode},
     selection::{ReturnOperand, Selection},
 };
@@ -46,20 +45,6 @@ pub trait EvaluateContext {
         graphrecord: &'a GraphRecord,
         context: &'a ExecutionContext<'a>,
     ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>>;
-}
-
-pub trait EvaluateContextGrouped: EvaluateContext {
-    fn evaluate_grouped<'a, D: Discriminator>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        context: &'a ExecutionContext<'a>,
-    ) -> GraphRecordResult<
-        GroupedIterator<
-            'a,
-            <D as Discriminator>::Key<'a>,
-            <Self::Operand as EvaluateOperand>::ReturnValue<'a>,
-        >,
-    >;
 }
 
 pub trait EvaluateOperand {

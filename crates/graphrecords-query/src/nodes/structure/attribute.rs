@@ -1,7 +1,7 @@
 use crate::{
     BoxedIterator, EvaluateContext, EvaluateOperand, Explain, Operand,
     execution::ExecutionContext,
-    group::{Discriminator, GroupOperand, GroupedOperandContext},
+    group::{Discriminator, GroupOperand, GroupedOperandContext, map_partitions},
     nodes::NodeOperand,
     optimizer::{Cardinality, HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Stats},
     traits::Attribute,
@@ -63,6 +63,17 @@ impl ValuesOperandContext for AttributeContext {
     type RootOperand = NodeOperand;
 }
 
+impl Attribute for NodeOperand {
+    type ReturnOperand = ValuesOperand<Self>;
+
+    fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
+        ValuesOperand::new(AttributeContext {
+            input: self.clone(),
+            attribute,
+        })
+    }
+}
+
 #[derive(PlanNode, HasInputs, OptimizeInputs, OptimizerHints, Explain)]
 #[plan(operand = GroupOperand<ValuesOperand<NodeOperand>, D>)]
 #[explain(label = "Attribute")]
@@ -89,29 +100,15 @@ impl<D: Discriminator> EvaluateContext for GroupedAttributeContext<D> {
     ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let partitions = self.input.evaluate(graphrecord, context)?;
 
-        Ok(Box::new(partitions.map(move |(key, partition)| {
-            (
-                key,
-                attribute_values(graphrecord, partition, &self.attribute),
-            )
-        })))
+        Ok(map_partitions(partitions, |partition| {
+            attribute_values(graphrecord, partition, &self.attribute)
+        }))
     }
 }
 
 impl<D: Discriminator> GroupedOperandContext<ValuesOperand<NodeOperand>, D>
     for GroupedAttributeContext<D>
 {
-}
-
-impl Attribute for NodeOperand {
-    type ReturnOperand = ValuesOperand<Self>;
-
-    fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
-        ValuesOperand::new(AttributeContext {
-            input: self.clone(),
-            attribute,
-        })
-    }
 }
 
 impl<D: Discriminator> Attribute for GroupOperand<NodeOperand, D> {

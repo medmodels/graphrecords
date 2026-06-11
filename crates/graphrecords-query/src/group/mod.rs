@@ -1,5 +1,4 @@
 mod discriminator;
-mod group_by;
 
 use crate::{
     BoxedIterator, EvaluateContext, EvaluateOperand, Explain, Operand,
@@ -12,11 +11,46 @@ use std::sync::Arc;
 
 pub type GroupedIterator<'a, K, T> = BoxedIterator<'a, (K, T)>;
 
-pub trait GroupableOperand: Operand + Clone + 'static {
-    type Grouped<'a>;
+pub fn partition_by<'a, Key, Item>(
+    items: BoxedIterator<'a, Item>,
+    key_of: impl Fn(&Item) -> Key,
+) -> GroupedIterator<'a, Key, BoxedIterator<'a, Item>>
+where
+    Key: PartialEq + 'a,
+    Item: 'a,
+{
+    let mut buckets: Vec<(Key, Vec<Item>)> = Vec::new();
+
+    for item in items {
+        let key = key_of(&item);
+
+        if let Some((_, bucket)) = buckets.iter_mut().find(|(existing, _)| *existing == key) {
+            bucket.push(item);
+        } else {
+            buckets.push((key, vec![item]));
+        }
+    }
+
+    Box::new(
+        buckets
+            .into_iter()
+            .map(|(key, items)| (key, Box::new(items.into_iter()) as BoxedIterator<'a, Item>)),
+    )
 }
 
-pub trait GroupedOperandContext<O: GroupableOperand, D: Discriminator>:
+pub fn map_partitions<'a, Key, In, Out>(
+    partitions: GroupedIterator<'a, Key, In>,
+    transform: impl Fn(In) -> Out + 'a,
+) -> GroupedIterator<'a, Key, Out>
+where
+    Key: 'a,
+    In: 'a,
+    Out: 'a,
+{
+    Box::new(partitions.map(move |(key, partition)| (key, transform(partition))))
+}
+
+pub trait GroupedOperandContext<O: Operand, D: Discriminator>:
     PlanNode
     + OptimizeInputs<Output = GroupOperand<O, D>>
     + Cardinality
@@ -25,11 +59,11 @@ pub trait GroupedOperandContext<O: GroupableOperand, D: Discriminator>:
 {
 }
 
-pub struct GroupOperand<O: GroupableOperand, D: Discriminator> {
+pub struct GroupOperand<O: Operand + ?Sized, D: Discriminator> {
     context: Arc<dyn GroupedOperandContext<O, D>>,
 }
 
-impl<O: GroupableOperand, D: Discriminator> Clone for GroupOperand<O, D> {
+impl<O: Operand, D: Discriminator> Clone for GroupOperand<O, D> {
     fn clone(&self) -> Self {
         Self {
             context: Arc::clone(&self.context),
@@ -37,7 +71,7 @@ impl<O: GroupableOperand, D: Discriminator> Clone for GroupOperand<O, D> {
     }
 }
 
-impl<O: GroupableOperand, D: Discriminator> Operand for GroupOperand<O, D> {
+impl<O: Operand, D: Discriminator> Operand for GroupOperand<O, D> {
     type Context = dyn GroupedOperandContext<O, D>;
 
     fn context(&self) -> &Self::Context {
@@ -53,8 +87,8 @@ impl<O: GroupableOperand, D: Discriminator> Operand for GroupOperand<O, D> {
     }
 }
 
-impl<O: GroupableOperand, D: Discriminator> EvaluateOperand for GroupOperand<O, D> {
-    type ReturnValue<'a> = GroupedIterator<'a, D::Key<'a>, O::Grouped<'a>>;
+impl<O: Operand, D: Discriminator> EvaluateOperand for GroupOperand<O, D> {
+    type ReturnValue<'a> = GroupedIterator<'a, D::Key<'a>, O::ReturnValue<'a>>;
 
     fn evaluate<'a>(
         &'a self,
@@ -65,7 +99,7 @@ impl<O: GroupableOperand, D: Discriminator> EvaluateOperand for GroupOperand<O, 
     }
 }
 
-impl<O: GroupableOperand, D: Discriminator> GroupOperand<O, D> {
+impl<O: Operand, D: Discriminator> GroupOperand<O, D> {
     #[must_use]
     pub fn new<C: GroupedOperandContext<O, D>>(context: C) -> Self {
         Self {
@@ -74,8 +108,10 @@ impl<O: GroupableOperand, D: Discriminator> GroupOperand<O, D> {
     }
 }
 
-pub trait GroupBy<D: Discriminator>: GroupableOperand {
-    fn group_by(&self, discriminator: D) -> GroupOperand<Self, D>;
+pub trait GroupBy<D: Discriminator>: Operand {
+    type Output: Operand;
+
+    fn group_by(&self, discriminator: D) -> Self::Output;
 }
 
 #[cfg(test)]

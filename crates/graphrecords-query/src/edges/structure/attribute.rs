@@ -2,7 +2,7 @@ use crate::{
     BoxedIterator, EvaluateContext, EvaluateOperand, Explain, Operand,
     edges::EdgeOperand,
     execution::ExecutionContext,
-    group::{Discriminator, GroupOperand, GroupedOperandContext},
+    group::{Discriminator, GroupOperand, GroupedOperandContext, map_partitions},
     optimizer::{Cardinality, HasInputs, OptimizeInputs, OptimizerHints, PlanNode, Stats},
     traits::Attribute,
     values::{ValuesOperand, ValuesOperandContext},
@@ -89,12 +89,9 @@ impl<D: Discriminator> EvaluateContext for GroupedAttributeContext<D> {
     ) -> GraphRecordResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
         let partitions = self.input.evaluate(graphrecord, context)?;
 
-        Ok(Box::new(partitions.map(move |(key, partition)| {
-            (
-                key,
-                attribute_values(graphrecord, partition, &self.attribute),
-            )
-        })))
+        Ok(map_partitions(partitions, |partition| {
+            attribute_values(graphrecord, partition, &self.attribute)
+        }))
     }
 }
 
