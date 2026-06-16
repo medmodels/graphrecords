@@ -1,15 +1,14 @@
 use crate::{
-    EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
-    QueryResult, Unit,
+    Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand, QueryResult, Scalar, Unit,
     execution::EvaluationCache,
     operands::{OperandHandle, ValuesOperand},
-    operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
     optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Attribute,
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeMap, EdgeIndex, GraphRecordAttribute, NodeIndex},
+    graphrecord::{AttributeMap, EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
 };
 use std::{
     error::Error,
@@ -65,59 +64,55 @@ impl Prepare for AttributeOperation {
     }
 }
 
-fn read_attributes<'a, I>(
-    graphrecord: &'a GraphRecord,
-    indices: KeyedStream<'a, I, Unit, Multiple>,
-    attribute: &'a GraphRecordAttribute,
-) -> <ValuesOperand<I> as EvaluateOperand>::ReturnValue<'a>
-where
-    I: EntityAttributes,
-{
-    Box::new(indices.map(move |(index, membership)| {
-        if let Err(failure) = membership {
-            return (index, Err(failure));
-        }
+impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation {
+    type OutShape = Indexed<I, Scalar>;
 
-        let attributes = I::attributes(graphrecord, &index);
-
-        if let Some(value) = attributes.get(attribute) {
-            return (index, Ok(value.clone()));
-        }
-
-        let mut available = attributes
-            .keys()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
-        available.sort();
-
-        let help = if available.is_empty() {
-            "no attributes are present here".to_string()
-        } else {
-            format!("available attributes: {}", available.join(", "))
-        };
-
-        let failure = Failure::new(
-            AttributeOperation::LABEL,
-            MissingAttribute {
-                attribute: attribute.clone(),
-            },
-        )
-        .at(&index)
-        .help(help);
-
-        (index, Err(failure))
-    }))
-}
-
-impl<I: EntityAttributes> Kernel<Indexed<I, Unit>, Multiple> for AttributeOperation {
-    type Output = ValuesOperand<I>;
-
-    fn execute<'a>(
+    fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Unit, Multiple>,
         attribute: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(read_attributes::<I>(graphrecord, values, attribute))
+    ) -> QueryResult<
+        Pipeline<
+            'a,
+            (I::Index<'a>, QueryResult<()>),
+            (I::Index<'a>, QueryResult<GraphRecordValue>),
+        >,
+    > {
+        Ok(Pipeline::default().map(
+            move |(index, membership): (I::Index<'a>, QueryResult<()>)| {
+                if let Err(failure) = membership {
+                    return (index, Err(failure));
+                }
+
+                let attributes = I::attributes(graphrecord, &index);
+
+                if let Some(value) = attributes.get(attribute) {
+                    return (index, Ok(value.clone()));
+                }
+
+                let mut available = attributes
+                    .keys()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>();
+                available.sort();
+
+                let help = if available.is_empty() {
+                    "no attributes are present here".to_string()
+                } else {
+                    format!("available attributes: {}", available.join(", "))
+                };
+
+                let failure = Failure::new(
+                    Self::LABEL,
+                    MissingAttribute {
+                        attribute: attribute.clone(),
+                    },
+                )
+                .at(&index)
+                .help(help);
+
+                (index, Err(failure))
+            },
+        ))
     }
 }
 

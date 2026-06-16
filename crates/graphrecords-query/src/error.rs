@@ -1,7 +1,6 @@
-use graphrecords_core::graphrecord::datatypes::DataType;
 use std::{
     error::Error,
-    fmt::{self, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     sync::Arc,
 };
 
@@ -93,19 +92,19 @@ impl Error for Failure {
 }
 
 #[derive(Debug)]
-pub struct IncomparableValues {
-    pub first: DataType,
-    pub second: DataType,
+pub struct IncomparableValues<T: Display> {
+    pub first: T,
+    pub second: T,
 }
 
-impl Display for IncomparableValues {
+impl<T: Display> Display for IncomparableValues<T> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "cannot compare values of data types {} and {}",
+            "cannot compare values `{}` and `{}`",
             self.first, self.second
         )
     }
 }
 
-impl Error for IncomparableValues {}
+impl<T: Display + Debug> Error for IncomparableValues<T> {}

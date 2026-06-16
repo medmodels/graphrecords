@@ -1,8 +1,8 @@
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, Indexed, Mask, Multiple, Not, Operand, QueryResult,
+    Explain, IndexDomain, Indexed, Mask, Not, Operand, QueryResult,
     execution::EvaluationCache,
     operands::BoolMaskOperand,
-    operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
     optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
@@ -24,17 +24,20 @@ impl Prepare for NotOperation {
     }
 }
 
-impl<I: IndexDomain> Kernel<Indexed<I, Mask>, Multiple> for NotOperation {
-    type Output = BoolMaskOperand<I>;
+impl<I: IndexDomain> ElementKernel<Indexed<I, Mask>> for NotOperation {
+    type OutShape = Indexed<I, Mask>;
 
-    fn execute<'a>(
+    fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Mask, Multiple>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(Box::new(
-            values.map(|(index, value)| (index, value.map(|value| !value))),
-        ))
+    ) -> QueryResult<
+        Pipeline<'a, (I::Index<'a>, QueryResult<bool>), (I::Index<'a>, QueryResult<bool>)>,
+    > {
+        Ok(
+            Pipeline::default().map(|(index, value): (I::Index<'a>, QueryResult<bool>)| {
+                (index, value.map(|value| !value))
+            }),
+        )
     }
 }
 

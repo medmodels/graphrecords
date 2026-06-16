@@ -1,9 +1,10 @@
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple, Operand, QueryResult, Unit,
+    Explain, IndexDomain, Indexed, Labeled, Multiple, Operand, QueryResult, Unit,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
-        Apply, ArgumentSource, Kernel, KeyedStream, OnMissing, Operation, OperationContext, Prepare,
+        Apply, ArgumentSource, ElementKernel, Keyed, OnMissing, Operation, OperationContext,
+        Pipeline, Prepare,
     },
     optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Filter,
@@ -33,44 +34,29 @@ impl<M: Prepare> Prepare for FilterOperation<M> {
     }
 }
 
-fn filter_indices<'a, I, M>(
-    indices: KeyedStream<'a, I, Unit, Multiple>,
-    prepared: M::Prepared<'a>,
-    label: &'static str,
-) -> KeyedStream<'a, I, Unit, Multiple>
+impl<I, M> ElementKernel<Indexed<I, Unit>> for FilterOperation<M>
 where
     I: IndexDomain,
-    M: ArgumentSource<I, Value = bool>,
-    M::Prepared<'a>: 'a,
+    M: ArgumentSource<Keyed<I>, Value = bool>,
 {
-    Box::new(
-        indices.filter_map(move |(index, membership)| match membership {
-            Err(failure) => Some((index, Err(failure))),
-            Ok(()) => match M::resolve(&prepared, &index, label, OnMissing::Drop) {
-                Ok(Some(true)) => Some((index, Ok(()))),
-                Ok(Some(false) | None) => None,
-                Err(failure) => Some((index, Err(failure))),
-            },
-        }),
-    )
-}
+    type OutShape = Indexed<I, Unit>;
 
-impl<I, M> Kernel<Indexed<I, Unit>, Multiple> for FilterOperation<M>
-where
-    I: IndexDomain,
-    M: ArgumentSource<I, Value = bool>,
-{
-    type Output = OperandHandle<Indexed<I, Unit>, Multiple>;
-
-    fn execute<'a>(
+    fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Unit, Multiple>,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(filter_indices::<I, M>(
-            values,
-            prepared,
-            <Self as Labeled>::LABEL,
+    ) -> QueryResult<Pipeline<'a, (I::Index<'a>, QueryResult<()>), (I::Index<'a>, QueryResult<()>)>>
+    {
+        let label = Self::LABEL;
+
+        Ok(Pipeline::default().filter_map(
+            move |(index, membership): (I::Index<'a>, QueryResult<()>)| match membership {
+                Err(failure) => Some((index, Err(failure))),
+                Ok(()) => match M::resolve(&prepared, &index, label, OnMissing::Drop) {
+                    Ok(Some(true)) => Some((index, Ok(()))),
+                    Ok(Some(false) | None) => None,
+                    Err(failure) => Some((index, Err(failure))),
+                },
+            },
         ))
     }
 }
@@ -78,7 +64,7 @@ where
 impl<I, M> EstimateCost<FilterOperation<M>> for OperandHandle<Indexed<I, Unit>, Multiple>
 where
     I: IndexDomain,
-    M: ArgumentSource<I, Value = bool>,
+    M: ArgumentSource<Keyed<I>, Value = bool>,
 {
     type OutputCost = <Self as Operand>::Cost;
 

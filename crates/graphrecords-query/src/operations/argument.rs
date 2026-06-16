@@ -9,6 +9,7 @@ use std::{
     error::Error,
     fmt::{self, Display, Formatter, Write},
     hash::Hasher,
+    marker::PhantomData,
 };
 
 pub enum Looked<'a, W> {
@@ -51,30 +52,56 @@ pub trait Prepare: 'static {
     ) -> QueryResult<Self::Prepared<'a>>;
 }
 
-pub trait ArgumentSource<I: IndexDomain>: Prepare + Explain + PlanIdentity + PlanInputs {
+pub trait Alignment: 'static {
+    type Address<'a>;
+
+    fn locate(address: &Self::Address<'_>, failure: Box<Failure>) -> Box<Failure>;
+}
+
+pub struct Keyed<I: IndexDomain>(PhantomData<I>);
+
+impl<I: IndexDomain> Alignment for Keyed<I> {
+    type Address<'a> = I::Index<'a>;
+
+    fn locate(address: &Self::Address<'_>, failure: Box<Failure>) -> Box<Failure> {
+        failure.at(address)
+    }
+}
+
+pub struct Unaligned;
+
+impl Alignment for Unaligned {
+    type Address<'a> = ();
+
+    fn locate(_address: &Self::Address<'_>, failure: Box<Failure>) -> Box<Failure> {
+        failure
+    }
+}
+
+pub trait ArgumentSource<A: Alignment>: Prepare + Explain + PlanIdentity + PlanInputs {
     type Value: 'static + Clone;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-        index: &I::Index<'a>,
+        address: &A::Address<'a>,
     ) -> Looked<'prepared, QueryResult<Self::Value>>
     where
         Self: 'a;
 
     fn resolve<'a>(
         prepared: &Self::Prepared<'a>,
-        index: &I::Index<'a>,
+        address: &A::Address<'a>,
         label: &'static str,
         default: OnMissing,
     ) -> QueryResult<Option<Self::Value>>
     where
         Self: 'a,
     {
-        match Self::lookup(prepared, index) {
+        match Self::lookup(prepared, address) {
             Looked::Present(wrapped) => wrapped.clone().map(Some),
             Looked::Absent(absent) => match default {
                 OnMissing::Drop => Ok(None),
-                OnMissing::Raise => Err(Failure::new(label, absent).at(index).help(
+                OnMissing::Raise => Err(A::locate(address, Failure::new(label, absent)).help(
                     "the argument has no value at this index; supply `on_missing(Drop)` or `on_missing(Replace(...))`",
                 )),
             },
@@ -122,12 +149,12 @@ impl Prepare for GraphRecordValue {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<I> for GraphRecordValue {
+impl<A: Alignment> ArgumentSource<A> for GraphRecordValue {
     type Value = Self;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-        _index: &I::Index<'a>,
+        _address: &A::Address<'a>,
     ) -> Looked<'prepared, QueryResult<Self::Value>>
     where
         Self: 'a,

@@ -1,13 +1,13 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, QueryResult, Scalar,
+    Bare, Explain, IndexDomain, Indexed, Operand, QueryResult, Scalar,
     execution::EvaluationCache,
     operands::{BareValuesOperand, ValuesOperand},
     operations::{
-        Apply, BareStream, ErrorPolicy, Kernel, KeyedStream, Operation, OperationContext, Prepare,
+        Apply, ElementKernel, ErrorPolicy, Operation, OperationContext, Pipeline, Prepare,
     },
     optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
-use graphrecords_core::GraphRecord;
+use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[explain(label = "Drop")]
@@ -25,17 +25,24 @@ impl Prepare for Drop {
     }
 }
 
-impl<I: IndexDomain> Kernel<Indexed<I, Scalar>, Multiple> for Drop {
-    type Output = ValuesOperand<I>;
+impl<I: IndexDomain> ElementKernel<Indexed<I, Scalar>> for Drop {
+    type OutShape = Indexed<I, Scalar>;
 
-    fn execute<'a>(
+    fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Scalar, Multiple>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(Box::new(values.filter_map(|(index, result)| {
-            result.ok().map(|value| (index, Ok(value)))
-        })))
+    ) -> QueryResult<
+        Pipeline<
+            'a,
+            (I::Index<'a>, QueryResult<GraphRecordValue>),
+            (I::Index<'a>, QueryResult<GraphRecordValue>),
+        >,
+    > {
+        Ok(Pipeline::default().filter_map(
+            |(index, result): (I::Index<'a>, QueryResult<GraphRecordValue>)| {
+                result.ok().map(|value| (index, Ok(value)))
+            },
+        ))
     }
 }
 
@@ -51,15 +58,16 @@ impl<I: IndexDomain> EstimateCost<Drop> for ValuesOperand<I> {
     }
 }
 
-impl Kernel<Bare<Scalar>, Multiple> for Drop {
-    type Output = BareValuesOperand;
+impl ElementKernel<Bare<Scalar>> for Drop {
+    type OutShape = Bare<Scalar>;
 
-    fn execute<'a>(
+    fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, Scalar, Multiple>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(Box::new(values.filter_map(|result| result.ok().map(Ok))))
+    ) -> QueryResult<Pipeline<'a, QueryResult<GraphRecordValue>, QueryResult<GraphRecordValue>>>
+    {
+        Ok(Pipeline::default()
+            .filter_map(|result: QueryResult<GraphRecordValue>| result.ok().map(Ok)))
     }
 }
 

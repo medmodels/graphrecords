@@ -1,11 +1,10 @@
 use super::combine_masks;
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Mask, Multiple, Operand, QueryResult,
-    Xor,
+    Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, Xor,
     execution::EvaluationCache,
     operands::BoolMaskOperand,
     operations::{
-        Apply, ArgumentSource, Kernel, KeyedStream, Operation, OperationContext, Prepare,
+        Apply, ArgumentSource, ElementKernel, Keyed, Operation, OperationContext, Pipeline, Prepare,
     },
     optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
@@ -31,22 +30,22 @@ impl<M: Prepare> Prepare for XorOperation<M> {
     }
 }
 
-impl<I, M> Kernel<Indexed<I, Mask>, Multiple> for XorOperation<M>
+impl<I, M> ElementKernel<Indexed<I, Mask>> for XorOperation<M>
 where
     I: IndexDomain,
-    M: ArgumentSource<I, Value = bool>,
+    M: ArgumentSource<Keyed<I>, Value = bool>,
 {
-    type Output = BoolMaskOperand<I>;
+    type OutShape = Indexed<I, Mask>;
 
-    fn execute<'a>(
+    fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Mask, Multiple>,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<
+        Pipeline<'a, (I::Index<'a>, QueryResult<bool>), (I::Index<'a>, QueryResult<bool>)>,
+    > {
         Ok(combine_masks::<I, M>(
-            values,
             prepared,
-            <Self as Labeled>::LABEL,
+            Self::LABEL,
             |left, right| left ^ right,
         ))
     }
@@ -54,7 +53,7 @@ where
 
 impl<I: IndexDomain, M> EstimateCost<XorOperation<M>> for BoolMaskOperand<I>
 where
-    M: ArgumentSource<I, Value = bool>,
+    M: ArgumentSource<Keyed<I>, Value = bool>,
 {
     type OutputCost = <Self as Operand>::Cost;
 
@@ -81,7 +80,7 @@ where
 
 impl<I: IndexDomain, M> BitXor<M> for BoolMaskOperand<I>
 where
-    M: ArgumentSource<I, Value = bool>,
+    M: ArgumentSource<Keyed<I>, Value = bool>,
 {
     type Output = Self;
 

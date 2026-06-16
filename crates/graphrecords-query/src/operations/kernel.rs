@@ -1,8 +1,8 @@
 use crate::{
-    Arity, Bare, ElementShape, EvaluateOperand, IndexDomain, Indexed, Operand, QueryResult,
-    ValueType,
+    Arity, Bare, BoxedIterator, ElementShape, EvaluateOperand, IndexDomain, Indexed, Multiple,
+    Operand, Ordered, QueryResult, ValueType,
     operands::OperandHandle,
-    operations::{Apply, Operation, Prepare},
+    operations::{Apply, Operation},
     optimizer::EstimateCost,
 };
 use graphrecords_core::GraphRecord;
@@ -35,12 +35,112 @@ where
     fn apply<'a>(
         graphrecord: &'a GraphRecord,
         values: Self::ReturnValue<'a>,
-        prepared: <P as Prepare>::Prepared<'a>,
+        prepared: P::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
     where
         Self: 'a,
     {
         P::execute(graphrecord, values, prepared)
+    }
+}
+
+pub struct Pipeline<'a, X: 'a, Y: 'a> {
+    run: Box<dyn FnOnce(BoxedIterator<'a, X>) -> BoxedIterator<'a, Y> + 'a>,
+}
+
+impl<'a, T: 'a> Default for Pipeline<'a, T, T> {
+    fn default() -> Self {
+        Self {
+            run: Box::new(|elements| elements),
+        }
+    }
+}
+
+impl<'a, X: 'a, Y: 'a> Pipeline<'a, X, Y> {
+    #[must_use]
+    pub fn map<Z: 'a>(self, function: impl FnMut(Y) -> Z + 'a) -> Pipeline<'a, X, Z> {
+        Pipeline {
+            run: Box::new(move |elements| Box::new((self.run)(elements).map(function))),
+        }
+    }
+
+    #[must_use]
+    pub fn filter(self, predicate: impl FnMut(&Y) -> bool + 'a) -> Self {
+        Self {
+            run: Box::new(move |elements| Box::new((self.run)(elements).filter(predicate))),
+        }
+    }
+
+    #[must_use]
+    pub fn filter_map<Z: 'a>(
+        self,
+        function: impl FnMut(Y) -> Option<Z> + 'a,
+    ) -> Pipeline<'a, X, Z> {
+        Pipeline {
+            run: Box::new(move |elements| Box::new((self.run)(elements).filter_map(function))),
+        }
+    }
+
+    #[must_use]
+    pub fn scan<T: 'a, Z: 'a>(
+        self,
+        initial: T,
+        mut function: impl FnMut(&mut T, Y) -> Option<Z> + 'a,
+    ) -> Pipeline<'a, X, Z> {
+        Pipeline {
+            run: Box::new(move |elements| {
+                Box::new(
+                    (self.run)(elements)
+                        .scan(initial, move |state, element| {
+                            Some(function(state, element))
+                        })
+                        .flatten(),
+                )
+            }),
+        }
+    }
+
+    #[must_use]
+    pub fn execute(self, elements: BoxedIterator<'a, X>) -> BoxedIterator<'a, Y> {
+        (self.run)(elements)
+    }
+}
+
+pub trait ElementKernel<S: ElementShape>: Operation {
+    type OutShape: ElementShape;
+
+    fn pipeline<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<Pipeline<'a, S::Element<'a>, <Self::OutShape as ElementShape>::Element<'a>>>;
+}
+
+impl<S: ElementShape, P: ElementKernel<S>> Kernel<S, Multiple> for P {
+    type Output = OperandHandle<P::OutShape, Multiple>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        values: <OperandHandle<S, Multiple> as EvaluateOperand>::ReturnValue<'a>,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(P::pipeline(graphrecord, prepared)?.execute(values))
+    }
+}
+
+impl<S: ElementShape, P: ElementKernel<S>> ElementKernel<Ordered<S>> for P {
+    type OutShape = Ordered<<P as ElementKernel<S>>::OutShape>;
+
+    fn pipeline<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<
+        Pipeline<
+            'a,
+            <Ordered<S> as ElementShape>::Element<'a>,
+            <Self::OutShape as ElementShape>::Element<'a>,
+        >,
+    > {
+        <P as ElementKernel<S>>::pipeline(graphrecord, prepared)
     }
 }
 
@@ -56,7 +156,7 @@ where
     fn apply<'a>(
         graphrecord: &'a GraphRecord,
         values: Self::ReturnValue<'a>,
-        prepared: <P as Prepare>::Prepared<'a>,
+        prepared: P::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
     where
         Self: 'a,

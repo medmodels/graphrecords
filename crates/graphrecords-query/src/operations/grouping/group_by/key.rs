@@ -1,7 +1,7 @@
 use crate::{
     BoxedIterator, IndexDomain,
     operands::ValuesOperand,
-    operations::{ArgumentSource, MissingPolicy, WithMissing},
+    operations::{ArgumentSource, Keyed, MissingPolicy, WithMissing},
     optimizer::PlanIdentity,
     traits::MaybeAbsent,
 };
@@ -17,7 +17,7 @@ pub trait GroupKey: 'static + Clone {
     type Key: 'static + Clone + Eq + Hash;
 }
 
-pub trait KeyOperand: GroupKey + ArgumentSource<Self::Subject, Value = Self::Key> {
+pub trait KeyOperand: GroupKey + ArgumentSource<Keyed<Self::Subject>, Value = Self::Key> {
     type Subject: IndexDomain;
 
     fn assignments<'a, 'prepared>(

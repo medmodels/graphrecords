@@ -4,7 +4,7 @@ mod edges;
 mod group;
 mod indices;
 mod nodes;
-mod operand_handle;
+mod ordered;
 mod values;
 
 use crate::{
@@ -28,7 +28,7 @@ use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 pub use group::{GroupOperand, Grouped, GroupedIterator, try_partition_by};
 pub use indices::{IndexOperand, IndicesOperand};
 pub use nodes::{AllNodes, NodeOperand};
-pub use operand_handle::OperandHandle;
+pub use ordered::Ordered;
 use std::{marker::PhantomData, sync::Arc};
 pub use values::{BareValueOperand, BareValuesOperand, ValueOperand, ValuesOperand};
 
@@ -148,3 +148,45 @@ pub trait Operand: 'static + Sized + Clone + EvaluateOperand + Sealed {
         Explanation::new(self)
     }
 }
+
+pub struct OperandHandle<S: ElementShape, C: Arity> {
+    context: Arc<dyn OperandContext<Self>>,
+}
+
+impl<S: ElementShape, C: Arity> Clone for OperandHandle<S, C> {
+    fn clone(&self) -> Self {
+        Self {
+            context: Arc::clone(&self.context),
+        }
+    }
+}
+
+impl<S: ElementShape, C: Arity> EvaluateOperand for OperandHandle<S, C> {
+    type ReturnValue<'a> = Return<'a, S, C>;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::ReturnValue<'a>> {
+        self.context.evaluate(graphrecord, cache)
+    }
+}
+
+impl<S: ElementShape, C: Arity> Operand for OperandHandle<S, C> {
+    type Cost = S::Cost;
+
+    fn context(&self) -> &dyn OperandContext<Self> {
+        self.context.as_ref()
+    }
+
+    fn as_plan_node(&self) -> &dyn PlanNode {
+        self.context.as_ref()
+    }
+
+    fn from_context(context: Arc<dyn OperandContext<Self>>) -> Self {
+        Self { context }
+    }
+}
+
+impl<S: ElementShape, C: Arity> Sealed for OperandHandle<S, C> {}

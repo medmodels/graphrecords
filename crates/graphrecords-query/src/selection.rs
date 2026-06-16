@@ -1,9 +1,10 @@
 use crate::{
-    BoxedIterator, EvaluateOperand, Explanation, NodeOperand, Operand, OperandContext, QueryResult,
+    BoxedIterator, EvaluateOperand, Explanation, Indexed, Multiple, NodeOperand, Operand,
+    OperandContext, Ordered, QueryResult, Scalar,
     execution::EvaluationCache,
     operands::{
         AllEdges, AllNodes, BoolMaskOperand, EdgeOperand, GroupOperand, GroupedIterator,
-        IndicesOperand, ValueOperand, ValuesOperand,
+        IndicesOperand, OperandHandle, ValueOperand, ValuesOperand,
     },
     operations::GroupKey,
     optimizer::{OptimizationReport, Optimizer, Stats},
@@ -223,6 +224,8 @@ impl_return_operand!(
     BoolMaskOperand<EdgeIndex> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<bool>)>,
     ValueOperand<NodeIndex> => Option<(&'a NodeIndex, QueryResult<GraphRecordValue>)>,
     ValueOperand<EdgeIndex> => Option<(&'a EdgeIndex, QueryResult<GraphRecordValue>)>,
+    OperandHandle<Ordered<Indexed<NodeIndex, Scalar>>, Multiple> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<GraphRecordValue>)>,
+    OperandHandle<Ordered<Indexed<EdgeIndex, Scalar>>, Multiple> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<GraphRecordValue>)>,
 );
 
 impl<'a> ReturnOperand<'a> for IndicesOperand<NodeIndex> {

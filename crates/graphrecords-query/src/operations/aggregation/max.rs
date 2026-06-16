@@ -9,7 +9,7 @@ use crate::{
     },
     traits::Max,
 };
-use graphrecords_core::{GraphRecord, graphrecord::datatypes::DataType};
+use graphrecords_core::GraphRecord;
 use std::cmp::Ordering;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
@@ -61,8 +61,8 @@ impl<I: IndexDomain> Kernel<Indexed<I, Scalar>, Multiple> for MaxOperation {
                 None => Err(Failure::new(
                     Self::LABEL,
                     IncomparableValues {
-                        first: DataType::from(value),
-                        second: DataType::from(current.clone()),
+                        first: value,
+                        second: current.clone(),
                     },
                 )
                 .at(index)

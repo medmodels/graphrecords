@@ -3,7 +3,7 @@ use crate::{
     BoxedIterator, Definite, EvaluateOperand, IndexDomain, Indexed, Mask, MaskMap, Multiple,
     error::QueryResult,
     execution::EvaluationCache,
-    operations::{Absent, ArgumentSource, Looked, Prepare},
+    operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
@@ -27,7 +27,7 @@ impl<I: IndexDomain, T: 'static + Clone> Prepare for NestedBoolMaskOperand<I, T>
     }
 }
 
-impl<I: IndexDomain, T: 'static + Clone> ArgumentSource<I> for NestedBoolMaskOperand<I, T> {
+impl<I: IndexDomain, T: 'static + Clone> ArgumentSource<Keyed<I>> for NestedBoolMaskOperand<I, T> {
     type Value = GrHashMap<T, bool>;
 
     fn lookup<'a, 'prepared>(
@@ -56,7 +56,7 @@ impl<I: IndexDomain> Prepare for BoolMaskOperand<I> {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<I> for BoolMaskOperand<I> {
+impl<I: IndexDomain> ArgumentSource<Keyed<I>> for BoolMaskOperand<I> {
     type Value = bool;
 
     fn lookup<'a, 'prepared>(
@@ -85,12 +85,12 @@ impl<I: IndexDomain> Prepare for BoolOperand<I> {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<I> for BoolOperand<I> {
+impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for BoolOperand<I> {
     type Value = bool;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-        _index: &I::Index<'a>,
+        _address: &A::Address<'a>,
     ) -> Looked<'prepared, QueryResult<Self::Value>>
     where
         Self: 'a,

@@ -17,7 +17,7 @@ pub struct BroadcastOperation<K: KeyOperand> {
 }
 
 impl<K: KeyOperand> Prepare for BroadcastOperation<K> {
-    type Prepared<'a> = <K as Prepare>::Prepared<'a>;
+    type Prepared<'a> = K::Prepared<'a>;
 
     fn prepare<'a>(
         &'a self,

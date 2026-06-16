@@ -4,7 +4,7 @@ use crate::{
     Multiple, Single,
     error::QueryResult,
     execution::EvaluationCache,
-    operations::{Absent, ArgumentSource, Looked, Prepare},
+    operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
@@ -30,7 +30,7 @@ impl<I: IndexDomain> Prepare for NestedAttributesOperand<I> {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<I> for NestedAttributesOperand<I> {
+impl<I: IndexDomain> ArgumentSource<Keyed<I>> for NestedAttributesOperand<I> {
     type Value = GrHashSet<GraphRecordAttribute>;
 
     fn lookup<'a, 'prepared>(
@@ -59,7 +59,7 @@ impl<I: IndexDomain> Prepare for AttributesOperand<I> {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<I> for AttributesOperand<I> {
+impl<I: IndexDomain> ArgumentSource<Keyed<I>> for AttributesOperand<I> {
     type Value = GraphRecordAttribute;
 
     fn lookup<'a, 'prepared>(
@@ -88,12 +88,12 @@ impl<I: IndexDomain> Prepare for AttributeOperand<I> {
     }
 }
 
-impl<I1: IndexDomain, I2: IndexDomain> ArgumentSource<I1> for AttributeOperand<I2> {
+impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for AttributeOperand<I> {
     type Value = GraphRecordAttribute;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-        _index: &I1::Index<'a>,
+        _address: &A::Address<'a>,
     ) -> Looked<'prepared, QueryResult<Self::Value>>
     where
         Self: 'a,
@@ -117,12 +117,12 @@ impl Prepare for BareAttributeOperand {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<I> for BareAttributeOperand {
+impl<A: Alignment> ArgumentSource<A> for BareAttributeOperand {
     type Value = GraphRecordAttribute;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-        _index: &I::Index<'a>,
+        _address: &A::Address<'a>,
     ) -> Looked<'prepared, QueryResult<Self::Value>>
     where
         Self: 'a,

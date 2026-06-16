@@ -1,8 +1,10 @@
-use crate::{BoxedIterator, QueryResult};
+use crate::{BoxedIterator, Positional, QueryResult};
 use elsa::FrozenMap;
 use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue};
+use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use std::{
     any::{Any, TypeId},
+    hash::Hash,
     marker::PhantomData,
 };
 
@@ -112,12 +114,27 @@ where
     }
 }
 
+impl<'a, T: 'static + Clone + Eq + Hash> Cacheable<'a> for GrHashMap<T, bool> {
+    type Owned = Self;
+
+    fn into_owned(self) -> Self::Owned {
+        self
+    }
+
+    fn from_owned(owned: &'a Self::Owned) -> Self {
+        owned.clone()
+    }
+}
+
+cacheable_owned_leaf!(());
 cacheable_owned_leaf!(bool);
 cacheable_owned_leaf!(usize);
 cacheable_owned_leaf!(EdgeIndex);
+cacheable_owned_leaf!(Positional);
 cacheable_owned_leaf!(GraphRecordValue);
 cacheable_owned_leaf!(GraphRecordAttribute);
 cacheable_owned_leaf!(Vec<GraphRecordAttribute>);
+cacheable_owned_leaf!(GrHashSet<GraphRecordAttribute>);
 
 cacheable_tuple!(A, B);
 cacheable_tuple!(A, B, C);

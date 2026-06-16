@@ -1,9 +1,8 @@
 use crate::{
-    EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
-    QueryResult, Unit,
+    Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Multiple, Operand, QueryResult, Unit,
     execution::EvaluationCache,
     operands::{BoolMaskOperand, OperandHandle},
-    operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
     optimizer::{
         Cardinality, EdgeGroupSize, EstimateCost, NodeGroupSize, OperationInputs, OptimizerHints,
         PlanIdentity, PlanInputs, Selectivity, Stats,
@@ -32,7 +31,7 @@ impl IndicesInGroup for NodeIndex {
     ) -> QueryResult<GrHashSet<Self::Index<'a>>> {
         Ok(graphrecord
             .nodes_in_group(group)
-            .map_err(|error| Failure::new(<InGroupOperation as Labeled>::LABEL, error))?
+            .map_err(|error| Failure::new(InGroupOperation::LABEL, error))?
             .collect())
     }
 
@@ -48,7 +47,7 @@ impl IndicesInGroup for EdgeIndex {
     ) -> QueryResult<GrHashSet<Self::Index<'a>>> {
         Ok(graphrecord
             .edges_in_group(group)
-            .map_err(|error| Failure::new(<InGroupOperation as Labeled>::LABEL, error))?
+            .map_err(|error| Failure::new(InGroupOperation::LABEL, error))?
             .collect())
     }
 
@@ -77,21 +76,23 @@ impl Prepare for InGroupOperation {
     }
 }
 
-impl<I: IndicesInGroup> Kernel<Indexed<I, Unit>, Multiple> for InGroupOperation {
-    type Output = BoolMaskOperand<I>;
+impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
+    type OutShape = Indexed<I, Mask>;
 
-    fn execute<'a>(
+    fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Unit, Multiple>,
         group: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<Pipeline<'a, (I::Index<'a>, QueryResult<()>), (I::Index<'a>, QueryResult<bool>)>>
+    {
         let members = I::indices_in_group(graphrecord, group)?;
 
-        Ok(Box::new(values.map(move |(index, membership)| {
-            let in_group = membership.map(|()| members.contains(&index));
+        Ok(Pipeline::default().map(
+            move |(index, membership): (I::Index<'a>, QueryResult<()>)| {
+                let in_group = membership.map(|()| members.contains(&index));
 
-            (index, in_group)
-        })))
+                (index, in_group)
+            },
+        ))
     }
 }
 

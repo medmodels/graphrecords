@@ -1,11 +1,11 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, QueryResult, Scalar,
+    Bare, Explain, IndexDomain, Indexed, Operand, QueryResult, Scalar,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operands::{BareValuesOperand, ValuesOperand},
     operations::{
-        Apply, ArgumentSource, BareStream, ErrorPolicy, Kernel, KeyedStream, Looked, Operation,
-        OperationContext, Prepare,
+        Apply, ArgumentSource, ElementKernel, ErrorPolicy, Keyed, Looked, Operation,
+        OperationContext, Pipeline, Prepare,
     },
     optimizer::{
         EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, PlanNode, Stats,
@@ -64,32 +64,39 @@ impl<R: Prepare> Prepare for Replace<R> {
     }
 }
 
-impl<I, R> Kernel<Indexed<I, Scalar>, Multiple> for Replace<R>
+impl<I, R> ElementKernel<Indexed<I, Scalar>> for Replace<R>
 where
     I: IndexDomain,
-    R: ArgumentSource<I, Value = GraphRecordValue>,
+    R: ArgumentSource<Keyed<I>, Value = GraphRecordValue>,
 {
-    type Output = ValuesOperand<I>;
+    type OutShape = Indexed<I, Scalar>;
 
-    fn execute<'a>(
+    fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Scalar, Multiple>,
         replacement: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(Box::new(values.map(move |(index, result)| match result {
-            Ok(value) => (index, Ok(value)),
-            Err(original) => match R::lookup(&replacement, &index) {
-                Looked::Present(Ok(value)) => (index, Ok(value.clone())),
-                Looked::Present(Err(_)) | Looked::Absent(_) => (index, Err(original)),
+    ) -> QueryResult<
+        Pipeline<
+            'a,
+            (I::Index<'a>, QueryResult<GraphRecordValue>),
+            (I::Index<'a>, QueryResult<GraphRecordValue>),
+        >,
+    > {
+        Ok(Pipeline::default().map(
+            move |(index, result): (I::Index<'a>, QueryResult<GraphRecordValue>)| match result {
+                Ok(value) => (index, Ok(value)),
+                Err(original) => match R::lookup(&replacement, &index) {
+                    Looked::Present(Ok(value)) => (index, Ok(value.clone())),
+                    Looked::Present(Err(_)) | Looked::Absent(_) => (index, Err(original)),
+                },
             },
-        })))
+        ))
     }
 }
 
 impl<I, R> EstimateCost<Replace<R>> for ValuesOperand<I>
 where
     I: IndexDomain,
-    R: ArgumentSource<I, Value = GraphRecordValue>,
+    R: ArgumentSource<Keyed<I>, Value = GraphRecordValue>,
 {
     type OutputCost = <Self as Operand>::Cost;
 
@@ -102,17 +109,19 @@ where
     }
 }
 
-impl Kernel<Bare<Scalar>, Multiple> for Replace<GraphRecordValue> {
-    type Output = BareValuesOperand;
+impl ElementKernel<Bare<Scalar>> for Replace<GraphRecordValue> {
+    type OutShape = Bare<Scalar>;
 
-    fn execute<'a>(
+    fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, Scalar, Multiple>,
         replacement: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(Box::new(values.map(move |result| {
-            result.or_else(|original| replacement.clone().or(Err(original)))
-        })))
+    ) -> QueryResult<Pipeline<'a, QueryResult<GraphRecordValue>, QueryResult<GraphRecordValue>>>
+    {
+        Ok(
+            Pipeline::default().map(move |result: QueryResult<GraphRecordValue>| {
+                result.or_else(|original| replacement.clone().or(Err(original)))
+            }),
+        )
     }
 }
 

@@ -21,19 +21,19 @@ pub struct GroupByOperation<K: KeyOperand> {
 }
 
 impl<K: KeyOperand> Prepare for GroupByOperation<K> {
-    type Prepared<'a> = <K as Prepare>::Prepared<'a>;
+    type Prepared<'a> = K::Prepared<'a>;
 
     fn prepare<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::Prepared<'a>> {
-        Prepare::prepare(&self.key, graphrecord, cache)
+        self.key.prepare(graphrecord, cache)
     }
 }
 
 fn resolve_key<'a, K>(
-    prepared: &<K as Prepare>::Prepared<'a>,
+    prepared: &K::Prepared<'a>,
     index: &<K::Subject as IndexDomain>::Index<'a>,
     label: &'static str,
 ) -> QueryResult<Option<K::Key>>
@@ -56,7 +56,7 @@ where
         values: KeyedStream<'a, I, V, Multiple>,
         keys: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let label = <Self as Labeled>::LABEL;
+        let label = Self::LABEL;
 
         let groups = try_partition_by(values, move |(index, _)| {
             resolve_key::<K>(&keys, index, label)

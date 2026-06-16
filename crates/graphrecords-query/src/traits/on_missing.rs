@@ -1,9 +1,9 @@
 use crate::{
     IndexDomain,
-    operations::{ArgumentSource, MissingPolicy, WithMissing},
+    operations::{ArgumentSource, Keyed, MissingPolicy, WithMissing},
 };
 
-pub trait MaybeAbsent<I: IndexDomain>: ArgumentSource<I> {
+pub trait MaybeAbsent<I: IndexDomain>: ArgumentSource<Keyed<I>> {
     fn on_missing<P>(self, policy: P) -> WithMissing<I, Self, P>
     where
         Self: Sized,

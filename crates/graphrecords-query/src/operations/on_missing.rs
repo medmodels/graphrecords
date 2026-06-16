@@ -5,7 +5,7 @@ use crate::{
     operands::{
         BareValueOperand, BoolMaskOperand, NestedBoolMaskOperand, ValueOperand, ValuesOperand,
     },
-    operations::{Absent, ArgumentSource, Drop, Looked, OnMissing, Prepare, Raise, Replace},
+    operations::{Absent, ArgumentSource, Drop, Keyed, Looked, OnMissing, Prepare, Raise, Replace},
     optimizer::{PlanIdentity, PlanInputs, PlanNode},
     traits::MaybeAbsent,
 };
@@ -77,7 +77,9 @@ impl<I: IndexDomain, V: 'static + Clone> MissingPolicy<I, V> for Raise {
     }
 }
 
-impl<I: IndexDomain, R: ArgumentSource<I> + Clone> MissingPolicy<I, R::Value> for Replace<R> {
+impl<I: IndexDomain, R: ArgumentSource<Keyed<I>> + Clone> MissingPolicy<I, R::Value>
+    for Replace<R>
+{
     type Prepared<'a> = R::Prepared<'a>;
 
     fn prepare<'a>(
@@ -186,7 +188,7 @@ where
     }
 }
 
-impl<I: IndexDomain, S: MaybeAbsent<I> + Clone, P> ArgumentSource<I> for WithMissing<I, S, P>
+impl<I: IndexDomain, S: MaybeAbsent<I> + Clone, P> ArgumentSource<Keyed<I>> for WithMissing<I, S, P>
 where
     P: MissingPolicy<I, S::Value>,
 {

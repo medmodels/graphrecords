@@ -1,5 +1,5 @@
 use crate::{
-    EvaluateContext, EvaluateOperand, Explain, Operand, QueryResult,
+    Cache, EvaluateContext, EvaluateOperand, Explain, Operand, QueryResult,
     execution::{Cacheable, EvaluationCache},
     optimizer::{
         Cost, MatchInputs, OptimizePlan, OptimizerHints, PlanNode, Session, Stats, Transformed,
@@ -22,8 +22,17 @@ impl<O: Operand> CacheContext<O> {
     }
 }
 
+impl<O: Operand> Cache for O
+where
+    for<'a> <O as EvaluateOperand>::ReturnValue<'a>: Cacheable<'a>,
+{
+    fn cache(&self) -> Self {
+        Self::new(CacheContext::new(self.clone()))
+    }
+}
+
 impl<O: Operand> Cost<O> for CacheContext<O> {
-    fn cost(&self, stats: &Stats) -> <O as Operand>::Cost {
+    fn cost(&self, stats: &Stats) -> O::Cost {
         self.input.context().cost(stats)
     }
 }

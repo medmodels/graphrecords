@@ -1,8 +1,8 @@
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, QueryResult, Unit,
+    Explain, IndexDomain, IndexValue, Indexed, Multiple, Operand, QueryResult, Unit,
     execution::EvaluationCache,
     operands::{IndicesOperand, OperandHandle},
-    operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
     optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Index,
 };
@@ -44,19 +44,21 @@ impl Prepare for IndexOperation {
     }
 }
 
-impl<I: OwnedIndex> Kernel<Indexed<I, Unit>, Multiple> for IndexOperation {
-    type Output = IndicesOperand<I>;
+impl<I: OwnedIndex> ElementKernel<Indexed<I, Unit>> for IndexOperation {
+    type OutShape = Indexed<I, IndexValue<I>>;
 
-    fn execute<'a>(
+    fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Unit, Multiple>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(Box::new(values.map(|(index, membership)| {
-            let promoted = membership.map(|()| I::owned(index.clone()));
+    ) -> QueryResult<Pipeline<'a, (I::Index<'a>, QueryResult<()>), (I::Index<'a>, QueryResult<I>)>>
+    {
+        Ok(
+            Pipeline::default().map(|(index, membership): (I::Index<'a>, QueryResult<()>)| {
+                let promoted = membership.map(|()| I::owned(index.clone()));
 
-            (index, promoted)
-        })))
+                (index, promoted)
+            }),
+        )
     }
 }
 

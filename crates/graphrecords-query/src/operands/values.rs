@@ -3,7 +3,7 @@ use crate::{
     Bare, EvaluateOperand, IndexDomain, Indexed, Multiple, Scalar, Single,
     error::QueryResult,
     execution::EvaluationCache,
-    operations::{Absent, ArgumentSource, Looked, Prepare},
+    operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 use graphrecords_utils::aliases::GrHashMap;
@@ -26,7 +26,7 @@ impl<I: IndexDomain> Prepare for ValuesOperand<I> {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<I> for ValuesOperand<I> {
+impl<I: IndexDomain> ArgumentSource<Keyed<I>> for ValuesOperand<I> {
     type Value = GraphRecordValue;
 
     fn lookup<'a, 'prepared>(
@@ -55,12 +55,12 @@ impl<I: IndexDomain> Prepare for ValueOperand<I> {
     }
 }
 
-impl<I1: IndexDomain, I2: IndexDomain> ArgumentSource<I1> for ValueOperand<I2> {
+impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for ValueOperand<I> {
     type Value = GraphRecordValue;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-        _index: &I1::Index<'a>,
+        _address: &A::Address<'a>,
     ) -> Looked<'prepared, QueryResult<Self::Value>>
     where
         Self: 'a,
@@ -84,12 +84,12 @@ impl Prepare for BareValueOperand {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<I> for BareValueOperand {
+impl<A: Alignment> ArgumentSource<A> for BareValueOperand {
     type Value = GraphRecordValue;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-        _index: &I::Index<'a>,
+        _address: &A::Address<'a>,
     ) -> Looked<'prepared, QueryResult<Self::Value>>
     where
         Self: 'a,

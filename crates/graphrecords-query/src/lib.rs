@@ -22,8 +22,8 @@ use graphrecords_core::{
 };
 pub use operands::{
     Arity, AttributeName, AttributeSet, Bare, Definite, EdgeOperand, ElementShape, EvaluateOperand,
-    IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand, Operand, Return, Scalar, Single,
-    Unit, ValueType,
+    IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand, Operand, Ordered, Return, Scalar,
+    Single, Unit, ValueType,
 };
 use std::{fmt::Display, hash::Hash};
 pub use traits::*;
@@ -31,7 +31,7 @@ pub use traits::*;
 pub type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
 
 pub trait IndexDomain: 'static + Clone {
-    type Index<'a>: Clone + Display + Eq + Hash
+    type Index<'a>: Clone + Display + Eq + Hash + PartialOrd
     where
         Self: 'a;
 }
@@ -117,8 +117,8 @@ impl QueryEdges for GraphRecord {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Attribute, Filter, InGroup, Index, NodeOperand, QueryNodes, QueryResult};
-    use graphrecords_core::{GraphRecord, graphrecord::NodeIndex};
+    use crate::{Attribute, Filter, InGroup, QueryNodes};
+    use graphrecords_core::GraphRecord;
     use std::collections::HashMap;
 
     #[test]
@@ -163,32 +163,5 @@ mod tests {
         println!("{}", selection.explain());
 
         println!("{:?}", selection.evaluate().unwrap().collect::<Vec<_>>());
-    }
-
-    #[test]
-    fn test_query_node_indices() {
-        let graphrecord = GraphRecord::from_tuples(
-            vec![
-                ("0".into(), HashMap::new()),
-                ("1".into(), HashMap::new()),
-                ("2".into(), HashMap::new()),
-            ],
-            None,
-            None,
-        )
-        .unwrap();
-
-        let selection = QueryNodes::query_nodes(&graphrecord, NodeOperand::index);
-
-        let indices = selection
-            .evaluate()
-            .unwrap()
-            .collect::<QueryResult<Vec<NodeIndex>>>()
-            .unwrap();
-
-        assert_eq!(3, indices.len());
-        assert!(indices.contains(&"0".into()));
-        assert!(indices.contains(&"1".into()));
-        assert!(indices.contains(&"2".into()));
     }
 }
