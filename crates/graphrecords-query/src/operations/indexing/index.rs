@@ -6,26 +6,7 @@ use crate::{
     optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Index,
 };
-use graphrecords_core::{
-    GraphRecord,
-    graphrecord::{EdgeIndex, NodeIndex},
-};
-
-pub trait OwnedIndex: IndexDomain {
-    fn owned(index: Self::Index<'_>) -> Self;
-}
-
-impl OwnedIndex for NodeIndex {
-    fn owned(index: Self::Index<'_>) -> Self {
-        index.clone()
-    }
-}
-
-impl OwnedIndex for EdgeIndex {
-    fn owned(index: Self::Index<'_>) -> Self {
-        *index
-    }
-}
+use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[explain(label = "Index")]
@@ -44,17 +25,18 @@ impl Prepare for IndexOperation {
     }
 }
 
-impl<I: OwnedIndex> ElementKernel<Indexed<I, Unit>> for IndexOperation {
+impl<I: IndexDomain> ElementKernel<Indexed<I, Unit>> for IndexOperation {
     type OutShape = Indexed<I, IndexValue<I>>;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<Pipeline<'a, (I::Index<'a>, QueryResult<()>), (I::Index<'a>, QueryResult<I>)>>
-    {
+    ) -> QueryResult<
+        Pipeline<'a, (I::Index<'a>, QueryResult<()>), (I::Index<'a>, QueryResult<I::Index<'a>>)>,
+    > {
         Ok(
             Pipeline::default().map(|(index, membership): (I::Index<'a>, QueryResult<()>)| {
-                let promoted = membership.map(|()| I::owned(index.clone()));
+                let promoted = membership.map(|()| index.clone());
 
                 (index, promoted)
             }),
@@ -62,7 +44,7 @@ impl<I: OwnedIndex> ElementKernel<Indexed<I, Unit>> for IndexOperation {
     }
 }
 
-impl<I: OwnedIndex> EstimateCost<IndexOperation> for OperandHandle<Indexed<I, Unit>, Multiple> {
+impl<I: IndexDomain> EstimateCost<IndexOperation> for OperandHandle<Indexed<I, Unit>, Multiple> {
     type OutputCost = <IndicesOperand<I> as Operand>::Cost;
 
     fn estimate(

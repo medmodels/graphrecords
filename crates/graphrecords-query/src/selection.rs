@@ -237,7 +237,8 @@ impl<'a> ReturnOperand<'a> for IndicesOperand<NodeIndex> {
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::ReturnValue> {
         Ok(Box::new(
-            EvaluateOperand::evaluate(self, graphrecord, cache)?.map(|(_index, value)| value),
+            EvaluateOperand::evaluate(self, graphrecord, cache)?
+                .map(|(_index, value)| value.cloned()),
         ))
     }
 
@@ -259,7 +260,8 @@ impl<'a> ReturnOperand<'a> for IndicesOperand<EdgeIndex> {
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::ReturnValue> {
         Ok(Box::new(
-            EvaluateOperand::evaluate(self, graphrecord, cache)?.map(|(_index, value)| value),
+            EvaluateOperand::evaluate(self, graphrecord, cache)?
+                .map(|(_index, value)| value.copied()),
         ))
     }
 
@@ -313,7 +315,7 @@ where
     Arc<dyn OperandContext<Self>>: 'a,
 {
     type ReturnValue =
-        GroupedIterator<'a, K::Key, QueryResult<<O as EvaluateOperand>::ReturnValue<'a>>>;
+        GroupedIterator<'a, K::Key<'a>, QueryResult<<O as EvaluateOperand>::ReturnValue<'a>>>;
 
     fn evaluate(
         &'a self,

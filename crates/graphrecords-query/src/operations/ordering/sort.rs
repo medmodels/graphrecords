@@ -60,7 +60,7 @@ impl<I, V> Kernel<Indexed<I, V>, Multiple> for SortOperation
 where
     I: IndexDomain,
     V: ValueType,
-    V::Value: PartialOrd + Display + Debug + Send + Sync,
+    for<'a> V::Value<'a>: PartialOrd + Display + Debug + Send + Sync,
 {
     type Output = OperandHandle<Ordered<Indexed<I, V>>, Multiple>;
 
@@ -69,9 +69,9 @@ where
         values: KeyedStream<'a, I, V, Multiple>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let mut collected = values
+        let mut collected: Vec<_> = values
             .map(|(index, result)| result.map(|value| (index, value)))
-            .collect::<QueryResult<Vec<_>>>()?;
+            .collect::<QueryResult<_>>()?;
 
         let mut incomparable_values = None;
         let mut incomparable_indices = None;
@@ -105,7 +105,7 @@ where
         });
 
         if let Some((first, second)) = incomparable_values {
-            return Err(Failure::new(Self::LABEL, IncomparableValues { first, second }).help(
+            return Err(Failure::new(Self::LABEL, IncomparableValues { first: first.to_string(), second: second.to_string() }).help(
                 "narrow the values down first using is_string(), is_int(), is_float(), is_bool(), is_datetime() or is_duration()",
             ));
         }
@@ -114,7 +114,7 @@ where
             return Err(Failure::new(
                 Self::LABEL,
                 IncomparableIndices {
-                    value,
+                    value: value.to_string(),
                     first,
                     second,
                 },
@@ -135,7 +135,7 @@ where
 impl<V> Kernel<Bare<V>, Multiple> for SortOperation
 where
     V: ValueType,
-    V::Value: PartialOrd + Display + Debug + Send + Sync,
+    for<'a> V::Value<'a>: PartialOrd + Display + Debug + Send + Sync,
 {
     type Output = OperandHandle<Ordered<Bare<V>>, Multiple>;
 
@@ -144,7 +144,7 @@ where
         values: BareStream<'a, V, Multiple>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let mut collected = values.collect::<QueryResult<Vec<_>>>()?;
+        let mut collected: Vec<_> = values.collect::<QueryResult<_>>()?;
 
         let mut incomparable = None;
 
@@ -161,7 +161,7 @@ where
         });
 
         if let Some((first, second)) = incomparable {
-            return Err(Failure::new(Self::LABEL, IncomparableValues { first, second }).help(
+            return Err(Failure::new(Self::LABEL, IncomparableValues { first: first.to_string(), second: second.to_string() }).help(
                 "narrow the values down first using is_string(), is_int(), is_float(), is_bool(), is_datetime() or is_duration()",
             ));
         }

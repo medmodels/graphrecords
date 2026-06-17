@@ -28,12 +28,12 @@ impl<I: IndexDomain, T: 'static + Clone> Prepare for NestedBoolMaskOperand<I, T>
 }
 
 impl<I: IndexDomain, T: 'static + Clone> ArgumentSource<Keyed<I>> for NestedBoolMaskOperand<I, T> {
-    type Value = GrHashMap<T, bool>;
+    type Value<'a> = GrHashMap<T, bool>;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -57,12 +57,12 @@ impl<I: IndexDomain> Prepare for BoolMaskOperand<I> {
 }
 
 impl<I: IndexDomain> ArgumentSource<Keyed<I>> for BoolMaskOperand<I> {
-    type Value = bool;
+    type Value<'a> = bool;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -86,12 +86,12 @@ impl<I: IndexDomain> Prepare for BoolOperand<I> {
 }
 
 impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for BoolOperand<I> {
-    type Value = bool;
+    type Value<'a> = bool;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {

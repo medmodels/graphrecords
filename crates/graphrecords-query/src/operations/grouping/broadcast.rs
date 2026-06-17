@@ -43,7 +43,7 @@ where
     where
         Self: 'a,
     {
-        let aggregates: GrHashMap<K::Key, QueryResult<GraphRecordValue>> = groups
+        let aggregates: GrHashMap<K::Key<'a>, QueryResult<GraphRecordValue>> = groups
             .filter_map(|(key, aggregate)| match aggregate {
                 Ok(Some((_, value))) => Some((key, value)),
                 Ok(None) => None,
@@ -51,9 +51,7 @@ where
             })
             .collect();
 
-        let assignments = K::assignments(&keys)
-            .map(|(index, key)| (index, key.clone()))
-            .collect::<Vec<_>>();
+        let assignments: Vec<_> = K::assignments(&keys).collect();
 
         let label = <BroadcastOperation<K> as Labeled>::LABEL;
 

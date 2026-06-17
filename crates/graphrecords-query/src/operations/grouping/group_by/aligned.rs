@@ -4,7 +4,8 @@ use crate::{
     execution::EvaluationCache,
     operands::{GroupOperand, OperandHandle, try_partition_by},
     operations::{
-        Apply, Kernel, KeyOperand, KeyedStream, OnMissing, Operation, OperationContext, Prepare,
+        Apply, ArgumentSource, Kernel, KeyOperand, Keyed, KeyedStream, OnMissing, Operation,
+        OperationContext, Prepare,
     },
     optimizer::{
         Cardinality, EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
@@ -32,22 +33,11 @@ impl<K: KeyOperand> Prepare for GroupByOperation<K> {
     }
 }
 
-fn resolve_key<'a, K>(
-    prepared: &K::Prepared<'a>,
-    index: &<K::Subject as IndexDomain>::Index<'a>,
-    label: &'static str,
-) -> QueryResult<Option<K::Key>>
-where
-    K: KeyOperand,
-{
-    K::resolve(prepared, index, label, OnMissing::Raise)
-}
-
 impl<I, V, K> Kernel<Indexed<I, V>, Multiple> for GroupByOperation<K>
 where
     I: IndexDomain,
     V: ValueType<Cost = Cardinality>,
-    K: KeyOperand<Subject = I>,
+    for<'a> K: KeyOperand<Subject = I> + ArgumentSource<Keyed<I>, Value<'a> = K::Key<'a>>,
 {
     type Output = GroupOperand<OperandHandle<Indexed<I, V>, Multiple>, K>;
 
@@ -59,7 +49,7 @@ where
         let label = Self::LABEL;
 
         let groups = try_partition_by(values, move |(index, _)| {
-            resolve_key::<K>(&keys, index, label)
+            K::resolve(&keys, index, label, OnMissing::Raise)
         })?;
 
         Ok(Box::new(

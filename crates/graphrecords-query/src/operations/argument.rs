@@ -79,12 +79,14 @@ impl Alignment for Unaligned {
 }
 
 pub trait ArgumentSource<A: Alignment>: Prepare + Explain + PlanIdentity + PlanInputs {
-    type Value: 'static + Clone;
+    type Value<'a>: Clone
+    where
+        Self: 'a;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a;
 
@@ -93,7 +95,7 @@ pub trait ArgumentSource<A: Alignment>: Prepare + Explain + PlanIdentity + PlanI
         address: &A::Address<'a>,
         label: &'static str,
         default: OnMissing,
-    ) -> QueryResult<Option<Self::Value>>
+    ) -> QueryResult<Option<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -150,12 +152,12 @@ impl Prepare for GraphRecordValue {
 }
 
 impl<A: Alignment> ArgumentSource<A> for GraphRecordValue {
-    type Value = Self;
+    type Value<'a> = Self;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {

@@ -27,12 +27,12 @@ impl<I: IndexDomain> Prepare for ValuesOperand<I> {
 }
 
 impl<I: IndexDomain> ArgumentSource<Keyed<I>> for ValuesOperand<I> {
-    type Value = GraphRecordValue;
+    type Value<'a> = GraphRecordValue;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -56,12 +56,12 @@ impl<I: IndexDomain> Prepare for ValueOperand<I> {
 }
 
 impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for ValueOperand<I> {
-    type Value = GraphRecordValue;
+    type Value<'a> = GraphRecordValue;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -85,12 +85,12 @@ impl Prepare for BareValueOperand {
 }
 
 impl<A: Alignment> ArgumentSource<A> for BareValueOperand {
-    type Value = GraphRecordValue;
+    type Value<'a> = GraphRecordValue;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {

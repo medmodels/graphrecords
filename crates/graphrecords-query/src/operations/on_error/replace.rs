@@ -67,7 +67,7 @@ impl<R: Prepare> Prepare for Replace<R> {
 impl<I, R> ElementKernel<Indexed<I, Scalar>> for Replace<R>
 where
     I: IndexDomain,
-    R: ArgumentSource<Keyed<I>, Value = GraphRecordValue>,
+    for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
 {
     type OutShape = Indexed<I, Scalar>;
 
@@ -96,7 +96,7 @@ where
 impl<I, R> EstimateCost<Replace<R>> for ValuesOperand<I>
 where
     I: IndexDomain,
-    R: ArgumentSource<Keyed<I>, Value = GraphRecordValue>,
+    for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
 {
     type OutputCost = <Self as Operand>::Cost;
 

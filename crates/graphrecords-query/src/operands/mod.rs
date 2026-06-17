@@ -26,14 +26,16 @@ use graphrecords_core::{
 };
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 pub use group::{GroupOperand, Grouped, GroupedIterator, try_partition_by};
-pub use indices::{IndexOperand, IndicesOperand};
+pub use indices::{IndexOperand, IndicesOperand, ReferenceOperand};
 pub use nodes::{AllNodes, NodeOperand};
 pub use ordered::Ordered;
 use std::{marker::PhantomData, sync::Arc};
 pub use values::{BareValueOperand, BareValuesOperand, ValueOperand, ValuesOperand};
 
 pub trait ValueType: 'static {
-    type Value: 'static + Clone;
+    type Value<'a>: 'a + Clone
+    where
+        Self: 'a;
     type Cost;
 }
 
@@ -47,31 +49,31 @@ pub struct IndexValue<I: IndexDomain>(PhantomData<I>);
 
 impl ValueType for Scalar {
     type Cost = Cardinality;
-    type Value = GraphRecordValue;
+    type Value<'a> = GraphRecordValue;
 }
 impl ValueType for Mask {
     type Cost = Selectivity;
-    type Value = bool;
+    type Value<'a> = bool;
 }
 impl ValueType for AttributeName {
     type Cost = Cardinality;
-    type Value = GraphRecordAttribute;
+    type Value<'a> = GraphRecordAttribute;
 }
 impl ValueType for Unit {
     type Cost = Cardinality;
-    type Value = ();
+    type Value<'a> = ();
 }
 impl<T: 'static + Clone> ValueType for MaskMap<T> {
     type Cost = Selectivity;
-    type Value = GrHashMap<T, bool>;
+    type Value<'a> = GrHashMap<T, bool>;
 }
 impl ValueType for AttributeSet {
     type Cost = Cardinality;
-    type Value = GrHashSet<GraphRecordAttribute>;
+    type Value<'a> = GrHashSet<GraphRecordAttribute>;
 }
 impl<I: IndexDomain> ValueType for IndexValue<I> {
     type Cost = Cardinality;
-    type Value = I;
+    type Value<'a> = I::Index<'a>;
 }
 
 pub trait ElementShape: 'static {
@@ -84,11 +86,11 @@ pub struct Bare<V: ValueType>(PhantomData<V>);
 
 impl<K: IndexDomain, V: ValueType> ElementShape for Indexed<K, V> {
     type Cost = V::Cost;
-    type Element<'a> = (K::Index<'a>, QueryResult<V::Value>);
+    type Element<'a> = (K::Index<'a>, QueryResult<V::Value<'a>>);
 }
 impl<V: ValueType> ElementShape for Bare<V> {
     type Cost = V::Cost;
-    type Element<'a> = QueryResult<V::Value>;
+    type Element<'a> = QueryResult<V::Value<'a>>;
 }
 
 pub trait Arity: 'static {

@@ -33,7 +33,7 @@ impl<M: Prepare> Prepare for XorOperation<M> {
 impl<I, M> ElementKernel<Indexed<I, Mask>> for XorOperation<M>
 where
     I: IndexDomain,
-    M: ArgumentSource<Keyed<I>, Value = bool>,
+    for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
     type OutShape = Indexed<I, Mask>;
 
@@ -53,7 +53,7 @@ where
 
 impl<I: IndexDomain, M> EstimateCost<XorOperation<M>> for BoolMaskOperand<I>
 where
-    M: ArgumentSource<Keyed<I>, Value = bool>,
+    for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
     type OutputCost = <Self as Operand>::Cost;
 
@@ -80,7 +80,7 @@ where
 
 impl<I: IndexDomain, M> BitXor<M> for BoolMaskOperand<I>
 where
-    M: ArgumentSource<Keyed<I>, Value = bool>,
+    for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
     type Output = Self;
 

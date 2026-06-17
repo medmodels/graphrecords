@@ -37,7 +37,7 @@ impl<M: Prepare> Prepare for FilterOperation<M> {
 impl<I, M> ElementKernel<Indexed<I, Unit>> for FilterOperation<M>
 where
     I: IndexDomain,
-    M: ArgumentSource<Keyed<I>, Value = bool>,
+    for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
     type OutShape = Indexed<I, Unit>;
 
@@ -64,7 +64,7 @@ where
 impl<I, M> EstimateCost<FilterOperation<M>> for OperandHandle<Indexed<I, Unit>, Multiple>
 where
     I: IndexDomain,
-    M: ArgumentSource<Keyed<I>, Value = bool>,
+    for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
     type OutputCost = <Self as Operand>::Cost;
 

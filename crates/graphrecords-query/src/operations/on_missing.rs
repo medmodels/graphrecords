@@ -12,7 +12,7 @@ use crate::{
 use graphrecords_core::GraphRecord;
 use std::{fmt, hash::Hasher, marker::PhantomData};
 
-pub trait MissingPolicy<I: IndexDomain, V: 'static + Clone>:
+pub trait MissingPolicy<I: IndexDomain, S: ArgumentSource<Keyed<I>>>:
     Clone + 'static + Explain + PlanIdentity + PlanInputs
 {
     type Prepared<'a>: Clone + 'a
@@ -30,10 +30,10 @@ pub trait MissingPolicy<I: IndexDomain, V: 'static + Clone>:
         index: &I::Index<'a>,
         label: &'static str,
         absent: Absent,
-    ) -> QueryResult<Option<V>>;
+    ) -> QueryResult<Option<S::Value<'a>>>;
 }
 
-impl<I: IndexDomain, V: 'static + Clone> MissingPolicy<I, V> for Drop {
+impl<I: IndexDomain, S: ArgumentSource<Keyed<I>>> MissingPolicy<I, S> for Drop {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -44,17 +44,17 @@ impl<I: IndexDomain, V: 'static + Clone> MissingPolicy<I, V> for Drop {
         Ok(())
     }
 
-    fn resolve_absent(
+    fn resolve_absent<'a>(
         _prepared: &(),
-        _index: &I::Index<'_>,
+        _index: &I::Index<'a>,
         _label: &'static str,
         _absent: Absent,
-    ) -> QueryResult<Option<V>> {
+    ) -> QueryResult<Option<S::Value<'a>>> {
         Ok(None)
     }
 }
 
-impl<I: IndexDomain, V: 'static + Clone> MissingPolicy<I, V> for Raise {
+impl<I: IndexDomain, S: ArgumentSource<Keyed<I>>> MissingPolicy<I, S> for Raise {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -65,20 +65,23 @@ impl<I: IndexDomain, V: 'static + Clone> MissingPolicy<I, V> for Raise {
         Ok(())
     }
 
-    fn resolve_absent(
+    fn resolve_absent<'a>(
         _prepared: &(),
-        index: &I::Index<'_>,
+        index: &I::Index<'a>,
         label: &'static str,
         absent: Absent,
-    ) -> QueryResult<Option<V>> {
+    ) -> QueryResult<Option<S::Value<'a>>> {
         Err(Failure::new(label, absent).at(index).help(
             "the argument has no value at this index; supply `on_missing(Drop)` or `on_missing(Replace(...))`",
         ))
     }
 }
 
-impl<I: IndexDomain, R: ArgumentSource<Keyed<I>> + Clone> MissingPolicy<I, R::Value>
-    for Replace<R>
+impl<I, S, R> MissingPolicy<I, S> for Replace<R>
+where
+    I: IndexDomain,
+    R: ArgumentSource<Keyed<I>> + Clone,
+    for<'a> S: ArgumentSource<Keyed<I>, Value<'a> = R::Value<'a>>,
 {
     type Prepared<'a> = R::Prepared<'a>;
 
@@ -95,7 +98,7 @@ impl<I: IndexDomain, R: ArgumentSource<Keyed<I>> + Clone> MissingPolicy<I, R::Va
         index: &I::Index<'a>,
         label: &'static str,
         _absent: Absent,
-    ) -> QueryResult<Option<R::Value>> {
+    ) -> QueryResult<Option<S::Value<'a>>> {
         match R::lookup(prepared, index) {
             Looked::Present(wrapped) => wrapped.clone().map(Some),
             Looked::Absent(absent) => Err(Failure::new(label, absent)
@@ -169,7 +172,7 @@ impl<I: IndexDomain, S: MaybeAbsent<I>, P: PlanInputs> PlanInputs for WithMissin
 
 impl<I: IndexDomain, S: MaybeAbsent<I> + Clone, P> Prepare for WithMissing<I, S, P>
 where
-    P: MissingPolicy<I, S::Value>,
+    P: MissingPolicy<I, S>,
 {
     type Prepared<'a>
         = (S::Prepared<'a>, P::Prepared<'a>)
@@ -190,14 +193,14 @@ where
 
 impl<I: IndexDomain, S: MaybeAbsent<I> + Clone, P> ArgumentSource<Keyed<I>> for WithMissing<I, S, P>
 where
-    P: MissingPolicy<I, S::Value>,
+    P: MissingPolicy<I, S>,
 {
-    type Value = S::Value;
+    type Value<'a> = S::Value<'a>;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -209,7 +212,7 @@ where
         index: &I::Index<'a>,
         label: &'static str,
         _default: OnMissing,
-    ) -> QueryResult<Option<Self::Value>>
+    ) -> QueryResult<Option<Self::Value<'a>>>
     where
         Self: 'a,
     {

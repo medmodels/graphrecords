@@ -31,7 +31,11 @@ impl<I: IndexDomain, V: ValueType> ElementKernel<Ordered<Indexed<I, V>>> for Uno
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<
-        Pipeline<'a, (I::Index<'a>, QueryResult<V::Value>), (I::Index<'a>, QueryResult<V::Value>)>,
+        Pipeline<
+            'a,
+            (I::Index<'a>, QueryResult<V::Value<'a>>),
+            (I::Index<'a>, QueryResult<V::Value<'a>>),
+        >,
     > {
         Ok(Pipeline::default())
     }
@@ -57,7 +61,7 @@ impl<V: ValueType> ElementKernel<Ordered<Bare<V>>> for UnorderedOperation {
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<Pipeline<'a, QueryResult<V::Value>, QueryResult<V::Value>>> {
+    ) -> QueryResult<Pipeline<'a, QueryResult<V::Value<'a>>, QueryResult<V::Value<'a>>>> {
         Ok(Pipeline::default())
     }
 }

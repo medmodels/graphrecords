@@ -33,9 +33,9 @@ impl<I: IndexDomain> Kernel<Indexed<I, Scalar>, Multiple> for Raise {
         values: KeyedStream<'a, I, Scalar, Multiple>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let raised = values
+        let raised: Vec<_> = values
             .map(|(index, result)| result.map(|value| (index, value)))
-            .collect::<QueryResult<Vec<_>>>()?;
+            .collect::<QueryResult<_>>()?;
 
         Ok(Box::new(
             raised.into_iter().map(|(index, value)| (index, Ok(value))),
@@ -63,7 +63,7 @@ impl Kernel<Bare<Scalar>, Multiple> for Raise {
         values: BareStream<'a, Scalar, Multiple>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let raised = values.collect::<QueryResult<Vec<_>>>()?;
+        let raised: Vec<_> = values.collect::<QueryResult<_>>()?;
 
         Ok(Box::new(raised.into_iter().map(Ok)))
     }

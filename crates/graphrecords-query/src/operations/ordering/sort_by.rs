@@ -63,7 +63,7 @@ where
     I: IndexDomain,
     V: ValueType,
     A: ArgumentSource<Keyed<I>>,
-    A::Value: PartialOrd + Display + Debug + Send + Sync,
+    for<'a> A::Value<'a>: PartialOrd + Display + Debug + Send + Sync,
 {
     type Output = SortedBy<I, V>;
 
@@ -74,7 +74,7 @@ where
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let label = Self::LABEL;
 
-        let mut collected = values
+        let mut collected: Vec<_> = values
             .filter_map(|(index, subject)| {
                 match A::resolve(&prepared, &index, label, OnMissing::Raise) {
                     Ok(Some(key)) => Some(Ok((index, subject, key))),
@@ -82,7 +82,7 @@ where
                     Err(failure) => Some(Err(failure)),
                 }
             })
-            .collect::<QueryResult<Vec<_>>>()?;
+            .collect::<QueryResult<_>>()?;
 
         let mut incomparable_keys = None;
         let mut incomparable_indices = None;
@@ -116,7 +116,7 @@ where
         });
 
         if let Some((first, second)) = incomparable_keys {
-            return Err(Failure::new(label, IncomparableValues { first, second }).help(
+            return Err(Failure::new(label, IncomparableValues { first: first.to_string(), second: second.to_string() }).help(
                 "narrow the values down first using is_string(), is_int(), is_float(), is_bool(), is_datetime() or is_duration()",
             ));
         }
@@ -125,7 +125,7 @@ where
             return Err(Failure::new(
                 label,
                 IncomparableIndices {
-                    value,
+                    value: value.to_string(),
                     first,
                     second,
                 },

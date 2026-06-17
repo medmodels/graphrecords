@@ -1,7 +1,7 @@
 use crate::{Operand, operations::Operation};
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{GraphRecordAttribute, GraphRecordValue, Group},
+    graphrecord::{GraphRecordAttribute, Group},
 };
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use std::{
@@ -85,7 +85,7 @@ impl Statistic for NodeAttributeCardinality {
                     .get(attribute)
                     .cloned()
             })
-            .collect::<GrHashSet<GraphRecordValue>>()
+            .collect::<GrHashSet<_>>()
             .len()
     }
 }
@@ -106,7 +106,7 @@ impl Statistic for EdgeAttributeCardinality {
                     .get(attribute)
                     .cloned()
             })
-            .collect::<GrHashSet<GraphRecordValue>>()
+            .collect::<GrHashSet<_>>()
             .len()
     }
 }

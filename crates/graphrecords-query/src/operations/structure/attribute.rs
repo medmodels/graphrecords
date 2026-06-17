@@ -1,5 +1,6 @@
 use crate::{
-    Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand, QueryResult, Scalar, Unit,
+    Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled, Multiple, Operand, QueryResult,
+    Scalar, Unit,
     execution::EvaluationCache,
     operands::{OperandHandle, ValuesOperand},
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
@@ -89,10 +90,7 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation
                     return (index, Ok(value.clone()));
                 }
 
-                let mut available = attributes
-                    .keys()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>();
+                let mut available: Vec<_> = attributes.keys().map(ToString::to_string).collect();
                 available.sort();
 
                 let help = if available.is_empty() {
@@ -120,6 +118,70 @@ impl<I: EntityAttributes> EstimateCost<AttributeOperation>
     for OperandHandle<Indexed<I, Unit>, Multiple>
 {
     type OutputCost = <ValuesOperand<I> as Operand>::Cost;
+
+    fn estimate(
+        _operation: &AttributeOperation,
+        input_cost: <Self as Operand>::Cost,
+        _stats: &Stats,
+    ) -> Self::OutputCost {
+        input_cost
+    }
+}
+
+impl<K: IndexDomain, E: EntityAttributes> ElementKernel<Indexed<K, IndexValue<E>>>
+    for AttributeOperation
+{
+    type OutShape = Indexed<K, Scalar>;
+
+    fn pipeline<'a>(
+        graphrecord: &'a GraphRecord,
+        attribute: Self::Prepared<'a>,
+    ) -> QueryResult<
+        Pipeline<
+            'a,
+            (K::Index<'a>, QueryResult<<E as IndexDomain>::Index<'a>>),
+            (K::Index<'a>, QueryResult<GraphRecordValue>),
+        >,
+    > {
+        Ok(Pipeline::default().map(
+            move |(key, reference): (K::Index<'a>, QueryResult<<E as IndexDomain>::Index<'a>>)| {
+                let value = reference.and_then(|entity| {
+                    let attributes = E::attributes(graphrecord, &entity);
+
+                    if let Some(value) = attributes.get(attribute) {
+                        return Ok(value.clone());
+                    }
+
+                    let mut available: Vec<_> =
+                        attributes.keys().map(ToString::to_string).collect();
+                    available.sort();
+
+                    let help = if available.is_empty() {
+                        "no attributes are present here".to_string()
+                    } else {
+                        format!("available attributes: {}", available.join(", "))
+                    };
+
+                    Err(Failure::new(
+                        Self::LABEL,
+                        MissingAttribute {
+                            attribute: attribute.clone(),
+                        },
+                    )
+                    .at(&key)
+                    .help(help))
+                });
+
+                (key, value)
+            },
+        ))
+    }
+}
+
+impl<K: IndexDomain, E: EntityAttributes> EstimateCost<AttributeOperation>
+    for OperandHandle<Indexed<K, IndexValue<E>>, Multiple>
+{
+    type OutputCost = <ValuesOperand<K> as Operand>::Cost;
 
     fn estimate(
         _operation: &AttributeOperation,

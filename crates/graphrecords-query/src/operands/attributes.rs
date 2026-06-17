@@ -31,12 +31,12 @@ impl<I: IndexDomain> Prepare for NestedAttributesOperand<I> {
 }
 
 impl<I: IndexDomain> ArgumentSource<Keyed<I>> for NestedAttributesOperand<I> {
-    type Value = GrHashSet<GraphRecordAttribute>;
+    type Value<'a> = GrHashSet<GraphRecordAttribute>;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -60,12 +60,12 @@ impl<I: IndexDomain> Prepare for AttributesOperand<I> {
 }
 
 impl<I: IndexDomain> ArgumentSource<Keyed<I>> for AttributesOperand<I> {
-    type Value = GraphRecordAttribute;
+    type Value<'a> = GraphRecordAttribute;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -89,12 +89,12 @@ impl<I: IndexDomain> Prepare for AttributeOperand<I> {
 }
 
 impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for AttributeOperand<I> {
-    type Value = GraphRecordAttribute;
+    type Value<'a> = GraphRecordAttribute;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -118,12 +118,12 @@ impl Prepare for BareAttributeOperand {
 }
 
 impl<A: Alignment> ArgumentSource<A> for BareAttributeOperand {
-    type Value = GraphRecordAttribute;
+    type Value<'a> = GraphRecordAttribute;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {

@@ -13,7 +13,7 @@ use graphrecords_core::{
 impl<I, A> ElementKernel<Indexed<I, Scalar>> for ModuloOperation<A>
 where
     I: IndexDomain,
-    A: ArgumentSource<Keyed<I>, Value = GraphRecordValue>,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
 {
     type OutShape = Indexed<I, Scalar>;
 
@@ -54,7 +54,7 @@ where
 
 impl<I: IndexDomain, A> EstimateCost<ModuloOperation<A>> for ValuesOperand<I>
 where
-    A: ArgumentSource<Keyed<I>, Value = GraphRecordValue>,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
     ModuloOperation<A>: Operation,
 {
     type OutputCost = <Self as Operand>::Cost;

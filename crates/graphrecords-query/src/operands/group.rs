@@ -43,7 +43,7 @@ pub struct Grouped<K, O>(PhantomData<(K, O)>);
 
 impl<K: GroupKey, O: Operand> ElementShape for Grouped<K, O> {
     type Cost = Cardinality;
-    type Element<'a> = (K::Key, QueryResult<O::ReturnValue<'a>>);
+    type Element<'a> = (K::Key<'a>, QueryResult<O::ReturnValue<'a>>);
 }
 
 pub type GroupOperand<O, K> = OperandHandle<Grouped<K, O>, Multiple>;

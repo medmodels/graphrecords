@@ -39,7 +39,7 @@ pub use graphrecords_macros::Operation;
 pub use grouping::{
     BroadcastOperation, GroupByOperation, GroupKey, KeyOperand, UngroupContext, Ungroupable,
 };
-pub use indexing::IndexOperation;
+pub use indexing::{IndexOperation, SelectOperation};
 pub use kernel::{BareStream, ElementKernel, Kernel, KeyedStream, Pipeline};
 pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
 pub use on_error::{Drop, ErrorPolicy, Raise, Replace};
@@ -52,6 +52,10 @@ use std::{
 };
 pub use structure::{
     AttributeOperation, FilterOperation, InGroupOperation, IndicesInGroup, MissingAttribute,
+};
+pub use traversal::{
+    EdgeSource, EdgeTarget, EdgesOperation, NeighborsOperation, NodesOperation, Relation,
+    RelationOperation,
 };
 
 pub trait Operation: Prepare + OperationInputs + Explain {}

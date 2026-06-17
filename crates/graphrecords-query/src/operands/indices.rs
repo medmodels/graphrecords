@@ -11,9 +11,10 @@ use std::sync::Arc;
 
 pub type IndicesOperand<I> = OperandHandle<Indexed<I, IndexValue<I>>, Multiple>;
 pub type IndexOperand<I> = OperandHandle<Indexed<I, IndexValue<I>>, Single>;
+pub type ReferenceOperand<K, E> = OperandHandle<Indexed<K, IndexValue<E>>, Multiple>;
 
 impl<I: IndexDomain> Prepare for IndicesOperand<I> {
-    type Prepared<'a> = Arc<GrHashMap<I::Index<'a>, QueryResult<I>>>;
+    type Prepared<'a> = Arc<GrHashMap<I::Index<'a>, QueryResult<I::Index<'a>>>>;
 
     fn prepare<'a>(
         &'a self,
@@ -25,12 +26,12 @@ impl<I: IndexDomain> Prepare for IndicesOperand<I> {
 }
 
 impl<I: IndexDomain> ArgumentSource<Keyed<I>> for IndicesOperand<I> {
-    type Value = I;
+    type Value<'a> = I::Index<'a>;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -42,7 +43,7 @@ impl<I: IndexDomain> ArgumentSource<Keyed<I>> for IndicesOperand<I> {
 }
 
 impl<I: IndexDomain> Prepare for IndexOperand<I> {
-    type Prepared<'a> = Option<QueryResult<I>>;
+    type Prepared<'a> = Option<QueryResult<I::Index<'a>>>;
 
     fn prepare<'a>(
         &'a self,
@@ -54,12 +55,12 @@ impl<I: IndexDomain> Prepare for IndexOperand<I> {
 }
 
 impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for IndexOperand<I> {
-    type Value = I;
+    type Value<'a> = I::Index<'a>;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value>>
+    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {

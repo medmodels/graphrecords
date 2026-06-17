@@ -23,7 +23,7 @@ fn combine_masks<'a, I, M>(
 ) -> Pipeline<'a, MaskElement<'a, I>, MaskElement<'a, I>>
 where
     I: IndexDomain,
-    M: ArgumentSource<Keyed<I>, Value = bool>,
+    M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
     M::Prepared<'a>: 'a,
 {
     Pipeline::default().filter_map(move |(index, left)| match left {

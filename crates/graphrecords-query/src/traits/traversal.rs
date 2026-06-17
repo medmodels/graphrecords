@@ -28,3 +28,21 @@ pub trait TargetNode {
 
     fn target_node(&self) -> Self::ReturnOperand;
 }
+
+pub trait Nodes {
+    type ReturnOperand;
+
+    fn nodes(&self) -> Self::ReturnOperand;
+}
+
+pub trait ViaSourceNode {
+    type ReturnOperand;
+
+    fn via_source_node(&self) -> Self::ReturnOperand;
+}
+
+pub trait ViaTargetNode {
+    type ReturnOperand;
+
+    fn via_target_node(&self) -> Self::ReturnOperand;
+}
