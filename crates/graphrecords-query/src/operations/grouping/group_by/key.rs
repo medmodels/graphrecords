@@ -1,6 +1,6 @@
 use crate::{
     BoxedIterator, IndexDomain,
-    operands::ValuesOperand,
+    operands::{ReferenceOperand, ValuesOperand},
     operations::{ArgumentSource, Keyed, MissingPolicy, WithMissing},
     traits::MaybeAbsent,
 };
@@ -46,6 +46,27 @@ impl<I: IndexDomain> KeyOperand for ValuesOperand<I> {
     fn assignments<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
     ) -> BoxedIterator<'prepared, (I::Index<'a>, GraphRecordValue)>
+    where
+        Self: 'a,
+    {
+        Box::new(
+            prepared.iter().filter_map(|(index, key)| {
+                key.as_ref().ok().map(|key| (index.clone(), key.clone()))
+            }),
+        )
+    }
+}
+
+impl<K: IndexDomain, E: IndexDomain> GroupKey for ReferenceOperand<K, E> {
+    type Key<'a> = E::Index<'a>;
+}
+
+impl<K: IndexDomain, E: IndexDomain> KeyOperand for ReferenceOperand<K, E> {
+    type Subject = K;
+
+    fn assignments<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+    ) -> BoxedIterator<'prepared, (K::Index<'a>, E::Index<'a>)>
     where
         Self: 'a,
     {

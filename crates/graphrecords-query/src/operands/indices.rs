@@ -13,8 +13,8 @@ pub type IndicesOperand<I> = OperandHandle<Indexed<I, IndexValue<I>>, Multiple>;
 pub type IndexOperand<I> = OperandHandle<Indexed<I, IndexValue<I>>, Single>;
 pub type ReferenceOperand<K, E> = OperandHandle<Indexed<K, IndexValue<E>>, Multiple>;
 
-impl<I: IndexDomain> Prepare for IndicesOperand<I> {
-    type Prepared<'a> = Arc<GrHashMap<I::Index<'a>, QueryResult<I::Index<'a>>>>;
+impl<K: IndexDomain, E: IndexDomain> Prepare for ReferenceOperand<K, E> {
+    type Prepared<'a> = Arc<GrHashMap<K::Index<'a>, QueryResult<E::Index<'a>>>>;
 
     fn prepare<'a>(
         &'a self,
@@ -25,12 +25,12 @@ impl<I: IndexDomain> Prepare for IndicesOperand<I> {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<Keyed<I>> for IndicesOperand<I> {
-    type Value<'a> = I::Index<'a>;
+impl<K: IndexDomain, E: IndexDomain> ArgumentSource<Keyed<K>> for ReferenceOperand<K, E> {
+    type Value<'a> = E::Index<'a>;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-        index: &I::Index<'a>,
+        index: &K::Index<'a>,
     ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
