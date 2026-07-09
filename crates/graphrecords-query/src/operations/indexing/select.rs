@@ -1,6 +1,6 @@
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, IndexValue, Indexed, Multiple, Operand, QueryResult,
-    Unit,
+    EvaluateOperand, Explain, IndexDomain, IndexValue, Indexed, Multiple, Operand, OrderState,
+    QueryResult, Unit,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -27,14 +27,14 @@ impl Prepare for SelectOperation {
     }
 }
 
-impl<K: IndexDomain, E: IndexDomain> Kernel<Indexed<K, IndexValue<E>>, Multiple>
+impl<K: IndexDomain, E: IndexDomain, O: OrderState> Kernel<Indexed<K, IndexValue<E>>, Multiple<O>>
     for SelectOperation
 {
     type Output = OperandHandle<Indexed<E, Unit>, Multiple>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, K, IndexValue<E>, Multiple>,
+        values: KeyedStream<'a, K, IndexValue<E>, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let targets: GrHashSet<_> = values
@@ -45,8 +45,8 @@ impl<K: IndexDomain, E: IndexDomain> Kernel<Indexed<K, IndexValue<E>>, Multiple>
     }
 }
 
-impl<K: IndexDomain, E: IndexDomain> EstimateCost<SelectOperation>
-    for OperandHandle<Indexed<K, IndexValue<E>>, Multiple>
+impl<K: IndexDomain, E: IndexDomain, O: OrderState> EstimateCost<SelectOperation>
+    for OperandHandle<Indexed<K, IndexValue<E>>, Multiple<O>>
 {
     type OutputCost = <OperandHandle<Indexed<E, Unit>, Multiple> as Operand>::Cost;
 

@@ -1,8 +1,9 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Multiple, Operand, Ordered, QueryResult, ValueType,
+    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
+    QueryResult, Unsorted, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
-    operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
+    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
     optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Unordered,
 };
@@ -24,25 +25,22 @@ impl Prepare for UnorderedOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> ElementKernel<Ordered<Indexed<I, V>>> for UnorderedOperation {
-    type OutShape = Indexed<I, V>;
+impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple<O>>
+    for UnorderedOperation
+{
+    type Output = OperandHandle<Indexed<I, V>, Multiple<Unsorted>>;
 
-    fn pipeline<'a>(
+    fn execute<'a>(
         _graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<
-            'a,
-            (I::Index<'a>, QueryResult<V::Value<'a>>),
-            (I::Index<'a>, QueryResult<V::Value<'a>>),
-        >,
-    > {
-        Ok(Pipeline::default())
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(values)
     }
 }
 
-impl<I: IndexDomain, V: ValueType> EstimateCost<UnorderedOperation>
-    for OperandHandle<Indexed<I, V>, Multiple>
+impl<I: IndexDomain, V: ValueType, O: OrderState> EstimateCost<UnorderedOperation>
+    for OperandHandle<Indexed<I, V>, Multiple<O>>
 {
     type OutputCost = <Self as Operand>::Cost;
 
@@ -55,18 +53,21 @@ impl<I: IndexDomain, V: ValueType> EstimateCost<UnorderedOperation>
     }
 }
 
-impl<V: ValueType> ElementKernel<Ordered<Bare<V>>> for UnorderedOperation {
-    type OutShape = Bare<V>;
+impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for UnorderedOperation {
+    type Output = OperandHandle<Bare<V>, Multiple<Unsorted>>;
 
-    fn pipeline<'a>(
+    fn execute<'a>(
         _graphrecord: &'a GraphRecord,
+        values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<Pipeline<'a, QueryResult<V::Value<'a>>, QueryResult<V::Value<'a>>>> {
-        Ok(Pipeline::default())
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(values)
     }
 }
 
-impl<V: ValueType> EstimateCost<UnorderedOperation> for OperandHandle<Bare<V>, Multiple> {
+impl<V: ValueType, O: OrderState> EstimateCost<UnorderedOperation>
+    for OperandHandle<Bare<V>, Multiple<O>>
+{
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(

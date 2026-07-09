@@ -1,7 +1,7 @@
 use super::IncomparableIndices;
 use crate::{
     EvaluateOperand, Explain, Failure, IncomparableValues, IndexDomain, Indexed, Labeled, Multiple,
-    Operand, Ordered, QueryResult, ValueType,
+    Operand, OrderState, QueryResult, Sorted, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -24,7 +24,7 @@ pub struct SortByOperation<A> {
     key: A,
 }
 
-type SortedBy<I, V> = OperandHandle<Ordered<Indexed<I, V>>, Multiple>;
+type SortedBy<I, V> = OperandHandle<Indexed<I, V>, Multiple<Sorted>>;
 
 impl<A: Prepare> Prepare for SortByOperation<A> {
     type Prepared<'a>
@@ -41,11 +41,12 @@ impl<A: Prepare> Prepare for SortByOperation<A> {
     }
 }
 
-impl<I, V, A> EstimateCost<SortByOperation<A>> for OperandHandle<Indexed<I, V>, Multiple>
+impl<I, V, A, O> EstimateCost<SortByOperation<A>> for OperandHandle<Indexed<I, V>, Multiple<O>>
 where
     I: IndexDomain,
     V: ValueType,
     A: ArgumentSource<Keyed<I>>,
+    O: OrderState,
 {
     type OutputCost = <Self as Operand>::Cost;
 
@@ -58,18 +59,19 @@ where
     }
 }
 
-impl<I, V, A> Kernel<Indexed<I, V>, Multiple> for SortByOperation<A>
+impl<I, V, A, O> Kernel<Indexed<I, V>, Multiple<O>> for SortByOperation<A>
 where
     I: IndexDomain,
     V: ValueType,
     A: ArgumentSource<Keyed<I>>,
+    O: OrderState,
     for<'a> A::Value<'a>: PartialOrd + Display + Debug + Send + Sync,
 {
     type Output = SortedBy<I, V>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, V, Multiple>,
+        values: KeyedStream<'a, I, V, Multiple<O>>,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let label = Self::LABEL;

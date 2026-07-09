@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Operand, QueryResult, Scalar,
+    Bare, Explain, IndexDomain, Indexed, Operand, OrderState, QueryResult, Scalar,
     execution::EvaluationCache,
     operands::{BareValuesOperand, ValuesOperand},
     operations::{
@@ -46,7 +46,7 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, Scalar>> for Drop {
     }
 }
 
-impl<I: IndexDomain> EstimateCost<Drop> for ValuesOperand<I> {
+impl<I: IndexDomain, O: OrderState> EstimateCost<Drop> for ValuesOperand<I, O> {
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(
@@ -71,7 +71,7 @@ impl ElementKernel<Bare<Scalar>> for Drop {
     }
 }
 
-impl EstimateCost<Drop> for BareValuesOperand {
+impl<O: OrderState> EstimateCost<Drop> for BareValuesOperand<O> {
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(

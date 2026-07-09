@@ -1,5 +1,5 @@
 use crate::{
-    Explain, IndexDomain, Indexed, Labeled, Multiple, Operand, QueryResult, Unit,
+    Explain, IndexDomain, Indexed, Labeled, Multiple, Operand, OrderState, QueryResult, Unit,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -61,9 +61,10 @@ where
     }
 }
 
-impl<I, M> EstimateCost<FilterOperation<M>> for OperandHandle<Indexed<I, Unit>, Multiple>
+impl<I, M, O> EstimateCost<FilterOperation<M>> for OperandHandle<Indexed<I, Unit>, Multiple<O>>
 where
     I: IndexDomain,
+    O: OrderState,
     for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
     type OutputCost = <Self as Operand>::Cost;

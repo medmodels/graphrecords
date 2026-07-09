@@ -1,5 +1,5 @@
 use crate::{
-    Explain, IndexDomain, Indexed, Mask, Not, Operand, QueryResult,
+    Explain, IndexDomain, Indexed, Mask, Not, Operand, OrderState, QueryResult,
     execution::EvaluationCache,
     operands::BoolMaskOperand,
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
@@ -41,7 +41,7 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, Mask>> for NotOperation {
     }
 }
 
-impl<I: IndexDomain> EstimateCost<NotOperation> for BoolMaskOperand<I> {
+impl<I: IndexDomain, O: OrderState> EstimateCost<NotOperation> for BoolMaskOperand<I, O> {
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(

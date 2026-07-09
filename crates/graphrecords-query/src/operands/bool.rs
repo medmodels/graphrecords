@@ -1,6 +1,7 @@
 use super::OperandHandle;
 use crate::{
     BoxedIterator, Definite, EvaluateOperand, IndexDomain, Indexed, Mask, MaskMap, Multiple,
+    OrderState, Unsorted,
     error::QueryResult,
     execution::EvaluationCache,
     operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
@@ -11,11 +12,12 @@ use std::sync::Arc;
 
 pub type NestedBoolMaskIterator<'a, I, T> = BoxedIterator<'a, (<I as IndexDomain>::Index<'a>, T)>;
 
-pub type NestedBoolMaskOperand<I, T> = OperandHandle<Indexed<I, MaskMap<T>>, Multiple>;
-pub type BoolMaskOperand<I> = OperandHandle<Indexed<I, Mask>, Multiple>;
+pub type NestedBoolMaskOperand<I, T, O = Unsorted> =
+    OperandHandle<Indexed<I, MaskMap<T>>, Multiple<O>>;
+pub type BoolMaskOperand<I, O = Unsorted> = OperandHandle<Indexed<I, Mask>, Multiple<O>>;
 pub type BoolOperand<I> = OperandHandle<Indexed<I, Mask>, Definite>;
 
-impl<I: IndexDomain, T: 'static + Clone> Prepare for NestedBoolMaskOperand<I, T> {
+impl<I: IndexDomain, T: 'static + Clone, O: OrderState> Prepare for NestedBoolMaskOperand<I, T, O> {
     type Prepared<'a> = Arc<GrHashMap<I::Index<'a>, QueryResult<GrHashMap<T, bool>>>>;
 
     fn prepare<'a>(
@@ -27,7 +29,9 @@ impl<I: IndexDomain, T: 'static + Clone> Prepare for NestedBoolMaskOperand<I, T>
     }
 }
 
-impl<I: IndexDomain, T: 'static + Clone> ArgumentSource<Keyed<I>> for NestedBoolMaskOperand<I, T> {
+impl<I: IndexDomain, T: 'static + Clone, O: OrderState> ArgumentSource<Keyed<I>>
+    for NestedBoolMaskOperand<I, T, O>
+{
     type Value<'a> = GrHashMap<T, bool>;
 
     fn lookup<'a, 'prepared>(
@@ -44,7 +48,7 @@ impl<I: IndexDomain, T: 'static + Clone> ArgumentSource<Keyed<I>> for NestedBool
     }
 }
 
-impl<I: IndexDomain> Prepare for BoolMaskOperand<I> {
+impl<I: IndexDomain, O: OrderState> Prepare for BoolMaskOperand<I, O> {
     type Prepared<'a> = Arc<GrHashMap<I::Index<'a>, QueryResult<bool>>>;
 
     fn prepare<'a>(
@@ -56,7 +60,7 @@ impl<I: IndexDomain> Prepare for BoolMaskOperand<I> {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<Keyed<I>> for BoolMaskOperand<I> {
+impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for BoolMaskOperand<I, O> {
     type Value<'a> = bool;
 
     fn lookup<'a, 'prepared>(

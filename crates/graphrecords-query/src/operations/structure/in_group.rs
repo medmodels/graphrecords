@@ -1,5 +1,6 @@
 use crate::{
-    Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Multiple, Operand, QueryResult, Unit,
+    Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Multiple, Operand, OrderState,
+    QueryResult, Unit,
     execution::EvaluationCache,
     operands::{BoolMaskOperand, OperandHandle},
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
@@ -96,8 +97,8 @@ impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
     }
 }
 
-impl<I: IndicesInGroup> EstimateCost<InGroupOperation>
-    for OperandHandle<Indexed<I, Unit>, Multiple>
+impl<I: IndicesInGroup, O: OrderState> EstimateCost<InGroupOperation>
+    for OperandHandle<Indexed<I, Unit>, Multiple<O>>
 {
     type OutputCost = <BoolMaskOperand<I> as Operand>::Cost;
 

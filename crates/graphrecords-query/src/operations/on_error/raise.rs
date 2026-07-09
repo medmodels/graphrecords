@@ -1,5 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, QueryResult, Scalar,
+    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
+    QueryResult, Scalar,
     execution::EvaluationCache,
     operands::{BareValuesOperand, ValuesOperand},
     operations::{
@@ -25,12 +26,12 @@ impl Prepare for Raise {
     }
 }
 
-impl<I: IndexDomain> Kernel<Indexed<I, Scalar>, Multiple> for Raise {
-    type Output = ValuesOperand<I>;
+impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for Raise {
+    type Output = ValuesOperand<I, O>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Scalar, Multiple>,
+        values: KeyedStream<'a, I, Scalar, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let raised: Vec<_> = values
@@ -43,7 +44,7 @@ impl<I: IndexDomain> Kernel<Indexed<I, Scalar>, Multiple> for Raise {
     }
 }
 
-impl<I: IndexDomain> EstimateCost<Raise> for ValuesOperand<I> {
+impl<I: IndexDomain, O: OrderState> EstimateCost<Raise> for ValuesOperand<I, O> {
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(
@@ -55,12 +56,12 @@ impl<I: IndexDomain> EstimateCost<Raise> for ValuesOperand<I> {
     }
 }
 
-impl Kernel<Bare<Scalar>, Multiple> for Raise {
-    type Output = BareValuesOperand;
+impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for Raise {
+    type Output = BareValuesOperand<O>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, Scalar, Multiple>,
+        values: BareStream<'a, Scalar, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let raised: Vec<_> = values.collect::<QueryResult<_>>()?;
@@ -69,7 +70,7 @@ impl Kernel<Bare<Scalar>, Multiple> for Raise {
     }
 }
 
-impl EstimateCost<Raise> for BareValuesOperand {
+impl<O: OrderState> EstimateCost<Raise> for BareValuesOperand<O> {
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(

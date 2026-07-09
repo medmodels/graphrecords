@@ -1,6 +1,6 @@
 use super::ModuloOperation;
 use crate::{
-    Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult, Scalar,
+    Failure, IndexDomain, Indexed, Labeled, Operand, OrderState, QueryResult, Scalar,
     operands::ValuesOperand,
     operations::{ArgumentSource, ElementKernel, Keyed, OnMissing, Operation, Pipeline},
     optimizer::{EstimateCost, Stats},
@@ -52,7 +52,7 @@ where
     }
 }
 
-impl<I: IndexDomain, A> EstimateCost<ModuloOperation<A>> for ValuesOperand<I>
+impl<I: IndexDomain, A, O: OrderState> EstimateCost<ModuloOperation<A>> for ValuesOperand<I, O>
 where
     for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
     ModuloOperation<A>: Operation,
@@ -71,18 +71,17 @@ where
 #[cfg(test)]
 mod test {
     use crate::{
-        Indexed, Multiple, Ordered, Scalar,
-        operands::OperandHandle,
+        Sorted,
+        operands::ValuesOperand,
         operations::{Apply, ModuloOperation},
     };
     use graphrecords_core::graphrecord::{GraphRecordValue, NodeIndex};
 
     #[test]
-    fn test_modulo_auto_lifts_onto_ordered_operand() {
+    fn test_modulo_auto_lifts_onto_sorted_operand() {
         fn assert_applies()
         where
-            OperandHandle<Ordered<Indexed<NodeIndex, Scalar>>, Multiple>:
-                Apply<ModuloOperation<GraphRecordValue>>,
+            ValuesOperand<NodeIndex, Sorted>: Apply<ModuloOperation<GraphRecordValue>>,
         {
         }
 

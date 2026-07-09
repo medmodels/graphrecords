@@ -75,7 +75,7 @@ where
 
 impl<O, K, P> EstimateCost<P> for OperandHandle<Grouped<K, O>, Multiple>
 where
-    O: Operand,
+    O: Apply<P>,
     K: GroupKey,
     P: Operation,
 {

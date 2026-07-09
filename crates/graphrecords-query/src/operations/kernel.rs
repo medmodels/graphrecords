@@ -1,6 +1,6 @@
 use crate::{
     Arity, Bare, BoxedIterator, ElementShape, EvaluateOperand, IndexDomain, Indexed, Multiple,
-    Operand, Ordered, QueryResult, ValueType,
+    Operand, OrderState, QueryResult, ValueType,
     operands::OperandHandle,
     operations::{Apply, Operation},
     optimizer::EstimateCost,
@@ -115,32 +115,15 @@ pub trait ElementKernel<S: ElementShape>: Operation {
     ) -> QueryResult<Pipeline<'a, S::Element<'a>, <Self::OutShape as ElementShape>::Element<'a>>>;
 }
 
-impl<S: ElementShape, P: ElementKernel<S>> Kernel<S, Multiple> for P {
-    type Output = OperandHandle<P::OutShape, Multiple>;
+impl<S: ElementShape, O: OrderState, P: ElementKernel<S>> Kernel<S, Multiple<O>> for P {
+    type Output = OperandHandle<P::OutShape, Multiple<O>>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
-        values: <OperandHandle<S, Multiple> as EvaluateOperand>::ReturnValue<'a>,
+        values: <OperandHandle<S, Multiple<O>> as EvaluateOperand>::ReturnValue<'a>,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(P::pipeline(graphrecord, prepared)?.execute(values))
-    }
-}
-
-impl<S: ElementShape, P: ElementKernel<S>> ElementKernel<Ordered<S>> for P {
-    type OutShape = Ordered<<P as ElementKernel<S>>::OutShape>;
-
-    fn pipeline<'a>(
-        graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<
-            'a,
-            <Ordered<S> as ElementShape>::Element<'a>,
-            <Self::OutShape as ElementShape>::Element<'a>,
-        >,
-    > {
-        <P as ElementKernel<S>>::pipeline(graphrecord, prepared)
     }
 }
 

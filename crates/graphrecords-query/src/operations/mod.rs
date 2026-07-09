@@ -44,7 +44,9 @@ pub use kernel::{BareStream, ElementKernel, Kernel, KeyedStream, Pipeline};
 pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
 pub use on_error::{Drop, ErrorPolicy, Raise, Replace};
 pub use on_missing::{MissingPolicy, WithMissing};
-pub use ordering::{SortByOperation, SortOperation, UnorderedOperation};
+pub use ordering::{
+    FirstOperation, LastOperation, SortByOperation, SortOperation, UnorderedOperation,
+};
 use std::{
     any::Any,
     fmt,
@@ -60,10 +62,8 @@ pub use traversal::{
 
 pub trait Operation: Prepare + OperationInputs + Explain {}
 
-pub trait Apply<P: Operation>:
-    Operand + EstimateCost<P, OutputCost = <<Self as Apply<P>>::Output as Operand>::Cost>
-{
-    type Output: Operand;
+pub trait Apply<P: Operation>: Operand + EstimateCost<P> {
+    type Output: Operand<Cost = <Self as EstimateCost<P>>::OutputCost>;
 
     fn apply<'a>(
         graphrecord: &'a GraphRecord,

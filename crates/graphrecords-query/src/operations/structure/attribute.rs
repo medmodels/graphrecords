@@ -1,6 +1,6 @@
 use crate::{
-    Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled, Multiple, Operand, QueryResult,
-    Scalar, Unit,
+    Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled, Multiple, Operand, OrderState,
+    QueryResult, Scalar, Unit,
     execution::EvaluationCache,
     operands::{OperandHandle, ValuesOperand},
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
@@ -114,8 +114,8 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation
     }
 }
 
-impl<I: EntityAttributes> EstimateCost<AttributeOperation>
-    for OperandHandle<Indexed<I, Unit>, Multiple>
+impl<I: EntityAttributes, O: OrderState> EstimateCost<AttributeOperation>
+    for OperandHandle<Indexed<I, Unit>, Multiple<O>>
 {
     type OutputCost = <ValuesOperand<I> as Operand>::Cost;
 
@@ -178,8 +178,8 @@ impl<K: IndexDomain, E: EntityAttributes> ElementKernel<Indexed<K, IndexValue<E>
     }
 }
 
-impl<K: IndexDomain, E: EntityAttributes> EstimateCost<AttributeOperation>
-    for OperandHandle<Indexed<K, IndexValue<E>>, Multiple>
+impl<K: IndexDomain, E: EntityAttributes, O: OrderState> EstimateCost<AttributeOperation>
+    for OperandHandle<Indexed<K, IndexValue<E>>, Multiple<O>>
 {
     type OutputCost = <ValuesOperand<K> as Operand>::Cost;
 

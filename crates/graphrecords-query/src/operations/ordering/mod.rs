@@ -1,7 +1,11 @@
+mod first;
+mod last;
 mod sort;
 mod sort_by;
 mod unordered;
 
+pub use first::FirstOperation;
+pub use last::LastOperation;
 pub use sort::SortOperation;
 pub use sort_by::SortByOperation;
 use std::{

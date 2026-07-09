@@ -1,7 +1,7 @@
 use super::OperandHandle;
 use crate::{
     AttributeName, AttributeSet, Bare, BoxedIterator, EvaluateOperand, IndexDomain, Indexed,
-    Multiple, Single,
+    Multiple, OrderState, Single, Unsorted,
     error::QueryResult,
     execution::EvaluationCache,
     operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
@@ -12,13 +12,14 @@ use std::sync::Arc;
 
 pub type NestedAttributesIterator<'a, I, T> = BoxedIterator<'a, (<I as IndexDomain>::Index<'a>, T)>;
 
-pub type NestedAttributesOperand<I> = OperandHandle<Indexed<I, AttributeSet>, Multiple>;
-pub type AttributesOperand<I> = OperandHandle<Indexed<I, AttributeName>, Multiple>;
-pub type BareAttributesOperand = OperandHandle<Bare<AttributeName>, Multiple>;
+pub type NestedAttributesOperand<I, O = Unsorted> =
+    OperandHandle<Indexed<I, AttributeSet>, Multiple<O>>;
+pub type AttributesOperand<I, O = Unsorted> = OperandHandle<Indexed<I, AttributeName>, Multiple<O>>;
+pub type BareAttributesOperand<O = Unsorted> = OperandHandle<Bare<AttributeName>, Multiple<O>>;
 pub type AttributeOperand<I> = OperandHandle<Indexed<I, AttributeName>, Single>;
 pub type BareAttributeOperand = OperandHandle<Bare<AttributeName>, Single>;
 
-impl<I: IndexDomain> Prepare for NestedAttributesOperand<I> {
+impl<I: IndexDomain, O: OrderState> Prepare for NestedAttributesOperand<I, O> {
     type Prepared<'a> = Arc<GrHashMap<I::Index<'a>, QueryResult<GrHashSet<GraphRecordAttribute>>>>;
 
     fn prepare<'a>(
@@ -30,7 +31,7 @@ impl<I: IndexDomain> Prepare for NestedAttributesOperand<I> {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<Keyed<I>> for NestedAttributesOperand<I> {
+impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for NestedAttributesOperand<I, O> {
     type Value<'a> = GrHashSet<GraphRecordAttribute>;
 
     fn lookup<'a, 'prepared>(
@@ -47,7 +48,7 @@ impl<I: IndexDomain> ArgumentSource<Keyed<I>> for NestedAttributesOperand<I> {
     }
 }
 
-impl<I: IndexDomain> Prepare for AttributesOperand<I> {
+impl<I: IndexDomain, O: OrderState> Prepare for AttributesOperand<I, O> {
     type Prepared<'a> = Arc<GrHashMap<I::Index<'a>, QueryResult<GraphRecordAttribute>>>;
 
     fn prepare<'a>(
@@ -59,7 +60,7 @@ impl<I: IndexDomain> Prepare for AttributesOperand<I> {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<Keyed<I>> for AttributesOperand<I> {
+impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for AttributesOperand<I, O> {
     type Value<'a> = GraphRecordAttribute;
 
     fn lookup<'a, 'prepared>(

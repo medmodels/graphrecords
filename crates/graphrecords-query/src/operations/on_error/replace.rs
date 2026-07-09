@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Operand, QueryResult, Scalar,
+    Bare, Explain, IndexDomain, Indexed, Operand, OrderState, QueryResult, Scalar,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operands::{BareValuesOperand, ValuesOperand},
@@ -93,9 +93,10 @@ where
     }
 }
 
-impl<I, R> EstimateCost<Replace<R>> for ValuesOperand<I>
+impl<I, R, O> EstimateCost<Replace<R>> for ValuesOperand<I, O>
 where
     I: IndexDomain,
+    O: OrderState,
     for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
 {
     type OutputCost = <Self as Operand>::Cost;
@@ -125,7 +126,7 @@ impl ElementKernel<Bare<Scalar>> for Replace<GraphRecordValue> {
     }
 }
 
-impl EstimateCost<Replace<GraphRecordValue>> for BareValuesOperand {
+impl<O: OrderState> EstimateCost<Replace<GraphRecordValue>> for BareValuesOperand<O> {
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(

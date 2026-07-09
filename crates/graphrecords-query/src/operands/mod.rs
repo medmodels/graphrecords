@@ -4,7 +4,6 @@ mod edges;
 mod group;
 mod indices;
 mod nodes;
-mod ordered;
 mod values;
 
 use crate::{
@@ -28,7 +27,6 @@ use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 pub use group::{GroupOperand, Grouped, GroupedIterator, try_partition_by};
 pub use indices::{IndexOperand, IndicesOperand, ReferenceOperand};
 pub use nodes::{AllNodes, NodeOperand};
-pub use ordered::Ordered;
 use std::{marker::PhantomData, sync::Arc};
 pub use values::{BareValueOperand, BareValuesOperand, ValueOperand, ValuesOperand};
 
@@ -97,11 +95,19 @@ pub trait Arity: 'static {
     type Container<'a, X: 'a>: 'a;
 }
 
-pub struct Multiple;
+pub trait OrderState: 'static {}
+
+pub struct Sorted;
+pub struct Unsorted;
+
+impl OrderState for Sorted {}
+impl OrderState for Unsorted {}
+
+pub struct Multiple<O: OrderState = Unsorted>(PhantomData<O>);
 pub struct Single;
 pub struct Definite;
 
-impl Arity for Multiple {
+impl<O: OrderState> Arity for Multiple<O> {
     type Container<'a, X: 'a> = BoxedIterator<'a, X>;
 }
 impl Arity for Single {

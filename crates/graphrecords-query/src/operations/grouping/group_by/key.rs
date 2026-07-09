@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, IndexDomain,
+    BoxedIterator, IndexDomain, OrderState,
     operands::{ReferenceOperand, ValuesOperand},
     operations::{ArgumentSource, Keyed, MissingPolicy, WithMissing},
     traits::MaybeAbsent,
@@ -28,7 +28,7 @@ pub trait KeyOperand: GroupKey + ArgumentSource<Keyed<Self::Subject>> {
         Self: 'a;
 }
 
-impl<I: IndexDomain> GroupKey for ValuesOperand<I> {
+impl<I: IndexDomain, O: OrderState> GroupKey for ValuesOperand<I, O> {
     type Key<'a> = GraphRecordValue;
 }
 
@@ -40,7 +40,7 @@ impl GroupKey for EdgeIndex {
     type Key<'a> = <Self as IndexDomain>::Index<'a>;
 }
 
-impl<I: IndexDomain> KeyOperand for ValuesOperand<I> {
+impl<I: IndexDomain, O: OrderState> KeyOperand for ValuesOperand<I, O> {
     type Subject = I;
 
     fn assignments<'a, 'prepared>(
@@ -57,11 +57,11 @@ impl<I: IndexDomain> KeyOperand for ValuesOperand<I> {
     }
 }
 
-impl<K: IndexDomain, E: IndexDomain> GroupKey for ReferenceOperand<K, E> {
+impl<K: IndexDomain, E: IndexDomain, O: OrderState> GroupKey for ReferenceOperand<K, E, O> {
     type Key<'a> = E::Index<'a>;
 }
 
-impl<K: IndexDomain, E: IndexDomain> KeyOperand for ReferenceOperand<K, E> {
+impl<K: IndexDomain, E: IndexDomain, O: OrderState> KeyOperand for ReferenceOperand<K, E, O> {
     type Subject = K;
 
     fn assignments<'a, 'prepared>(

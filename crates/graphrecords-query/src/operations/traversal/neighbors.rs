@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Indexed, Multiple, Operand,
+    BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Indexed, Multiple, Operand, OrderState,
     QueryResult, Unit,
     execution::EvaluationCache,
     operands::{NodeOperand, OperandHandle},
@@ -29,12 +29,12 @@ impl Prepare for NeighborsOperation {
     }
 }
 
-impl Kernel<Indexed<NodeIndex, Unit>, Multiple> for NeighborsOperation {
+impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for NeighborsOperation {
     type Output = NodeOperand;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, NodeIndex, Unit, Multiple>,
+        values: KeyedStream<'a, NodeIndex, Unit, Multiple<O>>,
         direction: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let neighbors: GrHashSet<_> = values
@@ -72,7 +72,9 @@ impl Kernel<Indexed<NodeIndex, Unit>, Multiple> for NeighborsOperation {
     }
 }
 
-impl EstimateCost<NeighborsOperation> for OperandHandle<Indexed<NodeIndex, Unit>, Multiple> {
+impl<O: OrderState> EstimateCost<NeighborsOperation>
+    for OperandHandle<Indexed<NodeIndex, Unit>, Multiple<O>>
+{
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(

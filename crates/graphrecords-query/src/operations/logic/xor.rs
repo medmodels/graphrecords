@@ -1,6 +1,6 @@
 use super::combine_masks;
 use crate::{
-    Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, Xor,
+    Explain, IndexDomain, Indexed, Labeled, Mask, Operand, OrderState, QueryResult, Xor,
     execution::EvaluationCache,
     operands::BoolMaskOperand,
     operations::{
@@ -51,7 +51,7 @@ where
     }
 }
 
-impl<I: IndexDomain, M> EstimateCost<XorOperation<M>> for BoolMaskOperand<I>
+impl<I: IndexDomain, M, O: OrderState> EstimateCost<XorOperation<M>> for BoolMaskOperand<I, O>
 where
     for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {

@@ -1,5 +1,5 @@
 use crate::{
-    Explain, IndexDomain, IndexValue, Indexed, Multiple, Operand, QueryResult, Unit,
+    Explain, IndexDomain, IndexValue, Indexed, Multiple, Operand, OrderState, QueryResult, Unit,
     execution::EvaluationCache,
     operands::{IndicesOperand, OperandHandle},
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
@@ -44,7 +44,9 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, Unit>> for IndexOperation {
     }
 }
 
-impl<I: IndexDomain> EstimateCost<IndexOperation> for OperandHandle<Indexed<I, Unit>, Multiple> {
+impl<I: IndexDomain, O: OrderState> EstimateCost<IndexOperation>
+    for OperandHandle<Indexed<I, Unit>, Multiple<O>>
+{
     type OutputCost = <IndicesOperand<I> as Operand>::Cost;
 
     fn estimate(

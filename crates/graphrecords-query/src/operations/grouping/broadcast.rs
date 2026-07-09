@@ -3,7 +3,7 @@ use crate::{
     execution::EvaluationCache,
     operands::{GroupOperand, ValueOperand, ValuesOperand},
     operations::{Absent, Apply, KeyOperand, Operation, OperationContext, Prepare},
-    optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Broadcast,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
@@ -25,6 +25,22 @@ impl<K: KeyOperand> Prepare for BroadcastOperation<K> {
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::Prepared<'a>> {
         Prepare::prepare(&self.key, graphrecord, cache)
+    }
+}
+
+impl<I, K> EstimateCost<BroadcastOperation<K>> for GroupOperand<ValueOperand<I>, K>
+where
+    I: IndexDomain,
+    K: KeyOperand<Subject = I> + Operand,
+{
+    type OutputCost = <ValuesOperand<I> as Operand>::Cost;
+
+    fn estimate(
+        _operation: &BroadcastOperation<K>,
+        input_cost: <Self as Operand>::Cost,
+        _stats: &Stats,
+    ) -> Self::OutputCost {
+        input_cost
     }
 }
 

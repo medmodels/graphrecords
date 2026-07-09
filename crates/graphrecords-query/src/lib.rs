@@ -22,8 +22,8 @@ use graphrecords_core::{
 };
 pub use operands::{
     Arity, AttributeName, AttributeSet, Bare, Definite, EdgeOperand, ElementShape, EvaluateOperand,
-    IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand, Operand, Ordered, Return, Scalar,
-    Single, Unit, ValueType,
+    IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand, Operand, OrderState, Return, Scalar,
+    Single, Sorted, Unit, Unsorted, ValueType,
 };
 use std::{fmt::Display, hash::Hash};
 pub use traits::*;

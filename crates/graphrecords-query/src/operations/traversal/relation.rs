@@ -1,5 +1,5 @@
 use crate::{
-    Explain, IndexDomain, IndexValue, Indexed, Multiple, Operand, QueryResult,
+    Explain, IndexDomain, IndexValue, Indexed, Multiple, Operand, OrderState, QueryResult,
     execution::EvaluationCache,
     operands::{OperandHandle, ReferenceOperand},
     operations::{ElementKernel, Operation, Pipeline, Prepare},
@@ -79,8 +79,8 @@ impl<R: Relation, K: IndexDomain> ElementKernel<Indexed<K, IndexValue<R::From>>>
     }
 }
 
-impl<R: Relation, K: IndexDomain> EstimateCost<RelationOperation<R>>
-    for OperandHandle<Indexed<K, IndexValue<R::From>>, Multiple>
+impl<R: Relation, K: IndexDomain, O: OrderState> EstimateCost<RelationOperation<R>>
+    for OperandHandle<Indexed<K, IndexValue<R::From>>, Multiple<O>>
 {
     type OutputCost = <ReferenceOperand<K, R::To> as Operand>::Cost;
 

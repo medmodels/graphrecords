@@ -1,6 +1,6 @@
 use crate::{
     EvaluateOperand, Explain, Failure, IncomparableValues, IndexDomain, Indexed, Labeled, Multiple,
-    Operand, QueryResult, Scalar,
+    Operand, OrderState, QueryResult, Scalar,
     execution::EvaluationCache,
     operands::{ValueOperand, ValuesOperand},
     operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -28,7 +28,7 @@ impl Prepare for MaxOperation {
     }
 }
 
-impl<I: IndexDomain> EstimateCost<MaxOperation> for ValuesOperand<I> {
+impl<I: IndexDomain, O: OrderState> EstimateCost<MaxOperation> for ValuesOperand<I, O> {
     type OutputCost = <ValueOperand<I> as Operand>::Cost;
 
     fn estimate(
@@ -40,12 +40,12 @@ impl<I: IndexDomain> EstimateCost<MaxOperation> for ValuesOperand<I> {
     }
 }
 
-impl<I: IndexDomain> Kernel<Indexed<I, Scalar>, Multiple> for MaxOperation {
+impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for MaxOperation {
     type Output = ValueOperand<I>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        mut values: KeyedStream<'a, I, Scalar, Multiple>,
+        mut values: KeyedStream<'a, I, Scalar, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let best = values.try_fold(None, |best, (index, result)| {

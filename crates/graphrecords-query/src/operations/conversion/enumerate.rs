@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, Ordered, Positional,
-    QueryResult, ValueType,
+    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, Positional,
+    QueryResult, Sorted, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -26,24 +26,24 @@ impl Prepare for EnumerateOperation {
     }
 }
 
-impl<V: ValueType> Kernel<Ordered<Bare<V>>, Multiple> for EnumerateOperation {
-    type Output = OperandHandle<Ordered<Indexed<Positional, V>>, Multiple>;
+impl<V: ValueType> Kernel<Bare<V>, Multiple<Sorted>> for EnumerateOperation {
+    type Output = OperandHandle<Indexed<Positional, V>, Multiple<Sorted>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, V, Multiple>,
+        values: BareStream<'a, V, Multiple<Sorted>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(Box::new(values.enumerate()))
     }
 }
 
-impl<I: IndexDomain, V: ValueType> Kernel<Ordered<Indexed<I, V>>, Multiple> for EnumerateOperation {
-    type Output = OperandHandle<Ordered<Indexed<Positional, V>>, Multiple>;
+impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Multiple<Sorted>> for EnumerateOperation {
+    type Output = OperandHandle<Indexed<Positional, V>, Multiple<Sorted>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, V, Multiple>,
+        values: KeyedStream<'a, I, V, Multiple<Sorted>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(Box::new(
@@ -54,8 +54,8 @@ impl<I: IndexDomain, V: ValueType> Kernel<Ordered<Indexed<I, V>>, Multiple> for 
     }
 }
 
-impl<V: ValueType> EstimateCost<EnumerateOperation> for OperandHandle<Ordered<Bare<V>>, Multiple> {
-    type OutputCost = <OperandHandle<Ordered<Indexed<Positional, V>>, Multiple> as Operand>::Cost;
+impl<V: ValueType> EstimateCost<EnumerateOperation> for OperandHandle<Bare<V>, Multiple<Sorted>> {
+    type OutputCost = <OperandHandle<Indexed<Positional, V>, Multiple<Sorted>> as Operand>::Cost;
 
     fn estimate(
         _operation: &EnumerateOperation,
@@ -67,9 +67,9 @@ impl<V: ValueType> EstimateCost<EnumerateOperation> for OperandHandle<Ordered<Ba
 }
 
 impl<I: IndexDomain, V: ValueType> EstimateCost<EnumerateOperation>
-    for OperandHandle<Ordered<Indexed<I, V>>, Multiple>
+    for OperandHandle<Indexed<I, V>, Multiple<Sorted>>
 {
-    type OutputCost = <OperandHandle<Ordered<Indexed<Positional, V>>, Multiple> as Operand>::Cost;
+    type OutputCost = <OperandHandle<Indexed<Positional, V>, Multiple<Sorted>> as Operand>::Cost;
 
     fn estimate(
         _operation: &EnumerateOperation,

@@ -1,7 +1,7 @@
 use super::IncomparableIndices;
 use crate::{
     Bare, EvaluateOperand, Explain, Failure, IncomparableValues, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, Ordered, QueryResult, ValueType,
+    Multiple, Operand, OrderState, QueryResult, Sorted, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -30,8 +30,8 @@ impl Prepare for SortOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> EstimateCost<SortOperation>
-    for OperandHandle<Indexed<I, V>, Multiple>
+impl<I: IndexDomain, V: ValueType, O: OrderState> EstimateCost<SortOperation>
+    for OperandHandle<Indexed<I, V>, Multiple<O>>
 {
     type OutputCost = <Self as Operand>::Cost;
 
@@ -44,7 +44,9 @@ impl<I: IndexDomain, V: ValueType> EstimateCost<SortOperation>
     }
 }
 
-impl<V: ValueType> EstimateCost<SortOperation> for OperandHandle<Bare<V>, Multiple> {
+impl<V: ValueType, O: OrderState> EstimateCost<SortOperation>
+    for OperandHandle<Bare<V>, Multiple<O>>
+{
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(
@@ -56,17 +58,18 @@ impl<V: ValueType> EstimateCost<SortOperation> for OperandHandle<Bare<V>, Multip
     }
 }
 
-impl<I, V> Kernel<Indexed<I, V>, Multiple> for SortOperation
+impl<I, V, O> Kernel<Indexed<I, V>, Multiple<O>> for SortOperation
 where
     I: IndexDomain,
     V: ValueType,
+    O: OrderState,
     for<'a> V::Value<'a>: PartialOrd + Display + Debug + Send + Sync,
 {
-    type Output = OperandHandle<Ordered<Indexed<I, V>>, Multiple>;
+    type Output = OperandHandle<Indexed<I, V>, Multiple<Sorted>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, V, Multiple>,
+        values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let mut collected: Vec<_> = values
@@ -132,16 +135,17 @@ where
     }
 }
 
-impl<V> Kernel<Bare<V>, Multiple> for SortOperation
+impl<V, O> Kernel<Bare<V>, Multiple<O>> for SortOperation
 where
     V: ValueType,
+    O: OrderState,
     for<'a> V::Value<'a>: PartialOrd + Display + Debug + Send + Sync,
 {
-    type Output = OperandHandle<Ordered<Bare<V>>, Multiple>;
+    type Output = OperandHandle<Bare<V>, Multiple<Sorted>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, V, Multiple>,
+        values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let mut collected: Vec<_> = values.collect::<QueryResult<_>>()?;

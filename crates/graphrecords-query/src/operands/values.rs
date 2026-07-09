@@ -1,6 +1,6 @@
 use super::OperandHandle;
 use crate::{
-    Bare, EvaluateOperand, IndexDomain, Indexed, Multiple, Scalar, Single,
+    Bare, EvaluateOperand, IndexDomain, Indexed, Multiple, OrderState, Scalar, Single, Unsorted,
     error::QueryResult,
     execution::EvaluationCache,
     operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
@@ -9,12 +9,12 @@ use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 use graphrecords_utils::aliases::GrHashMap;
 use std::sync::Arc;
 
-pub type ValuesOperand<I> = OperandHandle<Indexed<I, Scalar>, Multiple>;
-pub type BareValuesOperand = OperandHandle<Bare<Scalar>, Multiple>;
+pub type ValuesOperand<I, O = Unsorted> = OperandHandle<Indexed<I, Scalar>, Multiple<O>>;
+pub type BareValuesOperand<O = Unsorted> = OperandHandle<Bare<Scalar>, Multiple<O>>;
 pub type ValueOperand<I> = OperandHandle<Indexed<I, Scalar>, Single>;
 pub type BareValueOperand = OperandHandle<Bare<Scalar>, Single>;
 
-impl<I: IndexDomain> Prepare for ValuesOperand<I> {
+impl<I: IndexDomain, O: OrderState> Prepare for ValuesOperand<I, O> {
     type Prepared<'a> = Arc<GrHashMap<I::Index<'a>, QueryResult<GraphRecordValue>>>;
 
     fn prepare<'a>(
@@ -26,7 +26,7 @@ impl<I: IndexDomain> Prepare for ValuesOperand<I> {
     }
 }
 
-impl<I: IndexDomain> ArgumentSource<Keyed<I>> for ValuesOperand<I> {
+impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for ValuesOperand<I, O> {
     type Value<'a> = GraphRecordValue;
 
     fn lookup<'a, 'prepared>(

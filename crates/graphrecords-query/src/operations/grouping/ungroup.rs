@@ -1,5 +1,6 @@
 use crate::{
-    BoxedIterator, EvaluateContext, EvaluateOperand, Explain, IndexDomain, Operand, QueryResult,
+    BoxedIterator, EvaluateContext, EvaluateOperand, Explain, IndexDomain, Operand, OrderState,
+    QueryResult,
     execution::EvaluationCache,
     operands::{
         BareValueOperand, BareValuesOperand, GroupOperand, GroupedIterator, ValueOperand,
@@ -41,8 +42,8 @@ impl<I: IndexDomain> Ungroupable for ValueOperand<I> {
     }
 }
 
-impl<I: IndexDomain> Ungroupable for ValuesOperand<I> {
-    type Ungrouped<K: GroupKey> = Self;
+impl<I: IndexDomain, O: OrderState> Ungroupable for ValuesOperand<I, O> {
+    type Ungrouped<K: GroupKey> = ValuesOperand<I>;
 
     fn flatten<'a, K: GroupKey>(
         grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
@@ -75,8 +76,8 @@ impl Ungroupable for BareValueOperand {
     }
 }
 
-impl Ungroupable for BareValuesOperand {
-    type Ungrouped<K: GroupKey> = Self;
+impl<O: OrderState> Ungroupable for BareValuesOperand<O> {
+    type Ungrouped<K: GroupKey> = BareValuesOperand;
 
     fn flatten<'a, K: GroupKey>(
         grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,

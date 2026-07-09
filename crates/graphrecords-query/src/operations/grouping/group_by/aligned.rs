@@ -1,6 +1,6 @@
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple, Operand, QueryResult,
-    ValueType,
+    EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple, Operand, OrderState,
+    QueryResult, ValueType,
     execution::EvaluationCache,
     operands::{GroupOperand, OperandHandle, try_partition_by},
     operations::{
@@ -33,17 +33,18 @@ impl<K: KeyOperand> Prepare for GroupByOperation<K> {
     }
 }
 
-impl<I, V, K> Kernel<Indexed<I, V>, Multiple> for GroupByOperation<K>
+impl<I, V, K, O> Kernel<Indexed<I, V>, Multiple<O>> for GroupByOperation<K>
 where
     I: IndexDomain,
     V: ValueType<Cost = Cardinality>,
+    O: OrderState,
     for<'a> K: KeyOperand<Subject = I> + ArgumentSource<Keyed<I>, Value<'a> = K::Key<'a>>,
 {
-    type Output = GroupOperand<OperandHandle<Indexed<I, V>, Multiple>, K>;
+    type Output = GroupOperand<OperandHandle<Indexed<I, V>, Multiple<O>>, K>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, V, Multiple>,
+        values: KeyedStream<'a, I, V, Multiple<O>>,
         keys: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let label = Self::LABEL;
@@ -58,11 +59,12 @@ where
     }
 }
 
-impl<I, V, K> EstimateCost<GroupByOperation<K>> for OperandHandle<Indexed<I, V>, Multiple>
+impl<I, V, K, O> EstimateCost<GroupByOperation<K>> for OperandHandle<Indexed<I, V>, Multiple<O>>
 where
     I: IndexDomain,
     V: ValueType<Cost = Cardinality>,
     K: KeyOperand<Subject = I>,
+    O: OrderState,
 {
     type OutputCost = <GroupOperand<Self, K> as Operand>::Cost;
 
