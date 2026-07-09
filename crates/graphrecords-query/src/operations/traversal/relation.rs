@@ -3,7 +3,10 @@ use crate::{
     execution::EvaluationCache,
     operands::{OperandHandle, ReferenceOperand},
     operations::{ElementKernel, Operation, Pipeline, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{
+        Cardinality, EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
+        Stats, ValueCost,
+    },
 };
 use graphrecords_core::GraphRecord;
 
@@ -16,6 +19,10 @@ pub trait Relation: Prepare + Clone + Explain + PlanIdentity + PlanInputs {
         graphrecord: &'a GraphRecord,
         from: <Self::From as IndexDomain>::Index<'a>,
     ) -> QueryResult<<Self::To as IndexDomain>::Index<'a>>;
+
+    fn codomain_count(_stats: &Stats) -> Option<Cardinality> {
+        None
+    }
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
@@ -87,8 +94,13 @@ impl<R: Relation, K: IndexDomain, O: OrderState> EstimateCost<RelationOperation<
     fn estimate(
         _operation: &RelationOperation<R>,
         input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
+        stats: &Stats,
     ) -> Self::OutputCost {
-        input_cost
+        let distinct = match R::codomain_count(stats) {
+            Some(codomain) => codomain.min(input_cost.distinct()),
+            None => input_cost.distinct(),
+        };
+
+        ValueCost::new(input_cost.rows(), distinct)
     }
 }

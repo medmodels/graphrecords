@@ -55,7 +55,7 @@ impl<K: IndexDomain, E: IndexDomain, O: OrderState> EstimateCost<SelectOperation
         input_cost: <Self as Operand>::Cost,
         _stats: &Stats,
     ) -> Self::OutputCost {
-        input_cost
+        input_cost.distinct()
     }
 }
 

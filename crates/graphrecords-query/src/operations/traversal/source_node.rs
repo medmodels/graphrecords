@@ -3,7 +3,7 @@ use crate::{
     execution::EvaluationCache,
     operands::{EdgeOperand, NodeOperand, ReferenceOperand},
     operations::{OperationContext, Prepare, Relation, RelationOperation},
-    optimizer::{PlanIdentity, PlanInputs},
+    optimizer::{Cardinality, Count, CountKind, PlanIdentity, PlanInputs, Stats},
     traits::{Index, Select, SourceNode, ViaSourceNode},
 };
 use graphrecords_core::{
@@ -41,6 +41,10 @@ impl Relation for EdgeSource {
             .map_err(|error| Failure::new(Self::LABEL, error))?;
 
         Ok(source)
+    }
+
+    fn codomain_count(stats: &Stats) -> Option<Cardinality> {
+        Some(Cardinality(stats.get::<Count>(&CountKind::Nodes)))
     }
 }
 

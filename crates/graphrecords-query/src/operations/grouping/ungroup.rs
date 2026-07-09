@@ -8,15 +8,18 @@ use crate::{
     },
     operations::GroupKey,
     optimizer::{
-        Cardinality, Cost, MatchInputs, OptimizePlan, OptimizerHints, PlanNode, Session, Stats,
-        Transformed,
+        Cost, GroupCost, MatchInputs, OptimizePlan, OptimizerHints, PlanNode, Session, Stats,
+        Transformed, ValueCost,
     },
     traits::Ungroup,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 
 pub trait Ungroupable: Operand {
-    type Ungrouped<K: GroupKey>: Operand<Cost = Cardinality>;
+    type UngroupedCost;
+    type Ungrouped<K: GroupKey>: Operand<Cost = Self::UngroupedCost>;
+
+    fn flatten_cost(cost: GroupCost<Self::Cost>) -> Self::UngroupedCost;
 
     fn flatten<'a, K: GroupKey>(
         grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
@@ -26,7 +29,12 @@ pub trait Ungroupable: Operand {
 }
 
 impl<I: IndexDomain> Ungroupable for ValueOperand<I> {
+    type UngroupedCost = ValueCost;
     type Ungrouped<K: GroupKey> = ValuesOperand<I>;
+
+    fn flatten_cost(cost: GroupCost<ValueCost>) -> ValueCost {
+        cost.total()
+    }
 
     fn flatten<'a, K: GroupKey>(
         grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
@@ -43,7 +51,12 @@ impl<I: IndexDomain> Ungroupable for ValueOperand<I> {
 }
 
 impl<I: IndexDomain, O: OrderState> Ungroupable for ValuesOperand<I, O> {
+    type UngroupedCost = ValueCost;
     type Ungrouped<K: GroupKey> = ValuesOperand<I>;
+
+    fn flatten_cost(cost: GroupCost<ValueCost>) -> ValueCost {
+        cost.total()
+    }
 
     fn flatten<'a, K: GroupKey>(
         grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
@@ -60,7 +73,12 @@ impl<I: IndexDomain, O: OrderState> Ungroupable for ValuesOperand<I, O> {
 }
 
 impl Ungroupable for BareValueOperand {
+    type UngroupedCost = ValueCost;
     type Ungrouped<K: GroupKey> = BareValuesOperand;
+
+    fn flatten_cost(cost: GroupCost<ValueCost>) -> ValueCost {
+        cost.total()
+    }
 
     fn flatten<'a, K: GroupKey>(
         grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
@@ -77,7 +95,12 @@ impl Ungroupable for BareValueOperand {
 }
 
 impl<O: OrderState> Ungroupable for BareValuesOperand<O> {
+    type UngroupedCost = ValueCost;
     type Ungrouped<K: GroupKey> = BareValuesOperand;
+
+    fn flatten_cost(cost: GroupCost<ValueCost>) -> ValueCost {
+        cost.total()
+    }
 
     fn flatten<'a, K: GroupKey>(
         grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
@@ -94,7 +117,12 @@ impl<O: OrderState> Ungroupable for BareValuesOperand<O> {
 }
 
 impl<Inner: Ungroupable, KInner: GroupKey> Ungroupable for GroupOperand<Inner, KInner> {
+    type UngroupedCost = GroupCost<Inner::UngroupedCost>;
     type Ungrouped<KOuter: GroupKey> = GroupOperand<Inner::Ungrouped<KInner>, KOuter>;
+
+    fn flatten_cost(cost: GroupCost<Self::Cost>) -> Self::UngroupedCost {
+        cost.map(Inner::flatten_cost)
+    }
 
     fn flatten<'a, KOuter: GroupKey>(
         grouped: GroupedIterator<'a, KOuter::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
@@ -124,7 +152,7 @@ impl<O: Ungroupable, K: GroupKey> UngroupContext<O, K> {
 
 impl<O: Ungroupable, K: GroupKey> Cost<O::Ungrouped<K>> for UngroupContext<O, K> {
     fn cost(&self, stats: &Stats) -> <O::Ungrouped<K> as Operand>::Cost {
-        self.group.context().cost(stats)
+        O::flatten_cost(self.group.context().cost(stats))
     }
 }
 

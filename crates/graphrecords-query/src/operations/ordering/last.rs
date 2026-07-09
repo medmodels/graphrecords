@@ -1,11 +1,12 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, QueryResult, Single,
-    Sorted, ValueType,
+    AttributeName, AttributeSet, Bare, EvaluateOperand, Explain, IndexDomain, IndexValue, Indexed,
+    Multiple, Operand, QueryResult, Scalar, Single, Sorted, Unit, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
     optimizer::{
-        Cardinality, EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
+        Cardinality, EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
+        Stats, ValueCost,
     },
     traits::Last,
 };
@@ -30,7 +31,7 @@ impl Prepare for LastOperation {
 impl<I, V> Kernel<Indexed<I, V>, Multiple<Sorted>> for LastOperation
 where
     I: IndexDomain,
-    V: ValueType<Cost = Cardinality>,
+    V: ValueType,
 {
     type Output = OperandHandle<Indexed<I, V>, Single>;
 
@@ -43,12 +44,10 @@ where
     }
 }
 
-impl<I, V> EstimateCost<LastOperation> for OperandHandle<Indexed<I, V>, Multiple<Sorted>>
-where
-    I: IndexDomain,
-    V: ValueType<Cost = Cardinality>,
+impl<I: IndexDomain> EstimateCost<LastOperation>
+    for OperandHandle<Indexed<I, Unit>, Multiple<Sorted>>
 {
-    type OutputCost = <OperandHandle<Indexed<I, V>, Single> as Operand>::Cost;
+    type OutputCost = <OperandHandle<Indexed<I, Unit>, Single> as Operand>::Cost;
 
     fn estimate(
         _operation: &LastOperation,
@@ -59,9 +58,65 @@ where
     }
 }
 
+impl<I: IndexDomain> EstimateCost<LastOperation>
+    for OperandHandle<Indexed<I, Scalar>, Multiple<Sorted>>
+{
+    type OutputCost = <OperandHandle<Indexed<I, Scalar>, Single> as Operand>::Cost;
+
+    fn estimate(
+        _operation: &LastOperation,
+        _input_cost: <Self as Operand>::Cost,
+        _stats: &Stats,
+    ) -> Self::OutputCost {
+        ValueCost::new(Cardinality(1), Cardinality(1))
+    }
+}
+
+impl<I: IndexDomain> EstimateCost<LastOperation>
+    for OperandHandle<Indexed<I, AttributeName>, Multiple<Sorted>>
+{
+    type OutputCost = <OperandHandle<Indexed<I, AttributeName>, Single> as Operand>::Cost;
+
+    fn estimate(
+        _operation: &LastOperation,
+        _input_cost: <Self as Operand>::Cost,
+        _stats: &Stats,
+    ) -> Self::OutputCost {
+        ValueCost::new(Cardinality(1), Cardinality(1))
+    }
+}
+
+impl<I: IndexDomain> EstimateCost<LastOperation>
+    for OperandHandle<Indexed<I, AttributeSet>, Multiple<Sorted>>
+{
+    type OutputCost = <OperandHandle<Indexed<I, AttributeSet>, Single> as Operand>::Cost;
+
+    fn estimate(
+        _operation: &LastOperation,
+        _input_cost: <Self as Operand>::Cost,
+        _stats: &Stats,
+    ) -> Self::OutputCost {
+        Cardinality(1)
+    }
+}
+
+impl<I: IndexDomain, E: IndexDomain> EstimateCost<LastOperation>
+    for OperandHandle<Indexed<I, IndexValue<E>>, Multiple<Sorted>>
+{
+    type OutputCost = <OperandHandle<Indexed<I, IndexValue<E>>, Single> as Operand>::Cost;
+
+    fn estimate(
+        _operation: &LastOperation,
+        _input_cost: <Self as Operand>::Cost,
+        _stats: &Stats,
+    ) -> Self::OutputCost {
+        ValueCost::new(Cardinality(1), Cardinality(1))
+    }
+}
+
 impl<V> Kernel<Bare<V>, Multiple<Sorted>> for LastOperation
 where
-    V: ValueType<Cost = Cardinality>,
+    V: ValueType,
 {
     type Output = OperandHandle<Bare<V>, Single>;
 
@@ -74,18 +129,15 @@ where
     }
 }
 
-impl<V> EstimateCost<LastOperation> for OperandHandle<Bare<V>, Multiple<Sorted>>
-where
-    V: ValueType<Cost = Cardinality>,
-{
-    type OutputCost = <OperandHandle<Bare<V>, Single> as Operand>::Cost;
+impl EstimateCost<LastOperation> for OperandHandle<Bare<Scalar>, Multiple<Sorted>> {
+    type OutputCost = <OperandHandle<Bare<Scalar>, Single> as Operand>::Cost;
 
     fn estimate(
         _operation: &LastOperation,
         _input_cost: <Self as Operand>::Cost,
         _stats: &Stats,
     ) -> Self::OutputCost {
-        Cardinality(1)
+        ValueCost::new(Cardinality(1), Cardinality(1))
     }
 }
 

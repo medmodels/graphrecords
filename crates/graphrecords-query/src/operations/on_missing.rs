@@ -129,6 +129,10 @@ impl<I: IndexDomain, S: MaybeAbsent<I>, P> WithMissing<I, S, P> {
             index: PhantomData,
         }
     }
+
+    pub(crate) const fn inner(&self) -> &S {
+        &self.inner
+    }
 }
 
 impl<I: IndexDomain, S: MaybeAbsent<I> + Clone, P: Clone> Clone for WithMissing<I, S, P> {

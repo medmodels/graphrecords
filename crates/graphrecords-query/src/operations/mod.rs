@@ -53,7 +53,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 pub use structure::{
-    AttributeOperation, FilterOperation, InGroupOperation, IndicesInGroup, MissingAttribute,
+    AttributeOperation, EntityAttributes, FilterOperation, InGroupOperation, IndicesInGroup,
+    MissingAttribute,
 };
 pub use traversal::{
     EdgeSource, EdgeTarget, EdgesOperation, NeighborsOperation, NodesOperation, Relation,

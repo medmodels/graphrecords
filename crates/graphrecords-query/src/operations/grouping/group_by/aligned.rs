@@ -1,6 +1,6 @@
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple, Operand, OrderState,
-    QueryResult, ValueType,
+    AttributeName, AttributeSet, EvaluateOperand, Explain, IndexDomain, IndexValue, Indexed,
+    Labeled, Multiple, Operand, OrderState, QueryResult, Scalar, Unit, ValueType,
     execution::EvaluationCache,
     operands::{GroupOperand, OperandHandle, try_partition_by},
     operations::{
@@ -8,7 +8,8 @@ use crate::{
         OperationContext, Prepare,
     },
     optimizer::{
-        Cardinality, EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
+        EstimateCost, GroupCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
+        ValueCost,
     },
     traits::GroupBy,
 };
@@ -36,7 +37,7 @@ impl<K: KeyOperand> Prepare for GroupByOperation<K> {
 impl<I, V, K, O> Kernel<Indexed<I, V>, Multiple<O>> for GroupByOperation<K>
 where
     I: IndexDomain,
-    V: ValueType<Cost = Cardinality>,
+    V: ValueType,
     O: OrderState,
     for<'a> K: KeyOperand<Subject = I> + ArgumentSource<Keyed<I>, Value<'a> = K::Key<'a>>,
 {
@@ -59,21 +60,111 @@ where
     }
 }
 
-impl<I, V, K, O> EstimateCost<GroupByOperation<K>> for OperandHandle<Indexed<I, V>, Multiple<O>>
+impl<I, K, O> EstimateCost<GroupByOperation<K>> for OperandHandle<Indexed<I, Unit>, Multiple<O>>
 where
     I: IndexDomain,
-    V: ValueType<Cost = Cardinality>,
     K: KeyOperand<Subject = I>,
     O: OrderState,
 {
     type OutputCost = <GroupOperand<Self, K> as Operand>::Cost;
 
     fn estimate(
-        _operation: &GroupByOperation<K>,
+        operation: &GroupByOperation<K>,
         input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
+        stats: &Stats,
     ) -> Self::OutputCost {
-        input_cost
+        let (groups, per_group) = input_cost.split(operation.key.distinct_count(stats));
+
+        GroupCost { groups, per_group }
+    }
+}
+
+impl<I, K, O> EstimateCost<GroupByOperation<K>> for OperandHandle<Indexed<I, Scalar>, Multiple<O>>
+where
+    I: IndexDomain,
+    K: KeyOperand<Subject = I>,
+    O: OrderState,
+{
+    type OutputCost = <GroupOperand<Self, K> as Operand>::Cost;
+
+    fn estimate(
+        operation: &GroupByOperation<K>,
+        input_cost: <Self as Operand>::Cost,
+        stats: &Stats,
+    ) -> Self::OutputCost {
+        let (groups, rows) = input_cost.rows().split(operation.key.distinct_count(stats));
+
+        GroupCost {
+            groups,
+            per_group: ValueCost::new(rows, input_cost.distinct()),
+        }
+    }
+}
+
+impl<I, K, O> EstimateCost<GroupByOperation<K>>
+    for OperandHandle<Indexed<I, AttributeName>, Multiple<O>>
+where
+    I: IndexDomain,
+    K: KeyOperand<Subject = I>,
+    O: OrderState,
+{
+    type OutputCost = <GroupOperand<Self, K> as Operand>::Cost;
+
+    fn estimate(
+        operation: &GroupByOperation<K>,
+        input_cost: <Self as Operand>::Cost,
+        stats: &Stats,
+    ) -> Self::OutputCost {
+        let (groups, rows) = input_cost.rows().split(operation.key.distinct_count(stats));
+
+        GroupCost {
+            groups,
+            per_group: ValueCost::new(rows, input_cost.distinct()),
+        }
+    }
+}
+
+impl<I, K, O> EstimateCost<GroupByOperation<K>>
+    for OperandHandle<Indexed<I, AttributeSet>, Multiple<O>>
+where
+    I: IndexDomain,
+    K: KeyOperand<Subject = I>,
+    O: OrderState,
+{
+    type OutputCost = <GroupOperand<Self, K> as Operand>::Cost;
+
+    fn estimate(
+        operation: &GroupByOperation<K>,
+        input_cost: <Self as Operand>::Cost,
+        stats: &Stats,
+    ) -> Self::OutputCost {
+        let (groups, per_group) = input_cost.split(operation.key.distinct_count(stats));
+
+        GroupCost { groups, per_group }
+    }
+}
+
+impl<I, E, K, O> EstimateCost<GroupByOperation<K>>
+    for OperandHandle<Indexed<I, IndexValue<E>>, Multiple<O>>
+where
+    I: IndexDomain,
+    E: IndexDomain,
+    K: KeyOperand<Subject = I>,
+    O: OrderState,
+{
+    type OutputCost = <GroupOperand<Self, K> as Operand>::Cost;
+
+    fn estimate(
+        operation: &GroupByOperation<K>,
+        input_cost: <Self as Operand>::Cost,
+        stats: &Stats,
+    ) -> Self::OutputCost {
+        let (groups, rows) = input_cost.rows().split(operation.key.distinct_count(stats));
+
+        GroupCost {
+            groups,
+            per_group: ValueCost::new(rows, input_cost.distinct()),
+        }
     }
 }
 

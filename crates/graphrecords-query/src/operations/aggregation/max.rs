@@ -5,7 +5,8 @@ use crate::{
     operands::{ValueOperand, ValuesOperand},
     operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
     optimizer::{
-        Cardinality, EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
+        Cardinality, EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
+        Stats, ValueCost,
     },
     traits::Max,
 };
@@ -36,7 +37,7 @@ impl<I: IndexDomain, O: OrderState> EstimateCost<MaxOperation> for ValuesOperand
         _input_cost: <Self as Operand>::Cost,
         _stats: &Stats,
     ) -> Self::OutputCost {
-        Cardinality(1)
+        ValueCost::new(Cardinality(1), Cardinality(1))
     }
 }
 

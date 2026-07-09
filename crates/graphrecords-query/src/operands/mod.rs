@@ -10,7 +10,7 @@ use crate::{
     BoxedIterator, IndexDomain, OperandContext, QueryResult,
     execution::EvaluationCache,
     explain::Explanation,
-    optimizer::{Cardinality, PlanNode, Selectivity},
+    optimizer::{Cardinality, PlanNode, Selectivity, ValueCost},
     sealed::Sealed,
 };
 pub use attributes::{
@@ -46,7 +46,7 @@ pub struct AttributeSet;
 pub struct IndexValue<I: IndexDomain>(PhantomData<I>);
 
 impl ValueType for Scalar {
-    type Cost = Cardinality;
+    type Cost = ValueCost;
     type Value<'a> = GraphRecordValue;
 }
 impl ValueType for Mask {
@@ -54,7 +54,7 @@ impl ValueType for Mask {
     type Value<'a> = bool;
 }
 impl ValueType for AttributeName {
-    type Cost = Cardinality;
+    type Cost = ValueCost;
     type Value<'a> = GraphRecordAttribute;
 }
 impl ValueType for Unit {
@@ -70,7 +70,7 @@ impl ValueType for AttributeSet {
     type Value<'a> = GrHashSet<GraphRecordAttribute>;
 }
 impl<I: IndexDomain> ValueType for IndexValue<I> {
-    type Cost = Cardinality;
+    type Cost = ValueCost;
     type Value<'a> = I::Index<'a>;
 }
 

@@ -1,7 +1,8 @@
 use crate::{
-    BoxedIterator, IndexDomain, OrderState,
+    BoxedIterator, IndexDomain, Operand, OrderState,
     operands::{ReferenceOperand, ValuesOperand},
     operations::{ArgumentSource, Keyed, MissingPolicy, WithMissing},
+    optimizer::{Cardinality, Stats},
     traits::MaybeAbsent,
 };
 use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex};
@@ -20,6 +21,8 @@ pub trait GroupKey: 'static + Clone {
 
 pub trait KeyOperand: GroupKey + ArgumentSource<Keyed<Self::Subject>> {
     type Subject: IndexDomain;
+
+    fn distinct_count(&self, stats: &Stats) -> Cardinality;
 
     fn assignments<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
@@ -43,6 +46,10 @@ impl GroupKey for EdgeIndex {
 impl<I: IndexDomain, O: OrderState> KeyOperand for ValuesOperand<I, O> {
     type Subject = I;
 
+    fn distinct_count(&self, stats: &Stats) -> Cardinality {
+        self.context().cost(stats).distinct()
+    }
+
     fn assignments<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
     ) -> BoxedIterator<'prepared, (I::Index<'a>, GraphRecordValue)>
@@ -63,6 +70,10 @@ impl<K: IndexDomain, E: IndexDomain, O: OrderState> GroupKey for ReferenceOperan
 
 impl<K: IndexDomain, E: IndexDomain, O: OrderState> KeyOperand for ReferenceOperand<K, E, O> {
     type Subject = K;
+
+    fn distinct_count(&self, stats: &Stats) -> Cardinality {
+        self.context().cost(stats).distinct()
+    }
 
     fn assignments<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
@@ -92,6 +103,10 @@ where
     P: MissingPolicy<I, S>,
 {
     type Subject = I;
+
+    fn distinct_count(&self, stats: &Stats) -> Cardinality {
+        self.inner().distinct_count(stats)
+    }
 
     fn assignments<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,

@@ -3,7 +3,9 @@ use crate::{
     execution::EvaluationCache,
     operands::{IndicesOperand, OperandHandle},
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{
+        EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats, ValueCost,
+    },
     traits::Index,
 };
 use graphrecords_core::GraphRecord;
@@ -54,7 +56,7 @@ impl<I: IndexDomain, O: OrderState> EstimateCost<IndexOperation>
         input_cost: <Self as Operand>::Cost,
         _stats: &Stats,
     ) -> Self::OutputCost {
-        input_cost
+        ValueCost::new(input_cost, input_cost)
     }
 }
 

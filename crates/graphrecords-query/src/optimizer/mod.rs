@@ -6,10 +6,12 @@ mod phase;
 mod plan;
 mod rule;
 
-pub use builtins::{BuiltinPhase, EliminateDoubleNegation, register_builtins};
+pub use builtins::{
+    BuiltinPhase, EliminateDoubleNegation, SortBelowGroup, SortByBelowGroup, register_builtins,
+};
 pub use cost::{
     Cardinality, Cost, Count, CountKind, EdgeAttributeCardinality, EdgeGroupSize, EstimateCost,
-    NodeAttributeCardinality, NodeGroupSize, Selectivity, Statistic, Stats,
+    GroupCost, NodeAttributeCardinality, NodeGroupSize, Selectivity, Statistic, Stats, ValueCost,
 };
 pub use engine::{
     Direction, Optimizer, OptimizerBuilder, OptimizerError, PhaseHandle, RuleHandle, Session,

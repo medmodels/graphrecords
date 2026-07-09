@@ -4,7 +4,10 @@ use crate::{
     execution::EvaluationCache,
     operands::{OperandHandle, ValuesOperand},
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{
+        Cardinality, EdgeAttributeCardinality, EstimateCost, NodeAttributeCardinality,
+        OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats, ValueCost,
+    },
     traits::Attribute,
 };
 use graphrecords_core::{
@@ -18,17 +21,27 @@ use std::{
 
 pub trait EntityAttributes: IndexDomain {
     fn attributes<'a>(graphrecord: &'a GraphRecord, index: &Self::Index<'a>) -> &'a AttributeMap;
+
+    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> Cardinality;
 }
 
 impl EntityAttributes for NodeIndex {
     fn attributes<'a>(graphrecord: &'a GraphRecord, index: &Self::Index<'a>) -> &'a AttributeMap {
         graphrecord.node_attributes(index).expect("Node must exist")
     }
+
+    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> Cardinality {
+        Cardinality(stats.get::<NodeAttributeCardinality>(attribute))
+    }
 }
 
 impl EntityAttributes for EdgeIndex {
     fn attributes<'a>(graphrecord: &'a GraphRecord, index: &Self::Index<'a>) -> &'a AttributeMap {
         graphrecord.edge_attributes(index).expect("Edge must exist")
+    }
+
+    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> Cardinality {
+        Cardinality(stats.get::<EdgeAttributeCardinality>(attribute))
     }
 }
 
@@ -120,11 +133,14 @@ impl<I: EntityAttributes, O: OrderState> EstimateCost<AttributeOperation>
     type OutputCost = <ValuesOperand<I> as Operand>::Cost;
 
     fn estimate(
-        _operation: &AttributeOperation,
+        operation: &AttributeOperation,
         input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
+        stats: &Stats,
     ) -> Self::OutputCost {
-        input_cost
+        ValueCost::new(
+            input_cost,
+            I::attribute_cardinality(stats, &operation.attribute),
+        )
     }
 }
 
@@ -184,11 +200,13 @@ impl<K: IndexDomain, E: EntityAttributes, O: OrderState> EstimateCost<AttributeO
     type OutputCost = <ValuesOperand<K> as Operand>::Cost;
 
     fn estimate(
-        _operation: &AttributeOperation,
+        operation: &AttributeOperation,
         input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
+        stats: &Stats,
     ) -> Self::OutputCost {
-        input_cost
+        let cardinality = E::attribute_cardinality(stats, &operation.attribute);
+
+        ValueCost::new(input_cost.rows(), cardinality.min(input_cost.distinct()))
     }
 }
 

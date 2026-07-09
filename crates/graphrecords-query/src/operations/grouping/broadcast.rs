@@ -3,7 +3,9 @@ use crate::{
     execution::EvaluationCache,
     operands::{GroupOperand, ValueOperand, ValuesOperand},
     operations::{Absent, Apply, KeyOperand, Operation, OperationContext, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{
+        EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats, ValueCost,
+    },
     traits::Broadcast,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
@@ -31,23 +33,26 @@ impl<K: KeyOperand> Prepare for BroadcastOperation<K> {
 impl<I, K> EstimateCost<BroadcastOperation<K>> for GroupOperand<ValueOperand<I>, K>
 where
     I: IndexDomain,
-    K: KeyOperand<Subject = I> + Operand,
+    K: KeyOperand<Subject = I> + Operand<Cost = ValueCost>,
 {
     type OutputCost = <ValuesOperand<I> as Operand>::Cost;
 
     fn estimate(
-        _operation: &BroadcastOperation<K>,
+        operation: &BroadcastOperation<K>,
         input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
+        stats: &Stats,
     ) -> Self::OutputCost {
-        input_cost
+        ValueCost::new(
+            operation.key.context().cost(stats).rows(),
+            input_cost.groups,
+        )
     }
 }
 
 impl<I, K> Apply<BroadcastOperation<K>> for GroupOperand<ValueOperand<I>, K>
 where
     I: IndexDomain,
-    K: KeyOperand<Subject = I> + Operand,
+    K: KeyOperand<Subject = I> + Operand<Cost = ValueCost>,
 {
     type Output = ValuesOperand<I>;
 
@@ -88,7 +93,7 @@ where
 impl<I, K> Broadcast<K> for GroupOperand<ValueOperand<I>, K>
 where
     I: IndexDomain,
-    K: KeyOperand<Subject = I> + Operand,
+    K: KeyOperand<Subject = I> + Operand<Cost = ValueCost>,
 {
     type ReturnOperand = ValuesOperand<I>;
 

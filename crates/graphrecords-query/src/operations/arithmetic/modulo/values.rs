@@ -3,7 +3,7 @@ use crate::{
     Failure, IndexDomain, Indexed, Labeled, Operand, OrderState, QueryResult, Scalar,
     operands::ValuesOperand,
     operations::{ArgumentSource, ElementKernel, Keyed, OnMissing, Operation, Pipeline},
-    optimizer::{EstimateCost, Stats},
+    optimizer::{EstimateCost, Stats, ValueCost},
 };
 use graphrecords_core::{
     GraphRecord,
@@ -64,7 +64,7 @@ where
         input_cost: <Self as Operand>::Cost,
         _stats: &Stats,
     ) -> Self::OutputCost {
-        input_cost
+        ValueCost::unknown(input_cost.rows())
     }
 }
 

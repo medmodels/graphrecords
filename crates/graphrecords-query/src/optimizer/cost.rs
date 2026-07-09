@@ -153,6 +153,85 @@ impl Cardinality {
     pub fn scaled(self, selectivity: Selectivity) -> Self {
         Self((self.0 as f64 * selectivity.0).round() as usize)
     }
+
+    #[must_use]
+    pub fn split(self, groups: Self) -> (Self, Self) {
+        let groups = Self(groups.0.min(self.0));
+        let per_group = Self(if groups.0 == 0 {
+            0
+        } else {
+            self.0.div_ceil(groups.0)
+        });
+
+        (groups, per_group)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GroupCost<Inner> {
+    pub groups: Cardinality,
+    pub per_group: Inner,
+}
+
+impl<Inner> GroupCost<Inner> {
+    #[must_use]
+    pub fn map<T>(self, transform: impl FnOnce(Inner) -> T) -> GroupCost<T> {
+        GroupCost {
+            groups: self.groups,
+            per_group: transform(self.per_group),
+        }
+    }
+}
+
+impl GroupCost<Cardinality> {
+    #[must_use]
+    pub const fn total(self) -> Cardinality {
+        Cardinality(self.groups.0 * self.per_group.0)
+    }
+}
+
+impl GroupCost<ValueCost> {
+    #[must_use]
+    pub fn total(self) -> ValueCost {
+        ValueCost::new(
+            Cardinality(self.groups.0 * self.per_group.rows.0),
+            Cardinality(self.groups.0 * self.per_group.distinct.0),
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ValueCost {
+    rows: Cardinality,
+    distinct: Cardinality,
+}
+
+impl ValueCost {
+    #[must_use]
+    pub fn new(rows: Cardinality, distinct: Cardinality) -> Self {
+        Self {
+            rows,
+            distinct: Cardinality(distinct.0.min(rows.0)),
+        }
+    }
+
+    #[must_use]
+    pub const fn unknown(rows: Cardinality) -> Self {
+        Self {
+            rows,
+            distinct: rows,
+        }
+    }
+
+    #[must_use]
+    pub const fn rows(&self) -> Cardinality {
+        self.rows
+    }
+
+    #[must_use]
+    pub const fn distinct(&self) -> Cardinality {
+        self.distinct
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]

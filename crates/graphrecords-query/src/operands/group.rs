@@ -2,7 +2,7 @@ use crate::{
     BoxedIterator, ElementShape, EvaluateOperand, Multiple, Operand, QueryResult,
     operands::OperandHandle,
     operations::{Apply, GroupKey, Operation},
-    optimizer::{Cardinality, EstimateCost, Stats},
+    optimizer::{EstimateCost, GroupCost, Stats},
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
@@ -42,7 +42,7 @@ where
 pub struct Grouped<K, O>(PhantomData<(K, O)>);
 
 impl<K: GroupKey, O: Operand> ElementShape for Grouped<K, O> {
-    type Cost = Cardinality;
+    type Cost = GroupCost<O::Cost>;
     type Element<'a> = (K::Key<'a>, QueryResult<O::ReturnValue<'a>>);
 }
 
@@ -79,13 +79,13 @@ where
     K: GroupKey,
     P: Operation,
 {
-    type OutputCost = Cardinality;
+    type OutputCost = GroupCost<<O as EstimateCost<P>>::OutputCost>;
 
     fn estimate(
-        _operation: &P,
+        operation: &P,
         input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
+        stats: &Stats,
     ) -> Self::OutputCost {
-        input_cost
+        input_cost.map(|per_group| O::estimate(operation, per_group, stats))
     }
 }
