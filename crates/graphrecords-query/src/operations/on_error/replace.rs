@@ -6,39 +6,13 @@ use crate::{
         Apply, ArgumentSource, ElementKernel, ErrorPolicy, Keyed, Looked, Operation,
         OperationContext, Pipeline, Prepare,
     },
-    optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, PlanNode},
+    optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
-use std::{fmt, hash::Hasher};
+use std::fmt;
 
-#[derive(Clone, Operation)]
-pub struct Replace<A>(pub A);
-
-impl<A: PlanIdentity> PlanIdentity for Replace<A> {
-    fn identity_eq(&self, other: &Self) -> bool {
-        self.0.identity_eq(&other.0)
-    }
-
-    fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        self.0.identity_hash(state);
-    }
-}
-
-impl<A: PlanInputs> PlanInputs for Replace<A> {
-    fn inputs(&self) -> Vec<&dyn PlanNode> {
-        PlanInputs::inputs(&self.0)
-    }
-}
-
-impl<A> OptimizerHints for Replace<A> {}
-
-impl<A: PlanIdentity + PlanInputs + 'static> OperationInputs for Replace<A> {
-    type Inputs<'a, I: 'a> = (&'a I,);
-
-    fn inputs<'a, I: 'a>(&'a self, primary: &'a I) -> Self::Inputs<'a, I> {
-        (primary,)
-    }
-}
+#[derive(Clone, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+pub struct Replace<A>(#[argument] pub A);
 
 impl<A: Explain> Explain for Replace<A> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
