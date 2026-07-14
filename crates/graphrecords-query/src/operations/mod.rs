@@ -95,6 +95,11 @@ where
     pub const fn new(input: I, operation: P) -> Self {
         Self { input, operation }
     }
+
+    #[must_use]
+    pub const fn operation(&self) -> &P {
+        &self.operation
+    }
 }
 
 impl<I, P> MatchInputs for OperationContext<I, P>

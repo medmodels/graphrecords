@@ -33,60 +33,19 @@ fn eliminate_double_negation<I: IndexDomain, O: OrderState>() -> impl Rule<BoolM
 
 pub struct SortBelowGroup;
 
-fn sort_below_group_for_nodes()
--> impl Rule<GroupOperand<ValueOperand<NodeIndex>, ValuesOperand<NodeIndex, Unordered>>> {
+fn sort_below_group<I: IndexDomain>()
+-> impl Rule<GroupOperand<ValueOperand<I>, ValuesOperand<I, Unordered>>> {
     matching::<
         OperationContext<
-            GroupOperand<ValuesOperand<NodeIndex, Ordered>, ValuesOperand<NodeIndex, Unordered>>,
+            GroupOperand<ValuesOperand<I, Ordered>, ValuesOperand<I, Unordered>>,
             FirstOperation,
         >,
         _,
     >((matching::<
-        OperationContext<
-            ValuesOperand<NodeIndex, Ordered>,
-            GroupByOperation<ValuesOperand<NodeIndex, Unordered>>,
-        >,
+        OperationContext<ValuesOperand<I, Ordered>, GroupByOperation<ValuesOperand<I, Unordered>>>,
         _,
     >((
-        matching::<OperationContext<ValuesOperand<NodeIndex, Unordered>, SortOperation>, _>((
-            capture(),
-        )),
-        capture(),
-    )),))
-    .rewrite(|(((values,), key),), stats| {
-        let grouped = values.group_by(key);
-
-        let per_group_elements = grouped
-            .context()
-            .estimate(stats)
-            .per_group
-            .and_then(|inner| inner.elements);
-
-        match per_group_elements {
-            Some(elements) if elements > 1 => Some(grouped.sort().first()),
-            _ => None,
-        }
-    })
-}
-
-fn sort_below_group_for_edges()
--> impl Rule<GroupOperand<ValueOperand<EdgeIndex>, ValuesOperand<EdgeIndex, Unordered>>> {
-    matching::<
-        OperationContext<
-            GroupOperand<ValuesOperand<EdgeIndex, Ordered>, ValuesOperand<EdgeIndex, Unordered>>,
-            FirstOperation,
-        >,
-        _,
-    >((matching::<
-        OperationContext<
-            ValuesOperand<EdgeIndex, Ordered>,
-            GroupByOperation<ValuesOperand<EdgeIndex, Unordered>>,
-        >,
-        _,
-    >((
-        matching::<OperationContext<ValuesOperand<EdgeIndex, Unordered>, SortOperation>, _>((
-            capture(),
-        )),
+        matching::<OperationContext<ValuesOperand<I, Unordered>, SortOperation>, _>((capture(),)),
         capture(),
     )),))
     .rewrite(|(((values,), key),), stats| {
@@ -107,65 +66,22 @@ fn sort_below_group_for_edges()
 
 pub struct SortByBelowGroup;
 
-fn sort_by_below_group_for_nodes()
--> impl Rule<GroupOperand<ValueOperand<NodeIndex>, ValuesOperand<NodeIndex, Unordered>>> {
+fn sort_by_below_group<I: IndexDomain>()
+-> impl Rule<GroupOperand<ValueOperand<I>, ValuesOperand<I, Unordered>>> {
     matching::<
         OperationContext<
-            GroupOperand<ValuesOperand<NodeIndex, Ordered>, ValuesOperand<NodeIndex, Unordered>>,
+            GroupOperand<ValuesOperand<I, Ordered>, ValuesOperand<I, Unordered>>,
             FirstOperation,
         >,
         _,
     >((matching::<
-        OperationContext<
-            ValuesOperand<NodeIndex, Ordered>,
-            GroupByOperation<ValuesOperand<NodeIndex, Unordered>>,
-        >,
+        OperationContext<ValuesOperand<I, Ordered>, GroupByOperation<ValuesOperand<I, Unordered>>>,
         _,
     >((
         matching::<
             OperationContext<
-                ValuesOperand<NodeIndex, Unordered>,
-                SortByOperation<ValuesOperand<NodeIndex, Unordered>>,
-            >,
-            _,
-        >((capture(), capture())),
-        capture(),
-    )),))
-    .rewrite(|(((values, sort_key), group_key),), stats| {
-        let grouped = values.group_by(group_key);
-
-        let per_group_elements = grouped
-            .context()
-            .estimate(stats)
-            .per_group
-            .and_then(|inner| inner.elements);
-
-        match per_group_elements {
-            Some(elements) if elements > 1 => Some(grouped.sort_by(sort_key).first()),
-            _ => None,
-        }
-    })
-}
-
-fn sort_by_below_group_for_edges()
--> impl Rule<GroupOperand<ValueOperand<EdgeIndex>, ValuesOperand<EdgeIndex, Unordered>>> {
-    matching::<
-        OperationContext<
-            GroupOperand<ValuesOperand<EdgeIndex, Ordered>, ValuesOperand<EdgeIndex, Unordered>>,
-            FirstOperation,
-        >,
-        _,
-    >((matching::<
-        OperationContext<
-            ValuesOperand<EdgeIndex, Ordered>,
-            GroupByOperation<ValuesOperand<EdgeIndex, Unordered>>,
-        >,
-        _,
-    >((
-        matching::<
-            OperationContext<
-                ValuesOperand<EdgeIndex, Unordered>,
-                SortByOperation<ValuesOperand<EdgeIndex, Unordered>>,
+                ValuesOperand<I, Unordered>,
+                SortByOperation<ValuesOperand<I, Unordered>>,
             >,
             _,
         >((capture(), capture())),
@@ -262,18 +178,18 @@ pub fn register_builtins(builder: &mut OptimizerBuilder) {
         .label::<EliminateDoubleNegation>();
 
     builder
-        .add_rule(Reorder, sort_below_group_for_nodes())
+        .add_rule(Reorder, sort_below_group::<NodeIndex>())
         .label::<SortBelowGroup>();
 
     builder
-        .add_rule(Reorder, sort_below_group_for_edges())
+        .add_rule(Reorder, sort_below_group::<EdgeIndex>())
         .label::<SortBelowGroup>();
 
     builder
-        .add_rule(Reorder, sort_by_below_group_for_nodes())
+        .add_rule(Reorder, sort_by_below_group::<NodeIndex>())
         .label::<SortByBelowGroup>();
 
     builder
-        .add_rule(Reorder, sort_by_below_group_for_edges())
+        .add_rule(Reorder, sort_by_below_group::<EdgeIndex>())
         .label::<SortByBelowGroup>();
 }
