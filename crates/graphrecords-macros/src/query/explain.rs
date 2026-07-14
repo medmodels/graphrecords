@@ -1,8 +1,10 @@
+use super::optimizer::plan::with_bounds;
 use crate::{attribute::FromAttributes, query::resolve_query_crate_path};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    Data, DeriveInput, Error, Generics, Ident, Index, LitStr, Path, Result, meta::ParseNestedMeta,
+    Data, DeriveInput, Error, Generics, Ident, Index, LitStr, Path, Result, Type,
+    meta::ParseNestedMeta,
 };
 
 #[derive(Default)]
@@ -58,6 +60,9 @@ struct ExplainModel {
     label_accessors: Vec<TokenStream>,
     inline_accessors: Vec<TokenStream>,
     child_accessors: Vec<TokenStream>,
+    argument_names: Vec<String>,
+    argument_accessors: Vec<TokenStream>,
+    argument_types: Vec<Type>,
 }
 
 impl ExplainModel {
@@ -82,6 +87,9 @@ impl ExplainModel {
         let mut label_accessors = Vec::new();
         let mut inline_accessors = Vec::new();
         let mut child_accessors = Vec::new();
+        let mut argument_names = Vec::new();
+        let mut argument_accessors = Vec::new();
+        let mut argument_types = Vec::new();
 
         for (index, field) in data.fields.iter().enumerate() {
             let accessor = if let Some(name) = &field.ident {
@@ -95,6 +103,11 @@ impl ExplainModel {
                 .attrs
                 .iter()
                 .any(|attribute| attribute.path().is_ident("input"));
+
+            let is_argument = field
+                .attrs
+                .iter()
+                .any(|attribute| attribute.path().is_ident("argument"));
 
             let ExplainFieldAttributes { label, inline } =
                 ExplainFieldAttributes::from_attributes(&field.attrs)?;
@@ -115,6 +128,22 @@ impl ExplainModel {
                 }
 
                 child_accessors.push(accessor);
+            } else if is_argument {
+                if label || inline {
+                    return Err(Error::new_spanned(
+                        field,
+                        "a field cannot be both `#[argument]` and `#[explain(...)]`",
+                    ));
+                }
+
+                let name = match &field.ident {
+                    Some(name) => name.to_string(),
+                    None => index.to_string(),
+                };
+
+                argument_names.push(name);
+                argument_accessors.push(accessor);
+                argument_types.push(field.ty.clone());
             } else if label {
                 let name = match &field.ident {
                     Some(name) => name.to_string(),
@@ -137,6 +166,9 @@ impl ExplainModel {
             label_accessors,
             inline_accessors,
             child_accessors,
+            argument_names,
+            argument_accessors,
+            argument_types,
         })
     }
 }
@@ -151,7 +183,16 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
         label_accessors,
         inline_accessors,
         child_accessors,
+        argument_names,
+        argument_accessors,
+        argument_types,
     } = ExplainModel::parse(input)?;
+
+    let generics = with_bounds(
+        &generics,
+        &argument_types,
+        &quote!(#crate_path::explain::Explain),
+    );
 
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
@@ -176,6 +217,7 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
                     )?;
                 )*
                 #( formatter.child(&self.#child_accessors); )*
+                #( formatter.labeled_child(#argument_names, &self.#argument_accessors); )*
                 ::core::result::Result::Ok(())
             }
         }

@@ -22,12 +22,17 @@ impl<O: Operand> Explain for O {
 
 pub struct ExplainFormatter<'a, 'writer> {
     writer: &'writer mut dyn Write,
-    children: Vec<&'a dyn Explain>,
+    children: Vec<(Option<&'static str>, &'a dyn Explain)>,
 }
 
 impl<'a> ExplainFormatter<'a, '_> {
     pub fn child(&mut self, child: &'a dyn Explain) -> &mut Self {
-        self.children.push(child);
+        self.children.push((None, child));
+        self
+    }
+
+    pub fn labeled_child(&mut self, label: &'static str, child: &'a dyn Explain) -> &mut Self {
+        self.children.push((Some(label), child));
         self
     }
 }
@@ -68,10 +73,14 @@ fn write_node(node: &dyn Explain, formatter: &mut Formatter<'_>, prefix: &str) -
 
     let count = children.len();
 
-    for (index, child) in children.into_iter().enumerate() {
+    for (index, (label, child)) in children.into_iter().enumerate() {
         let last = index + 1 == count;
 
         write!(formatter, "\n{prefix}{}", if last { "└─ " } else { "├─ " })?;
+
+        if let Some(label) = label {
+            write!(formatter, "{label}: ")?;
+        }
 
         let mut child_prefix = String::from(prefix);
         child_prefix.push_str(if last { "   " } else { "│  " });

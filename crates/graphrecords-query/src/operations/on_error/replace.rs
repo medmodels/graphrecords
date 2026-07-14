@@ -43,9 +43,12 @@ impl<A: PlanIdentity + PlanInputs + 'static> OperationInputs for Replace<A> {
     }
 }
 
-impl<A> Explain for Replace<A> {
+impl<A: Explain> Explain for Replace<A> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        fmt::Write::write_str(formatter, "Replace")
+        fmt::Write::write_str(formatter, "Replace")?;
+        formatter.labeled_child("replacement", &self.0);
+
+        Ok(())
     }
 }
 
