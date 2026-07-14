@@ -1,7 +1,7 @@
 use crate::{
     EvaluateOperand, Explain, Operand, QueryResult,
     execution::EvaluationCache,
-    optimizer::{Cost, OptimizePlan, PlanNode},
+    optimizer::{Estimated, OptimizePlan, PlanNode},
 };
 use graphrecords_core::GraphRecord;
 
@@ -16,13 +16,13 @@ pub trait EvaluateContext {
 }
 
 pub trait OperandContext<O: Operand>:
-    PlanNode + OptimizePlan<Output = O> + Explain + EvaluateContext<Operand = O> + Cost<O>
+    PlanNode + OptimizePlan<Output = O> + Explain + EvaluateContext<Operand = O> + Estimated
 {
 }
 
 impl<O, C> OperandContext<O> for C
 where
     O: Operand,
-    C: PlanNode + OptimizePlan<Output = O> + Explain + EvaluateContext<Operand = O> + Cost<O>,
+    C: PlanNode + OptimizePlan<Output = O> + Explain + EvaluateContext<Operand = O> + Estimated,
 {
 }

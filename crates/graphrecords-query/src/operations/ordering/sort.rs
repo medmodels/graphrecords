@@ -5,7 +5,7 @@ use crate::{
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Sort,
 };
 use graphrecords_core::GraphRecord;
@@ -27,34 +27,6 @@ impl Prepare for SortOperation {
         _cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(())
-    }
-}
-
-impl<I: IndexDomain, V: ValueType, O: OrderState> EstimateCost<SortOperation>
-    for OperandHandle<Indexed<I, V>, Multiple<O>>
-{
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &SortOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
-    }
-}
-
-impl<V: ValueType, O: OrderState> EstimateCost<SortOperation>
-    for OperandHandle<Bare<V>, Multiple<O>>
-{
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &SortOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
     }
 }
 
@@ -133,6 +105,10 @@ where
                 .map(|(index, value)| (index, Ok(value))),
         ))
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
 impl<V, O> Kernel<Bare<V>, Multiple<O>> for SortOperation
@@ -171,6 +147,10 @@ where
         }
 
         Ok(Box::new(collected.into_iter().map(Ok)))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 

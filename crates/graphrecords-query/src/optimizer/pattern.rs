@@ -1,7 +1,7 @@
 use super::{
-    cost::Stats,
     plan::{MatchInputs, OptimizePlan, PlanNode},
     rule::{Rule, Transformed},
+    stats::Stats,
 };
 use crate::Operand;
 use std::marker::PhantomData;

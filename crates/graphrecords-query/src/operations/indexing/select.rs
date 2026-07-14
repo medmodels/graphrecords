@@ -4,7 +4,7 @@ use crate::{
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Select,
 };
 use graphrecords_core::GraphRecord;
@@ -43,19 +43,14 @@ impl<K: IndexDomain, E: IndexDomain, O: OrderState> Kernel<Indexed<K, IndexValue
 
         Ok(Box::new(targets.into_iter().map(|target| (target, Ok(())))))
     }
-}
 
-impl<K: IndexDomain, E: IndexDomain, O: OrderState> EstimateCost<SelectOperation>
-    for OperandHandle<Indexed<K, IndexValue<E>>, Multiple<O>>
-{
-    type OutputCost = <OperandHandle<Indexed<E, Unit>, Multiple<Unordered>> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &SelectOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost.distinct()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            elements: input.distinct,
+            distinct: input.distinct,
+            selectivity: None,
+            per_group: None,
+        }
     }
 }
 

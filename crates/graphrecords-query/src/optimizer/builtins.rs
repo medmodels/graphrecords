@@ -56,11 +56,16 @@ fn sort_below_group_for_nodes()
     .rewrite(|(((values,), key),), stats| {
         let grouped = values.group_by(key);
 
-        if grouped.context().cost(stats).per_group.rows().0 <= 1 {
-            return None;
-        }
+        let per_group_elements = grouped
+            .context()
+            .estimate(stats)
+            .per_group
+            .and_then(|inner| inner.elements);
 
-        Some(grouped.sort().first())
+        match per_group_elements {
+            Some(elements) if elements > 1 => Some(grouped.sort().first()),
+            _ => None,
+        }
     })
 }
 
@@ -87,11 +92,16 @@ fn sort_below_group_for_edges()
     .rewrite(|(((values,), key),), stats| {
         let grouped = values.group_by(key);
 
-        if grouped.context().cost(stats).per_group.rows().0 <= 1 {
-            return None;
-        }
+        let per_group_elements = grouped
+            .context()
+            .estimate(stats)
+            .per_group
+            .and_then(|inner| inner.elements);
 
-        Some(grouped.sort().first())
+        match per_group_elements {
+            Some(elements) if elements > 1 => Some(grouped.sort().first()),
+            _ => None,
+        }
     })
 }
 
@@ -124,11 +134,16 @@ fn sort_by_below_group_for_nodes()
     .rewrite(|(((values, sort_key), group_key),), stats| {
         let grouped = values.group_by(group_key);
 
-        if grouped.context().cost(stats).per_group.rows().0 <= 1 {
-            return None;
-        }
+        let per_group_elements = grouped
+            .context()
+            .estimate(stats)
+            .per_group
+            .and_then(|inner| inner.elements);
 
-        Some(grouped.sort_by(sort_key).first())
+        match per_group_elements {
+            Some(elements) if elements > 1 => Some(grouped.sort_by(sort_key).first()),
+            _ => None,
+        }
     })
 }
 
@@ -159,11 +174,16 @@ fn sort_by_below_group_for_edges()
     .rewrite(|(((values, sort_key), group_key),), stats| {
         let grouped = values.group_by(group_key);
 
-        if grouped.context().cost(stats).per_group.rows().0 <= 1 {
-            return None;
-        }
+        let per_group_elements = grouped
+            .context()
+            .estimate(stats)
+            .per_group
+            .and_then(|inner| inner.elements);
 
-        Some(grouped.sort_by(sort_key).first())
+        match per_group_elements {
+            Some(elements) if elements > 1 => Some(grouped.sort_by(sort_key).first()),
+            _ => None,
+        }
     })
 }
 

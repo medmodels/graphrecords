@@ -4,7 +4,7 @@ use crate::{
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Unorder,
 };
 use graphrecords_core::GraphRecord;
@@ -37,19 +37,9 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(values)
     }
-}
 
-impl<I: IndexDomain, V: ValueType, O: OrderState> EstimateCost<UnorderOperation>
-    for OperandHandle<Indexed<I, V>, Multiple<O>>
-{
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &UnorderOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 
@@ -63,19 +53,9 @@ impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for UnorderOperat
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(values)
     }
-}
 
-impl<V: ValueType, O: OrderState> EstimateCost<UnorderOperation>
-    for OperandHandle<Bare<V>, Multiple<O>>
-{
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &UnorderOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 

@@ -8,7 +8,7 @@ use crate::{
         Apply, ArgumentSource, Kernel, Keyed, KeyedStream, OnMissing, Operation, OperationContext,
         Prepare,
     },
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::SortBy,
 };
 use graphrecords_core::GraphRecord;
@@ -38,24 +38,6 @@ impl<A: Prepare> Prepare for SortByOperation<A> {
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::Prepared<'a>> {
         self.key.prepare(graphrecord, cache)
-    }
-}
-
-impl<I, V, A, O> EstimateCost<SortByOperation<A>> for OperandHandle<Indexed<I, V>, Multiple<O>>
-where
-    I: IndexDomain,
-    V: ValueType,
-    A: ArgumentSource<Keyed<I>>,
-    O: OrderState,
-{
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &SortByOperation<A>,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
     }
 }
 
@@ -142,6 +124,10 @@ where
                 .into_iter()
                 .map(|(index, subject, _key)| (index, subject)),
         ))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 

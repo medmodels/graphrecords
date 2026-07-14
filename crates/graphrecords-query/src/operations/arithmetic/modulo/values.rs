@@ -1,9 +1,8 @@
 use super::ModuloOperation;
 use crate::{
-    Failure, IndexDomain, Indexed, Labeled, Operand, OrderState, QueryResult, Scalar,
-    operands::ValuesOperand,
-    operations::{ArgumentSource, ElementKernel, Keyed, OnMissing, Operation, Pipeline},
-    optimizer::{EstimateCost, Stats, ValueCost},
+    Failure, IndexDomain, Indexed, Labeled, QueryResult, Scalar,
+    operations::{ArgumentSource, ElementKernel, Keyed, OnMissing, Pipeline},
+    optimizer::{Estimate, Stats},
 };
 use graphrecords_core::{
     GraphRecord,
@@ -50,21 +49,12 @@ where
             },
         ))
     }
-}
 
-impl<I: IndexDomain, A, O: OrderState> EstimateCost<ModuloOperation<A>> for ValuesOperand<I, O>
-where
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
-    ModuloOperation<A>: Operation,
-{
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &ModuloOperation<A>,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        ValueCost::unknown(input_cost.rows())
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            distinct: None,
+            ..input
+        }
     }
 }
 

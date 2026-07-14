@@ -3,9 +3,7 @@ use crate::{
     execution::EvaluationCache,
     operands::{GroupOperand, ValueOperand, ValuesOperand},
     operations::{Absent, Apply, KeyOperand, Operation, OperationContext, Prepare},
-    optimizer::{
-        EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats, ValueCost,
-    },
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Broadcast,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
@@ -30,31 +28,27 @@ impl<K: KeyOperand> Prepare for BroadcastOperation<K> {
     }
 }
 
-impl<I, K> EstimateCost<BroadcastOperation<K>> for GroupOperand<ValueOperand<I>, K>
-where
-    I: IndexDomain,
-    K: KeyOperand<Subject = I> + Operand<Cost = ValueCost>,
-{
-    type OutputCost = <ValuesOperand<I, Unordered> as Operand>::Cost;
-
-    fn estimate(
-        operation: &BroadcastOperation<K>,
-        input_cost: <Self as Operand>::Cost,
-        stats: &Stats,
-    ) -> Self::OutputCost {
-        ValueCost::new(
-            operation.key.context().cost(stats).rows(),
-            input_cost.groups,
-        )
-    }
-}
-
 impl<I, K> Apply<BroadcastOperation<K>> for GroupOperand<ValueOperand<I>, K>
 where
     I: IndexDomain,
-    K: KeyOperand<Subject = I> + Operand<Cost = ValueCost>,
+    K: KeyOperand<Subject = I> + Operand,
 {
     type Output = ValuesOperand<I, Unordered>;
+
+    fn estimate(operation: &BroadcastOperation<K>, input: Estimate, stats: &Stats) -> Estimate {
+        let elements = operation.key.estimate(stats).elements;
+        let distinct = match (input.elements, elements) {
+            (Some(distinct), Some(elements)) => Some(distinct.min(elements)),
+            (distinct, _) => distinct,
+        };
+
+        Estimate {
+            elements,
+            distinct,
+            selectivity: None,
+            per_group: None,
+        }
+    }
 
     fn apply<'a>(
         _graphrecord: &'a GraphRecord,
@@ -93,7 +87,7 @@ where
 impl<I, K> Broadcast<K> for GroupOperand<ValueOperand<I>, K>
 where
     I: IndexDomain,
-    K: KeyOperand<Subject = I> + Operand<Cost = ValueCost>,
+    K: KeyOperand<Subject = I> + Operand,
 {
     type ReturnOperand = ValuesOperand<I, Unordered>;
 

@@ -4,7 +4,7 @@ use crate::{
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Enumerate,
 };
 use graphrecords_core::GraphRecord;
@@ -36,6 +36,10 @@ impl<V: ValueType> Kernel<Bare<V>, Multiple<Ordered>> for EnumerateOperation {
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(Box::new(values.enumerate()))
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
 impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Multiple<Ordered>> for EnumerateOperation {
@@ -52,31 +56,9 @@ impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Multiple<Ordered>> for 
                 .map(|(position, (_index, value))| (position, value)),
         ))
     }
-}
 
-impl<V: ValueType> EstimateCost<EnumerateOperation> for OperandHandle<Bare<V>, Multiple<Ordered>> {
-    type OutputCost = <OperandHandle<Indexed<Positional, V>, Multiple<Ordered>> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &EnumerateOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
-    }
-}
-
-impl<I: IndexDomain, V: ValueType> EstimateCost<EnumerateOperation>
-    for OperandHandle<Indexed<I, V>, Multiple<Ordered>>
-{
-    type OutputCost = <OperandHandle<Indexed<Positional, V>, Multiple<Ordered>> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &EnumerateOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 

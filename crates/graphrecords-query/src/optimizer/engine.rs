@@ -1,10 +1,10 @@
 use super::{
-    cost::Stats,
     phase::{
         FixpointPolicy, OptimizationReport, PhaseId, PhaseLabel, PhaseOutcome, RunCondition,
         StopReason,
     },
     rule::{ErasedRule, Rule, Transformed},
+    stats::Stats,
 };
 use crate::Operand;
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};

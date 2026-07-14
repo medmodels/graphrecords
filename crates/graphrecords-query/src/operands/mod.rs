@@ -10,7 +10,7 @@ use crate::{
     BoxedIterator, IndexDomain, OperandContext, QueryResult,
     execution::EvaluationCache,
     explain::Explanation,
-    optimizer::{Cardinality, PlanNode, Selectivity, ValueCost},
+    optimizer::{Estimate, Estimated, PlanNode, Stats},
     sealed::Sealed,
 };
 pub use attributes::{
@@ -34,7 +34,6 @@ pub trait ValueType: 'static {
     type Value<'a>: 'a + Clone
     where
         Self: 'a;
-    type Cost;
 }
 
 pub struct Scalar;
@@ -46,48 +45,38 @@ pub struct AttributeSet;
 pub struct IndexValue<I: IndexDomain>(PhantomData<I>);
 
 impl ValueType for Scalar {
-    type Cost = ValueCost;
     type Value<'a> = GraphRecordValue;
 }
 impl ValueType for Mask {
-    type Cost = Selectivity;
     type Value<'a> = bool;
 }
 impl ValueType for AttributeName {
-    type Cost = ValueCost;
     type Value<'a> = GraphRecordAttribute;
 }
 impl ValueType for Unit {
-    type Cost = Cardinality;
     type Value<'a> = ();
 }
 impl<T: 'static + Clone> ValueType for MaskMap<T> {
-    type Cost = Selectivity;
     type Value<'a> = GrHashMap<T, bool>;
 }
 impl ValueType for AttributeSet {
-    type Cost = Cardinality;
     type Value<'a> = GrHashSet<GraphRecordAttribute>;
 }
 impl<I: IndexDomain> ValueType for IndexValue<I> {
-    type Cost = ValueCost;
     type Value<'a> = I::Index<'a>;
 }
 
 pub trait ElementShape: 'static {
     type Element<'a>: 'a;
-    type Cost;
 }
 
 pub struct Indexed<K: IndexDomain, V: ValueType>(PhantomData<(K, V)>);
 pub struct Bare<V: ValueType>(PhantomData<V>);
 
 impl<K: IndexDomain, V: ValueType> ElementShape for Indexed<K, V> {
-    type Cost = V::Cost;
     type Element<'a> = (K::Index<'a>, QueryResult<V::Value<'a>>);
 }
 impl<V: ValueType> ElementShape for Bare<V> {
-    type Cost = V::Cost;
     type Element<'a> = QueryResult<V::Value<'a>>;
 }
 
@@ -132,8 +121,6 @@ pub trait EvaluateOperand {
 }
 
 pub trait Operand: 'static + Sized + Clone + EvaluateOperand + Sealed {
-    type Cost;
-
     fn context(&self) -> &dyn OperandContext<Self>;
 
     fn as_plan_node(&self) -> &dyn PlanNode;
@@ -181,9 +168,13 @@ impl<S: ElementShape, C: Arity> EvaluateOperand for OperandHandle<S, C> {
     }
 }
 
-impl<S: ElementShape, C: Arity> Operand for OperandHandle<S, C> {
-    type Cost = S::Cost;
+impl<S: ElementShape, C: Arity> Estimated for OperandHandle<S, C> {
+    fn estimate(&self, stats: &Stats) -> Estimate {
+        self.context().estimate(stats)
+    }
+}
 
+impl<S: ElementShape, C: Arity> Operand for OperandHandle<S, C> {
     fn context(&self) -> &dyn OperandContext<Self> {
         self.context.as_ref()
     }

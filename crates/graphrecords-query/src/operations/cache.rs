@@ -2,7 +2,8 @@ use crate::{
     Cache, EvaluateContext, EvaluateOperand, Explain, Operand, QueryResult,
     execution::{Cacheable, EvaluationCache},
     optimizer::{
-        Cost, MatchInputs, OptimizePlan, OptimizerHints, PlanNode, Session, Stats, Transformed,
+        Estimate, Estimated, MatchInputs, OptimizePlan, OptimizerHints, PlanNode, Session, Stats,
+        Transformed,
     },
 };
 use graphrecords_core::GraphRecord;
@@ -31,9 +32,9 @@ where
     }
 }
 
-impl<O: Operand> Cost<O> for CacheContext<O> {
-    fn cost(&self, stats: &Stats) -> O::Cost {
-        self.input.context().cost(stats)
+impl<O: Operand> Estimated for CacheContext<O> {
+    fn estimate(&self, stats: &Stats) -> Estimate {
+        self.input.context().estimate(stats)
     }
 }
 

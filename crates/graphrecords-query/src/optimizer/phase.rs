@@ -1,4 +1,4 @@
-use super::cost::Stats;
+use super::stats::Stats;
 pub use graphrecords_macros::PhaseLabel;
 use std::{
     any::Any,

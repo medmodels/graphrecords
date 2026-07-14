@@ -6,7 +6,7 @@ use crate::{
     operations::{
         Apply, ArgumentSource, ElementKernel, Keyed, Operation, OperationContext, Pipeline, Prepare,
     },
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
 use std::ops::BitOr;
@@ -49,20 +49,17 @@ where
             |left, right| left || right,
         ))
     }
-}
 
-impl<I: IndexDomain, M, O: OrderState> EstimateCost<OrOperation<M>> for BoolMaskOperand<I, O>
-where
-    for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
-{
-    type OutputCost = <Self as Operand>::Cost;
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        let selectivity = input
+            .selectivity
+            .zip(self.other.estimate(stats).selectivity)
+            .map(|(left, right)| left.mul_add(-right, left + right));
 
-    fn estimate(
-        _operation: &OrOperation<M>,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
+        Estimate {
+            selectivity,
+            ..input
+        }
     }
 }
 

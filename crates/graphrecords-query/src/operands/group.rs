@@ -2,7 +2,7 @@ use crate::{
     BoxedIterator, ElementShape, EvaluateOperand, Multiple, Operand, QueryResult, Unordered,
     operands::OperandHandle,
     operations::{Apply, GroupKey, Operation},
-    optimizer::{EstimateCost, GroupCost, Stats},
+    optimizer::{Estimate, Stats},
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
@@ -42,7 +42,6 @@ where
 pub struct Grouped<K, O>(PhantomData<(K, O)>);
 
 impl<K: GroupKey, O: Operand> ElementShape for Grouped<K, O> {
-    type Cost = GroupCost<O::Cost>;
     type Element<'a> = (K::Key<'a>, QueryResult<O::ReturnValue<'a>>);
 }
 
@@ -55,6 +54,22 @@ where
     P: Operation,
 {
     type Output = OperandHandle<Grouped<K, <O as Apply<P>>::Output>, Multiple<Unordered>>;
+
+    fn estimate(operation: &P, input: Estimate, stats: &Stats) -> Estimate {
+        let Estimate {
+            elements,
+            distinct,
+            selectivity,
+            per_group,
+        } = input;
+
+        Estimate {
+            elements,
+            distinct,
+            selectivity,
+            per_group: per_group.map(|inner| Box::new(O::estimate(operation, *inner, stats))),
+        }
+    }
 
     fn apply<'a>(
         graphrecord: &'a GraphRecord,
@@ -70,22 +85,5 @@ where
 
             (key, result)
         })))
-    }
-}
-
-impl<O, K, P> EstimateCost<P> for OperandHandle<Grouped<K, O>, Multiple<Unordered>>
-where
-    O: Apply<P>,
-    K: GroupKey,
-    P: Operation,
-{
-    type OutputCost = GroupCost<<O as EstimateCost<P>>::OutputCost>;
-
-    fn estimate(
-        operation: &P,
-        input_cost: <Self as Operand>::Cost,
-        stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost.map(|per_group| O::estimate(operation, per_group, stats))
     }
 }

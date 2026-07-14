@@ -1,11 +1,10 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Operand, OrderState, QueryResult, Scalar,
+    Bare, Explain, IndexDomain, Indexed, Operand, QueryResult, Scalar,
     execution::EvaluationCache,
-    operands::{BareValuesOperand, ValuesOperand},
     operations::{
         Apply, ElementKernel, ErrorPolicy, Operation, OperationContext, Pipeline, Prepare,
     },
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 
@@ -46,18 +45,6 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, Scalar>> for Drop {
     }
 }
 
-impl<I: IndexDomain, O: OrderState> EstimateCost<Drop> for ValuesOperand<I, O> {
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &Drop,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
-    }
-}
-
 impl ElementKernel<Bare<Scalar>> for Drop {
     type OutShape = Bare<Scalar>;
 
@@ -68,18 +55,6 @@ impl ElementKernel<Bare<Scalar>> for Drop {
     {
         Ok(Pipeline::default()
             .filter_map(|result: QueryResult<GraphRecordValue>| result.ok().map(Ok)))
-    }
-}
-
-impl<O: OrderState> EstimateCost<Drop> for BareValuesOperand<O> {
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &Drop,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
     }
 }
 

@@ -1,15 +1,12 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Operand, OrderState, QueryResult, Scalar,
+    Bare, Explain, IndexDomain, Indexed, Operand, QueryResult, Scalar,
     execution::EvaluationCache,
     explain::ExplainFormatter,
-    operands::{BareValuesOperand, ValuesOperand},
     operations::{
         Apply, ArgumentSource, ElementKernel, ErrorPolicy, Keyed, Looked, Operation,
         OperationContext, Pipeline, Prepare,
     },
-    optimizer::{
-        EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, PlanNode, Stats,
-    },
+    optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, PlanNode},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 use std::{fmt, hash::Hasher};
@@ -96,23 +93,6 @@ where
     }
 }
 
-impl<I, R, O> EstimateCost<Replace<R>> for ValuesOperand<I, O>
-where
-    I: IndexDomain,
-    O: OrderState,
-    for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
-{
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &Replace<R>,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
-    }
-}
-
 impl ElementKernel<Bare<Scalar>> for Replace<GraphRecordValue> {
     type OutShape = Bare<Scalar>;
 
@@ -126,18 +106,6 @@ impl ElementKernel<Bare<Scalar>> for Replace<GraphRecordValue> {
                 result.or_else(|original| replacement.clone().or(Err(original)))
             }),
         )
-    }
-}
-
-impl<O: OrderState> EstimateCost<Replace<GraphRecordValue>> for BareValuesOperand<O> {
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &Replace<GraphRecordValue>,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
     }
 }
 

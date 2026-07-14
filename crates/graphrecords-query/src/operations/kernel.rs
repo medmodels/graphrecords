@@ -3,7 +3,7 @@ use crate::{
     Operand, OrderState, QueryResult, ValueType,
     operands::OperandHandle,
     operations::{Apply, Operation},
-    optimizer::EstimateCost,
+    optimizer::{Estimate, Stats},
 };
 use graphrecords_core::GraphRecord;
 
@@ -20,6 +20,10 @@ pub trait Kernel<S: ElementShape, C: Arity>: Operation {
         values: <OperandHandle<S, C> as EvaluateOperand>::ReturnValue<'a>,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>;
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::UNKNOWN
+    }
 }
 
 impl<K, V, C, P> Apply<P> for OperandHandle<Indexed<K, V>, C>
@@ -28,7 +32,6 @@ where
     V: ValueType,
     C: Arity,
     P: Kernel<Indexed<K, V>, C>,
-    Self: EstimateCost<P, OutputCost = <P::Output as Operand>::Cost>,
 {
     type Output = P::Output;
 
@@ -41,6 +44,10 @@ where
         Self: 'a,
     {
         P::execute(graphrecord, values, prepared)
+    }
+
+    fn estimate(operation: &P, input: Estimate, stats: &Stats) -> Estimate {
+        <P as Kernel<Indexed<K, V>, C>>::estimate(operation, input, stats)
     }
 }
 
@@ -113,6 +120,10 @@ pub trait ElementKernel<S: ElementShape>: Operation {
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<Pipeline<'a, S::Element<'a>, <Self::OutShape as ElementShape>::Element<'a>>>;
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
 impl<S: ElementShape, O: OrderState, P: ElementKernel<S>> Kernel<S, Multiple<O>> for P {
@@ -125,6 +136,10 @@ impl<S: ElementShape, O: OrderState, P: ElementKernel<S>> Kernel<S, Multiple<O>>
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(P::pipeline(graphrecord, prepared)?.execute(values))
     }
+
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        ElementKernel::estimate(self, input, stats)
+    }
 }
 
 impl<V, C, P> Apply<P> for OperandHandle<Bare<V>, C>
@@ -132,7 +147,6 @@ where
     V: ValueType,
     C: Arity,
     P: Kernel<Bare<V>, C>,
-    Self: EstimateCost<P, OutputCost = <P::Output as Operand>::Cost>,
 {
     type Output = P::Output;
 
@@ -145,5 +159,9 @@ where
         Self: 'a,
     {
         P::execute(graphrecord, values, prepared)
+    }
+
+    fn estimate(operation: &P, input: Estimate, stats: &Stats) -> Estimate {
+        <P as Kernel<Bare<V>, C>>::estimate(operation, input, stats)
     }
 }

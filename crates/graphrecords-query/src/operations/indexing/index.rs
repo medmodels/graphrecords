@@ -1,11 +1,8 @@
 use crate::{
-    Explain, IndexDomain, IndexValue, Indexed, Multiple, Operand, OrderState, QueryResult, Unit,
+    Explain, IndexDomain, IndexValue, Indexed, Operand, QueryResult, Unit,
     execution::EvaluationCache,
-    operands::{IndicesOperand, OperandHandle},
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
-    optimizer::{
-        EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats, ValueCost,
-    },
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Index,
 };
 use graphrecords_core::GraphRecord;
@@ -44,19 +41,12 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, Unit>> for IndexOperation {
             }),
         )
     }
-}
 
-impl<I: IndexDomain, O: OrderState> EstimateCost<IndexOperation>
-    for OperandHandle<Indexed<I, Unit>, Multiple<O>>
-{
-    type OutputCost = <IndicesOperand<I, O> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &IndexOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        ValueCost::new(input_cost, input_cost)
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            distinct: input.elements,
+            ..input
+        }
     }
 }
 

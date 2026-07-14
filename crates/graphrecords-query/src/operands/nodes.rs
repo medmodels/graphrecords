@@ -1,10 +1,9 @@
 use super::OperandHandle;
 use crate::{
-    EvaluateContext, EvaluateOperand, Explain, Indexed, Multiple, Operand, QueryResult, Unit,
-    Unordered,
+    EvaluateContext, EvaluateOperand, Explain, Indexed, Multiple, QueryResult, Unit, Unordered,
     execution::EvaluationCache,
     optimizer::{
-        Cardinality, Cost, Count, CountKind, MatchInputs, OptimizePlan, OptimizerHints, PlanNode,
+        Count, CountKind, Estimate, Estimated, MatchInputs, OptimizePlan, OptimizerHints, PlanNode,
         Stats,
     },
 };
@@ -16,9 +15,11 @@ pub type NodeOperand<O> = OperandHandle<Indexed<NodeIndex, Unit>, Multiple<O>>;
 #[plan(operand = NodeOperand<Unordered>, optimizer_hints(distinct))]
 pub struct AllNodes;
 
-impl Cost<NodeOperand<Unordered>> for AllNodes {
-    fn cost(&self, stats: &Stats) -> <NodeOperand<Unordered> as Operand>::Cost {
-        Cardinality(stats.get::<Count>(&CountKind::Nodes))
+impl Estimated for AllNodes {
+    fn estimate(&self, stats: &Stats) -> Estimate {
+        let nodes = stats.get::<Count>(&CountKind::Nodes);
+
+        Estimate::values(nodes, nodes)
     }
 }
 

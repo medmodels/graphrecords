@@ -1,4 +1,4 @@
-use super::{cost::Stats, engine::Session, plan::PlanNode};
+use super::{engine::Session, plan::PlanNode, stats::Stats};
 use crate::Operand;
 use std::marker::PhantomData;
 

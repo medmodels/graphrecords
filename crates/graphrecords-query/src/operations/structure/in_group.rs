@@ -1,12 +1,10 @@
 use crate::{
-    Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Multiple, Operand, OrderState,
-    QueryResult, Unit,
+    Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, Unit,
     execution::EvaluationCache,
-    operands::{BoolMaskOperand, OperandHandle},
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
     optimizer::{
-        Cardinality, EdgeGroupSize, EstimateCost, NodeGroupSize, OperationInputs, OptimizerHints,
-        PlanIdentity, PlanInputs, Selectivity, Stats,
+        EdgeGroupSize, Estimate, NodeGroupSize, OperationInputs, OptimizerHints, PlanIdentity,
+        PlanInputs, Stats,
     },
     traits::InGroup,
 };
@@ -22,7 +20,7 @@ pub trait IndicesInGroup: IndexDomain {
         group: &Group,
     ) -> QueryResult<GrHashSet<Self::Index<'a>>>;
 
-    fn group_size(stats: &Stats, group: &Group) -> Cardinality;
+    fn group_size(stats: &Stats, group: &Group) -> usize;
 }
 
 impl IndicesInGroup for NodeIndex {
@@ -36,8 +34,8 @@ impl IndicesInGroup for NodeIndex {
             .collect())
     }
 
-    fn group_size(stats: &Stats, group: &Group) -> Cardinality {
-        Cardinality(stats.get::<NodeGroupSize>(group))
+    fn group_size(stats: &Stats, group: &Group) -> usize {
+        stats.get::<NodeGroupSize>(group)
     }
 }
 
@@ -52,8 +50,8 @@ impl IndicesInGroup for EdgeIndex {
             .collect())
     }
 
-    fn group_size(stats: &Stats, group: &Group) -> Cardinality {
-        Cardinality(stats.get::<EdgeGroupSize>(group))
+    fn group_size(stats: &Stats, group: &Group) -> usize {
+        stats.get::<EdgeGroupSize>(group)
     }
 }
 
@@ -95,19 +93,17 @@ impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
             },
         ))
     }
-}
 
-impl<I: IndicesInGroup, O: OrderState> EstimateCost<InGroupOperation>
-    for OperandHandle<Indexed<I, Unit>, Multiple<O>>
-{
-    type OutputCost = <BoolMaskOperand<I, O> as Operand>::Cost;
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        let size = I::group_size(stats, &self.group);
+        let selectivity = input
+            .elements
+            .map(|elements| size.min(elements) as f64 / elements.max(1) as f64);
 
-    fn estimate(
-        operation: &InGroupOperation,
-        input_cost: <Self as Operand>::Cost,
-        stats: &Stats,
-    ) -> Self::OutputCost {
-        Selectivity::ratio(I::group_size(stats, &operation.group), input_cost)
+        Estimate {
+            selectivity,
+            ..input
+        }
     }
 }
 

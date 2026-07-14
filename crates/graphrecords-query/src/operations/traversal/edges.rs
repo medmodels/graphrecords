@@ -2,9 +2,9 @@ use crate::{
     BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Indexed, Multiple, Operand, OrderState,
     QueryResult, Unit, Unordered,
     execution::EvaluationCache,
-    operands::{EdgeOperand, NodeOperand, OperandHandle},
+    operands::{EdgeOperand, NodeOperand},
     operations::{Kernel, KeyedStream, Operation, OperationContext, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::Edges,
 };
 use graphrecords_core::{
@@ -65,20 +65,6 @@ impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for EdgesOpera
             .collect();
 
         Ok(Box::new(edges.into_iter().map(|edge| (edge, Ok(())))))
-    }
-}
-
-impl<O: OrderState> EstimateCost<EdgesOperation>
-    for OperandHandle<Indexed<NodeIndex, Unit>, Multiple<O>>
-{
-    type OutputCost = <EdgeOperand<Unordered> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &EdgesOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
     }
 }
 

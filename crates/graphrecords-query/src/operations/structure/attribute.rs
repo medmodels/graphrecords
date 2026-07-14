@@ -1,12 +1,11 @@
 use crate::{
-    Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled, Multiple, Operand, OrderState,
-    QueryResult, Scalar, Unit,
+    Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled, Operand, QueryResult, Scalar,
+    Unit,
     execution::EvaluationCache,
-    operands::{OperandHandle, ValuesOperand},
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
     optimizer::{
-        Cardinality, EdgeAttributeCardinality, EstimateCost, NodeAttributeCardinality,
-        OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats, ValueCost,
+        EdgeAttributeCardinality, Estimate, NodeAttributeCardinality, OperationInputs,
+        OptimizerHints, PlanIdentity, PlanInputs, Stats,
     },
     traits::Attribute,
 };
@@ -22,7 +21,7 @@ use std::{
 pub trait EntityAttributes: IndexDomain {
     fn attributes<'a>(graphrecord: &'a GraphRecord, index: &Self::Index<'a>) -> &'a AttributeMap;
 
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> Cardinality;
+    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize;
 }
 
 impl EntityAttributes for NodeIndex {
@@ -30,8 +29,8 @@ impl EntityAttributes for NodeIndex {
         graphrecord.node_attributes(index).expect("Node must exist")
     }
 
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> Cardinality {
-        Cardinality(stats.get::<NodeAttributeCardinality>(attribute))
+    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize {
+        stats.get::<NodeAttributeCardinality>(attribute)
     }
 }
 
@@ -40,8 +39,8 @@ impl EntityAttributes for EdgeIndex {
         graphrecord.edge_attributes(index).expect("Edge must exist")
     }
 
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> Cardinality {
-        Cardinality(stats.get::<EdgeAttributeCardinality>(attribute))
+    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize {
+        stats.get::<EdgeAttributeCardinality>(attribute)
     }
 }
 
@@ -125,22 +124,18 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation
             },
         ))
     }
-}
 
-impl<I: EntityAttributes, O: OrderState> EstimateCost<AttributeOperation>
-    for OperandHandle<Indexed<I, Unit>, Multiple<O>>
-{
-    type OutputCost = <ValuesOperand<I, O> as Operand>::Cost;
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        let mut distinct = I::attribute_cardinality(stats, &self.attribute);
+        if let Some(elements) = input.elements {
+            distinct = distinct.min(elements);
+        }
 
-    fn estimate(
-        operation: &AttributeOperation,
-        input_cost: <Self as Operand>::Cost,
-        stats: &Stats,
-    ) -> Self::OutputCost {
-        ValueCost::new(
-            input_cost,
-            I::attribute_cardinality(stats, &operation.attribute),
-        )
+        Estimate {
+            distinct: Some(distinct),
+            selectivity: None,
+            ..input
+        }
     }
 }
 
@@ -192,21 +187,21 @@ impl<K: IndexDomain, E: EntityAttributes> ElementKernel<Indexed<K, IndexValue<E>
             },
         ))
     }
-}
 
-impl<K: IndexDomain, E: EntityAttributes, O: OrderState> EstimateCost<AttributeOperation>
-    for OperandHandle<Indexed<K, IndexValue<E>>, Multiple<O>>
-{
-    type OutputCost = <ValuesOperand<K, O> as Operand>::Cost;
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        let mut distinct = E::attribute_cardinality(stats, &self.attribute);
+        if let Some(input_distinct) = input.distinct {
+            distinct = distinct.min(input_distinct);
+        }
+        if let Some(elements) = input.elements {
+            distinct = distinct.min(elements);
+        }
 
-    fn estimate(
-        operation: &AttributeOperation,
-        input_cost: <Self as Operand>::Cost,
-        stats: &Stats,
-    ) -> Self::OutputCost {
-        let cardinality = E::attribute_cardinality(stats, &operation.attribute);
-
-        ValueCost::new(input_cost.rows(), cardinality.min(input_cost.distinct()))
+        Estimate {
+            distinct: Some(distinct),
+            selectivity: None,
+            ..input
+        }
     }
 }
 

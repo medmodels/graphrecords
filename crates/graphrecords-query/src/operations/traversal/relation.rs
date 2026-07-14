@@ -1,12 +1,8 @@
 use crate::{
-    Explain, IndexDomain, IndexValue, Indexed, Multiple, Operand, OrderState, QueryResult,
+    Explain, IndexDomain, IndexValue, Indexed, QueryResult,
     execution::EvaluationCache,
-    operands::{OperandHandle, ReferenceOperand},
     operations::{ElementKernel, Operation, Pipeline, Prepare},
-    optimizer::{
-        Cardinality, EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
-        Stats, ValueCost,
-    },
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
 
@@ -20,7 +16,7 @@ pub trait Relation: Prepare + Clone + Explain + PlanIdentity + PlanInputs {
         from: <Self::From as IndexDomain>::Index<'a>,
     ) -> QueryResult<<Self::To as IndexDomain>::Index<'a>>;
 
-    fn codomain_count(_stats: &Stats) -> Option<Cardinality> {
+    fn codomain_count(_stats: &Stats) -> Option<usize> {
         None
     }
 }
@@ -84,23 +80,20 @@ impl<R: Relation, K: IndexDomain> ElementKernel<Indexed<K, IndexValue<R::From>>>
             },
         ))
     }
-}
 
-impl<R: Relation, K: IndexDomain, O: OrderState> EstimateCost<RelationOperation<R>>
-    for OperandHandle<Indexed<K, IndexValue<R::From>>, Multiple<O>>
-{
-    type OutputCost = <ReferenceOperand<K, R::To, O> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &RelationOperation<R>,
-        input_cost: <Self as Operand>::Cost,
-        stats: &Stats,
-    ) -> Self::OutputCost {
-        let distinct = match R::codomain_count(stats) {
-            Some(codomain) => codomain.min(input_cost.distinct()),
-            None => input_cost.distinct(),
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        let mut distinct = match (R::codomain_count(stats), input.distinct) {
+            (Some(codomain), Some(distinct)) => Some(codomain.min(distinct)),
+            (codomain, distinct) => codomain.or(distinct),
         };
+        if let Some(elements) = input.elements {
+            distinct = distinct.map(|distinct| distinct.min(elements));
+        }
 
-        ValueCost::new(input_cost.rows(), distinct)
+        Estimate {
+            distinct,
+            selectivity: None,
+            ..input
+        }
     }
 }

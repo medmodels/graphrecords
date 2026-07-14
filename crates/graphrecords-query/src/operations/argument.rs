@@ -2,7 +2,7 @@ use crate::{
     Explain, Failure, IndexDomain, QueryResult,
     execution::EvaluationCache,
     explain::ExplainFormatter,
-    optimizer::{PlanIdentity, PlanInputs},
+    optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 use std::{
@@ -78,7 +78,9 @@ impl Alignment for Unaligned {
     }
 }
 
-pub trait ArgumentSource<A: Alignment>: Prepare + Explain + PlanIdentity + PlanInputs {
+pub trait ArgumentSource<A: Alignment>:
+    Prepare + Explain + PlanIdentity + PlanInputs + Estimated
+{
     type Value<'a>: Clone
     where
         Self: 'a;
@@ -148,6 +150,15 @@ impl Prepare for GraphRecordValue {
         _cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(Ok(self.clone()))
+    }
+}
+
+impl Estimated for GraphRecordValue {
+    fn estimate(&self, _stats: &Stats) -> Estimate {
+        Estimate {
+            distinct: Some(1),
+            ..Estimate::UNKNOWN
+        }
     }
 }
 

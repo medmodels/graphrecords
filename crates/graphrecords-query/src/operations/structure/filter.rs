@@ -1,12 +1,11 @@
 use crate::{
-    Explain, IndexDomain, Indexed, Labeled, Multiple, Operand, OrderState, QueryResult, Unit,
+    Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, Unit,
     execution::EvaluationCache,
-    operands::OperandHandle,
     operations::{
         Apply, ArgumentSource, ElementKernel, Keyed, OnMissing, Operation, OperationContext,
         Pipeline, Prepare,
     },
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Filter,
 };
 use graphrecords_core::GraphRecord;
@@ -59,22 +58,12 @@ where
             },
         ))
     }
-}
 
-impl<I, M, O> EstimateCost<FilterOperation<M>> for OperandHandle<Indexed<I, Unit>, Multiple<O>>
-where
-    I: IndexDomain,
-    O: OrderState,
-    for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
-{
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &FilterOperation<M>,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        match self.mask.estimate(stats).selectivity {
+            Some(selectivity) => input.scaled(selectivity),
+            None => input,
+        }
     }
 }
 

@@ -6,7 +6,7 @@ use crate::{
     operations::{
         Apply, BareStream, ErrorPolicy, Kernel, KeyedStream, Operation, OperationContext, Prepare,
     },
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
 
@@ -42,17 +42,9 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
             raised.into_iter().map(|(index, value)| (index, Ok(value))),
         ))
     }
-}
 
-impl<I: IndexDomain, O: OrderState> EstimateCost<Raise> for ValuesOperand<I, O> {
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &Raise,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 
@@ -68,17 +60,9 @@ impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for Raise {
 
         Ok(Box::new(raised.into_iter().map(Ok)))
     }
-}
 
-impl<O: OrderState> EstimateCost<Raise> for BareValuesOperand<O> {
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &Raise,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 

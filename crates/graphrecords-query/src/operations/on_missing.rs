@@ -6,7 +6,7 @@ use crate::{
         BareValueOperand, BoolMaskOperand, NestedBoolMaskOperand, ValueOperand, ValuesOperand,
     },
     operations::{Absent, ArgumentSource, Drop, Keyed, Looked, OnMissing, Prepare, Raise, Replace},
-    optimizer::{PlanIdentity, PlanInputs, PlanNode},
+    optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, PlanNode, Stats},
     traits::MaybeAbsent,
 };
 use graphrecords_core::GraphRecord;
@@ -132,10 +132,6 @@ impl<I: IndexDomain, S: MaybeAbsent<I>, P> WithMissing<I, S, P> {
             index: PhantomData,
         }
     }
-
-    pub(crate) const fn inner(&self) -> &S {
-        &self.inner
-    }
 }
 
 impl<I: IndexDomain, S: MaybeAbsent<I> + Clone, P: Clone> Clone for WithMissing<I, S, P> {
@@ -195,6 +191,12 @@ where
             self.inner.prepare(graphrecord, cache)?,
             self.policy.prepare(graphrecord, cache)?,
         ))
+    }
+}
+
+impl<I: IndexDomain, S: MaybeAbsent<I>, P> Estimated for WithMissing<I, S, P> {
+    fn estimate(&self, stats: &Stats) -> Estimate {
+        self.inner.estimate(stats)
     }
 }
 

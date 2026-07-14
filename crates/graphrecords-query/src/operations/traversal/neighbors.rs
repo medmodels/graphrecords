@@ -2,9 +2,9 @@ use crate::{
     BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Indexed, Multiple, Operand, OrderState,
     QueryResult, Unit, Unordered,
     execution::EvaluationCache,
-    operands::{NodeOperand, OperandHandle},
+    operands::NodeOperand,
     operations::{Kernel, KeyedStream, Operation, OperationContext, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::Neighbors,
 };
 use graphrecords_core::{GraphRecord, graphrecord::NodeIndex};
@@ -69,20 +69,6 @@ impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for NeighborsO
             .collect();
 
         Ok(Box::new(neighbors.into_iter().map(|node| (node, Ok(())))))
-    }
-}
-
-impl<O: OrderState> EstimateCost<NeighborsOperation>
-    for OperandHandle<Indexed<NodeIndex, Unit>, Multiple<O>>
-{
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &NeighborsOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost
     }
 }
 

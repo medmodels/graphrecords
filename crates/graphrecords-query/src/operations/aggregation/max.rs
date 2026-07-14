@@ -2,12 +2,9 @@ use crate::{
     EvaluateOperand, Explain, Failure, IncomparableValues, IndexDomain, Indexed, Labeled, Multiple,
     Operand, OrderState, QueryResult, Scalar,
     execution::EvaluationCache,
-    operands::{ValueOperand, ValuesOperand},
+    operands::ValueOperand,
     operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
-    optimizer::{
-        Cardinality, EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
-        Stats, ValueCost,
-    },
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Max,
 };
 use graphrecords_core::GraphRecord;
@@ -26,18 +23,6 @@ impl Prepare for MaxOperation {
         _cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(())
-    }
-}
-
-impl<I: IndexDomain, O: OrderState> EstimateCost<MaxOperation> for ValuesOperand<I, O> {
-    type OutputCost = <ValueOperand<I> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &MaxOperation,
-        _input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        ValueCost::new(Cardinality(1), Cardinality(1))
     }
 }
 
@@ -74,6 +59,10 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
         })?;
 
         Ok(best.map(|(index, value)| (index, Ok(value))))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
     }
 }
 

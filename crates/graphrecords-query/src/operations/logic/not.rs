@@ -3,7 +3,7 @@ use crate::{
     execution::EvaluationCache,
     operands::BoolMaskOperand,
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
-    optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
 use std::ops::Not as BitNot;
@@ -39,17 +39,12 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, Mask>> for NotOperation {
             }),
         )
     }
-}
 
-impl<I: IndexDomain, O: OrderState> EstimateCost<NotOperation> for BoolMaskOperand<I, O> {
-    type OutputCost = <Self as Operand>::Cost;
-
-    fn estimate(
-        _operation: &NotOperation,
-        input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        input_cost.negated()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            selectivity: input.selectivity.map(|selectivity| 1.0 - selectivity),
+            ..input
+        }
     }
 }
 

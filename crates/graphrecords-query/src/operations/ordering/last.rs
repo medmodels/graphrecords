@@ -1,13 +1,10 @@
 use crate::{
-    AttributeName, AttributeSet, Bare, EvaluateOperand, Explain, IndexDomain, IndexValue, Indexed,
-    Multiple, Operand, Ordered, QueryResult, Scalar, Single, Unit, ValueType,
+    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, Ordered, QueryResult,
+    Single, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
-    optimizer::{
-        Cardinality, EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
-        Stats, ValueCost,
-    },
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Last,
 };
 use graphrecords_core::GraphRecord;
@@ -42,75 +39,9 @@ where
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(values.last())
     }
-}
 
-impl<I: IndexDomain> EstimateCost<LastOperation>
-    for OperandHandle<Indexed<I, Unit>, Multiple<Ordered>>
-{
-    type OutputCost = <OperandHandle<Indexed<I, Unit>, Single> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &LastOperation,
-        _input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        Cardinality(1)
-    }
-}
-
-impl<I: IndexDomain> EstimateCost<LastOperation>
-    for OperandHandle<Indexed<I, Scalar>, Multiple<Ordered>>
-{
-    type OutputCost = <OperandHandle<Indexed<I, Scalar>, Single> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &LastOperation,
-        _input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        ValueCost::new(Cardinality(1), Cardinality(1))
-    }
-}
-
-impl<I: IndexDomain> EstimateCost<LastOperation>
-    for OperandHandle<Indexed<I, AttributeName>, Multiple<Ordered>>
-{
-    type OutputCost = <OperandHandle<Indexed<I, AttributeName>, Single> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &LastOperation,
-        _input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        ValueCost::new(Cardinality(1), Cardinality(1))
-    }
-}
-
-impl<I: IndexDomain> EstimateCost<LastOperation>
-    for OperandHandle<Indexed<I, AttributeSet>, Multiple<Ordered>>
-{
-    type OutputCost = <OperandHandle<Indexed<I, AttributeSet>, Single> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &LastOperation,
-        _input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        Cardinality(1)
-    }
-}
-
-impl<I: IndexDomain, E: IndexDomain> EstimateCost<LastOperation>
-    for OperandHandle<Indexed<I, IndexValue<E>>, Multiple<Ordered>>
-{
-    type OutputCost = <OperandHandle<Indexed<I, IndexValue<E>>, Single> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &LastOperation,
-        _input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        ValueCost::new(Cardinality(1), Cardinality(1))
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
     }
 }
 
@@ -127,17 +58,9 @@ where
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(values.last())
     }
-}
 
-impl EstimateCost<LastOperation> for OperandHandle<Bare<Scalar>, Multiple<Ordered>> {
-    type OutputCost = <OperandHandle<Bare<Scalar>, Single> as Operand>::Cost;
-
-    fn estimate(
-        _operation: &LastOperation,
-        _input_cost: <Self as Operand>::Cost,
-        _stats: &Stats,
-    ) -> Self::OutputCost {
-        ValueCost::new(Cardinality(1), Cardinality(1))
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
     }
 }
 

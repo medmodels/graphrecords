@@ -23,7 +23,7 @@ use crate::{
     execution::EvaluationCache,
     explain::ExplainFormatter,
     optimizer::{
-        Cost, EmptyRule, EstimateCost, MatchInputs, OperationInputs, OptimizePlan, OptimizerHints,
+        EmptyRule, Estimate, Estimated, MatchInputs, OperationInputs, OptimizePlan, OptimizerHints,
         PlanInputs, PlanNode, Session, Stats, Transformed,
     },
 };
@@ -63,8 +63,8 @@ pub use traversal::{
 
 pub trait Operation: Prepare + OperationInputs + Explain {}
 
-pub trait Apply<P: Operation>: Operand + EstimateCost<P> {
-    type Output: Operand<Cost = <Self as EstimateCost<P>>::OutputCost>;
+pub trait Apply<P: Operation>: Operand {
+    type Output: Operand;
 
     fn apply<'a>(
         graphrecord: &'a GraphRecord,
@@ -73,6 +73,8 @@ pub trait Apply<P: Operation>: Operand + EstimateCost<P> {
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
     where
         Self: 'a;
+
+    fn estimate(operation: &P, input: Estimate, stats: &Stats) -> Estimate;
 }
 
 pub struct OperationContext<I, P>
@@ -199,13 +201,13 @@ where
     }
 }
 
-impl<I, P> Cost<<I as Apply<P>>::Output> for OperationContext<I, P>
+impl<I, P> Estimated for OperationContext<I, P>
 where
     I: Apply<P>,
     P: Operation,
 {
-    fn cost(&self, stats: &Stats) -> <<I as Apply<P>>::Output as Operand>::Cost {
-        <I as EstimateCost<P>>::estimate(&self.operation, self.input.context().cost(stats), stats)
+    fn estimate(&self, stats: &Stats) -> Estimate {
+        <I as Apply<P>>::estimate(&self.operation, self.input.context().estimate(stats), stats)
     }
 }
 

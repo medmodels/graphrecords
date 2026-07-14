@@ -1,10 +1,9 @@
 use super::OperandHandle;
 use crate::{
-    EvaluateContext, EvaluateOperand, Explain, Indexed, Multiple, Operand, QueryResult, Unit,
-    Unordered,
+    EvaluateContext, EvaluateOperand, Explain, Indexed, Multiple, QueryResult, Unit, Unordered,
     execution::EvaluationCache,
     optimizer::{
-        Cardinality, Cost, Count, CountKind, MatchInputs, OptimizePlan, OptimizerHints, PlanNode,
+        Count, CountKind, Estimate, Estimated, MatchInputs, OptimizePlan, OptimizerHints, PlanNode,
         Stats,
     },
 };
@@ -16,9 +15,11 @@ pub type EdgeOperand<O> = OperandHandle<Indexed<EdgeIndex, Unit>, Multiple<O>>;
 #[plan(operand = EdgeOperand<Unordered>, optimizer_hints(distinct))]
 pub struct AllEdges;
 
-impl Cost<EdgeOperand<Unordered>> for AllEdges {
-    fn cost(&self, stats: &Stats) -> <EdgeOperand<Unordered> as Operand>::Cost {
-        Cardinality(stats.get::<Count>(&CountKind::Edges))
+impl Estimated for AllEdges {
+    fn estimate(&self, stats: &Stats) -> Estimate {
+        let edges = stats.get::<Count>(&CountKind::Edges);
+
+        Estimate::values(edges, edges)
     }
 }
 
