@@ -1,5 +1,5 @@
 use crate::{
-    Explain, Failure, IndexDomain, QueryResult,
+    Explain, Failure, IndexDomain, OrderState, QueryResult,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operands::{
@@ -108,11 +108,14 @@ where
     }
 }
 
-impl<I: IndexDomain> MaybeAbsent<I> for ValuesOperand<I> {}
+impl<I: IndexDomain, O: OrderState> MaybeAbsent<I> for ValuesOperand<I, O> {}
 impl<I1: IndexDomain, I2: IndexDomain> MaybeAbsent<I1> for ValueOperand<I2> {}
 impl<I: IndexDomain> MaybeAbsent<I> for BareValueOperand {}
-impl<I: IndexDomain> MaybeAbsent<I> for BoolMaskOperand<I> {}
-impl<I: IndexDomain, T: 'static + Clone> MaybeAbsent<I> for NestedBoolMaskOperand<I, T> {}
+impl<I: IndexDomain, O: OrderState> MaybeAbsent<I> for BoolMaskOperand<I, O> {}
+impl<I: IndexDomain, T: 'static + Clone, O: OrderState> MaybeAbsent<I>
+    for NestedBoolMaskOperand<I, T, O>
+{
+}
 
 pub struct WithMissing<I: IndexDomain, S: MaybeAbsent<I>, P> {
     inner: S,

@@ -1,6 +1,6 @@
 use super::OperandHandle;
 use crate::{
-    Bare, EvaluateOperand, IndexDomain, Indexed, Multiple, OrderState, Scalar, Single, Unsorted,
+    Bare, EvaluateOperand, IndexDomain, Indexed, Multiple, OrderState, Scalar, Single,
     error::QueryResult,
     execution::EvaluationCache,
     operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
@@ -9,8 +9,8 @@ use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 use graphrecords_utils::aliases::GrHashMap;
 use std::sync::Arc;
 
-pub type ValuesOperand<I, O = Unsorted> = OperandHandle<Indexed<I, Scalar>, Multiple<O>>;
-pub type BareValuesOperand<O = Unsorted> = OperandHandle<Bare<Scalar>, Multiple<O>>;
+pub type ValuesOperand<I, O> = OperandHandle<Indexed<I, Scalar>, Multiple<O>>;
+pub type BareValuesOperand<O> = OperandHandle<Bare<Scalar>, Multiple<O>>;
 pub type ValueOperand<I> = OperandHandle<Indexed<I, Scalar>, Single>;
 pub type BareValueOperand = OperandHandle<Bare<Scalar>, Single>;
 

@@ -1,19 +1,19 @@
 use crate::{
     Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Unsorted, ValueType,
+    QueryResult, Unordered, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
     optimizer::{EstimateCost, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::Unordered,
+    traits::Unorder,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
-#[explain(label = "Unordered")]
-pub struct UnorderedOperation;
+#[explain(label = "Unorder")]
+pub struct UnorderOperation;
 
-impl Prepare for UnorderedOperation {
+impl Prepare for UnorderOperation {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -26,9 +26,9 @@ impl Prepare for UnorderedOperation {
 }
 
 impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple<O>>
-    for UnorderedOperation
+    for UnorderOperation
 {
-    type Output = OperandHandle<Indexed<I, V>, Multiple<Unsorted>>;
+    type Output = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -39,13 +39,13 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple
     }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState> EstimateCost<UnorderedOperation>
+impl<I: IndexDomain, V: ValueType, O: OrderState> EstimateCost<UnorderOperation>
     for OperandHandle<Indexed<I, V>, Multiple<O>>
 {
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(
-        _operation: &UnorderedOperation,
+        _operation: &UnorderOperation,
         input_cost: <Self as Operand>::Cost,
         _stats: &Stats,
     ) -> Self::OutputCost {
@@ -53,8 +53,8 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> EstimateCost<UnorderedOperatio
     }
 }
 
-impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for UnorderedOperation {
-    type Output = OperandHandle<Bare<V>, Multiple<Unsorted>>;
+impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for UnorderOperation {
+    type Output = OperandHandle<Bare<V>, Multiple<Unordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -65,13 +65,13 @@ impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for UnorderedOper
     }
 }
 
-impl<V: ValueType, O: OrderState> EstimateCost<UnorderedOperation>
+impl<V: ValueType, O: OrderState> EstimateCost<UnorderOperation>
     for OperandHandle<Bare<V>, Multiple<O>>
 {
     type OutputCost = <Self as Operand>::Cost;
 
     fn estimate(
-        _operation: &UnorderedOperation,
+        _operation: &UnorderOperation,
         input_cost: <Self as Operand>::Cost,
         _stats: &Stats,
     ) -> Self::OutputCost {
@@ -79,13 +79,13 @@ impl<V: ValueType, O: OrderState> EstimateCost<UnorderedOperation>
     }
 }
 
-impl<O> Unordered for O
+impl<O> Unorder for O
 where
-    O: Apply<UnorderedOperation>,
+    O: Apply<UnorderOperation>,
 {
-    type ReturnOperand = <O as Apply<UnorderedOperation>>::Output;
+    type ReturnOperand = <O as Apply<UnorderOperation>>::Output;
 
-    fn unordered(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), UnorderedOperation))
+    fn unorder(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), UnorderOperation))
     }
 }

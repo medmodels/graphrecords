@@ -1,6 +1,6 @@
 use crate::{
     BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Unit,
+    QueryResult, Unit, Unordered,
     execution::EvaluationCache,
     operands::{EdgeOperand, NodeOperand, OperandHandle},
     operations::{Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -33,7 +33,7 @@ impl Prepare for EdgesOperation {
 }
 
 impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for EdgesOperation {
-    type Output = EdgeOperand;
+    type Output = EdgeOperand<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
@@ -71,7 +71,7 @@ impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for EdgesOpera
 impl<O: OrderState> EstimateCost<EdgesOperation>
     for OperandHandle<Indexed<NodeIndex, Unit>, Multiple<O>>
 {
-    type OutputCost = <EdgeOperand as Operand>::Cost;
+    type OutputCost = <EdgeOperand<Unordered> as Operand>::Cost;
 
     fn estimate(
         _operation: &EdgesOperation,
@@ -82,8 +82,8 @@ impl<O: OrderState> EstimateCost<EdgesOperation>
     }
 }
 
-impl Edges for NodeOperand {
-    type ReturnOperand = EdgeOperand;
+impl<O: OrderState> Edges for NodeOperand<O> {
+    type ReturnOperand = EdgeOperand<Unordered>;
 
     fn edges(&self, direction: EdgeDirection) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

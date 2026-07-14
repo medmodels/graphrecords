@@ -1,5 +1,5 @@
 use crate::{
-    EvaluateOperand, Explain, Failure, IndexDomain, Labeled, Operand, QueryResult,
+    EvaluateOperand, Explain, Failure, IndexDomain, Labeled, Operand, QueryResult, Unordered,
     execution::EvaluationCache,
     operands::{GroupOperand, ValueOperand, ValuesOperand},
     operations::{Absent, Apply, KeyOperand, Operation, OperationContext, Prepare},
@@ -35,7 +35,7 @@ where
     I: IndexDomain,
     K: KeyOperand<Subject = I> + Operand<Cost = ValueCost>,
 {
-    type OutputCost = <ValuesOperand<I> as Operand>::Cost;
+    type OutputCost = <ValuesOperand<I, Unordered> as Operand>::Cost;
 
     fn estimate(
         operation: &BroadcastOperation<K>,
@@ -54,7 +54,7 @@ where
     I: IndexDomain,
     K: KeyOperand<Subject = I> + Operand<Cost = ValueCost>,
 {
-    type Output = ValuesOperand<I>;
+    type Output = ValuesOperand<I, Unordered>;
 
     fn apply<'a>(
         _graphrecord: &'a GraphRecord,
@@ -95,7 +95,7 @@ where
     I: IndexDomain,
     K: KeyOperand<Subject = I> + Operand<Cost = ValueCost>,
 {
-    type ReturnOperand = ValuesOperand<I>;
+    type ReturnOperand = ValuesOperand<I, Unordered>;
 
     fn broadcast(&self, key: K) -> Self::ReturnOperand {
         ValuesOperand::new(OperationContext::new(

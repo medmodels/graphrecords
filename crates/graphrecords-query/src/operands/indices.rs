@@ -1,6 +1,6 @@
 use super::OperandHandle;
 use crate::{
-    EvaluateOperand, IndexDomain, IndexValue, Indexed, Multiple, OrderState, Single, Unsorted,
+    EvaluateOperand, IndexDomain, IndexValue, Indexed, Multiple, OrderState, Single,
     error::QueryResult,
     execution::EvaluationCache,
     operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
@@ -9,10 +9,9 @@ use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
 use std::sync::Arc;
 
-pub type IndicesOperand<I, O = Unsorted> = OperandHandle<Indexed<I, IndexValue<I>>, Multiple<O>>;
+pub type IndicesOperand<I, O> = OperandHandle<Indexed<I, IndexValue<I>>, Multiple<O>>;
 pub type IndexOperand<I> = OperandHandle<Indexed<I, IndexValue<I>>, Single>;
-pub type ReferenceOperand<K, E, O = Unsorted> =
-    OperandHandle<Indexed<K, IndexValue<E>>, Multiple<O>>;
+pub type ReferenceOperand<K, E, O> = OperandHandle<Indexed<K, IndexValue<E>>, Multiple<O>>;
 
 impl<K: IndexDomain, E: IndexDomain, O: OrderState> Prepare for ReferenceOperand<K, E, O> {
     type Prepared<'a> = Arc<GrHashMap<K::Index<'a>, QueryResult<E::Index<'a>>>>;

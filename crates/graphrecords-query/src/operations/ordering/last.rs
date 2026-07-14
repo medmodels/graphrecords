@@ -1,6 +1,6 @@
 use crate::{
     AttributeName, AttributeSet, Bare, EvaluateOperand, Explain, IndexDomain, IndexValue, Indexed,
-    Multiple, Operand, QueryResult, Scalar, Single, Sorted, Unit, ValueType,
+    Multiple, Operand, Ordered, QueryResult, Scalar, Single, Unit, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -28,7 +28,7 @@ impl Prepare for LastOperation {
     }
 }
 
-impl<I, V> Kernel<Indexed<I, V>, Multiple<Sorted>> for LastOperation
+impl<I, V> Kernel<Indexed<I, V>, Multiple<Ordered>> for LastOperation
 where
     I: IndexDomain,
     V: ValueType,
@@ -37,7 +37,7 @@ where
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, V, Multiple<Sorted>>,
+        values: KeyedStream<'a, I, V, Multiple<Ordered>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(values.last())
@@ -45,7 +45,7 @@ where
 }
 
 impl<I: IndexDomain> EstimateCost<LastOperation>
-    for OperandHandle<Indexed<I, Unit>, Multiple<Sorted>>
+    for OperandHandle<Indexed<I, Unit>, Multiple<Ordered>>
 {
     type OutputCost = <OperandHandle<Indexed<I, Unit>, Single> as Operand>::Cost;
 
@@ -59,7 +59,7 @@ impl<I: IndexDomain> EstimateCost<LastOperation>
 }
 
 impl<I: IndexDomain> EstimateCost<LastOperation>
-    for OperandHandle<Indexed<I, Scalar>, Multiple<Sorted>>
+    for OperandHandle<Indexed<I, Scalar>, Multiple<Ordered>>
 {
     type OutputCost = <OperandHandle<Indexed<I, Scalar>, Single> as Operand>::Cost;
 
@@ -73,7 +73,7 @@ impl<I: IndexDomain> EstimateCost<LastOperation>
 }
 
 impl<I: IndexDomain> EstimateCost<LastOperation>
-    for OperandHandle<Indexed<I, AttributeName>, Multiple<Sorted>>
+    for OperandHandle<Indexed<I, AttributeName>, Multiple<Ordered>>
 {
     type OutputCost = <OperandHandle<Indexed<I, AttributeName>, Single> as Operand>::Cost;
 
@@ -87,7 +87,7 @@ impl<I: IndexDomain> EstimateCost<LastOperation>
 }
 
 impl<I: IndexDomain> EstimateCost<LastOperation>
-    for OperandHandle<Indexed<I, AttributeSet>, Multiple<Sorted>>
+    for OperandHandle<Indexed<I, AttributeSet>, Multiple<Ordered>>
 {
     type OutputCost = <OperandHandle<Indexed<I, AttributeSet>, Single> as Operand>::Cost;
 
@@ -101,7 +101,7 @@ impl<I: IndexDomain> EstimateCost<LastOperation>
 }
 
 impl<I: IndexDomain, E: IndexDomain> EstimateCost<LastOperation>
-    for OperandHandle<Indexed<I, IndexValue<E>>, Multiple<Sorted>>
+    for OperandHandle<Indexed<I, IndexValue<E>>, Multiple<Ordered>>
 {
     type OutputCost = <OperandHandle<Indexed<I, IndexValue<E>>, Single> as Operand>::Cost;
 
@@ -114,7 +114,7 @@ impl<I: IndexDomain, E: IndexDomain> EstimateCost<LastOperation>
     }
 }
 
-impl<V> Kernel<Bare<V>, Multiple<Sorted>> for LastOperation
+impl<V> Kernel<Bare<V>, Multiple<Ordered>> for LastOperation
 where
     V: ValueType,
 {
@@ -122,14 +122,14 @@ where
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, V, Multiple<Sorted>>,
+        values: BareStream<'a, V, Multiple<Ordered>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(values.last())
     }
 }
 
-impl EstimateCost<LastOperation> for OperandHandle<Bare<Scalar>, Multiple<Sorted>> {
+impl EstimateCost<LastOperation> for OperandHandle<Bare<Scalar>, Multiple<Ordered>> {
     type OutputCost = <OperandHandle<Bare<Scalar>, Single> as Operand>::Cost;
 
     fn estimate(

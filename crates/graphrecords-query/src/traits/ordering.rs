@@ -22,8 +22,8 @@ pub trait SortBy<A> {
     fn sort_by(&self, key: A) -> Self::ReturnOperand;
 }
 
-pub trait Unordered {
+pub trait Unorder {
     type ReturnOperand;
 
-    fn unordered(&self) -> Self::ReturnOperand;
+    fn unorder(&self) -> Self::ReturnOperand;
 }

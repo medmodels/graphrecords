@@ -130,7 +130,7 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation
 impl<I: EntityAttributes, O: OrderState> EstimateCost<AttributeOperation>
     for OperandHandle<Indexed<I, Unit>, Multiple<O>>
 {
-    type OutputCost = <ValuesOperand<I> as Operand>::Cost;
+    type OutputCost = <ValuesOperand<I, O> as Operand>::Cost;
 
     fn estimate(
         operation: &AttributeOperation,
@@ -197,7 +197,7 @@ impl<K: IndexDomain, E: EntityAttributes> ElementKernel<Indexed<K, IndexValue<E>
 impl<K: IndexDomain, E: EntityAttributes, O: OrderState> EstimateCost<AttributeOperation>
     for OperandHandle<Indexed<K, IndexValue<E>>, Multiple<O>>
 {
-    type OutputCost = <ValuesOperand<K> as Operand>::Cost;
+    type OutputCost = <ValuesOperand<K, O> as Operand>::Cost;
 
     fn estimate(
         operation: &AttributeOperation,

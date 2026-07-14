@@ -64,7 +64,7 @@ where
     }
 }
 
-impl<I: IndexDomain> BitNot for BoolMaskOperand<I> {
+impl<I: IndexDomain, O: OrderState> BitNot for BoolMaskOperand<I, O> {
     type Output = Self;
 
     fn not(self) -> Self::Output {

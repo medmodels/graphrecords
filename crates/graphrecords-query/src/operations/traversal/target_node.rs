@@ -1,5 +1,5 @@
 use crate::{
-    Explain, Failure, IndexDomain, Labeled, Operand, QueryResult,
+    Explain, Failure, IndexDomain, Labeled, Operand, OrderState, QueryResult, Unordered,
     execution::EvaluationCache,
     operands::{EdgeOperand, NodeOperand, ReferenceOperand},
     operations::{OperationContext, Prepare, Relation, RelationOperation},
@@ -48,8 +48,8 @@ impl Relation for EdgeTarget {
     }
 }
 
-impl ViaTargetNode for EdgeOperand {
-    type ReturnOperand = ReferenceOperand<EdgeIndex, NodeIndex>;
+impl<O: OrderState> ViaTargetNode for EdgeOperand<O> {
+    type ReturnOperand = ReferenceOperand<EdgeIndex, NodeIndex, O>;
 
     fn via_target_node(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(
@@ -59,8 +59,8 @@ impl ViaTargetNode for EdgeOperand {
     }
 }
 
-impl<K: IndexDomain> ViaTargetNode for ReferenceOperand<K, EdgeIndex> {
-    type ReturnOperand = ReferenceOperand<K, NodeIndex>;
+impl<K: IndexDomain, O: OrderState> ViaTargetNode for ReferenceOperand<K, EdgeIndex, O> {
+    type ReturnOperand = ReferenceOperand<K, NodeIndex, O>;
 
     fn via_target_node(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(
@@ -70,8 +70,8 @@ impl<K: IndexDomain> ViaTargetNode for ReferenceOperand<K, EdgeIndex> {
     }
 }
 
-impl TargetNode for EdgeOperand {
-    type ReturnOperand = NodeOperand;
+impl<O: OrderState> TargetNode for EdgeOperand<O> {
+    type ReturnOperand = NodeOperand<Unordered>;
 
     fn target_node(&self) -> Self::ReturnOperand {
         self.via_target_node().select()

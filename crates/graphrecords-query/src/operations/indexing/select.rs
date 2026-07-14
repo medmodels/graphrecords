@@ -1,6 +1,6 @@
 use crate::{
     EvaluateOperand, Explain, IndexDomain, IndexValue, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Unit,
+    QueryResult, Unit, Unordered,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -30,7 +30,7 @@ impl Prepare for SelectOperation {
 impl<K: IndexDomain, E: IndexDomain, O: OrderState> Kernel<Indexed<K, IndexValue<E>>, Multiple<O>>
     for SelectOperation
 {
-    type Output = OperandHandle<Indexed<E, Unit>, Multiple>;
+    type Output = OperandHandle<Indexed<E, Unit>, Multiple<Unordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -48,7 +48,7 @@ impl<K: IndexDomain, E: IndexDomain, O: OrderState> Kernel<Indexed<K, IndexValue
 impl<K: IndexDomain, E: IndexDomain, O: OrderState> EstimateCost<SelectOperation>
     for OperandHandle<Indexed<K, IndexValue<E>>, Multiple<O>>
 {
-    type OutputCost = <OperandHandle<Indexed<E, Unit>, Multiple> as Operand>::Cost;
+    type OutputCost = <OperandHandle<Indexed<E, Unit>, Multiple<Unordered>> as Operand>::Cost;
 
     fn estimate(
         _operation: &SelectOperation,

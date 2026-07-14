@@ -1,7 +1,7 @@
 use super::IncomparableIndices;
 use crate::{
     EvaluateOperand, Explain, Failure, IncomparableValues, IndexDomain, Indexed, Labeled, Multiple,
-    Operand, OrderState, QueryResult, Sorted, ValueType,
+    Operand, OrderState, Ordered, QueryResult, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -24,7 +24,7 @@ pub struct SortByOperation<A> {
     key: A,
 }
 
-type SortedBy<I, V> = OperandHandle<Indexed<I, V>, Multiple<Sorted>>;
+type SortedBy<I, V> = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
 
 impl<A: Prepare> Prepare for SortByOperation<A> {
     type Prepared<'a>

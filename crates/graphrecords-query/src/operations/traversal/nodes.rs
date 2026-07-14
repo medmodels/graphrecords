@@ -1,5 +1,5 @@
 use crate::{
-    EvaluateOperand, Explain, Indexed, Multiple, Operand, OrderState, QueryResult, Unit,
+    EvaluateOperand, Explain, Indexed, Multiple, Operand, OrderState, QueryResult, Unit, Unordered,
     execution::EvaluationCache,
     operands::{EdgeOperand, NodeOperand, OperandHandle},
     operations::{Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -30,7 +30,7 @@ impl Prepare for NodesOperation {
 }
 
 impl<O: OrderState> Kernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesOperation {
-    type Output = NodeOperand;
+    type Output = NodeOperand<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
@@ -53,7 +53,7 @@ impl<O: OrderState> Kernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesOpera
 impl<O: OrderState> EstimateCost<NodesOperation>
     for OperandHandle<Indexed<EdgeIndex, Unit>, Multiple<O>>
 {
-    type OutputCost = <NodeOperand as Operand>::Cost;
+    type OutputCost = <NodeOperand<Unordered> as Operand>::Cost;
 
     fn estimate(
         _operation: &NodesOperation,
@@ -64,8 +64,8 @@ impl<O: OrderState> EstimateCost<NodesOperation>
     }
 }
 
-impl Nodes for EdgeOperand {
-    type ReturnOperand = NodeOperand;
+impl<O: OrderState> Nodes for EdgeOperand<O> {
+    type ReturnOperand = NodeOperand<Unordered>;
 
     fn nodes(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), NodesOperation))

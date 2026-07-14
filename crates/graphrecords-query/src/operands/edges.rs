@@ -1,6 +1,7 @@
 use super::OperandHandle;
 use crate::{
     EvaluateContext, EvaluateOperand, Explain, Indexed, Multiple, Operand, QueryResult, Unit,
+    Unordered,
     execution::EvaluationCache,
     optimizer::{
         Cardinality, Cost, Count, CountKind, MatchInputs, OptimizePlan, OptimizerHints, PlanNode,
@@ -9,20 +10,20 @@ use crate::{
 };
 use graphrecords_core::{GraphRecord, graphrecord::EdgeIndex};
 
-pub type EdgeOperand = OperandHandle<Indexed<EdgeIndex, Unit>, Multiple>;
+pub type EdgeOperand<O> = OperandHandle<Indexed<EdgeIndex, Unit>, Multiple<O>>;
 
 #[derive(PlanNode, MatchInputs, OptimizePlan, OptimizerHints, Explain)]
-#[plan(operand = EdgeOperand, optimizer_hints(distinct))]
+#[plan(operand = EdgeOperand<Unordered>, optimizer_hints(distinct))]
 pub struct AllEdges;
 
-impl Cost<EdgeOperand> for AllEdges {
-    fn cost(&self, stats: &Stats) -> <EdgeOperand as Operand>::Cost {
+impl Cost<EdgeOperand<Unordered>> for AllEdges {
+    fn cost(&self, stats: &Stats) -> <EdgeOperand<Unordered> as Operand>::Cost {
         Cardinality(stats.get::<Count>(&CountKind::Edges))
     }
 }
 
 impl EvaluateContext for AllEdges {
-    type Operand = EdgeOperand;
+    type Operand = EdgeOperand<Unordered>;
 
     fn evaluate<'a>(
         &'a self,

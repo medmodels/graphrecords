@@ -1,5 +1,5 @@
 use crate::{
-    BoxedIterator, ElementShape, EvaluateOperand, Multiple, Operand, QueryResult,
+    BoxedIterator, ElementShape, EvaluateOperand, Multiple, Operand, QueryResult, Unordered,
     operands::OperandHandle,
     operations::{Apply, GroupKey, Operation},
     optimizer::{EstimateCost, GroupCost, Stats},
@@ -46,15 +46,15 @@ impl<K: GroupKey, O: Operand> ElementShape for Grouped<K, O> {
     type Element<'a> = (K::Key<'a>, QueryResult<O::ReturnValue<'a>>);
 }
 
-pub type GroupOperand<O, K> = OperandHandle<Grouped<K, O>, Multiple>;
+pub type GroupOperand<O, K> = OperandHandle<Grouped<K, O>, Multiple<Unordered>>;
 
-impl<O, K, P> Apply<P> for OperandHandle<Grouped<K, O>, Multiple>
+impl<O, K, P> Apply<P> for OperandHandle<Grouped<K, O>, Multiple<Unordered>>
 where
     O: Apply<P>,
     K: GroupKey,
     P: Operation,
 {
-    type Output = OperandHandle<Grouped<K, <O as Apply<P>>::Output>, Multiple>;
+    type Output = OperandHandle<Grouped<K, <O as Apply<P>>::Output>, Multiple<Unordered>>;
 
     fn apply<'a>(
         graphrecord: &'a GraphRecord,
@@ -73,7 +73,7 @@ where
     }
 }
 
-impl<O, K, P> EstimateCost<P> for OperandHandle<Grouped<K, O>, Multiple>
+impl<O, K, P> EstimateCost<P> for OperandHandle<Grouped<K, O>, Multiple<Unordered>>
 where
     O: Apply<P>,
     K: GroupKey,

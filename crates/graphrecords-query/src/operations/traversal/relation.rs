@@ -89,7 +89,7 @@ impl<R: Relation, K: IndexDomain> ElementKernel<Indexed<K, IndexValue<R::From>>>
 impl<R: Relation, K: IndexDomain, O: OrderState> EstimateCost<RelationOperation<R>>
     for OperandHandle<Indexed<K, IndexValue<R::From>>, Multiple<O>>
 {
-    type OutputCost = <ReferenceOperand<K, R::To> as Operand>::Cost;
+    type OutputCost = <ReferenceOperand<K, R::To, O> as Operand>::Cost;
 
     fn estimate(
         _operation: &RelationOperation<R>,

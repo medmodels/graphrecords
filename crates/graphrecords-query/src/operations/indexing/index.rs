@@ -49,7 +49,7 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, Unit>> for IndexOperation {
 impl<I: IndexDomain, O: OrderState> EstimateCost<IndexOperation>
     for OperandHandle<Indexed<I, Unit>, Multiple<O>>
 {
-    type OutputCost = <IndicesOperand<I> as Operand>::Cost;
+    type OutputCost = <IndicesOperand<I, O> as Operand>::Cost;
 
     fn estimate(
         _operation: &IndexOperation,

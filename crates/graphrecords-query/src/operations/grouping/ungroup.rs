@@ -1,6 +1,6 @@
 use crate::{
     BoxedIterator, EvaluateContext, EvaluateOperand, Explain, IndexDomain, Operand, OrderState,
-    QueryResult,
+    QueryResult, Unordered,
     execution::EvaluationCache,
     operands::{
         BareValueOperand, BareValuesOperand, GroupOperand, GroupedIterator, ValueOperand,
@@ -30,7 +30,7 @@ pub trait Ungroupable: Operand {
 
 impl<I: IndexDomain> Ungroupable for ValueOperand<I> {
     type UngroupedCost = ValueCost;
-    type Ungrouped<K: GroupKey> = ValuesOperand<I>;
+    type Ungrouped<K: GroupKey> = ValuesOperand<I, Unordered>;
 
     fn flatten_cost(cost: GroupCost<ValueCost>) -> ValueCost {
         cost.total()
@@ -52,7 +52,7 @@ impl<I: IndexDomain> Ungroupable for ValueOperand<I> {
 
 impl<I: IndexDomain, O: OrderState> Ungroupable for ValuesOperand<I, O> {
     type UngroupedCost = ValueCost;
-    type Ungrouped<K: GroupKey> = ValuesOperand<I>;
+    type Ungrouped<K: GroupKey> = ValuesOperand<I, Unordered>;
 
     fn flatten_cost(cost: GroupCost<ValueCost>) -> ValueCost {
         cost.total()
@@ -74,7 +74,7 @@ impl<I: IndexDomain, O: OrderState> Ungroupable for ValuesOperand<I, O> {
 
 impl Ungroupable for BareValueOperand {
     type UngroupedCost = ValueCost;
-    type Ungrouped<K: GroupKey> = BareValuesOperand;
+    type Ungrouped<K: GroupKey> = BareValuesOperand<Unordered>;
 
     fn flatten_cost(cost: GroupCost<ValueCost>) -> ValueCost {
         cost.total()
@@ -96,7 +96,7 @@ impl Ungroupable for BareValueOperand {
 
 impl<O: OrderState> Ungroupable for BareValuesOperand<O> {
     type UngroupedCost = ValueCost;
-    type Ungrouped<K: GroupKey> = BareValuesOperand;
+    type Ungrouped<K: GroupKey> = BareValuesOperand<Unordered>;
 
     fn flatten_cost(cost: GroupCost<ValueCost>) -> ValueCost {
         cost.total()

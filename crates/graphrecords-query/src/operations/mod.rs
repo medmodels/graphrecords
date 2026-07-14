@@ -45,7 +45,7 @@ pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
 pub use on_error::{Drop, ErrorPolicy, Raise, Replace};
 pub use on_missing::{MissingPolicy, WithMissing};
 pub use ordering::{
-    FirstOperation, LastOperation, SortByOperation, SortOperation, UnorderedOperation,
+    FirstOperation, LastOperation, SortByOperation, SortOperation, UnorderOperation,
 };
 use std::{
     any::Any,

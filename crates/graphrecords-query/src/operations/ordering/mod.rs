@@ -2,7 +2,7 @@ mod first;
 mod last;
 mod sort;
 mod sort_by;
-mod unordered;
+mod unorder;
 
 pub use first::FirstOperation;
 pub use last::LastOperation;
@@ -12,7 +12,7 @@ use std::{
     error::Error,
     fmt::{self, Debug, Display, Formatter},
 };
-pub use unordered::UnorderedOperation;
+pub use unorder::UnorderOperation;
 
 #[derive(Debug)]
 pub struct IncomparableIndices<V: Display, I: Display> {

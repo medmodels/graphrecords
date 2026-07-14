@@ -71,7 +71,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::{
-        Sorted,
+        Ordered,
         operands::ValuesOperand,
         operations::{Apply, ModuloOperation},
     };
@@ -81,7 +81,7 @@ mod test {
     fn test_modulo_auto_lifts_onto_sorted_operand() {
         fn assert_applies()
         where
-            ValuesOperand<NodeIndex, Sorted>: Apply<ModuloOperation<GraphRecordValue>>,
+            ValuesOperand<NodeIndex, Ordered>: Apply<ModuloOperation<GraphRecordValue>>,
         {
         }
 

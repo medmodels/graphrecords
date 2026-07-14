@@ -1,7 +1,7 @@
 use super::OperandHandle;
 use crate::{
     AttributeName, AttributeSet, Bare, BoxedIterator, EvaluateOperand, IndexDomain, Indexed,
-    Multiple, OrderState, Single, Unsorted,
+    Multiple, OrderState, Single,
     error::QueryResult,
     execution::EvaluationCache,
     operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
@@ -12,10 +12,9 @@ use std::sync::Arc;
 
 pub type NestedAttributesIterator<'a, I, T> = BoxedIterator<'a, (<I as IndexDomain>::Index<'a>, T)>;
 
-pub type NestedAttributesOperand<I, O = Unsorted> =
-    OperandHandle<Indexed<I, AttributeSet>, Multiple<O>>;
-pub type AttributesOperand<I, O = Unsorted> = OperandHandle<Indexed<I, AttributeName>, Multiple<O>>;
-pub type BareAttributesOperand<O = Unsorted> = OperandHandle<Bare<AttributeName>, Multiple<O>>;
+pub type NestedAttributesOperand<I, O> = OperandHandle<Indexed<I, AttributeSet>, Multiple<O>>;
+pub type AttributesOperand<I, O> = OperandHandle<Indexed<I, AttributeName>, Multiple<O>>;
+pub type BareAttributesOperand<O> = OperandHandle<Bare<AttributeName>, Multiple<O>>;
 pub type AttributeOperand<I> = OperandHandle<Indexed<I, AttributeName>, Single>;
 pub type BareAttributeOperand = OperandHandle<Bare<AttributeName>, Single>;
 

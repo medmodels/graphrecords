@@ -1,7 +1,7 @@
 use super::OperandHandle;
 use crate::{
     BoxedIterator, Definite, EvaluateOperand, IndexDomain, Indexed, Mask, MaskMap, Multiple,
-    OrderState, Unsorted,
+    OrderState,
     error::QueryResult,
     execution::EvaluationCache,
     operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
@@ -12,9 +12,8 @@ use std::sync::Arc;
 
 pub type NestedBoolMaskIterator<'a, I, T> = BoxedIterator<'a, (<I as IndexDomain>::Index<'a>, T)>;
 
-pub type NestedBoolMaskOperand<I, T, O = Unsorted> =
-    OperandHandle<Indexed<I, MaskMap<T>>, Multiple<O>>;
-pub type BoolMaskOperand<I, O = Unsorted> = OperandHandle<Indexed<I, Mask>, Multiple<O>>;
+pub type NestedBoolMaskOperand<I, T, O> = OperandHandle<Indexed<I, MaskMap<T>>, Multiple<O>>;
+pub type BoolMaskOperand<I, O> = OperandHandle<Indexed<I, Mask>, Multiple<O>>;
 pub type BoolOperand<I> = OperandHandle<Indexed<I, Mask>, Definite>;
 
 impl<I: IndexDomain, T: 'static + Clone, O: OrderState> Prepare for NestedBoolMaskOperand<I, T, O> {

@@ -22,8 +22,8 @@ use graphrecords_core::{
 };
 pub use operands::{
     Arity, AttributeName, AttributeSet, Bare, Definite, EdgeOperand, ElementShape, EvaluateOperand,
-    IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand, Operand, OrderState, Return, Scalar,
-    Single, Sorted, Unit, Unsorted, ValueType,
+    IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand, Operand, OrderState, Ordered,
+    Return, Scalar, Single, Unit, Unordered, ValueType,
 };
 use std::{fmt::Display, hash::Hash};
 pub use traits::*;
@@ -58,19 +58,19 @@ mod sealed {
 pub trait QueryNodes {
     fn query_nodes<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&NodeOperand) -> R,
+        Q: FnOnce(&NodeOperand<Unordered>) -> R,
         R: ReturnOperand<'a>;
 
     fn query_nodes_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&NodeOperand) -> R,
+        Q: FnOnce(&NodeOperand<Unordered>) -> R,
         R: ReturnOperand<'a>;
 }
 
 impl QueryNodes for GraphRecord {
     fn query_nodes<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&NodeOperand) -> R,
+        Q: FnOnce(&NodeOperand<Unordered>) -> R,
         R: ReturnOperand<'a>,
     {
         Selection::new_node(self, query)
@@ -78,7 +78,7 @@ impl QueryNodes for GraphRecord {
 
     fn query_nodes_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&NodeOperand) -> R,
+        Q: FnOnce(&NodeOperand<Unordered>) -> R,
         R: ReturnOperand<'a>,
     {
         Selection::new_node_with(self, optimizer, query)
@@ -88,19 +88,19 @@ impl QueryNodes for GraphRecord {
 pub trait QueryEdges {
     fn query_edges<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&EdgeOperand) -> R,
+        Q: FnOnce(&EdgeOperand<Unordered>) -> R,
         R: ReturnOperand<'a>;
 
     fn query_edges_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&EdgeOperand) -> R,
+        Q: FnOnce(&EdgeOperand<Unordered>) -> R,
         R: ReturnOperand<'a>;
 }
 
 impl QueryEdges for GraphRecord {
     fn query_edges<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&EdgeOperand) -> R,
+        Q: FnOnce(&EdgeOperand<Unordered>) -> R,
         R: ReturnOperand<'a>,
     {
         Selection::new_edge(self, query)
@@ -108,7 +108,7 @@ impl QueryEdges for GraphRecord {
 
     fn query_edges_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&EdgeOperand) -> R,
+        Q: FnOnce(&EdgeOperand<Unordered>) -> R,
         R: ReturnOperand<'a>,
     {
         Selection::new_edge_with(self, optimizer, query)

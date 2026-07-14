@@ -1,6 +1,7 @@
 use super::OperandHandle;
 use crate::{
     EvaluateContext, EvaluateOperand, Explain, Indexed, Multiple, Operand, QueryResult, Unit,
+    Unordered,
     execution::EvaluationCache,
     optimizer::{
         Cardinality, Cost, Count, CountKind, MatchInputs, OptimizePlan, OptimizerHints, PlanNode,
@@ -9,20 +10,20 @@ use crate::{
 };
 use graphrecords_core::{GraphRecord, graphrecord::NodeIndex};
 
-pub type NodeOperand = OperandHandle<Indexed<NodeIndex, Unit>, Multiple>;
+pub type NodeOperand<O> = OperandHandle<Indexed<NodeIndex, Unit>, Multiple<O>>;
 
 #[derive(PlanNode, MatchInputs, OptimizePlan, OptimizerHints, Explain)]
-#[plan(operand = NodeOperand, optimizer_hints(distinct))]
+#[plan(operand = NodeOperand<Unordered>, optimizer_hints(distinct))]
 pub struct AllNodes;
 
-impl Cost<NodeOperand> for AllNodes {
-    fn cost(&self, stats: &Stats) -> <NodeOperand as Operand>::Cost {
+impl Cost<NodeOperand<Unordered>> for AllNodes {
+    fn cost(&self, stats: &Stats) -> <NodeOperand<Unordered> as Operand>::Cost {
         Cardinality(stats.get::<Count>(&CountKind::Nodes))
     }
 }
 
 impl EvaluateContext for AllNodes {
-    type Operand = NodeOperand;
+    type Operand = NodeOperand<Unordered>;
 
     fn evaluate<'a>(
         &'a self,

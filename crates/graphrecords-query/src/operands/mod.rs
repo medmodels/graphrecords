@@ -97,13 +97,13 @@ pub trait Arity: 'static {
 
 pub trait OrderState: 'static {}
 
-pub struct Sorted;
-pub struct Unsorted;
+pub struct Ordered;
+pub struct Unordered;
 
-impl OrderState for Sorted {}
-impl OrderState for Unsorted {}
+impl OrderState for Ordered {}
+impl OrderState for Unordered {}
 
-pub struct Multiple<O: OrderState = Unsorted>(PhantomData<O>);
+pub struct Multiple<O: OrderState>(PhantomData<O>);
 pub struct Single;
 pub struct Definite;
 

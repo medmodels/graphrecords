@@ -1,6 +1,6 @@
 use super::{Direction, Optimizer, OptimizerBuilder, Pattern, PhaseLabel, Rule, capture, matching};
 use crate::{
-    IndexDomain, Operand, Sorted,
+    IndexDomain, Operand, OrderState, Ordered, Unordered,
     operands::{BoolMaskOperand, GroupOperand, ValueOperand, ValuesOperand},
     operations::{
         FirstOperation, GroupByOperation, NotOperation, OperationContext, SortByOperation,
@@ -23,9 +23,9 @@ pub enum BuiltinPhase {
 
 pub struct EliminateDoubleNegation;
 
-fn eliminate_double_negation<I: IndexDomain>() -> impl Rule<BoolMaskOperand<I>> {
-    matching::<OperationContext<BoolMaskOperand<I>, NotOperation>, _>((matching::<
-        OperationContext<BoolMaskOperand<I>, NotOperation>,
+fn eliminate_double_negation<I: IndexDomain, O: OrderState>() -> impl Rule<BoolMaskOperand<I, O>> {
+    matching::<OperationContext<BoolMaskOperand<I, O>, NotOperation>, _>((matching::<
+        OperationContext<BoolMaskOperand<I, O>, NotOperation>,
         _,
     >((capture(),)),))
     .rewrite(|((inner,),), _stats| Some(inner))
@@ -34,21 +34,23 @@ fn eliminate_double_negation<I: IndexDomain>() -> impl Rule<BoolMaskOperand<I>> 
 pub struct SortBelowGroup;
 
 fn sort_below_group_for_nodes()
--> impl Rule<GroupOperand<ValueOperand<NodeIndex>, ValuesOperand<NodeIndex>>> {
+-> impl Rule<GroupOperand<ValueOperand<NodeIndex>, ValuesOperand<NodeIndex, Unordered>>> {
     matching::<
         OperationContext<
-            GroupOperand<ValuesOperand<NodeIndex, Sorted>, ValuesOperand<NodeIndex>>,
+            GroupOperand<ValuesOperand<NodeIndex, Ordered>, ValuesOperand<NodeIndex, Unordered>>,
             FirstOperation,
         >,
         _,
     >((matching::<
         OperationContext<
-            ValuesOperand<NodeIndex, Sorted>,
-            GroupByOperation<ValuesOperand<NodeIndex>>,
+            ValuesOperand<NodeIndex, Ordered>,
+            GroupByOperation<ValuesOperand<NodeIndex, Unordered>>,
         >,
         _,
     >((
-        matching::<OperationContext<ValuesOperand<NodeIndex>, SortOperation>, _>((capture(),)),
+        matching::<OperationContext<ValuesOperand<NodeIndex, Unordered>, SortOperation>, _>((
+            capture(),
+        )),
         capture(),
     )),))
     .rewrite(|(((values,), key),), stats| {
@@ -63,21 +65,23 @@ fn sort_below_group_for_nodes()
 }
 
 fn sort_below_group_for_edges()
--> impl Rule<GroupOperand<ValueOperand<EdgeIndex>, ValuesOperand<EdgeIndex>>> {
+-> impl Rule<GroupOperand<ValueOperand<EdgeIndex>, ValuesOperand<EdgeIndex, Unordered>>> {
     matching::<
         OperationContext<
-            GroupOperand<ValuesOperand<EdgeIndex, Sorted>, ValuesOperand<EdgeIndex>>,
+            GroupOperand<ValuesOperand<EdgeIndex, Ordered>, ValuesOperand<EdgeIndex, Unordered>>,
             FirstOperation,
         >,
         _,
     >((matching::<
         OperationContext<
-            ValuesOperand<EdgeIndex, Sorted>,
-            GroupByOperation<ValuesOperand<EdgeIndex>>,
+            ValuesOperand<EdgeIndex, Ordered>,
+            GroupByOperation<ValuesOperand<EdgeIndex, Unordered>>,
         >,
         _,
     >((
-        matching::<OperationContext<ValuesOperand<EdgeIndex>, SortOperation>, _>((capture(),)),
+        matching::<OperationContext<ValuesOperand<EdgeIndex, Unordered>, SortOperation>, _>((
+            capture(),
+        )),
         capture(),
     )),))
     .rewrite(|(((values,), key),), stats| {
@@ -94,22 +98,25 @@ fn sort_below_group_for_edges()
 pub struct SortByBelowGroup;
 
 fn sort_by_below_group_for_nodes()
--> impl Rule<GroupOperand<ValueOperand<NodeIndex>, ValuesOperand<NodeIndex>>> {
+-> impl Rule<GroupOperand<ValueOperand<NodeIndex>, ValuesOperand<NodeIndex, Unordered>>> {
     matching::<
         OperationContext<
-            GroupOperand<ValuesOperand<NodeIndex, Sorted>, ValuesOperand<NodeIndex>>,
+            GroupOperand<ValuesOperand<NodeIndex, Ordered>, ValuesOperand<NodeIndex, Unordered>>,
             FirstOperation,
         >,
         _,
     >((matching::<
         OperationContext<
-            ValuesOperand<NodeIndex, Sorted>,
-            GroupByOperation<ValuesOperand<NodeIndex>>,
+            ValuesOperand<NodeIndex, Ordered>,
+            GroupByOperation<ValuesOperand<NodeIndex, Unordered>>,
         >,
         _,
     >((
         matching::<
-            OperationContext<ValuesOperand<NodeIndex>, SortByOperation<ValuesOperand<NodeIndex>>>,
+            OperationContext<
+                ValuesOperand<NodeIndex, Unordered>,
+                SortByOperation<ValuesOperand<NodeIndex, Unordered>>,
+            >,
             _,
         >((capture(), capture())),
         capture(),
@@ -126,22 +133,25 @@ fn sort_by_below_group_for_nodes()
 }
 
 fn sort_by_below_group_for_edges()
--> impl Rule<GroupOperand<ValueOperand<EdgeIndex>, ValuesOperand<EdgeIndex>>> {
+-> impl Rule<GroupOperand<ValueOperand<EdgeIndex>, ValuesOperand<EdgeIndex, Unordered>>> {
     matching::<
         OperationContext<
-            GroupOperand<ValuesOperand<EdgeIndex, Sorted>, ValuesOperand<EdgeIndex>>,
+            GroupOperand<ValuesOperand<EdgeIndex, Ordered>, ValuesOperand<EdgeIndex, Unordered>>,
             FirstOperation,
         >,
         _,
     >((matching::<
         OperationContext<
-            ValuesOperand<EdgeIndex, Sorted>,
-            GroupByOperation<ValuesOperand<EdgeIndex>>,
+            ValuesOperand<EdgeIndex, Ordered>,
+            GroupByOperation<ValuesOperand<EdgeIndex, Unordered>>,
         >,
         _,
     >((
         matching::<
-            OperationContext<ValuesOperand<EdgeIndex>, SortByOperation<ValuesOperand<EdgeIndex>>>,
+            OperationContext<
+                ValuesOperand<EdgeIndex, Unordered>,
+                SortByOperation<ValuesOperand<EdgeIndex, Unordered>>,
+            >,
             _,
         >((capture(), capture())),
         capture(),
@@ -210,11 +220,25 @@ pub fn register_builtins(builder: &mut OptimizerBuilder) {
         .after(Limit);
 
     builder
-        .add_rule(Simplify, eliminate_double_negation::<NodeIndex>())
+        .add_rule(
+            Simplify,
+            eliminate_double_negation::<NodeIndex, Unordered>(),
+        )
         .label::<EliminateDoubleNegation>();
 
     builder
-        .add_rule(Simplify, eliminate_double_negation::<EdgeIndex>())
+        .add_rule(Simplify, eliminate_double_negation::<NodeIndex, Ordered>())
+        .label::<EliminateDoubleNegation>();
+
+    builder
+        .add_rule(
+            Simplify,
+            eliminate_double_negation::<EdgeIndex, Unordered>(),
+        )
+        .label::<EliminateDoubleNegation>();
+
+    builder
+        .add_rule(Simplify, eliminate_double_negation::<EdgeIndex, Ordered>())
         .label::<EliminateDoubleNegation>();
 
     builder

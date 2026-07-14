@@ -1,6 +1,6 @@
 use crate::{
     BoxedIterator, EvaluateOperand, Explanation, NodeOperand, Operand, OperandContext, OrderState,
-    Positional, QueryResult,
+    Positional, QueryResult, Unordered,
     execution::EvaluationCache,
     operands::{
         AllEdges, AllNodes, AttributeOperand, AttributesOperand, BareAttributeOperand,
@@ -102,16 +102,16 @@ pub struct Selection<'a, R: ReturnOperand<'a>> {
 impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
     pub fn new_node<Q>(graphrecord: &'a GraphRecord, query: Q) -> Self
     where
-        Q: FnOnce(&NodeOperand) -> R,
+        Q: FnOnce(&NodeOperand<Unordered>) -> R,
     {
         Self::new_node_with(graphrecord, &Optimizer::builtin(), query)
     }
 
     pub fn new_node_with<Q>(graphrecord: &'a GraphRecord, optimizer: &Optimizer, query: Q) -> Self
     where
-        Q: FnOnce(&NodeOperand) -> R,
+        Q: FnOnce(&NodeOperand<Unordered>) -> R,
     {
-        let operand = NodeOperand::new(AllNodes);
+        let operand = NodeOperand::<Unordered>::new(AllNodes);
         let unoptimized_return_operand = query(&operand);
         let (optimized_return_operand, report) =
             optimize(unoptimized_return_operand.clone(), optimizer, graphrecord);
@@ -127,16 +127,16 @@ impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
 
     pub fn new_edge<Q>(graphrecord: &'a GraphRecord, query: Q) -> Self
     where
-        Q: FnOnce(&EdgeOperand) -> R,
+        Q: FnOnce(&EdgeOperand<Unordered>) -> R,
     {
         Self::new_edge_with(graphrecord, &Optimizer::builtin(), query)
     }
 
     pub fn new_edge_with<Q>(graphrecord: &'a GraphRecord, optimizer: &Optimizer, query: Q) -> Self
     where
-        Q: FnOnce(&EdgeOperand) -> R,
+        Q: FnOnce(&EdgeOperand<Unordered>) -> R,
     {
-        let operand = EdgeOperand::new(AllEdges);
+        let operand = EdgeOperand::<Unordered>::new(AllEdges);
         let unoptimized_return_operand = query(&operand);
         let (optimized_return_operand, report) =
             optimize(unoptimized_return_operand.clone(), optimizer, graphrecord);

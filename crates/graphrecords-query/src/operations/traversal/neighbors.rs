@@ -1,6 +1,6 @@
 use crate::{
     BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Unit,
+    QueryResult, Unit, Unordered,
     execution::EvaluationCache,
     operands::{NodeOperand, OperandHandle},
     operations::{Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -30,7 +30,7 @@ impl Prepare for NeighborsOperation {
 }
 
 impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for NeighborsOperation {
-    type Output = NodeOperand;
+    type Output = NodeOperand<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
@@ -86,8 +86,8 @@ impl<O: OrderState> EstimateCost<NeighborsOperation>
     }
 }
 
-impl Neighbors for NodeOperand {
-    type ReturnOperand = Self;
+impl<O: OrderState> Neighbors for NodeOperand<O> {
+    type ReturnOperand = NodeOperand<Unordered>;
 
     fn neighbors(&self, direction: EdgeDirection) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

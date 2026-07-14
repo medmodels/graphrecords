@@ -100,7 +100,7 @@ impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
 impl<I: IndicesInGroup, O: OrderState> EstimateCost<InGroupOperation>
     for OperandHandle<Indexed<I, Unit>, Multiple<O>>
 {
-    type OutputCost = <BoolMaskOperand<I> as Operand>::Cost;
+    type OutputCost = <BoolMaskOperand<I, O> as Operand>::Cost;
 
     fn estimate(
         operation: &InGroupOperation,

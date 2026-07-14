@@ -1,7 +1,7 @@
 use super::IncomparableIndices;
 use crate::{
     Bare, EvaluateOperand, Explain, Failure, IncomparableValues, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, OrderState, QueryResult, Sorted, ValueType,
+    Multiple, Operand, OrderState, Ordered, QueryResult, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -65,7 +65,7 @@ where
     O: OrderState,
     for<'a> V::Value<'a>: PartialOrd + Display + Debug + Send + Sync,
 {
-    type Output = OperandHandle<Indexed<I, V>, Multiple<Sorted>>;
+    type Output = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -141,7 +141,7 @@ where
     O: OrderState,
     for<'a> V::Value<'a>: PartialOrd + Display + Debug + Send + Sync,
 {
-    type Output = OperandHandle<Bare<V>, Multiple<Sorted>>;
+    type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,

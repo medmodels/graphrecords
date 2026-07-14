@@ -78,7 +78,7 @@ where
     }
 }
 
-impl<I: IndexDomain, M> BitXor<M> for BoolMaskOperand<I>
+impl<I: IndexDomain, M, O: OrderState> BitXor<M> for BoolMaskOperand<I, O>
 where
     for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
