@@ -2,7 +2,7 @@
 
 use super::{Lut, traits::DeepFrom};
 use crate::{conversion_lut::ConversionLut, graphrecord::errors::PyGraphRecordError};
-use graphrecords_core::{errors::GraphRecordError, graphrecord::datatypes::DataType};
+use graphrecords_core::graphrecord::datatypes::DataType;
 use pyo3::{IntoPyObjectExt, prelude::*};
 
 macro_rules! implement_pymethods {
@@ -103,12 +103,7 @@ pub(crate) fn convert_pyobject_to_datatype(ob: &Bound<'_, pyo3::PyAny>) -> PyRes
     }
 
     fn throw_error(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
-        Err(
-            PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                "Failed to convert {ob} into DataType",
-            )))
-            .into(),
-        )
+        Err(PyGraphRecordError::Conversion(format!("Failed to convert {ob} into DataType")).into())
     }
 
     let type_pointer = ob.get_type_ptr() as usize;

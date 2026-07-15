@@ -63,7 +63,9 @@ impl Connector for PyConnector {
             PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                 self.0
                     .call_method1(py, "initialize", (graphrecord,))
-                    .map_err(|err| GraphRecordError::ConversionError(format!("{err}")))?;
+                    .map_err(|err| GraphRecordError::ConnectorFailure {
+                        message: err.to_string(),
+                    })?;
 
                 Ok(())
             })
@@ -75,7 +77,9 @@ impl Connector for PyConnector {
             PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                 self.0
                     .call_method1(py, "disconnect", (graphrecord,))
-                    .map_err(|err| GraphRecordError::ConversionError(format!("{err}")))?;
+                    .map_err(|err| GraphRecordError::ConnectorFailure {
+                        message: err.to_string(),
+                    })?;
 
                 Ok(())
             })
@@ -91,7 +95,9 @@ impl IngestConnector for PyConnector {
             PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                 self.0
                     .call_method1(py, "ingest", (graphrecord, data))
-                    .map_err(|err| GraphRecordError::ConversionError(format!("{err}")))?;
+                    .map_err(|err| GraphRecordError::ConnectorFailure {
+                        message: err.to_string(),
+                    })?;
 
                 Ok(())
             })
@@ -108,7 +114,9 @@ impl ExportConnector for PyConnector {
                 let data = self
                     .0
                     .call_method1(py, "export", (graphrecord,))
-                    .map_err(|err| GraphRecordError::ConversionError(format!("{err}")))?;
+                    .map_err(|err| GraphRecordError::ConnectorFailure {
+                        message: err.to_string(),
+                    })?;
 
                 Ok(data)
             })

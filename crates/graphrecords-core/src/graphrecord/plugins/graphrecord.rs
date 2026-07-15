@@ -60,9 +60,7 @@ impl GraphRecord {
         plugin: Box<dyn Plugin>,
     ) -> GraphRecordResult<()> {
         if self.plugins.contains_key(&name) {
-            return Err(GraphRecordError::KeyError(format!(
-                "Plugin with name '{name}' already exists"
-            )));
+            return Err(GraphRecordError::PluginAlreadyExists { name });
         }
 
         plugin.initialize(self)?;
@@ -78,9 +76,9 @@ impl GraphRecord {
         let plugin = {
             let plugins = Arc::make_mut(&mut self.plugins);
 
-            plugins.remove(name).ok_or_else(|| {
-                GraphRecordError::KeyError(format!("Plugin with name '{name}' does not exist"))
-            })?
+            plugins
+                .remove(name)
+                .ok_or_else(|| GraphRecordError::PluginNotFound { name: name.clone() })?
         };
 
         plugin.finalize(self)?;

@@ -1,20 +1,17 @@
 use crate::graphrecord::{errors::PyGraphRecordError, value::PyGraphRecordValue};
-use graphrecords_core::{
-    errors::GraphRecordError,
-    graphrecord::{
-        GraphRecordValue,
-        querying::{
-            DeepClone,
-            edges::EdgeOperand,
-            group_by::GroupOperand,
-            nodes::NodeOperand,
-            values::{
-                MultipleValuesComparisonOperand, MultipleValuesWithIndexOperand,
-                MultipleValuesWithoutIndexOperand, SingleValueComparisonOperand,
-                SingleValueWithIndexOperand, SingleValueWithoutIndexOperand,
-            },
-            wrapper::Wrapper,
+use graphrecords_core::graphrecord::{
+    GraphRecordValue,
+    querying::{
+        DeepClone,
+        edges::EdgeOperand,
+        group_by::GroupOperand,
+        nodes::NodeOperand,
+        values::{
+            MultipleValuesComparisonOperand, MultipleValuesWithIndexOperand,
+            MultipleValuesWithoutIndexOperand, SingleValueComparisonOperand,
+            SingleValueWithIndexOperand, SingleValueWithoutIndexOperand,
         },
+        wrapper::Wrapper,
     },
 };
 use pyo3::{
@@ -52,11 +49,9 @@ impl FromPyObject<'_, '_> for PySingleValueComparisonOperand {
                         Ok(operand) => Ok(Self(operand.0.into())),
                         _ => match ob.extract::<PyEdgeSingleValueWithoutIndexOperand>() {
                             Ok(operand) => Ok(Self(operand.0.into())),
-                            _ => Err(PyGraphRecordError::from(GraphRecordError::ConversionError(
-                                format!(
-                    "Failed to convert {} into GraphRecordValue or SingleValueOperand",
-                    ob.to_owned()
-                ),
+                            _ => Err(PyGraphRecordError::Conversion(format!(
+                                "Failed to convert {} into GraphRecordValue or SingleValueOperand",
+                                ob.to_owned()
                             ))
                             .into()),
                         },
@@ -99,12 +94,10 @@ impl FromPyObject<'_, '_> for PyMultipleValuesComparisonOperand {
                         Ok(operand) => Ok(Self(operand.0.into())),
                         _ => match ob.extract::<PyEdgeMultipleValuesWithoutIndexOperand>() {
                             Ok(operand) => Ok(Self(operand.0.into())),
-                            _ => Err(PyGraphRecordError::from(GraphRecordError::ConversionError(
-                                format!(
+                            _ => Err(PyGraphRecordError::Conversion(format!(
                     "Failed to convert {} into List[GraphRecordValue] or MultipleValuesOperand",
                     ob.to_owned()
-                ),
-                            ))
+                ))
                             .into()),
                         },
                     },

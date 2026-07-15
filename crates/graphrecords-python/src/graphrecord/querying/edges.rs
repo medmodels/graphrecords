@@ -11,19 +11,16 @@ use crate::graphrecord::{
         values::{PyEdgeMultipleValuesWithIndexGroupOperand, PyEdgeMultipleValuesWithIndexOperand},
     },
 };
-use graphrecords_core::{
-    errors::GraphRecordError,
-    graphrecord::{
-        EdgeIndex,
-        querying::{
-            DeepClone,
-            edges::{
-                self, EdgeIndexComparisonOperand, EdgeIndexOperand, EdgeIndicesComparisonOperand,
-                EdgeIndicesOperand, EdgeOperand,
-            },
-            group_by::GroupOperand,
-            wrapper::Wrapper,
+use graphrecords_core::graphrecord::{
+    EdgeIndex,
+    querying::{
+        DeepClone,
+        edges::{
+            self, EdgeIndexComparisonOperand, EdgeIndexOperand, EdgeIndicesComparisonOperand,
+            EdgeIndicesOperand, EdgeOperand,
         },
+        group_by::GroupOperand,
+        wrapper::Wrapper,
     },
 };
 use pyo3::{
@@ -245,13 +242,11 @@ impl FromPyObject<'_, '_> for PyEdgeIndexComparisonOperand {
             Ok(index) => Ok(EdgeIndexComparisonOperand::Index(index).into()),
             _ => match ob.extract::<PyEdgeIndexOperand>() {
                 Ok(operand) => Ok(Self(operand.0.into())),
-                _ => Err(
-                    PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                        "Failed to convert {} into EdgeIndex or EdgeIndexOperand",
-                        ob.to_owned()
-                    )))
-                    .into(),
-                ),
+                _ => Err(PyGraphRecordError::Conversion(format!(
+                    "Failed to convert {} into EdgeIndex or EdgeIndexOperand",
+                    ob.to_owned()
+                ))
+                .into()),
             },
         }
     }
@@ -280,13 +275,11 @@ impl FromPyObject<'_, '_> for PyEdgeIndicesComparisonOperand {
             Ok(indices) => Ok(EdgeIndicesComparisonOperand::from(indices).into()),
             _ => match ob.extract::<PyEdgeIndicesOperand>() {
                 Ok(operand) => Ok(Self(operand.0.into())),
-                _ => Err(
-                    PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                        "Failed to convert {} into List[EdgeIndex] or EdgeIndicesOperand",
-                        ob.to_owned()
-                    )))
-                    .into(),
-                ),
+                _ => Err(PyGraphRecordError::Conversion(format!(
+                    "Failed to convert {} into List[EdgeIndex] or EdgeIndicesOperand",
+                    ob.to_owned()
+                ))
+                .into()),
             },
         }
     }

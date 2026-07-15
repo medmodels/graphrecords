@@ -1,8 +1,5 @@
 use super::{PyGraphRecord, PyGraphRecordInner};
-use graphrecords_core::{
-    GraphRecord,
-    errors::{GraphRecordError, GraphRecordResult},
-};
+use graphrecords_core::{GraphRecord, errors::GraphRecordResult};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use pyo3::{Py, Python};
 use std::{
@@ -136,11 +133,7 @@ macro_rules! impl_scope {
                         }),
                     },
                 )
-                .map_err(|error| {
-                    GraphRecordError::ConversionError(format!(
-                        "Failed to create PyGraphRecord: {error}"
-                    ))
-                })?,
+                .expect("PyGraphRecord must be creatable"),
                 pointer,
             );
             function(py, &guard.1)

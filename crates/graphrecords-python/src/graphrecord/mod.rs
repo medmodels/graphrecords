@@ -23,6 +23,7 @@ use attribute::PyGraphRecordAttribute;
 use borrowed::BorrowedGraphRecord;
 use connector::PyConnector;
 use errors::PyGraphRecordError;
+use graphrecords_core::errors::ConversionError;
 use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{
@@ -245,9 +246,7 @@ impl PyGraphRecord {
 
     pub fn _to_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let bytes = bincode::serialize(&*self.inner()?)
-            .map_err(|_| {
-                GraphRecordError::ConversionError("Could not serialize GraphRecord".into())
-            })
+            .map_err(|_| GraphRecordError::Conversion(ConversionError::BinarySerialization))
             .map_err(PyGraphRecordError::from)?;
 
         Ok(PyBytes::new(py, &bytes))
@@ -256,9 +255,7 @@ impl PyGraphRecord {
     #[staticmethod]
     pub fn _from_bytes(data: &Bound<'_, PyBytes>) -> PyResult<Self> {
         let graphrecord: GraphRecord = bincode::deserialize(data.as_bytes())
-            .map_err(|_| {
-                GraphRecordError::ConversionError("Could not deserialize GraphRecord".into())
-            })
+            .map_err(|_| GraphRecordError::Conversion(ConversionError::BinaryDeserialization))
             .map_err(PyGraphRecordError::from)?;
 
         Ok(graphrecord.into())

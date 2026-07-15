@@ -18,7 +18,9 @@ macro_rules! impl_attributes_mut {
         $get_attributes_fn:ident,
         $get_attributes_mut_fn:ident,
         $schema_update_fn:ident,
-        $schema_validate_fn:ident
+        $schema_validate_fn:ident,
+        $not_found_variant:ident,
+        $attribute_not_found_variant:ident
     ) => {
         pub struct $struct_name<'a> {
             $index_field: &'a $index_type,
@@ -31,10 +33,9 @@ macro_rules! impl_attributes_mut {
                 graphrecord: &'a mut GraphRecord,
             ) -> GraphRecordResult<Self> {
                 if !graphrecord.$contains_fn($index_field) {
-                    return Err(GraphRecordError::IndexError(format!(
-                        concat!("Cannot find ", $entity, " with index {}"),
-                        $index_field
-                    )));
+                    return Err(GraphRecordError::$not_found_variant {
+                        $index_field: $index_field.clone(),
+                    });
                 }
 
                 Ok(Self {
@@ -140,10 +141,10 @@ macro_rules! impl_attributes_mut {
                 let removed_value = attributes.remove(attribute);
 
                 let Some(removed_value) = removed_value else {
-                    return Err(GraphRecordError::KeyError(format!(
-                        concat!("Attribute {} does not exist on ", $entity, " {}"),
-                        attribute, self.$index_field
-                    )));
+                    return Err(GraphRecordError::$attribute_not_found_variant {
+                        $index_field: self.$index_field.clone(),
+                        attribute: attribute.clone(),
+                    });
                 };
 
                 self.handle_schema(&attributes, &groups)?;
@@ -164,7 +165,9 @@ impl_attributes_mut!(
     node_attributes,
     node_attributes_mut,
     update_node,
-    validate_node
+    validate_node,
+    NodeNotFound,
+    NodeAttributeNotFound
 );
 
 impl_attributes_mut!(
@@ -177,5 +180,7 @@ impl_attributes_mut!(
     edge_attributes,
     edge_attributes_mut,
     update_edge,
-    validate_edge
+    validate_edge,
+    EdgeNotFound,
+    EdgeAttributeNotFound
 );

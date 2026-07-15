@@ -2,7 +2,7 @@ use super::{
     Abs, Ceil, Contains, EndsWith, Floor, Lowercase, Mod, Pow, Round, Slice, Sqrt, StartsWith,
     Trim, TrimEnd, TrimStart, Uppercase,
 };
-use crate::errors::{GraphRecordError, GraphRecordResult};
+use crate::errors::{GraphRecordError, GraphRecordResult, ValueOperation};
 use chrono::{DateTime, NaiveDateTime, TimeDelta};
 use graphrecords_utils::implement_from_for_wrapper;
 #[cfg(feature = "serde")]
@@ -195,142 +195,24 @@ impl Add for GraphRecordValue {
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Self::String(value), Self::String(rhs)) => Ok(Self::String(value + rhs.as_str())),
-            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::String(value), Self::Float(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::String(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::String(value), Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::String(value), Self::Duration(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::String(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add None to {value}"
-            ))),
-            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
             (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value + rhs)),
             (Self::Int(value), Self::Float(rhs)) => Ok(Self::Float(value as f64 + rhs)),
-            (Self::Int(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add {rhs} to {value}"
-            ))),
-            (Self::Int(value), Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Int(value), Self::Duration(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Int(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add None to {value}"
-            ))),
-            (Self::Float(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
             (Self::Float(value), Self::Int(rhs)) => Ok(Self::Float(value + rhs as f64)),
             (Self::Float(value), Self::Float(rhs)) => Ok(Self::Float(value + rhs)),
-            (Self::Float(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Float(value), Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Float(value), Self::Duration(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Float(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add None to {value}"
-            ))),
-            (Self::Bool(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Bool(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add {rhs} to {value}"
-            ))),
-            (Self::Bool(value), Self::Float(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Bool(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add {rhs} to {value}"
-            ))),
-            (Self::Bool(value), Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Bool(value), Self::Duration(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Bool(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add None to {value}"
-            ))),
-            (Self::DateTime(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::DateTime(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::DateTime(value), Self::Float(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::DateTime(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
             (Self::DateTime(value), Self::DateTime(rhs)) => Ok(DateTime::from_timestamp(
                 value.and_utc().timestamp() + rhs.and_utc().timestamp(),
                 0,
             )
-            .ok_or_else(|| GraphRecordError::AssertionError("Invalid timestamp".to_string()))?
+            .ok_or(GraphRecordError::InvalidTimestamp)?
             .naive_utc()
             .into()),
             (Self::DateTime(value), Self::Duration(rhs)) => Ok(value.add(rhs).into()),
-            (Self::DateTime(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add None to {value}"
-            ))),
-            (Self::Duration(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Duration(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Duration(value), Self::Float(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Duration(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Duration(value), Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
             (Self::Duration(value), Self::Duration(rhs)) => Ok((value + rhs).into()),
-            (Self::Duration(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add None to {value}"
-            ))),
-            (Self::Null, Self::String(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add {rhs} to None"
-            ))),
-            (Self::Null, Self::Int(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add {rhs} to None"
-            ))),
-            (Self::Null, Self::Float(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add {rhs} to None"
-            ))),
-            (Self::Null, Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add {rhs} to None"
-            ))),
-            (Self::Null, Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add {rhs} to None"
-            ))),
-            (Self::Null, Self::Duration(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot add {rhs} to None"
-            ))),
-            (Self::Null, Self::Null) => Err(GraphRecordError::AssertionError(
-                "Cannot add None to None".to_string(),
-            )),
+            (left, right) => Err(GraphRecordError::IncompatibleValueOperands {
+                operation: ValueOperation::Add,
+                left,
+                right,
+            }),
         }
     }
 }
@@ -341,753 +223,106 @@ impl Sub for GraphRecordValue {
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::String(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::String(value), Self::Float(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::String(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::String(value), Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::String(value), Self::Duration(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::String(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract None from {value}"
-            ))),
-            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
             (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value - rhs)),
             (Self::Int(value), Self::Float(rhs)) => Ok(Self::Float(value as f64 - rhs)),
-            (Self::Int(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract {rhs} from {value}"
-            ))),
-            (Self::Int(value), Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Int(value), Self::Duration(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Int(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract None from {value}"
-            ))),
-            (Self::Float(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
             (Self::Float(value), Self::Int(rhs)) => Ok(Self::Float(value - rhs as f64)),
             (Self::Float(value), Self::Float(rhs)) => Ok(Self::Float(value - rhs)),
-            (Self::Float(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Float(value), Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Float(value), Self::Duration(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Float(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract None from {value}"
-            ))),
-            (Self::Bool(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Bool(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract {rhs} from {value}"
-            ))),
-            (Self::Bool(value), Self::Float(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Bool(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract {rhs} from {value}"
-            ))),
-            (Self::Bool(value), Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Bool(value), Self::Duration(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Bool(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract None from {value}"
-            ))),
-            (Self::DateTime(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::DateTime(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::DateTime(value), Self::Float(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::DateTime(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
             (Self::DateTime(value), Self::DateTime(rhs)) => {
                 let duration = value - rhs;
 
                 Ok(duration.into())
             }
             (Self::DateTime(value), Self::Duration(rhs)) => Ok((value - rhs).into()),
-            (Self::DateTime(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract None from {value}"
-            ))),
-            (Self::Duration(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Duration(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Duration(value), Self::Float(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Duration(value), Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Duration(value), Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Duration(value), Self::Duration(rhs)) => Ok((value + rhs).into()),
-            (Self::Duration(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract None from {value}"
-            ))),
-            (Self::Null, Self::String(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract {rhs} from None"
-            ))),
-            (Self::Null, Self::Int(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract {rhs} from None"
-            ))),
-            (Self::Null, Self::Float(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract {rhs} from None"
-            ))),
-            (Self::Null, Self::Bool(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract {rhs} from None"
-            ))),
-            (Self::Null, Self::DateTime(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract {rhs} from None"
-            ))),
-            (Self::Null, Self::Duration(rhs)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot subtract {rhs} from None"
-            ))),
-            (Self::Null, Self::Null) => Err(GraphRecordError::AssertionError(
-                "Cannot subtract None from None".to_string(),
-            )),
+            (Self::Duration(value), Self::Duration(rhs)) => Ok((value - rhs).into()),
+            (left, right) => Err(GraphRecordError::IncompatibleValueOperands {
+                operation: ValueOperation::Subtract,
+                left,
+                right,
+            }),
         }
     }
 }
 
-// TODO: Add tests for Duration
 impl Mul for GraphRecordValue {
     type Output = GraphRecordResult<Self>;
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::String(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
+            (Self::String(value), Self::Int(other)) => Ok(Self::String(
+                value.repeat(usize::try_from(other).unwrap_or(0)),
             )),
-            (Self::String(value), Self::Int(other)) => {
-                let mut result = String::new();
-
-                for _ in 0..other {
-                    result.push_str(&value);
-                }
-
-                Ok(Self::String(result))
-            }
-            (Self::String(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
+            (Self::Int(value), Self::String(other)) => Ok(Self::String(
+                other.repeat(usize::try_from(value).unwrap_or(0)),
             )),
-            (Self::String(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::String(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::String(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::String(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty {value} with None"
-            ))),
-            (Self::Int(value), Self::String(other)) => {
-                let mut result = String::new();
-
-                for _ in 0..value {
-                    result.push_str(&other);
-                }
-
-                Ok(Self::String(result))
-            }
             (Self::Int(value), Self::Int(other)) => Ok(Self::Int(value * other)),
             (Self::Int(value), Self::Float(other)) => Ok(Self::Float(value as f64 * other)),
-            (Self::Int(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Int(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
             (Self::Int(value), Self::Duration(other)) => Ok((other * (value as i32)).into()),
-            (Self::Int(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty {value} with None"
-            ))),
-            (Self::Float(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
             (Self::Float(value), Self::Int(other)) => Ok(Self::Float(value * other as f64)),
             (Self::Float(value), Self::Float(other)) => Ok(Self::Float(value * other)),
-            (Self::Float(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Float(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Float(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Float(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty {value} with None"
-            ))),
-            (Self::Bool(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty {value} with None"
-            ))),
-            (Self::DateTime(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::DateTime(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::DateTime(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::DateTime(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::DateTime(value), Self::DateTime(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot multiplty {value} with {other}")),
-            ),
-            (Self::DateTime(value), Self::Duration(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot multiplty {value} with {other}")),
-            ),
-            (Self::DateTime(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty {value} with None"
-            ))),
-            (Self::Duration(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
             (Self::Duration(value), Self::Int(other)) => Ok((value * (other as i32)).into()),
-            (Self::Duration(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Duration(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiplty {value} with {other}"),
-            )),
-            (Self::Duration(value), Self::DateTime(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot multiplty {value} with {other}")),
-            ),
-            (Self::Duration(value), Self::Duration(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot multiplty {value} with {other}")),
-            ),
-            (Self::Duration(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty {value} with None"
-            ))),
-            (Self::Null, Self::String(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty None with {other}"
-            ))),
-            (Self::Null, Self::Int(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty None with {other}"
-            ))),
-            (Self::Null, Self::Float(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty None with {other}"
-            ))),
-            (Self::Null, Self::Bool(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty None with {other}"
-            ))),
-            (Self::Null, Self::DateTime(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty None with {other}"
-            ))),
-            (Self::Null, Self::Duration(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot multiplty None with {other}"
-            ))),
-            (Self::Null, Self::Null) => Err(GraphRecordError::AssertionError(
-                "Cannot multiplty None with None".to_string(),
-            )),
+            (left, right) => Err(GraphRecordError::IncompatibleValueOperands {
+                operation: ValueOperation::Multiply,
+                left,
+                right,
+            }),
         }
     }
 }
 
-// TODO: Add tests for Duration
 impl Div for GraphRecordValue {
     type Output = GraphRecordResult<Self>;
 
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::String(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::String(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::String(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::String(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::String(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::String(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::String(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide {value} by None"
-            ))),
-            (Self::Int(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
             (Self::Int(value), Self::Int(other)) => Ok(Self::Float(value as f64 / other as f64)),
             (Self::Int(value), Self::Float(other)) => Ok(Self::Float(value as f64 / other)),
-            (Self::Int(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Int(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Int(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Int(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide {value} by None"
-            ))),
-            (Self::Float(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
             (Self::Float(value), Self::Int(other)) => Ok(Self::Float(value / other as f64)),
             (Self::Float(value), Self::Float(other)) => Ok(Self::Float(value / other)),
-            (Self::Float(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Float(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Float(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Float(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide {value} by None"
-            ))),
-            (Self::Bool(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Bool(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Bool(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Bool(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Bool(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Bool(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Bool(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide {value} by None"
-            ))),
-            (Self::DateTime(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
             (Self::DateTime(value), Self::Int(other)) => Ok(DateTime::from_timestamp(
                 (value.and_utc().timestamp() as f64 / other as f64).floor() as i64,
                 0,
             )
-            .ok_or_else(|| GraphRecordError::AssertionError("Invalid timestamp".to_string()))?
+            .ok_or(GraphRecordError::InvalidTimestamp)?
             .naive_utc()
             .into()),
-            (Self::DateTime(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::DateTime(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::DateTime(value), Self::DateTime(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot divide {value} by {other}")),
-            ),
-            (Self::DateTime(value), Self::Duration(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot divide {value} by {other}")),
-            ),
-            (Self::DateTime(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide {value} by None"
-            ))),
-            (Self::Duration(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
             (Self::Duration(value), Self::Int(other)) => Ok((value / (other as i32)).into()),
-            (Self::Duration(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Duration(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot divide {value} by {other}"),
-            )),
-            (Self::Duration(value), Self::DateTime(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot divide {value} by {other}")),
-            ),
-            (Self::Duration(value), Self::Duration(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot divide {value} by {other}")),
-            ),
-            (Self::Duration(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide {value} by None"
-            ))),
-            (Self::Null, Self::String(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide None by {other}"
-            ))),
-            (Self::Null, Self::Int(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide None by {other}"
-            ))),
-            (Self::Null, Self::Float(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide None by {other}"
-            ))),
-            (Self::Null, Self::Bool(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide None by {other}"
-            ))),
-            (Self::Null, Self::DateTime(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide None by {other}"
-            ))),
-            (Self::Null, Self::Duration(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot divide None by {other}"
-            ))),
-            (Self::Null, Self::Null) => Err(GraphRecordError::AssertionError(
-                "Cannot divide None by None".to_string(),
-            )),
+            (left, right) => Err(GraphRecordError::IncompatibleValueOperands {
+                operation: ValueOperation::Divide,
+                left,
+                right,
+            }),
         }
     }
 }
 
-// TODO: Add tests for Duration
 impl Pow for GraphRecordValue {
     fn pow(self, exp: Self) -> GraphRecordResult<Self> {
         match (self, exp) {
-            (Self::String(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::String(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::String(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::String(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::String(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::String(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::String(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise {value} to the power of None"
-            ))),
-            (Self::Int(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
             (Self::Int(value), Self::Int(exp)) => Ok(Self::Int(value.pow(exp as u32))),
             (Self::Int(value), Self::Float(exp)) => Ok(Self::Float((value as f64).powf(exp))),
-            (Self::Int(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Int(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Int(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Int(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise {value} to the power of None"
-            ))),
-            (Self::Float(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
             (Self::Float(value), Self::Int(exp)) => Ok(Self::Float(value.powi(exp as i32))),
             (Self::Float(value), Self::Float(exp)) => Ok(Self::Float(value.powf(exp))),
-            (Self::Float(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Float(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Float(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Float(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise {value} to the power of None"
-            ))),
-            (Self::Bool(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Bool(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Bool(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Bool(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Bool(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Bool(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Bool(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise {value} to the power of None"
-            ))),
-            (Self::DateTime(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::DateTime(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::DateTime(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::DateTime(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::DateTime(value), Self::DateTime(other)) => {
-                Err(GraphRecordError::AssertionError(format!(
-                    "Cannot raise {value} to the power of {other}"
-                )))
-            }
-            (Self::DateTime(value), Self::Duration(other)) => {
-                Err(GraphRecordError::AssertionError(format!(
-                    "Cannot raise {value} to the power of {other}"
-                )))
-            }
-            (Self::DateTime(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise {value} to the power of Null"
-            ))),
-            (Self::Duration(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Duration(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Duration(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Duration(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {other}"),
-            )),
-            (Self::Duration(value), Self::DateTime(other)) => {
-                Err(GraphRecordError::AssertionError(format!(
-                    "Cannot raise {value} to the power of {other}"
-                )))
-            }
-            (Self::Duration(value), Self::Duration(other)) => {
-                Err(GraphRecordError::AssertionError(format!(
-                    "Cannot raise {value} to the power of {other}"
-                )))
-            }
-            (Self::Duration(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise {value} to the power of Null"
-            ))),
-            (Self::Null, Self::String(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise None to the power of {other}"
-            ))),
-            (Self::Null, Self::Int(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise None to the power of {other}"
-            ))),
-            (Self::Null, Self::Float(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise None to the power of {other}"
-            ))),
-            (Self::Null, Self::Bool(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise None to the power of {other}"
-            ))),
-            (Self::Null, Self::DateTime(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise None to the power of {other}"
-            ))),
-            (Self::Null, Self::Duration(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot raise None to the power of {other}"
-            ))),
-            (Self::Null, Self::Null) => Err(GraphRecordError::AssertionError(
-                "Cannot raise None to the power of None".to_string(),
-            )),
+            (left, right) => Err(GraphRecordError::IncompatibleValueOperands {
+                operation: ValueOperation::Power,
+                left,
+                right,
+            }),
         }
     }
 }
 
-// TODO: Add tests for Duration
 impl Mod for GraphRecordValue {
     fn r#mod(self, other: Self) -> GraphRecordResult<Self> {
         match (self, other) {
-            (Self::String(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::String(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::String(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::String(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::String(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::String(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::String(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod {value} with None"
-            ))),
-            (Self::Int(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
             (Self::Int(value), Self::Int(other)) => Ok(Self::Int(value % other)),
             (Self::Int(value), Self::Float(other)) => Ok(Self::Float(value as f64 % other)),
-            (Self::Int(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Int(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Int(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Int(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod {value} with None"
-            ))),
-            (Self::Float(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
             (Self::Float(value), Self::Int(other)) => Ok(Self::Float(value % other as f64)),
             (Self::Float(value), Self::Float(other)) => Ok(Self::Float(value % other)),
-            (Self::Float(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Float(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Float(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Float(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod {value} with None"
-            ))),
-            (Self::Bool(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::DateTime(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::Duration(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Bool(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod {value} with None"
-            ))),
-            (Self::DateTime(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::DateTime(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::DateTime(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::DateTime(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::DateTime(value), Self::DateTime(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot mod {value} with {other}")),
-            ),
-            (Self::DateTime(value), Self::Duration(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot mod {value} with {other}")),
-            ),
-            (Self::DateTime(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod {value} with None"
-            ))),
-            (Self::Duration(value), Self::String(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Duration(value), Self::Int(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Duration(value), Self::Float(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Duration(value), Self::Bool(other)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} with {other}"),
-            )),
-            (Self::Duration(value), Self::DateTime(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot mod {value} with {other}")),
-            ),
-            (Self::Duration(value), Self::Duration(other)) => Err(
-                GraphRecordError::AssertionError(format!("Cannot mod {value} with {other}")),
-            ),
-            (Self::Duration(value), Self::Null) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod {value} with None"
-            ))),
-            (Self::Null, Self::String(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod None with {other}"
-            ))),
-            (Self::Null, Self::Int(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod None with {other}"
-            ))),
-            (Self::Null, Self::Float(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod None with {other}"
-            ))),
-            (Self::Null, Self::Bool(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod None with {other}"
-            ))),
-            (Self::Null, Self::DateTime(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod None with {other}"
-            ))),
-            (Self::Null, Self::Duration(other)) => Err(GraphRecordError::AssertionError(format!(
-                "Cannot mod None with {other}"
-            ))),
-            (Self::Null, Self::Null) => Err(GraphRecordError::AssertionError(
-                "Cannot mod None with None".to_string(),
-            )),
+            (left, right) => Err(GraphRecordError::IncompatibleValueOperands {
+                operation: ValueOperation::Modulo,
+                left,
+                right,
+            }),
         }
     }
 }
@@ -1277,7 +512,7 @@ mod test {
             Uppercase,
         },
     };
-    use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+    use chrono::{NaiveDate, NaiveDateTime, NaiveTime, TimeDelta};
     use std::hash::{Hash, Hasher};
 
     #[test]
@@ -1702,29 +937,29 @@ mod test {
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) + GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) + GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string())
                 + GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Int(0) + GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Int(10),
@@ -1736,20 +971,20 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Int(0) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0) + GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0) + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Float(0_f64) + GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Float(10_f64),
@@ -1761,58 +996,58 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Float(0_f64) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64) + GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64) + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Bool(false) + GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) + GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) + GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) + GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN)
                 + GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) + GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) + GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::DateTime(
@@ -1833,32 +1068,32 @@ mod test {
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Null + GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null + GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null + GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null + GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
     }
 
@@ -1867,33 +1102,33 @@ mod test {
         assert!(
             (GraphRecordValue::String("value".to_string())
                 - GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) - GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) - GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string())
                 - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Int(0) - GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Int(0),
@@ -1905,20 +1140,20 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Int(0) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0) - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Float(0_f64) - GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Float(0_f64),
@@ -1930,87 +1165,120 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Float(0_f64) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64) - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Bool(false) - GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) - GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) - GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN)
                 - GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) - GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) - GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+        );
+
+        assert!(
+            (GraphRecordValue::Duration(TimeDelta::seconds(5))
+                - GraphRecordValue::String("value".to_string()))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+        );
+        assert!(
+            (GraphRecordValue::Duration(TimeDelta::seconds(5)) - GraphRecordValue::Int(0))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+        );
+        assert!(
+            (GraphRecordValue::Duration(TimeDelta::seconds(5)) - GraphRecordValue::Float(0_f64))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+        );
+        assert!(
+            (GraphRecordValue::Duration(TimeDelta::seconds(5)) - GraphRecordValue::Bool(false))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+        );
+        assert!(
+            (GraphRecordValue::Duration(TimeDelta::seconds(5))
+                - GraphRecordValue::DateTime(NaiveDateTime::MIN))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+        );
+        assert_eq!(
+            GraphRecordValue::Duration(TimeDelta::seconds(2)),
+            (GraphRecordValue::Duration(TimeDelta::seconds(5))
+                - GraphRecordValue::Duration(TimeDelta::seconds(3)))
+            .unwrap()
+        );
+        assert!(
+            (GraphRecordValue::Duration(TimeDelta::seconds(5)) - GraphRecordValue::Null)
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Null - GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null - GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null - GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
     }
 
@@ -2019,7 +1287,7 @@ mod test {
         assert!(
             (GraphRecordValue::String("value".to_string())
                 * GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::String("valuevaluevalue".to_string()),
@@ -2027,20 +1295,20 @@ mod test {
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) * GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string())
                 * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert_eq!(
@@ -2057,20 +1325,20 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Int(0) * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0) * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0) * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Float(0_f64) * GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Float(25_f64),
@@ -2082,92 +1350,92 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Float(0_f64) * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64) * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64) * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Bool(false) * GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) * GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) * GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN)
                 * GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) * GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) * GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN)
                 * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Null * GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null * GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null * GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
     }
 
@@ -2176,33 +1444,33 @@ mod test {
         assert!(
             (GraphRecordValue::String("value".to_string())
                 / GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) / GraphRecordValue::Int(1))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) / GraphRecordValue::Float(1_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string())
                 / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()) / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Int(0) / GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Float(1_f64),
@@ -2214,20 +1482,20 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Int(0) / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0) / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0) / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Float(0_f64) / GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Float(1_f64),
@@ -2239,46 +1507,46 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Float(0_f64) / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64) / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64) / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Bool(false) / GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) / GraphRecordValue::Int(1))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) / GraphRecordValue::Float(1_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN)
                 / GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::DateTime(NaiveDateTime::MIN),
@@ -2286,45 +1554,45 @@ mod test {
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) / GraphRecordValue::Float(1_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN)
                 / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN) / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Null / GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null / GraphRecordValue::Int(1))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null / GraphRecordValue::Float(1_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
     }
 
@@ -2333,33 +1601,33 @@ mod test {
         assert!(
             (GraphRecordValue::String("value".to_string())
                 .pow(GraphRecordValue::String("value".to_string())))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()).pow(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()).pow(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()).pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string())
                 .pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()).pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Int(0).pow(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Int(25),
@@ -2371,20 +1639,20 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Int(0).pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0).pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0).pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Float(0_f64).pow(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Float(25_f64),
@@ -2396,92 +1664,92 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Float(0_f64).pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64).pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64).pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Bool(false).pow(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false).pow(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false).pow(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false).pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false).pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false).pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN)
                 .pow(GraphRecordValue::String("value".to_string())))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN).pow(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN).pow(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN).pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN)
                 .pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN).pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Null.pow(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null.pow(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null.pow(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null.pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null.pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null.pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
     }
 
@@ -2490,33 +1758,33 @@ mod test {
         assert!(
             (GraphRecordValue::String("value".to_string())
                 .r#mod(GraphRecordValue::String("value".to_string())))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()).r#mod(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()).r#mod(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()).r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string())
                 .r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::String("value".to_string()).r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Int(0).r#mod(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Int(1),
@@ -2528,20 +1796,20 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Int(0).r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0).r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Int(0).r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Float(0_f64).r#mod(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert_eq!(
             GraphRecordValue::Float(1_f64),
@@ -2553,92 +1821,92 @@ mod test {
         );
         assert!(
             (GraphRecordValue::Float(0_f64).r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64).r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Float(0_f64).r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN)
                 .r#mod(GraphRecordValue::String("value".to_string())))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN).r#mod(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN).r#mod(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN).r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN)
                 .r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-            .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::DateTime(NaiveDateTime::MIN).r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
 
         assert!(
             (GraphRecordValue::Null.r#mod(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null.r#mod(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null.r#mod(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null.r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null.r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Null.r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
     }
 

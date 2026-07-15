@@ -34,7 +34,7 @@ use attributes::{
 use edges::{PyEdgeIndexOperand, PyEdgeIndicesOperand};
 use graphrecords_core::{
     GraphRecord,
-    errors::{GraphRecordError, GraphRecordResult},
+    errors::GraphRecordResult,
     graphrecord::{
         GraphRecordAttribute,
         querying::{
@@ -669,12 +669,10 @@ pub(crate) fn convert_pyobject_to_pyreturnoperand(
     }
 
     fn throw_error(ob: &Bound<'_, PyAny>) -> PyResult<PyReturnOperand> {
-        Err(
-            PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                "Failed to convert {ob} into query ReturnOperand",
-            )))
-            .into(),
-        )
+        Err(PyGraphRecordError::Conversion(format!(
+            "Failed to convert {ob} into query ReturnOperand",
+        ))
+        .into())
     }
 
     let type_pointer = ob.get_type_ptr() as usize;
@@ -1200,10 +1198,10 @@ impl FromPyObject<'_, '_> for PyGraphRecordAttributeCardinalityWrapper {
             .into())
         } _ => {
             Err(
-                PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
+                PyGraphRecordError::Conversion(format!(
                     "Failed to convert {} into GraphRecordAttribute, List[GraphRecordAttribute] or (List[GraphRecordAttribute], MatchMode)",
                     ob.to_owned()
-                )))
+                ))
                 .into(),
             )
         }}}}}}

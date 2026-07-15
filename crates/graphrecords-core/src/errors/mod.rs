@@ -1,38 +1,26 @@
-mod graph;
+mod conversion;
 mod graphrecord;
+mod schema;
 
-pub use graph::GraphError;
-pub use graphrecord::GraphRecordError;
-
-impl From<GraphError> for GraphRecordError {
-    fn from(value: GraphError) -> Self {
-        match value {
-            GraphError::IndexError(value) => Self::IndexError(value),
-            GraphError::AssertionError(value) => Self::AssertionError(value),
-            GraphError::SchemaError(value) => Self::SchemaError(value),
-        }
-    }
-}
+pub use conversion::ConversionError;
+pub use graphrecord::{GraphRecordError, ValueOperation};
+pub use schema::SchemaError;
 
 pub type GraphRecordResult<T> = Result<T, GraphRecordError>;
 
 #[cfg(test)]
 mod test {
-    use super::{GraphError, GraphRecordError};
+    use super::{GraphRecordError, SchemaError};
 
     #[test]
-    fn test_from() {
+    fn test_from_schema_error() {
         assert_eq!(
-            GraphRecordError::IndexError("value".to_string()),
-            GraphRecordError::from(GraphError::IndexError("value".to_string()))
-        );
-        assert_eq!(
-            GraphRecordError::AssertionError("value".to_string()),
-            GraphRecordError::from(GraphError::AssertionError("value".to_string()))
-        );
-        assert_eq!(
-            GraphRecordError::SchemaError("value".to_string()),
-            GraphRecordError::from(GraphError::SchemaError("value".to_string()))
+            GraphRecordError::Schema(SchemaError::GroupNotInSchema {
+                group: "test".into()
+            }),
+            GraphRecordError::from(SchemaError::GroupNotInSchema {
+                group: "test".into()
+            })
         );
     }
 }

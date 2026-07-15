@@ -12,19 +12,16 @@ use crate::graphrecord::{
         values::{PyNodeMultipleValuesWithIndexGroupOperand, PyNodeMultipleValuesWithIndexOperand},
     },
 };
-use graphrecords_core::{
-    errors::GraphRecordError,
-    graphrecord::{
-        NodeIndex,
-        querying::{
-            DeepClone,
-            group_by::GroupOperand,
-            nodes::{
-                self, EdgeDirection, NodeIndexComparisonOperand, NodeIndexOperand,
-                NodeIndicesComparisonOperand, NodeIndicesOperand, NodeOperand,
-            },
-            wrapper::Wrapper,
+use graphrecords_core::graphrecord::{
+    NodeIndex,
+    querying::{
+        DeepClone,
+        group_by::GroupOperand,
+        nodes::{
+            self, EdgeDirection, NodeIndexComparisonOperand, NodeIndexOperand,
+            NodeIndicesComparisonOperand, NodeIndicesOperand, NodeOperand,
         },
+        wrapper::Wrapper,
     },
 };
 use pyo3::{
@@ -268,13 +265,11 @@ impl FromPyObject<'_, '_> for PyNodeIndexComparisonOperand {
             Ok(index) => Ok(NodeIndexComparisonOperand::Index(NodeIndex::from(index)).into()),
             _ => match ob.extract::<PyNodeIndexOperand>() {
                 Ok(operand) => Ok(Self(operand.0.into())),
-                _ => Err(
-                    PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                        "Failed to convert {} into NodeIndex or NodeIndexOperand",
-                        ob.to_owned()
-                    )))
-                    .into(),
-                ),
+                _ => Err(PyGraphRecordError::Conversion(format!(
+                    "Failed to convert {} into NodeIndex or NodeIndexOperand",
+                    ob.to_owned()
+                ))
+                .into()),
             },
         }
     }
@@ -306,13 +301,11 @@ impl FromPyObject<'_, '_> for PyNodeIndicesComparisonOperand {
             .into()),
             _ => match ob.extract::<PyNodeIndicesOperand>() {
                 Ok(operand) => Ok(Self(operand.0.into())),
-                _ => Err(
-                    PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                        "Failed to convert {} into List[NodeIndex] or NodeIndicesOperand",
-                        ob.to_owned()
-                    )))
-                    .into(),
-                ),
+                _ => Err(PyGraphRecordError::Conversion(format!(
+                    "Failed to convert {} into List[NodeIndex] or NodeIndicesOperand",
+                    ob.to_owned()
+                ))
+                .into()),
             },
         }
     }

@@ -89,12 +89,15 @@ impl PartialEq for DataType {
                     | (Self::Float, Self::Float)
                     | (Self::Bool, Self::Bool)
                     | (Self::DateTime, Self::DateTime)
+                    | (Self::Duration, Self::Duration)
                     | (Self::Null, Self::Null)
                     | (Self::Any, Self::Any)
             ),
         }
     }
 }
+
+impl Eq for DataType {}
 
 // TODO: Add tests for Duration
 impl Display for DataType {
@@ -313,6 +316,7 @@ mod test {
         assert!(DataType::Float == DataType::Float);
         assert!(DataType::Bool == DataType::Bool);
         assert!(DataType::DateTime == DataType::DateTime);
+        assert!(DataType::Duration == DataType::Duration);
         assert!(DataType::Null == DataType::Null);
         assert!(DataType::Any == DataType::Any);
 
@@ -334,6 +338,7 @@ mod test {
         assert!(DataType::String != DataType::Float);
         assert!(DataType::String != DataType::Bool);
         assert!(DataType::String != DataType::DateTime);
+        assert!(DataType::String != DataType::Duration);
         assert!(DataType::String != DataType::Null);
         assert!(DataType::String != DataType::Any);
 
@@ -341,6 +346,7 @@ mod test {
         assert!(DataType::Int != DataType::Float);
         assert!(DataType::Int != DataType::Bool);
         assert!(DataType::Int != DataType::DateTime);
+        assert!(DataType::Int != DataType::Duration);
         assert!(DataType::Int != DataType::Null);
         assert!(DataType::Int != DataType::Any);
 
@@ -348,6 +354,7 @@ mod test {
         assert!(DataType::Float != DataType::Int);
         assert!(DataType::Float != DataType::Bool);
         assert!(DataType::Float != DataType::DateTime);
+        assert!(DataType::Float != DataType::Duration);
         assert!(DataType::Float != DataType::Null);
         assert!(DataType::Float != DataType::Any);
 
@@ -355,6 +362,7 @@ mod test {
         assert!(DataType::Bool != DataType::Int);
         assert!(DataType::Bool != DataType::Float);
         assert!(DataType::Bool != DataType::DateTime);
+        assert!(DataType::Bool != DataType::Duration);
         assert!(DataType::Bool != DataType::Null);
         assert!(DataType::Bool != DataType::Any);
 
@@ -362,14 +370,24 @@ mod test {
         assert!(DataType::DateTime != DataType::Int);
         assert!(DataType::DateTime != DataType::Float);
         assert!(DataType::DateTime != DataType::Bool);
+        assert!(DataType::DateTime != DataType::Duration);
         assert!(DataType::DateTime != DataType::Null);
         assert!(DataType::DateTime != DataType::Any);
+
+        assert!(DataType::Duration != DataType::String);
+        assert!(DataType::Duration != DataType::Int);
+        assert!(DataType::Duration != DataType::Float);
+        assert!(DataType::Duration != DataType::Bool);
+        assert!(DataType::Duration != DataType::DateTime);
+        assert!(DataType::Duration != DataType::Null);
+        assert!(DataType::Duration != DataType::Any);
 
         assert!(DataType::Null != DataType::String);
         assert!(DataType::Null != DataType::Int);
         assert!(DataType::Null != DataType::Float);
         assert!(DataType::Null != DataType::Bool);
         assert!(DataType::Null != DataType::DateTime);
+        assert!(DataType::Null != DataType::Duration);
         assert!(DataType::Null != DataType::Any);
 
         assert!(DataType::Any != DataType::String);
@@ -377,6 +395,7 @@ mod test {
         assert!(DataType::Any != DataType::Float);
         assert!(DataType::Any != DataType::Bool);
         assert!(DataType::Any != DataType::DateTime);
+        assert!(DataType::Any != DataType::Duration);
         assert!(DataType::Any != DataType::Null);
 
         // If all the basic datatypes have been tested, it should be safe to assume that the

@@ -2,7 +2,7 @@ use super::{
     Abs, Contains, EndsWith, GraphRecordValue, Lowercase, Mod, Pow, Slice, StartsWith, Trim,
     TrimEnd, TrimStart, Uppercase,
 };
-use crate::errors::{GraphRecordError, GraphRecordResult};
+use crate::errors::{ConversionError, GraphRecordError, GraphRecordResult, ValueOperation};
 use graphrecords_utils::implement_from_for_wrapper;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -45,9 +45,9 @@ impl TryFrom<GraphRecordValue> for GraphRecordAttribute {
         match value {
             GraphRecordValue::String(value) => Ok(Self::String(value)),
             GraphRecordValue::Int(value) => Ok(Self::Int(value)),
-            _ => Err(GraphRecordError::ConversionError(format!(
-                "Cannot convert {value} into GraphRecordAttribute"
-            ))),
+            _ => Err(GraphRecordError::Conversion(
+                ConversionError::ValueToAttribute { value },
+            )),
         }
     }
 }
@@ -77,7 +77,7 @@ impl PartialOrd for GraphRecordAttribute {
 impl Display for GraphRecordAttribute {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::String(value) => write!(f, "{value}"),
+            Self::String(value) => write!(f, "\"{value}\""),
             Self::Int(value) => write!(f, "{value}"),
         }
     }
@@ -90,13 +90,12 @@ impl Add for GraphRecordAttribute {
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Self::String(value), Self::String(rhs)) => Ok(Self::String(value + rhs.as_str())),
-            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
-            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot add {rhs} to {value}"),
-            )),
             (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value + rhs)),
+            (left, right) => Err(GraphRecordError::IncompatibleAttributeOperands {
+                operation: ValueOperation::Add,
+                left,
+                right,
+            }),
         }
     }
 }
@@ -107,16 +106,12 @@ impl Sub for GraphRecordAttribute {
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::String(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
-            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot subtract {rhs} from {value}"),
-            )),
             (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value - rhs)),
+            (left, right) => Err(GraphRecordError::IncompatibleAttributeOperands {
+                operation: ValueOperation::Subtract,
+                left,
+                right,
+            }),
         }
     }
 }
@@ -127,16 +122,12 @@ impl Mul for GraphRecordAttribute {
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::String(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiply {value} by {rhs}"),
-            )),
-            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiply {value} by {rhs}"),
-            )),
-            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot multiply {value} by {rhs}"),
-            )),
             (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value * rhs)),
+            (left, right) => Err(GraphRecordError::IncompatibleAttributeOperands {
+                operation: ValueOperation::Multiply,
+                left,
+                right,
+            }),
         }
     }
 }
@@ -145,16 +136,12 @@ impl Mul for GraphRecordAttribute {
 impl Pow for GraphRecordAttribute {
     fn pow(self, rhs: Self) -> GraphRecordResult<Self> {
         match (self, rhs) {
-            (Self::String(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {rhs}"),
-            )),
-            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {rhs}"),
-            )),
-            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot raise {value} to the power of {rhs}"),
-            )),
             (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value.pow(rhs as u32))),
+            (left, right) => Err(GraphRecordError::IncompatibleAttributeOperands {
+                operation: ValueOperation::Power,
+                left,
+                right,
+            }),
         }
     }
 }
@@ -163,16 +150,12 @@ impl Pow for GraphRecordAttribute {
 impl Mod for GraphRecordAttribute {
     fn r#mod(self, rhs: Self) -> GraphRecordResult<Self> {
         match (self, rhs) {
-            (Self::String(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} by {rhs}"),
-            )),
-            (Self::String(value), Self::Int(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} by {rhs}"),
-            )),
-            (Self::Int(value), Self::String(rhs)) => Err(GraphRecordError::AssertionError(
-                format!("Cannot mod {value} by {rhs}"),
-            )),
             (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value % rhs)),
+            (left, right) => Err(GraphRecordError::IncompatibleAttributeOperands {
+                operation: ValueOperation::Modulo,
+                left,
+                right,
+            }),
         }
     }
 }
@@ -286,7 +269,7 @@ impl Uppercase for GraphRecordAttribute {
 mod test {
     use super::GraphRecordAttribute;
     use crate::{
-        errors::GraphRecordError,
+        errors::{ConversionError, GraphRecordError},
         graphrecord::{
             GraphRecordValue,
             datatypes::{Contains, EndsWith, StartsWith},
@@ -325,20 +308,24 @@ mod test {
         assert_eq!(GraphRecordAttribute::Int(0), attribute);
 
         assert!(
-            GraphRecordAttribute::try_from(GraphRecordValue::from(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_)))
+            GraphRecordAttribute::try_from(GraphRecordValue::from(true)).is_err_and(|e| matches!(
+                e,
+                GraphRecordError::Conversion(ConversionError::ValueToAttribute { .. })
+            ))
         );
 
         assert!(
-            GraphRecordAttribute::try_from(GraphRecordValue::from(0.0))
-                .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_)))
+            GraphRecordAttribute::try_from(GraphRecordValue::from(0.0)).is_err_and(|e| matches!(
+                e,
+                GraphRecordError::Conversion(ConversionError::ValueToAttribute { .. })
+            ))
         );
     }
 
     #[test]
     fn test_display() {
         assert_eq!(
-            "value",
+            "\"value\"",
             GraphRecordAttribute::from("value".to_string()).to_string()
         );
 

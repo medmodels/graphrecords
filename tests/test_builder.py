@@ -186,7 +186,7 @@ class TestGraphRecordBuilder(unittest.TestCase):
 
         with pytest.raises(
             ValueError,
-            match=r"Attribute attribute of node with index node2 is of type String\. Expected Int\.",
+            match=r'Attribute `"attribute"` of node with index `"node2"` is of type `String`\. Expected `Int`\.',
         ):
             graphrecord.add_nodes(("node2", {"attribute": "1"}))
 
