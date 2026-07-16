@@ -4,7 +4,7 @@ use crate::{
     Multiple, OrderState, Single,
     error::QueryResult,
     execution::EvaluationCache,
-    operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
+    operations::{Absent, Alignment, ArgumentSource, Keyed, Lookup, Prepare},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
@@ -36,13 +36,13 @@ impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for NestedAttribute
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
         match prepared.get(index) {
-            Some(wrapped) => Looked::Present(wrapped),
-            None => Looked::Absent(Absent::Uncovered),
+            Some(wrapped) => Lookup::Present(wrapped),
+            None => Lookup::Absent(Absent::Uncovered),
         }
     }
 }
@@ -65,13 +65,13 @@ impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for AttributesOpera
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
         match prepared.get(index) {
-            Some(wrapped) => Looked::Present(wrapped),
-            None => Looked::Absent(Absent::Uncovered),
+            Some(wrapped) => Lookup::Present(wrapped),
+            None => Lookup::Absent(Absent::Uncovered),
         }
     }
 }
@@ -94,13 +94,13 @@ impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for AttributeOperand<I> {
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
         match prepared {
-            Some(wrapped) => Looked::Present(wrapped),
-            None => Looked::Absent(Absent::Empty),
+            Some(wrapped) => Lookup::Present(wrapped),
+            None => Lookup::Absent(Absent::Empty),
         }
     }
 }
@@ -123,13 +123,13 @@ impl<A: Alignment> ArgumentSource<A> for BareAttributeOperand {
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
         match prepared {
-            Some(wrapped) => Looked::Present(wrapped),
-            None => Looked::Absent(Absent::Empty),
+            Some(wrapped) => Lookup::Present(wrapped),
+            None => Lookup::Absent(Absent::Empty),
         }
     }
 }

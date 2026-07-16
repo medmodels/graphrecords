@@ -3,7 +3,7 @@ use crate::{
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ErrorPolicy, Keyed, Looked, Operation,
+        Apply, ArgumentSource, ElementKernel, ErrorPolicy, Keyed, Lookup, Operation,
         OperationContext, Pipeline, Prepare,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
@@ -59,8 +59,8 @@ where
             move |(index, result): (I::Index<'a>, QueryResult<GraphRecordValue>)| match result {
                 Ok(value) => (index, Ok(value)),
                 Err(original) => match R::lookup(&replacement, &index) {
-                    Looked::Present(Ok(value)) => (index, Ok(value.clone())),
-                    Looked::Present(Err(_)) | Looked::Absent(_) => (index, Err(original)),
+                    Lookup::Present(Ok(value)) => (index, Ok(value.clone())),
+                    Lookup::Present(Err(_)) | Lookup::Absent(_) => (index, Err(original)),
                 },
             },
         ))

@@ -6,7 +6,7 @@ use crate::{
         BareValueOperand, BoolMaskOperand, NestedBoolMaskOperand, ValueOperand, ValuesOperand,
     },
     operations::{
-        Absent, ArgumentAbsent, ArgumentSource, Drop, Keyed, Looked, OnMissing, Prepare, Raise,
+        Absent, ArgumentAbsent, ArgumentSource, Drop, Keyed, Lookup, OnMissing, Prepare, Raise,
         Replace,
     },
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, PlanNode, Stats},
@@ -136,8 +136,8 @@ where
         _absent: Absent,
     ) -> QueryResult<Option<S::Value<'a>>> {
         match R::lookup(prepared, index) {
-            Looked::Present(wrapped) => wrapped.clone().map(Some),
-            Looked::Absent(absent) => Err(Failure::new_at(
+            Lookup::Present(wrapped) => wrapped.clone().map(Some),
+            Lookup::Absent(absent) => Err(Failure::new_at(
                 label,
                 ReplacementAbsent { cause: absent },
                 index,
@@ -247,7 +247,7 @@ where
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -264,8 +264,8 @@ where
         Self: 'a,
     {
         match S::lookup(&prepared.0, index) {
-            Looked::Present(wrapped) => wrapped.clone().map(Some),
-            Looked::Absent(absent) => P::resolve_absent(&prepared.1, index, label, absent),
+            Lookup::Present(wrapped) => wrapped.clone().map(Some),
+            Lookup::Absent(absent) => P::resolve_absent(&prepared.1, index, label, absent),
         }
     }
 }

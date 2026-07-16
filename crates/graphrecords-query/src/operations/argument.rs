@@ -12,7 +12,7 @@ use std::{
     marker::PhantomData,
 };
 
-pub enum Looked<'a, W> {
+pub enum Lookup<'a, W> {
     Present(&'a W),
     Absent(Absent),
 }
@@ -126,7 +126,7 @@ pub trait ArgumentSource<A: Alignment>:
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a;
 
@@ -140,8 +140,8 @@ pub trait ArgumentSource<A: Alignment>:
         Self: 'a,
     {
         match Self::lookup(prepared, address) {
-            Looked::Present(wrapped) => wrapped.clone().map(Some),
-            Looked::Absent(absent) => match default {
+            Lookup::Present(wrapped) => wrapped.clone().map(Some),
+            Lookup::Absent(absent) => match default {
                 OnMissing::Drop => Ok(None),
                 OnMissing::Raise => Err(A::raise_at(
                     label,
@@ -208,10 +208,10 @@ impl<A: Alignment> ArgumentSource<A> for GraphRecordValue {
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
-        Looked::Present(prepared)
+        Lookup::Present(prepared)
     }
 }

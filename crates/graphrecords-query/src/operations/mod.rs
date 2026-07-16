@@ -29,7 +29,7 @@ use crate::{
 };
 pub use aggregation::MaxOperation;
 pub use argument::{
-    Absent, Alignment, ArgumentAbsent, ArgumentSource, Keyed, Looked, OnMissing, Prepare, Unaligned,
+    Absent, Alignment, ArgumentAbsent, ArgumentSource, Keyed, Lookup, OnMissing, Prepare, Unaligned,
 };
 pub use arithmetic::ModuloOperation;
 pub use cache::CacheContext;
@@ -134,19 +134,13 @@ where
         };
 
         self.operation.identity_eq(&other.operation)
-            && PlanNode::inputs(self)
-                .into_iter()
-                .zip(PlanNode::inputs(other))
-                .all(|(own, other)| own.dyn_eq(other))
+            && self.input.as_plan_node().dyn_eq(other.input.as_plan_node())
     }
 
     fn dyn_hash(&self, mut state: &mut dyn Hasher) {
         Any::type_id(self).hash(&mut state);
         self.operation.identity_hash(&mut state);
-
-        for input in PlanNode::inputs(self) {
-            input.dyn_hash(state);
-        }
+        self.input.as_plan_node().dyn_hash(state);
     }
 }
 

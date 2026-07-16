@@ -3,7 +3,7 @@ use crate::{
     EvaluateOperand, IndexDomain, IndexValue, Indexed, Multiple, OrderState, Single,
     error::QueryResult,
     execution::EvaluationCache,
-    operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
+    operations::{Absent, Alignment, ArgumentSource, Keyed, Lookup, Prepare},
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
@@ -33,13 +33,13 @@ impl<K: IndexDomain, E: IndexDomain, O: OrderState> ArgumentSource<Keyed<K>>
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &K::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
         match prepared.get(index) {
-            Some(wrapped) => Looked::Present(wrapped),
-            None => Looked::Absent(Absent::Uncovered),
+            Some(wrapped) => Lookup::Present(wrapped),
+            None => Lookup::Absent(Absent::Uncovered),
         }
     }
 }
@@ -62,13 +62,13 @@ impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for IndexOperand<I> {
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
         match prepared {
-            Some(wrapped) => Looked::Present(wrapped),
-            None => Looked::Absent(Absent::Empty),
+            Some(wrapped) => Lookup::Present(wrapped),
+            None => Lookup::Absent(Absent::Empty),
         }
     }
 }

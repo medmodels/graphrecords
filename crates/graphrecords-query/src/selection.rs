@@ -1,6 +1,6 @@
 use crate::{
-    BoxedIterator, EvaluateOperand, Explanation, NodeOperand, Operand, OperandContext, OrderState,
-    Position, Positional, QueryResult, Unordered,
+    BoxedIterator, EvaluateOperand, Explanation, NodeOperand, Operand, OrderState, Position,
+    Positional, QueryResult, Unordered,
     execution::EvaluationCache,
     operands::{
         AllEdges, AllNodes, AttributeOperand, AttributesOperand, BareAttributeOperand,
@@ -16,10 +16,7 @@ use graphrecords_core::{
     graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
 };
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
-use std::{
-    fmt::{self, Display, Formatter},
-    sync::Arc,
-};
+use std::fmt::{self, Display, Formatter};
 
 macro_rules! impl_return_operand {
     ($( $({$O:ident})? $Operand:ty => $ReturnValue:ty ),* $(,)?) => {
@@ -416,7 +413,6 @@ impl<'a, O, K> ReturnOperand<'a> for GroupOperand<O, K>
 where
     K: GroupKey,
     O: Operand + ReturnOperand<'a>,
-    Arc<dyn OperandContext<Self>>: 'a,
 {
     type ReturnValue =
         GroupedIterator<'a, K::Key<'a>, QueryResult<<O as EvaluateOperand>::ReturnValue<'a>>>;

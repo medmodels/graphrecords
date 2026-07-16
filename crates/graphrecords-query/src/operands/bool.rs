@@ -4,7 +4,7 @@ use crate::{
     OrderState,
     error::QueryResult,
     execution::EvaluationCache,
-    operations::{Absent, Alignment, ArgumentSource, Keyed, Looked, Prepare},
+    operations::{Absent, Alignment, ArgumentSource, Keyed, Lookup, Prepare},
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
@@ -36,13 +36,13 @@ impl<I: IndexDomain, T: 'static + Clone, O: OrderState> ArgumentSource<Keyed<I>>
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
         match prepared.get(index) {
-            Some(wrapped) => Looked::Present(wrapped),
-            None => Looked::Absent(Absent::Uncovered),
+            Some(wrapped) => Lookup::Present(wrapped),
+            None => Lookup::Absent(Absent::Uncovered),
         }
     }
 }
@@ -65,13 +65,13 @@ impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for BoolMaskOperand
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         index: &I::Index<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
         match prepared.get(index) {
-            Some(wrapped) => Looked::Present(wrapped),
-            None => Looked::Absent(Absent::Uncovered),
+            Some(wrapped) => Lookup::Present(wrapped),
+            None => Lookup::Absent(Absent::Uncovered),
         }
     }
 }
@@ -94,10 +94,10 @@ impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for BoolOperand<I> {
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Looked<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
-        Looked::Present(&prepared.1)
+        Lookup::Present(&prepared.1)
     }
 }
