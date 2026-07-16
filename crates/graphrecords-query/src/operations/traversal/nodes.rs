@@ -1,5 +1,6 @@
 use crate::{
-    EvaluateOperand, Explain, Indexed, Multiple, Operand, OrderState, QueryResult, Unit, Unordered,
+    EvaluateOperand, Explain, Failure, Indexed, Labeled, Multiple, Operand, OrderState,
+    QueryResult, Unit, Unordered,
     execution::EvaluationCache,
     operands::{EdgeOperand, NodeOperand},
     operations::{Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -39,7 +40,11 @@ impl<O: OrderState> Kernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesOpera
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let nodes: GrHashSet<_> = values
             .map(|(edge, membership)| {
-                membership.map(|()| graphrecord.edge_endpoints(edge).expect("Edge must exist"))
+                membership.and_then(|()| {
+                    graphrecord
+                        .edge_endpoints(edge)
+                        .map_err(|error| Failure::new_at(Self::LABEL, error, &edge))
+                })
             })
             .collect::<QueryResult<Vec<(&NodeIndex, &NodeIndex)>>>()?
             .into_iter()

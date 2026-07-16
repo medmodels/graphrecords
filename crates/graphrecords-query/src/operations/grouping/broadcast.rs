@@ -1,13 +1,38 @@
 use crate::{
-    EvaluateOperand, Explain, Failure, IndexDomain, Labeled, Operand, QueryResult, Unordered,
+    Diagnostic, EvaluateOperand, Explain, Failure, IndexDomain, Labeled, Operand, QueryResult,
+    Unordered,
     execution::EvaluationCache,
     operands::{GroupOperand, ValueOperand, ValuesOperand},
-    operations::{Absent, Apply, KeyOperand, Operation, OperationContext, Prepare},
+    operations::{Apply, KeyOperand, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Broadcast,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 use graphrecords_utils::aliases::GrHashMap;
+use std::{
+    error::Error,
+    fmt::{self, Display, Formatter},
+};
+
+#[derive(Debug)]
+pub struct MissingGroupAggregate;
+
+impl Display for MissingGroupAggregate {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str("no aggregate value for the element's group")
+    }
+}
+
+impl Error for MissingGroupAggregate {}
+
+impl Diagnostic for MissingGroupAggregate {
+    fn help(&self) -> Option<String> {
+        Some(
+            "compute the aggregate over every group being broadcast to or handle the gaps with `on_error(...)`"
+                .to_string(),
+        )
+    }
+}
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[explain(label = "Broadcast")]
@@ -70,17 +95,17 @@ where
 
         let label = <BroadcastOperation<K> as Labeled>::LABEL;
 
-        Ok(Box::new(assignments.into_iter().map(move |(index, key)| {
-            if let Some(aggregate) = aggregates.get(&key) {
-                (index, aggregate.clone())
-            } else {
-                let failure = Failure::new(label, Absent::Empty).at(&index).help(
-                    "this index's group has no aggregate value; supply `on_error(Drop)` or `on_error(Replace(...))`",
-                );
+        Ok(Box::new(assignments.into_iter().map(
+            move |(index, key)| {
+                if let Some(aggregate) = aggregates.get(&key) {
+                    (index, aggregate.clone())
+                } else {
+                    let failure = Failure::new_at(label, MissingGroupAggregate, &index);
 
-                (index, Err(failure))
-            }
-        })))
+                    (index, Err(failure))
+                }
+            },
+        )))
     }
 }
 

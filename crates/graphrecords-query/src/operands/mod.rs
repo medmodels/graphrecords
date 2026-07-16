@@ -7,7 +7,7 @@ mod nodes;
 mod values;
 
 use crate::{
-    BoxedIterator, IndexDomain, OperandContext, QueryResult,
+    BoxedIterator, IndexDomain, OperandContext, QueryResult, ToOwnedValue,
     execution::EvaluationCache,
     explain::Explanation,
     optimizer::{Estimate, Estimated, PlanNode, Stats},
@@ -31,7 +31,7 @@ use std::{marker::PhantomData, sync::Arc};
 pub use values::{BareValueOperand, BareValuesOperand, ValueOperand, ValuesOperand};
 
 pub trait ValueType: 'static {
-    type Value<'a>: 'a + Clone
+    type Value<'a>: 'a + Clone + ToOwnedValue
     where
         Self: 'a;
 }

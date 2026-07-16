@@ -69,6 +69,17 @@ fn int_float_eq(int_value: i64, float_value: f64) -> bool {
     converted == float_value && converted as i64 == int_value
 }
 
+fn int_float_cmp(int_value: i64, float_value: f64) -> Option<Ordering> {
+    if float_value.is_nan() {
+        return None;
+    }
+
+    match (int_value as f64).partial_cmp(&float_value) {
+        Some(Ordering::Equal) => Some(i128::from(int_value).cmp(&(float_value as i128))),
+        ordering => ordering,
+    }
+}
+
 impl PartialEq for GraphRecordValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -161,9 +172,17 @@ impl PartialOrd for GraphRecordValue {
         match (self, other) {
             (Self::String(value), Self::String(other)) => Some(value.cmp(other)),
             (Self::Int(value), Self::Int(other)) => Some(value.cmp(other)),
-            (Self::Int(value), Self::Float(other)) => (*value as f64).partial_cmp(other),
-            (Self::Float(value), Self::Int(other)) => value.partial_cmp(&(*other as f64)),
-            (Self::Float(value), Self::Float(other)) => value.partial_cmp(other),
+            (Self::Int(value), Self::Float(other)) => int_float_cmp(*value, *other),
+            (Self::Float(value), Self::Int(other)) => {
+                int_float_cmp(*other, *value).map(Ordering::reverse)
+            }
+            (Self::Float(value), Self::Float(other)) => {
+                if value.is_nan() && other.is_nan() {
+                    Some(Ordering::Equal)
+                } else {
+                    value.partial_cmp(other)
+                }
+            }
             (Self::Bool(value), Self::Bool(other)) => Some(value.cmp(other)),
             (Self::DateTime(value), Self::DateTime(other)) => Some(value.cmp(other)),
             (Self::Duration(value), Self::Duration(other)) => Some(value.cmp(other)),

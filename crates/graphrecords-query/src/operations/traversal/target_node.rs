@@ -38,7 +38,7 @@ impl Relation for EdgeTarget {
     ) -> QueryResult<<Self::To as IndexDomain>::Index<'a>> {
         let (_source, target) = graphrecord
             .edge_endpoints(from)
-            .map_err(|error| Failure::new(Self::LABEL, error))?;
+            .map_err(|error| Failure::new_at(Self::LABEL, error, &from))?;
 
         Ok(target)
     }

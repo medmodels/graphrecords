@@ -43,7 +43,7 @@ where
 
                 let result = value
                     .r#mod(modulus)
-                    .map_err(|error| Failure::new(label, error).at(&index));
+                    .map_err(|error| Failure::new_at(label, error, &index));
 
                 Some((index, result))
             },

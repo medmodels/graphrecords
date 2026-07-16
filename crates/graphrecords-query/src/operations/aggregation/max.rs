@@ -1,6 +1,6 @@
 use crate::{
-    EvaluateOperand, Explain, Failure, IncomparableValues, IndexDomain, Indexed, Labeled, Multiple,
-    Operand, OrderState, QueryResult, Scalar,
+    EvaluateOperand, Explain, Failure, IncomparableValuesAt, IndexDomain, Indexed, Labeled,
+    Multiple, Operand, OrderState, QueryResult, Scalar, ToOwnedValue,
     execution::EvaluationCache,
     operands::ValueOperand,
     operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -37,7 +37,7 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
         let best = values.try_fold(None, |best, (index, result)| {
             let value = result?;
 
-            let Some((_, current)) = &best else {
+            let Some((best_index, current)) = &best else {
                 return Ok(Some((index, value)));
             };
 
@@ -46,14 +46,12 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
                 Some(_) => Ok(best),
                 None => Err(Failure::new(
                     Self::LABEL,
-                    IncomparableValues {
+                    IncomparableValuesAt {
                         first: value,
                         second: current.clone(),
+                        first_element: index.to_owned_value(),
+                        second_element: best_index.to_owned_value(),
                     },
-                )
-                .at(index)
-                .help(
-                    "narrow the values down first using is_string(), is_int(), is_float(), is_bool(), is_datetime() or is_duration()",
                 )),
             }
         })?;

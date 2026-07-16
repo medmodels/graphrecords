@@ -1,6 +1,6 @@
 use crate::{
-    BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Unit, Unordered,
+    BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Failure, Indexed, Labeled, Multiple,
+    Operand, OrderState, QueryResult, Unit, Unordered,
     execution::EvaluationCache,
     operands::{EdgeOperand, NodeOperand},
     operations::{Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -42,21 +42,23 @@ impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for EdgesOpera
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let edges: GrHashSet<_> = values
             .map(|(node, membership)| {
-                membership.map(|()| -> BoxedIterator<'a, &'a EdgeIndex> {
-                    match direction {
+                membership.and_then(|()| -> QueryResult<BoxedIterator<'a, &'a EdgeIndex>> {
+                    let raise = |error| Failure::new_at(Self::LABEL, error, &node);
+
+                    Ok(match direction {
                         EdgeDirection::Outgoing => {
-                            Box::new(graphrecord.outgoing_edges(node).expect("Node must exist"))
+                            Box::new(graphrecord.outgoing_edges(node).map_err(raise)?)
                         }
                         EdgeDirection::Incoming => {
-                            Box::new(graphrecord.incoming_edges(node).expect("Node must exist"))
+                            Box::new(graphrecord.incoming_edges(node).map_err(raise)?)
                         }
                         EdgeDirection::Both => Box::new(
                             graphrecord
                                 .outgoing_edges(node)
-                                .expect("Node must exist")
-                                .chain(graphrecord.incoming_edges(node).expect("Node must exist")),
+                                .map_err(raise)?
+                                .chain(graphrecord.incoming_edges(node).map_err(raise)?),
                         ),
-                    }
+                    })
                 })
             })
             .collect::<QueryResult<Vec<_>>>()?

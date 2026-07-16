@@ -23,9 +23,8 @@ use attribute::PyGraphRecordAttribute;
 use borrowed::BorrowedGraphRecord;
 use connector::PyConnector;
 use errors::PyGraphRecordError;
-use graphrecords_core::errors::ConversionError;
 use graphrecords_core::{
-    errors::GraphRecordError,
+    errors::{ConversionError, GraphRecordError},
     graphrecord::{
         AttributeMap, EdgeDataFrameInput, EdgeIndex, GraphRecord, GraphRecordAttribute,
         GraphRecordValue, Group, NodeDataFrameInput, connector::ConnectedGraphRecord,

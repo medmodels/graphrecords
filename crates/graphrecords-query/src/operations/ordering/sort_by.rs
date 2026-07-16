@@ -1,7 +1,7 @@
-use super::IncomparableIndices;
+use super::{EnsureSortable, IncomparableIndices};
 use crate::{
-    EvaluateOperand, Explain, Failure, IncomparableValues, IndexDomain, Indexed, Labeled, Multiple,
-    Operand, OrderState, Ordered, QueryResult, ValueType,
+    EvaluateOperand, Explain, Failure, IncomparableValuesAt, IndexDomain, Indexed, Labeled,
+    Multiple, Operand, OrderState, Ordered, QueryResult, ToOwnedValue, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -47,7 +47,8 @@ where
     V: ValueType,
     A: ArgumentSource<Keyed<I>>,
     O: OrderState,
-    for<'a> A::Value<'a>: PartialOrd + Display + Debug + Send + Sync,
+    for<'a> A::Value<'a>: EnsureSortable,
+    for<'a> <A::Value<'a> as ToOwnedValue>::Owned: Debug + Display + Send + Sync,
 {
     type Output = SortedBy<I, V>;
 
@@ -68,55 +69,52 @@ where
             })
             .collect::<QueryResult<_>>()?;
 
-        let mut incomparable_keys = None;
-        let mut incomparable_indices = None;
+        if let Some((first_position, second_position)) =
+            EnsureSortable::find_incomparable(collected.iter().map(|(_index, _subject, key)| key))
+        {
+            let (first_index, _, first) = &collected[first_position];
+            let (second_index, _, second) = &collected[second_position];
 
-        collected.sort_by(|(left_index, _, left_key), (right_index, _, right_key)| {
-            let Some(ordering) = left_key.partial_cmp(right_key) else {
-                if incomparable_keys.is_none() {
-                    incomparable_keys = Some((left_key.clone(), right_key.clone()));
-                }
-
-                return Ordering::Equal;
-            };
-
-            if ordering != Ordering::Equal {
-                return ordering;
-            }
-
-            let Some(index_ordering) = left_index.partial_cmp(right_index) else {
-                if incomparable_indices.is_none() {
-                    incomparable_indices = Some((
-                        left_key.clone(),
-                        left_index.to_string(),
-                        right_index.to_string(),
-                    ));
-                }
-
-                return Ordering::Equal;
-            };
-
-            index_ordering
-        });
-
-        if let Some((first, second)) = incomparable_keys {
-            return Err(Failure::new(label, IncomparableValues { first: first.to_string(), second: second.to_string() }).help(
-                "narrow the values down first using is_string(), is_int(), is_float(), is_bool(), is_datetime() or is_duration()",
+            return Err(Failure::new(
+                label,
+                IncomparableValuesAt {
+                    first: first.to_owned_value(),
+                    second: second.to_owned_value(),
+                    first_element: first_index.to_owned_value(),
+                    second_element: second_index.to_owned_value(),
+                },
             ));
         }
 
-        if let Some((value, first, second)) = incomparable_indices {
-            return Err(Failure::new(
-                label,
-                IncomparableIndices {
-                    value: value.to_string(),
-                    first,
-                    second,
-                },
-            )
-            .help(
-                "to order them deterministically, sort by a key that distinguishes these elements",
-            ));
+        collected.sort_by(|(_, _, left), (_, _, right)| {
+            left.partial_cmp(right)
+                .unwrap_or_else(|| panic!("EnsureSortable admitted an incomparable pair of keys"))
+        });
+
+        for run in collected.chunk_by_mut(|(_, _, left), (_, _, right)| {
+            left.partial_cmp(right) == Some(Ordering::Equal)
+        }) {
+            if let Some((first_position, second_position)) =
+                EnsureSortable::find_incomparable(run.iter().map(|(index, _subject, _key)| index))
+            {
+                let (first_index, _, key) = &run[first_position];
+                let (second_index, _, _) = &run[second_position];
+
+                return Err(Failure::new(
+                    label,
+                    IncomparableIndices {
+                        value: key.to_owned_value(),
+                        first: first_index.to_owned_value(),
+                        second: second_index.to_owned_value(),
+                    },
+                ));
+            }
+
+            run.sort_by(|(left_index, _, _), (right_index, _, _)| {
+                left_index.partial_cmp(right_index).unwrap_or_else(|| {
+                    panic!("EnsureSortable admitted an incomparable pair of indices")
+                })
+            });
         }
 
         Ok(Box::new(

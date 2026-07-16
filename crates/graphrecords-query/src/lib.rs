@@ -14,33 +14,90 @@ use crate::{
     selection::{ReturnOperand, Selection},
 };
 pub use context::{EvaluateContext, OperandContext};
-pub use error::{Failure, IncomparableValues, QueryResult};
+pub use error::{
+    Diagnostic, External, Failure, IncomparableValues, IncomparableValuesAt, QueryResult,
+};
 pub use explain::{Explain, Explanation, Labeled};
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, NodeIndex},
+    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
 };
+use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 pub use operands::{
     Arity, AttributeName, AttributeSet, Bare, Definite, EdgeOperand, ElementShape, EvaluateOperand,
     IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand, Operand, OrderState, Ordered,
     Return, Scalar, Single, Unit, Unordered, ValueType,
 };
-use std::{fmt::Display, hash::Hash};
+use operations::EnsureSortable;
+use std::{
+    any::Any,
+    fmt::{Debug, Display},
+    hash::Hash,
+};
 pub use traits::*;
 
 pub type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
 
+pub type Position = usize;
+
+pub trait OwnedIndex: Any + Debug + Display + Send + Sync {}
+
+impl OwnedIndex for NodeIndex {}
+impl OwnedIndex for EdgeIndex {}
+impl OwnedIndex for Position {}
+
+pub trait ToOwnedValue {
+    type Owned: 'static;
+
+    fn to_owned_value(&self) -> Self::Owned;
+}
+
+impl<T: Clone + 'static> ToOwnedValue for &T {
+    type Owned = T;
+
+    fn to_owned_value(&self) -> T {
+        (*self).clone()
+    }
+}
+
+macro_rules! owned_value_leaf {
+    ($Type:ty) => {
+        impl ToOwnedValue for $Type {
+            type Owned = Self;
+
+            fn to_owned_value(&self) -> Self::Owned {
+                self.clone()
+            }
+        }
+    };
+}
+
+owned_value_leaf!(());
+owned_value_leaf!(bool);
+owned_value_leaf!(Position);
+owned_value_leaf!(GraphRecordValue);
+owned_value_leaf!(GraphRecordAttribute);
+owned_value_leaf!(GrHashSet<GraphRecordAttribute>);
+
+impl<T: Clone + 'static> ToOwnedValue for GrHashMap<T, bool> {
+    type Owned = Self;
+
+    fn to_owned_value(&self) -> Self::Owned {
+        self.clone()
+    }
+}
+
 pub trait IndexDomain: 'static + Clone {
-    type Index<'a>: Clone + Display + Eq + Hash + PartialOrd
+    type Index<'a>: Clone + Eq + Hash + EnsureSortable + ToOwnedValue<Owned: OwnedIndex>
     where
         Self: 'a;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Positional;
 
 impl IndexDomain for Positional {
-    type Index<'a> = usize;
+    type Index<'a> = Position;
 }
 
 impl IndexDomain for EdgeIndex {

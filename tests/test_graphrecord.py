@@ -1760,7 +1760,9 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.freeze_schema()
 
-        with pytest.raises(ValueError, match='Group `"2"` is not defined in the schema'):
+        with pytest.raises(
+            ValueError, match='Group `"2"` is not defined in the schema'
+        ):
             graphrecord.add_group("2")
 
         graphrecord.remove_groups("0")

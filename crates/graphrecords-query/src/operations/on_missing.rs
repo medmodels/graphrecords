@@ -1,16 +1,50 @@
 use crate::{
-    Explain, Failure, IndexDomain, OrderState, QueryResult,
+    Diagnostic, Explain, Failure, IndexDomain, OrderState, QueryResult,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operands::{
         BareValueOperand, BoolMaskOperand, NestedBoolMaskOperand, ValueOperand, ValuesOperand,
     },
-    operations::{Absent, ArgumentSource, Drop, Keyed, Looked, OnMissing, Prepare, Raise, Replace},
+    operations::{
+        Absent, ArgumentAbsent, ArgumentSource, Drop, Keyed, Looked, OnMissing, Prepare, Raise,
+        Replace,
+    },
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, PlanNode, Stats},
     traits::MaybeAbsent,
 };
 use graphrecords_core::GraphRecord;
-use std::{fmt, hash::Hasher, marker::PhantomData};
+use std::{
+    error::Error,
+    fmt::{self, Display, Formatter},
+    hash::Hasher,
+    marker::PhantomData,
+};
+
+#[derive(Debug)]
+pub struct ReplacementAbsent {
+    pub cause: Absent,
+}
+
+impl Display for ReplacementAbsent {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        match self.cause {
+            Absent::Uncovered => formatter.write_str("replacement did not cover this index"),
+            Absent::Empty => formatter.write_str("replacement operand was empty"),
+        }
+    }
+}
+
+impl Error for ReplacementAbsent {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.cause)
+    }
+}
+
+impl Diagnostic for ReplacementAbsent {
+    fn help(&self) -> Option<String> {
+        Some("make the replacement operand cover every index it replaces".to_string())
+    }
+}
 
 pub trait MissingPolicy<I: IndexDomain, S: ArgumentSource<Keyed<I>>>:
     Clone + 'static + Explain + PlanIdentity + PlanInputs
@@ -71,8 +105,10 @@ impl<I: IndexDomain, S: ArgumentSource<Keyed<I>>> MissingPolicy<I, S> for Raise 
         label: &'static str,
         absent: Absent,
     ) -> QueryResult<Option<S::Value<'a>>> {
-        Err(Failure::new(label, absent).at(index).help(
-            "the argument has no value at this index; supply `on_missing(Drop)` or `on_missing(Replace(...))`",
+        Err(Failure::new_at(
+            label,
+            ArgumentAbsent { cause: absent },
+            index,
         ))
     }
 }
@@ -101,9 +137,11 @@ where
     ) -> QueryResult<Option<S::Value<'a>>> {
         match R::lookup(prepared, index) {
             Looked::Present(wrapped) => wrapped.clone().map(Some),
-            Looked::Absent(absent) => Err(Failure::new(label, absent)
-                .at(index)
-                .help("the replacement operand has no value at this index")),
+            Looked::Absent(absent) => Err(Failure::new_at(
+                label,
+                ReplacementAbsent { cause: absent },
+                index,
+            )),
         }
     }
 }

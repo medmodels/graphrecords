@@ -239,7 +239,9 @@ class TestSchema(unittest.TestCase):
             "test": (gr.String(), gr.AttributeType.Unstructured)
         }
 
-        with pytest.raises(ValueError, match=r'Group `"invalid"` is not defined in the schema'):
+        with pytest.raises(
+            ValueError, match=r'Group `"invalid"` is not defined in the schema'
+        ):
             schema.group("invalid")
 
     def test_default(self) -> None:
@@ -427,7 +429,9 @@ class TestSchema(unittest.TestCase):
             "group1"
         ).edges
 
-        with pytest.raises(ValueError, match=r'Group `"group1"` already exists in the schema'):
+        with pytest.raises(
+            ValueError, match=r'Group `"group1"` already exists in the schema'
+        ):
             schema.add_group("group1", gr.GroupSchema())
 
     def test_remove_group(self) -> None:

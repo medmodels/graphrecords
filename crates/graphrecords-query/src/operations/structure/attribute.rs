@@ -1,6 +1,6 @@
 use crate::{
-    Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled, Operand, QueryResult, Scalar,
-    Unit,
+    Diagnostic, Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled, Operand, OwnedIndex,
+    QueryResult, Scalar, ToOwnedValue, Unit,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
     optimizer::{
@@ -11,22 +11,29 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
+    errors::GraphRecordError,
     graphrecord::{AttributeMap, EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
 };
 use std::{
     error::Error,
-    fmt::{self, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter},
 };
 
 pub trait EntityAttributes: IndexDomain {
-    fn attributes<'a>(graphrecord: &'a GraphRecord, index: &Self::Index<'a>) -> &'a AttributeMap;
+    fn attributes<'a>(
+        graphrecord: &'a GraphRecord,
+        index: &Self::Index<'a>,
+    ) -> Result<&'a AttributeMap, GraphRecordError>;
 
     fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize;
 }
 
 impl EntityAttributes for NodeIndex {
-    fn attributes<'a>(graphrecord: &'a GraphRecord, index: &Self::Index<'a>) -> &'a AttributeMap {
-        graphrecord.node_attributes(index).expect("Node must exist")
+    fn attributes<'a>(
+        graphrecord: &'a GraphRecord,
+        index: &Self::Index<'a>,
+    ) -> Result<&'a AttributeMap, GraphRecordError> {
+        graphrecord.node_attributes(index)
     }
 
     fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize {
@@ -35,8 +42,11 @@ impl EntityAttributes for NodeIndex {
 }
 
 impl EntityAttributes for EdgeIndex {
-    fn attributes<'a>(graphrecord: &'a GraphRecord, index: &Self::Index<'a>) -> &'a AttributeMap {
-        graphrecord.edge_attributes(index).expect("Edge must exist")
+    fn attributes<'a>(
+        graphrecord: &'a GraphRecord,
+        index: &Self::Index<'a>,
+    ) -> Result<&'a AttributeMap, GraphRecordError> {
+        graphrecord.edge_attributes(index)
     }
 
     fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize {
@@ -64,6 +74,42 @@ impl Display for MissingAttribute {
 }
 
 impl Error for MissingAttribute {}
+
+impl Diagnostic for MissingAttribute {
+    fn help(&self) -> Option<String> {
+        Some(
+            "filter the elements using `has_attribute(...)` first or handle missing attributes with `on_error(...)`"
+                .to_string(),
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct MissingTraversedAttribute<T: OwnedIndex> {
+    pub attribute: GraphRecordAttribute,
+    pub entity: T,
+}
+
+impl<T: OwnedIndex> Display for MissingTraversedAttribute<T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "no attribute `{}` on the traversed element `{}`",
+            self.attribute, self.entity
+        )
+    }
+}
+
+impl<T: OwnedIndex> Error for MissingTraversedAttribute<T> {}
+
+impl<T: OwnedIndex> Diagnostic for MissingTraversedAttribute<T> {
+    fn help(&self) -> Option<String> {
+        Some(
+            "filter the elements using `has_attribute(...)` first or handle missing attributes with `on_error(...)`"
+                .to_string(),
+        )
+    }
+}
 
 impl Prepare for AttributeOperation {
     type Prepared<'a> = &'a GraphRecordAttribute;
@@ -96,29 +142,26 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation
                     return (index, Err(failure));
                 }
 
-                let attributes = I::attributes(graphrecord, &index);
+                let attributes = match I::attributes(graphrecord, &index) {
+                    Ok(attributes) => attributes,
+                    Err(error) => {
+                        let failure = Failure::new_at(Self::LABEL, error, &index);
+
+                        return (index, Err(failure));
+                    }
+                };
 
                 if let Some(value) = attributes.get(attribute) {
                     return (index, Ok(value.clone()));
                 }
 
-                let mut available: Vec<_> = attributes.keys().map(ToString::to_string).collect();
-                available.sort();
-
-                let help = if available.is_empty() {
-                    "no attributes are present here".to_string()
-                } else {
-                    format!("available attributes: {}", available.join(", "))
-                };
-
-                let failure = Failure::new(
+                let failure = Failure::new_at(
                     Self::LABEL,
                     MissingAttribute {
                         attribute: attribute.clone(),
                     },
-                )
-                .at(&index)
-                .help(help);
+                    &index,
+                );
 
                 (index, Err(failure))
             },
@@ -157,30 +200,21 @@ impl<K: IndexDomain, E: EntityAttributes> ElementKernel<Indexed<K, IndexValue<E>
         Ok(Pipeline::default().map(
             move |(key, reference): (K::Index<'a>, QueryResult<<E as IndexDomain>::Index<'a>>)| {
                 let value = reference.and_then(|entity| {
-                    let attributes = E::attributes(graphrecord, &entity);
+                    let attributes = E::attributes(graphrecord, &entity)
+                        .map_err(|error| Failure::new_at(Self::LABEL, error, &key))?;
 
                     if let Some(value) = attributes.get(attribute) {
                         return Ok(value.clone());
                     }
 
-                    let mut available: Vec<_> =
-                        attributes.keys().map(ToString::to_string).collect();
-                    available.sort();
-
-                    let help = if available.is_empty() {
-                        "no attributes are present here".to_string()
-                    } else {
-                        format!("available attributes: {}", available.join(", "))
-                    };
-
-                    Err(Failure::new(
+                    Err(Failure::new_at(
                         Self::LABEL,
-                        MissingAttribute {
+                        MissingTraversedAttribute {
                             attribute: attribute.clone(),
+                            entity: entity.to_owned_value(),
                         },
-                    )
-                    .at(&key)
-                    .help(help))
+                        &key,
+                    ))
                 });
 
                 (key, value)

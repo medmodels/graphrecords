@@ -29,7 +29,7 @@ use crate::{
 };
 pub use aggregation::MaxOperation;
 pub use argument::{
-    Absent, Alignment, ArgumentSource, Keyed, Looked, OnMissing, Prepare, Unaligned,
+    Absent, Alignment, ArgumentAbsent, ArgumentSource, Keyed, Looked, OnMissing, Prepare, Unaligned,
 };
 pub use arithmetic::ModuloOperation;
 pub use cache::CacheContext;
@@ -37,15 +37,17 @@ pub use conversion::EnumerateOperation;
 use graphrecords_core::GraphRecord;
 pub use graphrecords_macros::Operation;
 pub use grouping::{
-    BroadcastOperation, GroupByOperation, GroupKey, KeyOperand, UngroupContext, Ungroupable,
+    BroadcastOperation, GroupByOperation, GroupKey, KeyOperand, MissingGroupAggregate,
+    UngroupContext, Ungroupable,
 };
 pub use indexing::{IndexOperation, SelectOperation};
 pub use kernel::{BareStream, ElementKernel, Kernel, KeyedStream, Pipeline};
 pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
 pub use on_error::{Drop, ErrorPolicy, Raise, Replace};
-pub use on_missing::{MissingPolicy, WithMissing};
+pub use on_missing::{MissingPolicy, ReplacementAbsent, WithMissing};
 pub use ordering::{
-    FirstOperation, LastOperation, SortByOperation, SortOperation, UnorderOperation,
+    EnsureSortable, FirstOperation, IncomparableIndices, LastOperation, SortByOperation,
+    SortOperation, UnorderOperation, incomparable_with_first,
 };
 use std::{
     any::Any,
@@ -54,7 +56,7 @@ use std::{
 };
 pub use structure::{
     AttributeOperation, EntityAttributes, FilterOperation, InGroupOperation, IndicesInGroup,
-    MissingAttribute,
+    MissingAttribute, MissingTraversedAttribute,
 };
 pub use traversal::{
     EdgeSource, EdgeTarget, EdgesOperation, NeighborsOperation, NodesOperation, Relation,

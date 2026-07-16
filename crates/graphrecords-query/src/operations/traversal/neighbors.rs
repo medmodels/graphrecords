@@ -1,6 +1,6 @@
 use crate::{
-    BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Unit, Unordered,
+    BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Failure, Indexed, Labeled, Multiple,
+    Operand, OrderState, QueryResult, Unit, Unordered,
     execution::EvaluationCache,
     operands::NodeOperand,
     operations::{Kernel, KeyedStream, Operation, OperationContext, Prepare},
@@ -37,36 +37,37 @@ impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for NeighborsO
         values: KeyedStream<'a, NodeIndex, Unit, Multiple<O>>,
         direction: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let neighbors: GrHashSet<_> = values
-            .map(|(node, membership)| {
-                membership.map(|()| -> BoxedIterator<'a, &'a NodeIndex> {
-                    match direction {
-                        EdgeDirection::Outgoing => Box::new(
-                            graphrecord
-                                .outgoing_edges(node)
-                                .expect("Node must exist")
-                                .map(|edge| {
-                                    graphrecord.edge_endpoints(edge).expect("Edge must exist").1
-                                }),
-                        ),
-                        EdgeDirection::Incoming => Box::new(
-                            graphrecord
-                                .incoming_edges(node)
-                                .expect("Node must exist")
-                                .map(|edge| {
-                                    graphrecord.edge_endpoints(edge).expect("Edge must exist").0
-                                }),
-                        ),
-                        EdgeDirection::Both => {
-                            Box::new(graphrecord.neighbors(node).expect("Node must exist"))
-                        }
-                    }
+        let neighbors: GrHashSet<_> =
+            values
+                .map(|(node, membership)| {
+                    membership.and_then(|()| -> QueryResult<BoxedIterator<'a, &'a NodeIndex>> {
+                        let raise = |error| Failure::new_at(Self::LABEL, error, &node);
+
+                        Ok(match direction {
+                            EdgeDirection::Outgoing => {
+                                Box::new(graphrecord.outgoing_edges(node).map_err(raise)?.map(
+                                    |edge| {
+                                        graphrecord.edge_endpoints(edge).expect("Edge must exist").1
+                                    },
+                                ))
+                            }
+                            EdgeDirection::Incoming => {
+                                Box::new(graphrecord.incoming_edges(node).map_err(raise)?.map(
+                                    |edge| {
+                                        graphrecord.edge_endpoints(edge).expect("Edge must exist").0
+                                    },
+                                ))
+                            }
+                            EdgeDirection::Both => {
+                                Box::new(graphrecord.neighbors(node).map_err(raise)?)
+                            }
+                        })
+                    })
                 })
-            })
-            .collect::<QueryResult<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect();
+                .collect::<QueryResult<Vec<_>>>()?
+                .into_iter()
+                .flatten()
+                .collect();
 
         Ok(Box::new(neighbors.into_iter().map(|node| (node, Ok(())))))
     }

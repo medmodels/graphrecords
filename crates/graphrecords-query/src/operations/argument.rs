@@ -1,5 +1,5 @@
 use crate::{
-    Explain, Failure, IndexDomain, QueryResult,
+    Diagnostic, Explain, Failure, IndexDomain, QueryResult, ToOwnedValue,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, Stats},
@@ -34,6 +34,32 @@ impl Display for Absent {
 
 impl Error for Absent {}
 
+#[derive(Debug)]
+pub struct ArgumentAbsent {
+    pub cause: Absent,
+}
+
+impl Display for ArgumentAbsent {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", self.cause)
+    }
+}
+
+impl Error for ArgumentAbsent {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.cause)
+    }
+}
+
+impl Diagnostic for ArgumentAbsent {
+    fn help(&self) -> Option<String> {
+        Some(
+            "make the argument cover the subject's elements or state a policy with `on_missing(...)`"
+                .to_string(),
+        )
+    }
+}
+
 #[derive(Clone, Copy)]
 pub enum OnMissing {
     Raise,
@@ -55,7 +81,11 @@ pub trait Prepare: 'static {
 pub trait Alignment: 'static {
     type Address<'a>;
 
-    fn locate(address: &Self::Address<'_>, failure: Box<Failure>) -> Box<Failure>;
+    fn raise_at(
+        operation: &'static str,
+        cause: impl Diagnostic,
+        address: &Self::Address<'_>,
+    ) -> Box<Failure>;
 }
 
 pub struct Keyed<I: IndexDomain>(PhantomData<I>);
@@ -63,8 +93,12 @@ pub struct Keyed<I: IndexDomain>(PhantomData<I>);
 impl<I: IndexDomain> Alignment for Keyed<I> {
     type Address<'a> = I::Index<'a>;
 
-    fn locate(address: &Self::Address<'_>, failure: Box<Failure>) -> Box<Failure> {
-        failure.at(address)
+    fn raise_at(
+        operation: &'static str,
+        cause: impl Diagnostic,
+        address: &Self::Address<'_>,
+    ) -> Box<Failure> {
+        Failure::new_at(operation, cause, address)
     }
 }
 
@@ -73,15 +107,19 @@ pub struct Unaligned;
 impl Alignment for Unaligned {
     type Address<'a> = ();
 
-    fn locate(_address: &Self::Address<'_>, failure: Box<Failure>) -> Box<Failure> {
-        failure
+    fn raise_at(
+        operation: &'static str,
+        cause: impl Diagnostic,
+        _address: &Self::Address<'_>,
+    ) -> Box<Failure> {
+        Failure::new(operation, cause)
     }
 }
 
 pub trait ArgumentSource<A: Alignment>:
     Prepare + Explain + PlanIdentity + PlanInputs + Estimated
 {
-    type Value<'a>: Clone
+    type Value<'a>: Clone + ToOwnedValue
     where
         Self: 'a;
 
@@ -105,8 +143,10 @@ pub trait ArgumentSource<A: Alignment>:
             Looked::Present(wrapped) => wrapped.clone().map(Some),
             Looked::Absent(absent) => match default {
                 OnMissing::Drop => Ok(None),
-                OnMissing::Raise => Err(A::locate(address, Failure::new(label, absent)).help(
-                    "the argument has no value at this index; supply `on_missing(Drop)` or `on_missing(Replace(...))`",
+                OnMissing::Raise => Err(A::raise_at(
+                    label,
+                    ArgumentAbsent { cause: absent },
+                    address,
                 )),
             },
         }
