@@ -2,7 +2,8 @@ use super::{engine::Session, plan::PlanNode, stats::Stats};
 use crate::Operand;
 use std::marker::PhantomData;
 
-pub(super) type ErasedRule<O> = Box<dyn for<'a> Fn(O, &Session<'a>) -> Transformed<O>>;
+pub(super) type ErasedRule<O> =
+    Box<dyn for<'a> Fn(O, &Session<'a>) -> Transformed<O> + Send + Sync>;
 
 pub struct Transformed<T> {
     pub value: T,
@@ -27,7 +28,7 @@ impl<T> Transformed<T> {
     }
 }
 
-pub trait Rule<O: Operand>: 'static {
+pub trait Rule<O: Operand>: 'static + Send + Sync {
     fn apply(&self, operand: O, stats: &Stats) -> Transformed<O>;
 }
 
@@ -36,7 +37,7 @@ pub fn rule<C, O, F>(rewrite: F) -> impl Rule<O>
 where
     C: PlanNode,
     O: Operand + 'static,
-    F: Fn(&C, &Stats) -> Option<O> + 'static,
+    F: Fn(&C, &Stats) -> Option<O> + Send + Sync + 'static,
 {
     ContextRule {
         rewrite,
@@ -53,7 +54,7 @@ impl<C, O, F> Rule<O> for ContextRule<C, O, F>
 where
     C: PlanNode,
     O: Operand + 'static,
-    F: Fn(&C, &Stats) -> Option<O> + 'static,
+    F: Fn(&C, &Stats) -> Option<O> + Send + Sync + 'static,
 {
     fn apply(&self, operand: O, stats: &Stats) -> Transformed<O> {
         let Some(context) = operand.downcast::<C>() else {

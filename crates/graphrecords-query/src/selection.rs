@@ -101,7 +101,7 @@ impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
     where
         Q: FnOnce(&NodeOperand<Unordered>) -> R,
     {
-        Self::new_node_with(graphrecord, &Optimizer::builtin(), query)
+        Self::new_node_with(graphrecord, Optimizer::shared_builtin(), query)
     }
 
     pub fn new_node_with<Q>(graphrecord: &'a GraphRecord, optimizer: &Optimizer, query: Q) -> Self
@@ -126,7 +126,7 @@ impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
     where
         Q: FnOnce(&EdgeOperand<Unordered>) -> R,
     {
-        Self::new_edge_with(graphrecord, &Optimizer::builtin(), query)
+        Self::new_edge_with(graphrecord, Optimizer::shared_builtin(), query)
     }
 
     pub fn new_edge_with<Q>(graphrecord: &'a GraphRecord, optimizer: &Optimizer, query: Q) -> Self

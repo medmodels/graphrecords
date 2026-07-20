@@ -11,7 +11,8 @@ pub use builtins::{
     BuiltinPhase, EliminateDoubleNegation, SortBelowGroup, SortByBelowGroup, register_builtins,
 };
 pub use engine::{
-    Direction, Optimizer, OptimizerBuilder, OptimizerError, PhaseHandle, RuleHandle, Session,
+    Direction, Misconfiguration, Optimizer, OptimizerBuilder, OptimizerError, PhaseHandle,
+    RuleHandle, Session,
 };
 pub use estimate::{Estimate, Estimated};
 pub use pattern::{

@@ -13,9 +13,9 @@ pub trait Pattern<O: Operand> {
 
     fn rewrite<F>(self, rewrite: F) -> impl Rule<O>
     where
-        Self: Sized + 'static,
+        Self: Sized + Send + Sync + 'static,
         O: 'static,
-        F: Fn(Self::Bindings, &Stats) -> Option<O> + 'static,
+        F: Fn(Self::Bindings, &Stats) -> Option<O> + Send + Sync + 'static,
     {
         PatternRule {
             pattern: self,
@@ -54,8 +54,8 @@ struct PatternRule<P, F> {
 impl<O, P, F> Rule<O> for PatternRule<P, F>
 where
     O: Operand,
-    P: Pattern<O> + 'static,
-    F: Fn(P::Bindings, &Stats) -> Option<O> + 'static,
+    P: Pattern<O> + Send + Sync + 'static,
+    F: Fn(P::Bindings, &Stats) -> Option<O> + Send + Sync + 'static,
 {
     fn apply(&self, operand: O, stats: &Stats) -> Transformed<O> {
         let Some(bindings) = self.pattern.try_match(&operand) else {
@@ -78,9 +78,9 @@ impl<P, G> GuardedPattern<P, G> {
     pub fn rewrite<O, F>(self, rewrite: F) -> impl Rule<O>
     where
         O: Operand + 'static,
-        P: Pattern<O> + 'static,
-        G: Fn(&Stats) -> bool + 'static,
-        F: Fn(P::Bindings, &Stats) -> Option<O> + 'static,
+        P: Pattern<O> + Send + Sync + 'static,
+        G: Fn(&Stats) -> bool + Send + Sync + 'static,
+        F: Fn(P::Bindings, &Stats) -> Option<O> + Send + Sync + 'static,
     {
         let guard = self.guard;
 
@@ -170,7 +170,7 @@ impl<O: Operand> Pattern<O> for Capture {
 
 pub struct Matching<C, P> {
     patterns: P,
-    matched: PhantomData<C>,
+    matched: PhantomData<fn() -> C>,
 }
 
 #[must_use]
@@ -199,9 +199,9 @@ impl<C, P> Matching<C, P> {
     pub fn rewrite_matched<B, F>(self, rewrite: F) -> impl Rule<C::Output>
     where
         C: PlanNode + MatchInputs + OptimizePlan,
-        P: for<'a> MatchAgainst<C::Inputs<'a>, Bindings = B> + 'static,
+        P: for<'a> MatchAgainst<C::Inputs<'a>, Bindings = B> + Send + Sync + 'static,
         B: 'static,
-        F: Fn(&C, B, &Stats) -> Option<C::Output> + 'static,
+        F: Fn(&C, B, &Stats) -> Option<C::Output> + Send + Sync + 'static,
     {
         MatchingRewriteRule {
             pattern: self,
@@ -218,9 +218,9 @@ struct MatchingRewriteRule<C, P, F> {
 impl<C, P, B, F> Rule<C::Output> for MatchingRewriteRule<C, P, F>
 where
     C: PlanNode + MatchInputs + OptimizePlan,
-    P: for<'a> MatchAgainst<C::Inputs<'a>, Bindings = B> + 'static,
+    P: for<'a> MatchAgainst<C::Inputs<'a>, Bindings = B> + Send + Sync + 'static,
     B: 'static,
-    F: Fn(&C, B, &Stats) -> Option<C::Output> + 'static,
+    F: Fn(&C, B, &Stats) -> Option<C::Output> + Send + Sync + 'static,
 {
     fn apply(&self, operand: C::Output, stats: &Stats) -> Transformed<C::Output> {
         let Some(context) = operand.downcast::<C>() else {

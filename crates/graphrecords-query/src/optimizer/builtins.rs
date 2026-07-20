@@ -9,6 +9,7 @@ use crate::{
     traits::{First, GroupBy, Sort, SortBy},
 };
 use graphrecords_core::graphrecord::{EdgeIndex, NodeIndex};
+use std::sync::OnceLock;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PhaseLabel)]
 pub enum BuiltinPhase {
@@ -114,6 +115,13 @@ impl Optimizer {
         builder
             .build()
             .expect("Builtin phases and rules must form a valid optimizer")
+    }
+
+    #[must_use]
+    pub fn shared_builtin() -> &'static Self {
+        static BUILTIN: OnceLock<Optimizer> = OnceLock::new();
+
+        BUILTIN.get_or_init(Self::builtin)
     }
 }
 

@@ -4,11 +4,10 @@ use std::{
     any::Any,
     fmt::{self, Debug, Display, Formatter},
     hash::{Hash, Hasher},
+    sync::Arc,
 };
 
-pub trait PhaseLabel: Any {
-    fn dyn_clone(&self) -> Box<dyn PhaseLabel>;
-
+pub trait PhaseLabel: Any + Send + Sync {
     fn dyn_eq(&self, other: &dyn PhaseLabel) -> bool;
 
     fn dyn_hash(&self, state: &mut dyn Hasher);
@@ -18,18 +17,18 @@ pub trait PhaseLabel: Any {
     fn as_any(&self) -> &dyn Any;
 }
 
-pub struct PhaseId(Box<dyn PhaseLabel>);
+pub struct PhaseId(Arc<dyn PhaseLabel>);
 
 impl PhaseId {
     #[must_use]
     pub fn new(label: impl PhaseLabel) -> Self {
-        Self(Box::new(label))
+        Self(Arc::new(label))
     }
 }
 
 impl Clone for PhaseId {
     fn clone(&self) -> Self {
-        Self(self.0.dyn_clone())
+        Self(Arc::clone(&self.0))
     }
 }
 
@@ -139,4 +138,4 @@ impl Display for ReportDisplay<'_> {
     }
 }
 
-pub(super) type RunCondition = Box<dyn Fn(&Stats<'_>) -> bool>;
+pub(super) type RunCondition = Box<dyn Fn(&Stats<'_>) -> bool + Send + Sync>;

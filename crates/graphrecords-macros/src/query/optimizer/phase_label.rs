@@ -54,10 +54,6 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics #crate_path::optimizer::PhaseLabel for #ident #type_generics #where_clause {
-            fn dyn_clone(&self) -> ::std::boxed::Box<dyn #crate_path::optimizer::PhaseLabel> {
-                ::std::boxed::Box::new(::core::clone::Clone::clone(self))
-            }
-
             fn dyn_eq(&self, other: &dyn #crate_path::optimizer::PhaseLabel) -> bool {
                 match #crate_path::optimizer::PhaseLabel::as_any(other).downcast_ref::<Self>() {
                     ::core::option::Option::Some(other) => self == other,
