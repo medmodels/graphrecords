@@ -4,7 +4,7 @@ use crate::{
     Multiple, OrderState, Single,
     error::QueryResult,
     execution::EvaluationCache,
-    operations::{Absent, Alignment, ArgumentSource, Keyed, Lookup, Prepare},
+    operations::{Absent, Alignment, ArgumentSource, Keyed, Lookup, Prepare, Preserving},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
@@ -31,6 +31,7 @@ impl<I: IndexDomain, O: OrderState> Prepare for NestedAttributesOperand<I, O> {
 }
 
 impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for NestedAttributesOperand<I, O> {
+    type Retention = Preserving;
     type Value<'a> = GrHashSet<GraphRecordAttribute>;
 
     fn lookup<'a, 'prepared>(
@@ -60,6 +61,7 @@ impl<I: IndexDomain, O: OrderState> Prepare for AttributesOperand<I, O> {
 }
 
 impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for AttributesOperand<I, O> {
+    type Retention = Preserving;
     type Value<'a> = GraphRecordAttribute;
 
     fn lookup<'a, 'prepared>(
@@ -89,6 +91,7 @@ impl<I: IndexDomain> Prepare for AttributeOperand<I> {
 }
 
 impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for AttributeOperand<I> {
+    type Retention = Preserving;
     type Value<'a> = GraphRecordAttribute;
 
     fn lookup<'a, 'prepared>(
@@ -118,6 +121,7 @@ impl Prepare for BareAttributeOperand {
 }
 
 impl<A: Alignment> ArgumentSource<A> for BareAttributeOperand {
+    type Retention = Preserving;
     type Value<'a> = GraphRecordAttribute;
 
     fn lookup<'a, 'prepared>(

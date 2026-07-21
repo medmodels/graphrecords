@@ -3,8 +3,8 @@ use crate::{
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ErrorPolicy, Keyed, Lookup, Operation,
-        OperationContext, Pipeline, Prepare,
+        Apply, ArgumentSource, ElementKernel, ElementPipeline, ErrorPolicy, Keyed, Lookup,
+        Operation, OperationContext, Pipeline, Prepare, Preserving,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
 };
@@ -44,17 +44,12 @@ where
     for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
 {
     type OutShape = Indexed<I, Scalar>;
+    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         replacement: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<
-            'a,
-            (I::Index<'a>, QueryResult<GraphRecordValue>),
-            (I::Index<'a>, QueryResult<GraphRecordValue>),
-        >,
-    > {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Scalar>, Self>> {
         Ok(Pipeline::default().map(
             move |(index, result): (I::Index<'a>, QueryResult<GraphRecordValue>)| match result {
                 Ok(value) => (index, Ok(value)),
@@ -69,12 +64,12 @@ where
 
 impl ElementKernel<Bare<Scalar>> for Replace<GraphRecordValue> {
     type OutShape = Bare<Scalar>;
+    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         replacement: Self::Prepared<'a>,
-    ) -> QueryResult<Pipeline<'a, QueryResult<GraphRecordValue>, QueryResult<GraphRecordValue>>>
-    {
+    ) -> QueryResult<ElementPipeline<'a, Bare<Scalar>, Self>> {
         Ok(
             Pipeline::default().map(move |result: QueryResult<GraphRecordValue>| {
                 result.or_else(|original| replacement.clone().or(Err(original)))

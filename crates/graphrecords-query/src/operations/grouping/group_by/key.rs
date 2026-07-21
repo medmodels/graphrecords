@@ -45,7 +45,7 @@ impl<I: IndexDomain, O: OrderState> KeyOperand for ValuesOperand<I, O> {
 
     fn assignments<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-    ) -> BoxedIterator<'prepared, (I::Index<'a>, GraphRecordValue)>
+    ) -> BoxedIterator<'prepared, (<Self::Subject as IndexDomain>::Index<'a>, Self::Key<'a>)>
     where
         Self: 'a,
     {
@@ -66,7 +66,7 @@ impl<K: IndexDomain, E: IndexDomain, O: OrderState> KeyOperand for ReferenceOper
 
     fn assignments<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-    ) -> BoxedIterator<'prepared, (K::Index<'a>, E::Index<'a>)>
+    ) -> BoxedIterator<'prepared, (<Self::Subject as IndexDomain>::Index<'a>, Self::Key<'a>)>
     where
         Self: 'a,
     {
@@ -78,24 +78,24 @@ impl<K: IndexDomain, E: IndexDomain, O: OrderState> KeyOperand for ReferenceOper
     }
 }
 
-impl<I: IndexDomain, S, P> GroupKey for WithMissing<I, S, P>
+impl<I: IndexDomain, S, P> GroupKey for WithMissing<Keyed<I>, S, P>
 where
-    S: KeyOperand<Subject = I> + MaybeAbsent<I> + Clone,
-    P: MissingPolicy<I, S>,
+    S: KeyOperand<Subject = I> + MaybeAbsent<Keyed<I>> + Clone,
+    P: MissingPolicy<Keyed<I>, S>,
 {
     type Key<'a> = S::Key<'a>;
 }
 
-impl<I: IndexDomain, S, P> KeyOperand for WithMissing<I, S, P>
+impl<I: IndexDomain, S, P> KeyOperand for WithMissing<Keyed<I>, S, P>
 where
-    S: KeyOperand<Subject = I> + MaybeAbsent<I> + Clone,
-    P: MissingPolicy<I, S>,
+    S: KeyOperand<Subject = I> + MaybeAbsent<Keyed<I>> + Clone,
+    P: MissingPolicy<Keyed<I>, S>,
 {
     type Subject = I;
 
     fn assignments<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-    ) -> BoxedIterator<'prepared, (I::Index<'a>, S::Key<'a>)>
+    ) -> BoxedIterator<'prepared, (<Self::Subject as IndexDomain>::Index<'a>, Self::Key<'a>)>
     where
         Self: 'a,
     {

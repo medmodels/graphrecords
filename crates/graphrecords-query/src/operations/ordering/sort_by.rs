@@ -5,8 +5,8 @@ use crate::{
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
-        Apply, ArgumentSource, Kernel, Keyed, KeyedStream, OnMissing, Operation, OperationContext,
-        Prepare,
+        Apply, ArgumentSource, Kernel, Keyed, KeyedStream, Operation, OperationContext, Prepare,
+        Retention,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::SortBy,
@@ -61,11 +61,10 @@ where
 
         let mut collected: Vec<_> = values
             .filter_map(|(index, subject)| {
-                match A::resolve(&prepared, &index, label, OnMissing::Raise) {
-                    Ok(Some(key)) => Some(Ok((index, subject, key))),
-                    Ok(None) => None,
-                    Err(failure) => Some(Err(failure)),
-                }
+                let step = A::resolve(&prepared, &index, label);
+
+                <A::Retention as Retention>::collapse(step)
+                    .map(|key| key.map(|key| (index, subject, key)))
             })
             .collect::<QueryResult<_>>()?;
 

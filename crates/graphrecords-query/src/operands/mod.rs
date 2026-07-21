@@ -17,7 +17,10 @@ pub use attributes::{
     AttributeOperand, AttributesOperand, BareAttributeOperand, BareAttributesOperand,
     NestedAttributesIterator, NestedAttributesOperand,
 };
-pub use bool::{BoolMaskOperand, BoolOperand, NestedBoolMaskIterator, NestedBoolMaskOperand};
+pub use bool::{
+    BareBoolMaskOperand, BareBoolOperand, BoolMaskOperand, BoolOperand, DefiniteBoolOperand,
+    NestedBoolMaskIterator, NestedBoolMaskOperand,
+};
 pub use edges::{AllEdges, EdgeOperand};
 use graphrecords_core::{
     GraphRecord,
@@ -28,7 +31,9 @@ pub use group::{GroupOperand, Grouped, GroupedIterator, try_partition_by};
 pub use indices::{IndexOperand, IndicesOperand, ReferenceOperand};
 pub use nodes::{AllNodes, NodeOperand};
 use std::{marker::PhantomData, sync::Arc};
-pub use values::{BareValueOperand, BareValuesOperand, ValueOperand, ValuesOperand};
+pub use values::{
+    BareValueOperand, BareValuesOperand, DefiniteValueOperand, ValueOperand, ValuesOperand,
+};
 
 pub trait ValueType: 'static {
     type Value<'a>: 'a + Clone + ToOwnedValue
@@ -82,6 +87,17 @@ impl<V: ValueType> ElementShape for Bare<V> {
 
 pub trait Arity: 'static {
     type Container<'a, X: 'a>: 'a;
+    type AfterDrop: Arity;
+
+    fn map_elements<'a, X: 'a, Y: 'a>(
+        container: Self::Container<'a, X>,
+        function: impl FnMut(X) -> Y + 'a,
+    ) -> Self::Container<'a, Y>;
+
+    fn filter_map_elements<'a, X: 'a, Y: 'a>(
+        container: Self::Container<'a, X>,
+        function: impl FnMut(X) -> Option<Y> + 'a,
+    ) -> <Self::AfterDrop as Arity>::Container<'a, Y>;
 }
 
 pub trait OrderState: 'static {}
@@ -97,13 +113,58 @@ pub struct Single;
 pub struct Definite;
 
 impl<O: OrderState> Arity for Multiple<O> {
+    type AfterDrop = Self;
     type Container<'a, X: 'a> = BoxedIterator<'a, X>;
+
+    fn map_elements<'a, X: 'a, Y: 'a>(
+        container: Self::Container<'a, X>,
+        function: impl FnMut(X) -> Y + 'a,
+    ) -> Self::Container<'a, Y> {
+        Box::new(container.map(function))
+    }
+
+    fn filter_map_elements<'a, X: 'a, Y: 'a>(
+        container: Self::Container<'a, X>,
+        function: impl FnMut(X) -> Option<Y> + 'a,
+    ) -> <Self::AfterDrop as Arity>::Container<'a, Y> {
+        Box::new(container.filter_map(function))
+    }
 }
 impl Arity for Single {
+    type AfterDrop = Self;
     type Container<'a, X: 'a> = Option<X>;
+
+    fn map_elements<'a, X: 'a, Y: 'a>(
+        container: Self::Container<'a, X>,
+        function: impl FnMut(X) -> Y + 'a,
+    ) -> Self::Container<'a, Y> {
+        container.map(function)
+    }
+
+    fn filter_map_elements<'a, X: 'a, Y: 'a>(
+        container: Self::Container<'a, X>,
+        function: impl FnMut(X) -> Option<Y> + 'a,
+    ) -> <Self::AfterDrop as Arity>::Container<'a, Y> {
+        container.and_then(function)
+    }
 }
 impl Arity for Definite {
+    type AfterDrop = Single;
     type Container<'a, X: 'a> = X;
+
+    fn map_elements<'a, X: 'a, Y: 'a>(
+        container: Self::Container<'a, X>,
+        mut function: impl FnMut(X) -> Y + 'a,
+    ) -> Self::Container<'a, Y> {
+        function(container)
+    }
+
+    fn filter_map_elements<'a, X: 'a, Y: 'a>(
+        container: Self::Container<'a, X>,
+        mut function: impl FnMut(X) -> Option<Y> + 'a,
+    ) -> <Self::AfterDrop as Arity>::Container<'a, Y> {
+        function(container)
+    }
 }
 
 pub type Return<'a, S, C> = <C as Arity>::Container<'a, <S as ElementShape>::Element<'a>>;

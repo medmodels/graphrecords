@@ -1,10 +1,10 @@
 use super::OperandHandle;
 use crate::{
-    BoxedIterator, Definite, EvaluateOperand, IndexDomain, Indexed, Mask, MaskMap, Multiple,
-    OrderState,
+    Bare, BoxedIterator, Definite, EvaluateOperand, IndexDomain, Indexed, Mask, MaskMap, Multiple,
+    OrderState, Single,
     error::QueryResult,
     execution::EvaluationCache,
-    operations::{Absent, Alignment, ArgumentSource, Keyed, Lookup, Prepare},
+    operations::{Absent, Alignment, ArgumentSource, Keyed, Lookup, Prepare, Preserving},
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
@@ -14,7 +14,10 @@ pub type NestedBoolMaskIterator<'a, I, T> = BoxedIterator<'a, (<I as IndexDomain
 
 pub type NestedBoolMaskOperand<I, T, O> = OperandHandle<Indexed<I, MaskMap<T>>, Multiple<O>>;
 pub type BoolMaskOperand<I, O> = OperandHandle<Indexed<I, Mask>, Multiple<O>>;
-pub type BoolOperand<I> = OperandHandle<Indexed<I, Mask>, Definite>;
+pub type BoolOperand<I> = OperandHandle<Indexed<I, Mask>, Single>;
+pub type BareBoolMaskOperand<O> = OperandHandle<Bare<Mask>, Multiple<O>>;
+pub type BareBoolOperand = OperandHandle<Bare<Mask>, Single>;
+pub type DefiniteBoolOperand = OperandHandle<Bare<Mask>, Definite>;
 
 impl<I: IndexDomain, T: 'static + Clone, O: OrderState> Prepare for NestedBoolMaskOperand<I, T, O> {
     type Prepared<'a> = Arc<GrHashMap<I::Index<'a>, QueryResult<GrHashMap<T, bool>>>>;
@@ -31,6 +34,7 @@ impl<I: IndexDomain, T: 'static + Clone, O: OrderState> Prepare for NestedBoolMa
 impl<I: IndexDomain, T: 'static + Clone, O: OrderState> ArgumentSource<Keyed<I>>
     for NestedBoolMaskOperand<I, T, O>
 {
+    type Retention = Preserving;
     type Value<'a> = GrHashMap<T, bool>;
 
     fn lookup<'a, 'prepared>(
@@ -60,6 +64,7 @@ impl<I: IndexDomain, O: OrderState> Prepare for BoolMaskOperand<I, O> {
 }
 
 impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for BoolMaskOperand<I, O> {
+    type Retention = Preserving;
     type Value<'a> = bool;
 
     fn lookup<'a, 'prepared>(
@@ -77,7 +82,37 @@ impl<I: IndexDomain, O: OrderState> ArgumentSource<Keyed<I>> for BoolMaskOperand
 }
 
 impl<I: IndexDomain> Prepare for BoolOperand<I> {
-    type Prepared<'a> = (I::Index<'a>, QueryResult<bool>);
+    type Prepared<'a> = Option<QueryResult<bool>>;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(self.evaluate(graphrecord, cache)?.map(|(_, value)| value))
+    }
+}
+
+impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for BoolOperand<I> {
+    type Retention = Preserving;
+    type Value<'a> = bool;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        match prepared {
+            Some(wrapped) => Lookup::Present(wrapped),
+            None => Lookup::Absent(Absent::Empty),
+        }
+    }
+}
+
+impl Prepare for BareBoolOperand {
+    type Prepared<'a> = Option<QueryResult<bool>>;
 
     fn prepare<'a>(
         &'a self,
@@ -88,7 +123,8 @@ impl<I: IndexDomain> Prepare for BoolOperand<I> {
     }
 }
 
-impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for BoolOperand<I> {
+impl<A: Alignment> ArgumentSource<A> for BareBoolOperand {
+    type Retention = Preserving;
     type Value<'a> = bool;
 
     fn lookup<'a, 'prepared>(
@@ -98,6 +134,36 @@ impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for BoolOperand<I> {
     where
         Self: 'a,
     {
-        Lookup::Present(&prepared.1)
+        match prepared {
+            Some(wrapped) => Lookup::Present(wrapped),
+            None => Lookup::Absent(Absent::Empty),
+        }
+    }
+}
+
+impl Prepare for DefiniteBoolOperand {
+    type Prepared<'a> = QueryResult<bool>;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        self.evaluate(graphrecord, cache)
+    }
+}
+
+impl<A: Alignment> ArgumentSource<A> for DefiniteBoolOperand {
+    type Retention = Preserving;
+    type Value<'a> = bool;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
     }
 }

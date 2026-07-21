@@ -1,54 +1,27 @@
 use crate::{
-    Diagnostic, Explain, Failure, IndexDomain, OrderState, QueryResult,
+    Explain, IndexDomain, OrderState, QueryResult,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operands::{
-        BareValueOperand, BoolMaskOperand, NestedBoolMaskOperand, ValueOperand, ValuesOperand,
+        AttributeOperand, AttributesOperand, BareAttributeOperand, BareBoolOperand,
+        BareValueOperand, BoolMaskOperand, BoolOperand, IndexOperand, NestedAttributesOperand,
+        NestedBoolMaskOperand, ReferenceOperand, ValueOperand, ValuesOperand,
     },
     operations::{
-        Absent, ArgumentAbsent, ArgumentSource, Drop, Keyed, Lookup, OnMissing, Prepare, Raise,
-        Replace,
+        Absent, Alignment, ArgumentSource, Drop, Dropping, Keyed, Lookup, Prepare, Replace,
+        Retention,
     },
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, PlanNode, Stats},
     traits::MaybeAbsent,
 };
 use graphrecords_core::GraphRecord;
-use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
-    hash::Hasher,
-    marker::PhantomData,
-};
+use std::{fmt, hash::Hasher, marker::PhantomData};
 
-#[derive(Debug)]
-pub struct ReplacementAbsent {
-    pub cause: Absent,
-}
-
-impl Display for ReplacementAbsent {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        match self.cause {
-            Absent::Uncovered => formatter.write_str("replacement did not cover this index"),
-            Absent::Empty => formatter.write_str("replacement operand was empty"),
-        }
-    }
-}
-
-impl Error for ReplacementAbsent {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(&self.cause)
-    }
-}
-
-impl Diagnostic for ReplacementAbsent {
-    fn help(&self) -> Option<String> {
-        Some("make the replacement operand cover every index it replaces".to_string())
-    }
-}
-
-pub trait MissingPolicy<I: IndexDomain, S: ArgumentSource<Keyed<I>>>:
+pub trait MissingPolicy<A: Alignment, S: ArgumentSource<A>>:
     Clone + 'static + Explain + PlanIdentity + PlanInputs
 {
+    type Retention: Retention;
+
     type Prepared<'a>: Clone + 'a
     where
         Self: 'a;
@@ -61,128 +34,117 @@ pub trait MissingPolicy<I: IndexDomain, S: ArgumentSource<Keyed<I>>>:
 
     fn resolve_absent<'a>(
         prepared: &Self::Prepared<'a>,
-        index: &I::Index<'a>,
+        address: &A::Address<'a>,
         label: &'static str,
         absent: Absent,
-    ) -> QueryResult<Option<S::Value<'a>>>;
+    ) -> <Self::Retention as Retention>::Step<QueryResult<S::Value<'a>>>
+    where
+        S: 'a;
 }
 
-impl<I: IndexDomain, S: ArgumentSource<Keyed<I>>> MissingPolicy<I, S> for Drop {
+impl<A: Alignment, S: ArgumentSource<A>> MissingPolicy<A, S> for Drop {
     type Prepared<'a> = ();
+    type Retention = Dropping;
 
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
         _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<()> {
+    ) -> QueryResult<Self::Prepared<'a>> {
         Ok(())
     }
 
     fn resolve_absent<'a>(
-        _prepared: &(),
-        _index: &I::Index<'a>,
+        _prepared: &Self::Prepared<'a>,
+        _address: &A::Address<'a>,
         _label: &'static str,
         _absent: Absent,
-    ) -> QueryResult<Option<S::Value<'a>>> {
-        Ok(None)
+    ) -> <Self::Retention as Retention>::Step<QueryResult<S::Value<'a>>>
+    where
+        S: 'a,
+    {
+        None
     }
 }
 
-impl<I: IndexDomain, S: ArgumentSource<Keyed<I>>> MissingPolicy<I, S> for Raise {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<()> {
-        Ok(())
-    }
-
-    fn resolve_absent<'a>(
-        _prepared: &(),
-        index: &I::Index<'a>,
-        label: &'static str,
-        absent: Absent,
-    ) -> QueryResult<Option<S::Value<'a>>> {
-        Err(Failure::new_at(
-            label,
-            ArgumentAbsent { cause: absent },
-            index,
-        ))
-    }
-}
-
-impl<I, S, R> MissingPolicy<I, S> for Replace<R>
+impl<A, S, R> MissingPolicy<A, S> for Replace<R>
 where
-    I: IndexDomain,
-    R: ArgumentSource<Keyed<I>> + Clone,
-    for<'a> S: ArgumentSource<Keyed<I>, Value<'a> = R::Value<'a>>,
+    A: Alignment,
+    R: ArgumentSource<A> + Clone,
+    for<'a> S: ArgumentSource<A, Value<'a> = R::Value<'a>>,
 {
     type Prepared<'a> = R::Prepared<'a>;
+    type Retention = <R as ArgumentSource<A>>::Retention;
 
     fn prepare<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
         cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<R::Prepared<'a>> {
+    ) -> QueryResult<Self::Prepared<'a>> {
         self.0.prepare(graphrecord, cache)
     }
 
     fn resolve_absent<'a>(
-        prepared: &R::Prepared<'a>,
-        index: &I::Index<'a>,
+        prepared: &Self::Prepared<'a>,
+        address: &A::Address<'a>,
         label: &'static str,
         _absent: Absent,
-    ) -> QueryResult<Option<S::Value<'a>>> {
-        match R::lookup(prepared, index) {
-            Lookup::Present(wrapped) => wrapped.clone().map(Some),
-            Lookup::Absent(absent) => Err(Failure::new_at(
-                label,
-                ReplacementAbsent { cause: absent },
-                index,
-            )),
-        }
+    ) -> <Self::Retention as Retention>::Step<QueryResult<S::Value<'a>>>
+    where
+        S: 'a,
+    {
+        R::resolve(prepared, address, label)
     }
 }
 
-impl<I: IndexDomain, O: OrderState> MaybeAbsent<I> for ValuesOperand<I, O> {}
-impl<I1: IndexDomain, I2: IndexDomain> MaybeAbsent<I1> for ValueOperand<I2> {}
-impl<I: IndexDomain> MaybeAbsent<I> for BareValueOperand {}
-impl<I: IndexDomain, O: OrderState> MaybeAbsent<I> for BoolMaskOperand<I, O> {}
-impl<I: IndexDomain, T: 'static + Clone, O: OrderState> MaybeAbsent<I>
+impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for ValuesOperand<I, O> {}
+impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for ValueOperand<I> {}
+impl<A: Alignment> MaybeAbsent<A> for BareValueOperand {}
+impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for BoolMaskOperand<I, O> {}
+impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for BoolOperand<I> {}
+impl<A: Alignment> MaybeAbsent<A> for BareBoolOperand {}
+impl<I: IndexDomain, T: 'static + Clone, O: OrderState> MaybeAbsent<Keyed<I>>
     for NestedBoolMaskOperand<I, T, O>
 {
 }
-
-pub struct WithMissing<I: IndexDomain, S: MaybeAbsent<I>, P> {
-    inner: S,
-    policy: P,
-    index: PhantomData<fn() -> I>,
+impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for AttributesOperand<I, O> {}
+impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for AttributeOperand<I> {}
+impl<A: Alignment> MaybeAbsent<A> for BareAttributeOperand {}
+impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for NestedAttributesOperand<I, O> {}
+impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for IndexOperand<I> {}
+impl<K: IndexDomain, E: IndexDomain, O: OrderState> MaybeAbsent<Keyed<K>>
+    for ReferenceOperand<K, E, O>
+{
 }
 
-impl<I: IndexDomain, S: MaybeAbsent<I>, P> WithMissing<I, S, P> {
+pub struct WithMissing<A: Alignment, S: MaybeAbsent<A>, P> {
+    inner: S,
+    policy: P,
+    alignment: PhantomData<fn() -> A>,
+}
+
+impl<A: Alignment, S: MaybeAbsent<A>, P> WithMissing<A, S, P> {
     #[must_use]
     pub fn new(inner: S, policy: P) -> Self {
         Self {
             inner,
             policy,
-            index: PhantomData,
+            alignment: PhantomData,
         }
     }
 }
 
-impl<I: IndexDomain, S: MaybeAbsent<I> + Clone, P: Clone> Clone for WithMissing<I, S, P> {
+impl<A: Alignment, S: MaybeAbsent<A> + Clone, P: Clone> Clone for WithMissing<A, S, P> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
             policy: self.policy.clone(),
-            index: PhantomData,
+            alignment: PhantomData,
         }
     }
 }
 
-impl<I: IndexDomain, S: MaybeAbsent<I>, P: Explain> Explain for WithMissing<I, S, P> {
+impl<A: Alignment, S: MaybeAbsent<A>, P: Explain> Explain for WithMissing<A, S, P> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         self.inner.describe(formatter)?;
         fmt::Write::write_str(formatter, " on_missing(")?;
@@ -191,7 +153,7 @@ impl<I: IndexDomain, S: MaybeAbsent<I>, P: Explain> Explain for WithMissing<I, S
     }
 }
 
-impl<I: IndexDomain, S: MaybeAbsent<I>, P: PlanIdentity> PlanIdentity for WithMissing<I, S, P> {
+impl<A: Alignment, S: MaybeAbsent<A>, P: PlanIdentity> PlanIdentity for WithMissing<A, S, P> {
     fn identity_eq(&self, other: &Self) -> bool {
         self.inner.identity_eq(&other.inner) && self.policy.identity_eq(&other.policy)
     }
@@ -202,7 +164,7 @@ impl<I: IndexDomain, S: MaybeAbsent<I>, P: PlanIdentity> PlanIdentity for WithMi
     }
 }
 
-impl<I: IndexDomain, S: MaybeAbsent<I>, P: PlanInputs> PlanInputs for WithMissing<I, S, P> {
+impl<A: Alignment, S: MaybeAbsent<A>, P: PlanInputs> PlanInputs for WithMissing<A, S, P> {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         let mut inputs = PlanInputs::inputs(&self.inner);
         inputs.extend(PlanInputs::inputs(&self.policy));
@@ -211,9 +173,9 @@ impl<I: IndexDomain, S: MaybeAbsent<I>, P: PlanInputs> PlanInputs for WithMissin
     }
 }
 
-impl<I: IndexDomain, S: MaybeAbsent<I> + Clone, P> Prepare for WithMissing<I, S, P>
+impl<A: Alignment, S: MaybeAbsent<A> + Clone, P> Prepare for WithMissing<A, S, P>
 where
-    P: MissingPolicy<I, S>,
+    P: MissingPolicy<A, S>,
 {
     type Prepared<'a>
         = (S::Prepared<'a>, P::Prepared<'a>)
@@ -232,40 +194,40 @@ where
     }
 }
 
-impl<I: IndexDomain, S: MaybeAbsent<I>, P> Estimated for WithMissing<I, S, P> {
+impl<A: Alignment, S: MaybeAbsent<A>, P> Estimated for WithMissing<A, S, P> {
     fn estimate(&self, stats: &Stats) -> Estimate {
         self.inner.estimate(stats)
     }
 }
 
-impl<I: IndexDomain, S: MaybeAbsent<I> + Clone, P> ArgumentSource<Keyed<I>> for WithMissing<I, S, P>
+impl<A: Alignment, S: MaybeAbsent<A> + Clone, P> ArgumentSource<A> for WithMissing<A, S, P>
 where
-    P: MissingPolicy<I, S>,
+    P: MissingPolicy<A, S>,
 {
+    type Retention = P::Retention;
     type Value<'a> = S::Value<'a>;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
-        index: &I::Index<'a>,
+        address: &A::Address<'a>,
     ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
-        S::lookup(&prepared.0, index)
+        S::lookup(&prepared.0, address)
     }
 
     fn resolve<'a>(
         prepared: &Self::Prepared<'a>,
-        index: &I::Index<'a>,
+        address: &A::Address<'a>,
         label: &'static str,
-        _default: OnMissing,
-    ) -> QueryResult<Option<Self::Value<'a>>>
+    ) -> <Self::Retention as Retention>::Step<QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
-        match S::lookup(&prepared.0, index) {
-            Lookup::Present(wrapped) => wrapped.clone().map(Some),
-            Lookup::Absent(absent) => P::resolve_absent(&prepared.1, index, label, absent),
+        match S::lookup(&prepared.0, address) {
+            Lookup::Present(wrapped) => <P::Retention as Retention>::keep(wrapped.clone()),
+            Lookup::Absent(absent) => P::resolve_absent(&prepared.1, address, label, absent),
         }
     }
 }

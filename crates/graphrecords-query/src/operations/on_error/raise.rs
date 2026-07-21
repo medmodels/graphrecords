@@ -1,8 +1,10 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Scalar,
+    Bare, Definite, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
+    QueryResult, Scalar, Single,
     execution::EvaluationCache,
-    operands::{BareValuesOperand, ValuesOperand},
+    operands::{
+        BareValueOperand, BareValuesOperand, DefiniteValueOperand, ValueOperand, ValuesOperand,
+    },
     operations::{
         Apply, BareStream, ErrorPolicy, Kernel, KeyedStream, Operation, OperationContext, Prepare,
     },
@@ -59,6 +61,60 @@ impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for Raise {
         let raised: Vec<_> = values.collect::<QueryResult<_>>()?;
 
         Ok(Box::new(raised.into_iter().map(Ok)))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<I: IndexDomain> Kernel<Indexed<I, Scalar>, Single> for Raise {
+    type Output = ValueOperand<I>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, I, Scalar, Single>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        match value {
+            Some((index, result)) => Ok(Some((index, Ok(result?)))),
+            None => Ok(None),
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl Kernel<Bare<Scalar>, Single> for Raise {
+    type Output = BareValueOperand;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        value: BareStream<'a, Scalar, Single>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        match value {
+            Some(result) => Ok(Some(Ok(result?))),
+            None => Ok(None),
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl Kernel<Bare<Scalar>, Definite> for Raise {
+    type Output = DefiniteValueOperand;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        value: BareStream<'a, Scalar, Definite>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(Ok(value?))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {

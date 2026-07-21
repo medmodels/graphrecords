@@ -9,4 +9,5 @@ mod std;
 mod sum;
 mod var;
 
+pub use count::CountOperation;
 pub use max::MaxOperation;

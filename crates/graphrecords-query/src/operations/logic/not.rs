@@ -1,8 +1,11 @@
 use crate::{
-    Explain, IndexDomain, Indexed, Mask, Not, Operand, OrderState, QueryResult,
+    Arity, Bare, ElementShape, Explain, IndexDomain, Indexed, Mask, Not, Operand, QueryResult,
     execution::EvaluationCache,
-    operands::BoolMaskOperand,
-    operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
+    operands::OperandHandle,
+    operations::{
+        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
+        Preserving,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
@@ -26,18 +29,36 @@ impl Prepare for NotOperation {
 
 impl<I: IndexDomain> ElementKernel<Indexed<I, Mask>> for NotOperation {
     type OutShape = Indexed<I, Mask>;
+    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<'a, (I::Index<'a>, QueryResult<bool>), (I::Index<'a>, QueryResult<bool>)>,
-    > {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
         Ok(
             Pipeline::default().map(|(index, value): (I::Index<'a>, QueryResult<bool>)| {
                 (index, value.map(|value| !value))
             }),
         )
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            selectivity: input.selectivity.map(|selectivity| 1.0 - selectivity),
+            ..input
+        }
+    }
+}
+
+impl ElementKernel<Bare<Mask>> for NotOperation {
+    type OutShape = Bare<Mask>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<Mask>, Self>> {
+        Ok(Pipeline::default().map(|value: QueryResult<bool>| value.map(|value| !value)))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -59,8 +80,11 @@ where
     }
 }
 
-impl<I: IndexDomain, O: OrderState> BitNot for BoolMaskOperand<I, O> {
-    type Output = Self;
+impl<S: ElementShape, C: Arity> BitNot for OperandHandle<S, C>
+where
+    Self: Not,
+{
+    type Output = <Self as Not>::ReturnOperand;
 
     fn not(self) -> Self::Output {
         <Self as Not>::not(&self)

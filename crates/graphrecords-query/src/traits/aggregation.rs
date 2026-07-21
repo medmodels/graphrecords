@@ -13,7 +13,7 @@ pub trait Min {
 pub trait Count {
     type ReturnOperand;
 
-    fn count(&mut self) -> Self::ReturnOperand;
+    fn count(&self) -> Self::ReturnOperand;
 }
 
 pub trait Sum {

@@ -1,10 +1,12 @@
-use super::combine_masks;
+use super::{combine_bare_masks, combine_masks};
 use crate::{
-    Explain, IndexDomain, Indexed, Labeled, Mask, Operand, Or, OrderState, QueryResult,
+    Arity, Bare, ElementShape, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, Or,
+    QueryResult,
     execution::EvaluationCache,
-    operands::BoolMaskOperand,
+    operands::OperandHandle,
     operations::{
-        Apply, ArgumentSource, ElementKernel, Keyed, Operation, OperationContext, Pipeline, Prepare,
+        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
+        Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
@@ -36,14 +38,44 @@ where
     for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
     type OutShape = Indexed<I, Mask>;
+    type Retention = <M as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<'a, (I::Index<'a>, QueryResult<bool>), (I::Index<'a>, QueryResult<bool>)>,
-    > {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
         Ok(combine_masks::<I, M>(
+            prepared,
+            Self::LABEL,
+            |left, right| left || right,
+        ))
+    }
+
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        let selectivity = input
+            .selectivity
+            .zip(self.other.estimate(stats).selectivity)
+            .map(|(left, right)| left.mul_add(-right, left + right));
+
+        Estimate {
+            selectivity,
+            ..input
+        }
+    }
+}
+
+impl<M> ElementKernel<Bare<Mask>> for OrOperation<M>
+where
+    for<'a> M: ArgumentSource<Unaligned, Value<'a> = bool>,
+{
+    type OutShape = Bare<Mask>;
+    type Retention = <M as ArgumentSource<Unaligned>>::Retention;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<Mask>, Self>> {
+        Ok(combine_bare_masks::<M>(
             prepared,
             Self::LABEL,
             |left, right| left || right,
@@ -75,11 +107,11 @@ where
     }
 }
 
-impl<I: IndexDomain, M, O: OrderState> BitOr<M> for BoolMaskOperand<I, O>
+impl<S: ElementShape, C: Arity, M> BitOr<M> for OperandHandle<S, C>
 where
-    for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
+    Self: Or<M>,
 {
-    type Output = Self;
+    type Output = <Self as Or<M>>::ReturnOperand;
 
     fn bitor(self, rhs: M) -> Self::Output {
         self.or(rhs)

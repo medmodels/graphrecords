@@ -1,7 +1,9 @@
 use super::ModuloOperation;
 use crate::{
-    Failure, IndexDomain, Indexed, Labeled, QueryResult, Scalar,
-    operations::{ArgumentSource, ElementKernel, Keyed, OnMissing, Pipeline},
+    Bare, Failure, IndexDomain, Indexed, Labeled, QueryResult, Scalar,
+    operations::{
+        ArgumentSource, ElementKernel, ElementPipeline, Keyed, Pipeline, Retention, Unaligned,
+    },
     optimizer::{Estimate, Stats},
 };
 use graphrecords_core::{
@@ -15,37 +17,34 @@ where
     for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
 {
     type OutShape = Indexed<I, Scalar>;
+    type Retention = <A as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<
-            'a,
-            (I::Index<'a>, QueryResult<GraphRecordValue>),
-            (I::Index<'a>, QueryResult<GraphRecordValue>),
-        >,
-    > {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Scalar>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::default().filter_map(
+        Ok(Pipeline::element_wise(
             move |(index, item): (I::Index<'a>, QueryResult<GraphRecordValue>)| {
                 let value = match item {
                     Ok(value) => value,
-                    Err(original) => return Some((index, Err(original))),
+                    Err(original) => {
+                        return <Self::Retention as Retention>::keep((index, Err(original)));
+                    }
                 };
 
-                let modulus = match A::resolve(&prepared, &index, label, OnMissing::Raise) {
-                    Ok(Some(modulus)) => modulus,
-                    Ok(None) => return None,
-                    Err(failure) => return Some((index, Err(failure))),
-                };
+                let step = A::resolve(&prepared, &index, label);
 
-                let result = value
-                    .r#mod(modulus)
-                    .map_err(|error| Failure::new_at(label, error, &index));
+                <Self::Retention as Retention>::map_step(step, |resolved| {
+                    let result = resolved.and_then(|modulus| {
+                        value
+                            .r#mod(modulus)
+                            .map_err(|error| Failure::new_at(label, error, &index))
+                    });
 
-                Some((index, result))
+                    (index, result)
+                })
             },
         ))
     }
@@ -58,23 +57,45 @@ where
     }
 }
 
-#[cfg(test)]
-mod test {
-    use crate::{
-        Ordered,
-        operands::ValuesOperand,
-        operations::{Apply, ModuloOperation},
-    };
-    use graphrecords_core::graphrecord::{GraphRecordValue, NodeIndex};
+impl<A> ElementKernel<Bare<Scalar>> for ModuloOperation<A>
+where
+    for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordValue>,
+{
+    type OutShape = Bare<Scalar>;
+    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
-    #[test]
-    fn test_modulo_auto_lifts_onto_sorted_operand() {
-        fn assert_applies()
-        where
-            ValuesOperand<NodeIndex, Ordered>: Apply<ModuloOperation<GraphRecordValue>>,
-        {
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<Scalar>, Self>> {
+        let label = Self::LABEL;
+
+        Ok(Pipeline::element_wise(
+            move |item: QueryResult<GraphRecordValue>| {
+                let value = match item {
+                    Ok(value) => value,
+                    Err(original) => {
+                        return <Self::Retention as Retention>::keep(Err(original));
+                    }
+                };
+
+                let step = A::resolve(&prepared, &(), label);
+
+                <Self::Retention as Retention>::map_step(step, |resolved| {
+                    resolved.and_then(|modulus| {
+                        value
+                            .r#mod(modulus)
+                            .map_err(|error| Failure::new(label, error))
+                    })
+                })
+            },
+        ))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            distinct: None,
+            ..input
         }
-
-        assert_applies();
     }
 }

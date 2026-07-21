@@ -3,7 +3,7 @@ use crate::{
     EvaluateOperand, IndexDomain, IndexValue, Indexed, Multiple, OrderState, Single,
     error::QueryResult,
     execution::EvaluationCache,
-    operations::{Absent, Alignment, ArgumentSource, Keyed, Lookup, Prepare},
+    operations::{Absent, Alignment, ArgumentSource, Keyed, Lookup, Prepare, Preserving},
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
@@ -28,6 +28,7 @@ impl<K: IndexDomain, E: IndexDomain, O: OrderState> Prepare for ReferenceOperand
 impl<K: IndexDomain, E: IndexDomain, O: OrderState> ArgumentSource<Keyed<K>>
     for ReferenceOperand<K, E, O>
 {
+    type Retention = Preserving;
     type Value<'a> = E::Index<'a>;
 
     fn lookup<'a, 'prepared>(
@@ -57,6 +58,7 @@ impl<I: IndexDomain> Prepare for IndexOperand<I> {
 }
 
 impl<A: Alignment, I: IndexDomain> ArgumentSource<A> for IndexOperand<I> {
+    type Retention = Preserving;
     type Value<'a> = I::Index<'a>;
 
     fn lookup<'a, 'prepared>(

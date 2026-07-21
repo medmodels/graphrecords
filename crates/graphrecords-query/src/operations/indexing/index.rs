@@ -1,7 +1,10 @@
 use crate::{
     Explain, IndexDomain, IndexValue, Indexed, Operand, QueryResult, Unit,
     execution::EvaluationCache,
-    operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
+    operations::{
+        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
+        Preserving,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Index,
 };
@@ -26,13 +29,12 @@ impl Prepare for IndexOperation {
 
 impl<I: IndexDomain> ElementKernel<Indexed<I, Unit>> for IndexOperation {
     type OutShape = Indexed<I, IndexValue<I>>;
+    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<'a, (I::Index<'a>, QueryResult<()>), (I::Index<'a>, QueryResult<I::Index<'a>>)>,
-    > {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
         Ok(
             Pipeline::default().map(|(index, membership): (I::Index<'a>, QueryResult<()>)| {
                 let promoted = membership.map(|()| index.clone());

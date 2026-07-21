@@ -2,6 +2,7 @@ use crate::{
     Diagnostic, Explain, Failure, IndexDomain, QueryResult, ToOwnedValue,
     execution::EvaluationCache,
     explain::ExplainFormatter,
+    operations::{Preserving, Retention},
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
@@ -58,12 +59,6 @@ impl Diagnostic for ArgumentAbsent {
                 .to_string(),
         )
     }
-}
-
-#[derive(Clone, Copy)]
-pub enum OnMissing {
-    Raise,
-    Drop,
 }
 
 pub trait Prepare: 'static {
@@ -123,6 +118,8 @@ pub trait ArgumentSource<A: Alignment>:
     where
         Self: 'a;
 
+    type Retention: Retention;
+
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         address: &A::Address<'a>,
@@ -134,21 +131,15 @@ pub trait ArgumentSource<A: Alignment>:
         prepared: &Self::Prepared<'a>,
         address: &A::Address<'a>,
         label: &'static str,
-        default: OnMissing,
-    ) -> QueryResult<Option<Self::Value<'a>>>
+    ) -> <Self::Retention as Retention>::Step<QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
         match Self::lookup(prepared, address) {
-            Lookup::Present(wrapped) => wrapped.clone().map(Some),
-            Lookup::Absent(absent) => match default {
-                OnMissing::Drop => Ok(None),
-                OnMissing::Raise => Err(A::raise_at(
-                    label,
-                    ArgumentAbsent { cause: absent },
-                    address,
-                )),
-            },
+            Lookup::Present(wrapped) => <Self::Retention as Retention>::keep(wrapped.clone()),
+            Lookup::Absent(absent) => <Self::Retention as Retention>::absent(|| {
+                A::raise_at(label, ArgumentAbsent { cause: absent }, address)
+            }),
         }
     }
 }
@@ -203,6 +194,7 @@ impl Estimated for GraphRecordValue {
 }
 
 impl<A: Alignment> ArgumentSource<A> for GraphRecordValue {
+    type Retention = Preserving;
     type Value<'a> = Self;
 
     fn lookup<'a, 'prepared>(

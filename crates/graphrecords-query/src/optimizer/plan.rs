@@ -106,7 +106,8 @@ pub trait PlanInputs: Clone {
         Vec::new()
     }
 
-    fn optimize(&self, _session: &Session) -> Transformed<Self> {
+    #[allow(unused_variables)]
+    fn optimize(&self, session: &Session) -> Transformed<Self> {
         Transformed::unchanged(self.clone())
     }
 }

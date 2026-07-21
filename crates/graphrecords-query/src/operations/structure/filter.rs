@@ -1,9 +1,9 @@
 use crate::{
-    Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, Unit,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
     execution::EvaluationCache,
     operations::{
-        Apply, ArgumentSource, ElementKernel, Keyed, OnMissing, Operation, OperationContext,
-        Pipeline, Prepare,
+        Apply, ArgumentSource, Dropping, ElementKernel, ElementPipeline, Keyed, Operation,
+        OperationContext, Pipeline, Prepare, Retention, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Filter,
@@ -12,7 +12,7 @@ use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[explain(label = "Filter")]
-#[plan(optimizer_hints(commutes_with_filter, distinct, empty = if_any))]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct FilterOperation<M> {
     #[argument]
     mask: M,
@@ -33,30 +33,77 @@ impl<M: Prepare> Prepare for FilterOperation<M> {
     }
 }
 
-impl<I, M> ElementKernel<Indexed<I, Unit>> for FilterOperation<M>
+impl<I, V, M> ElementKernel<Indexed<I, V>> for FilterOperation<M>
 where
     I: IndexDomain,
+    V: ValueType,
     for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
-    type OutShape = Indexed<I, Unit>;
+    type OutShape = Indexed<I, V>;
+    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<Pipeline<'a, (I::Index<'a>, QueryResult<()>), (I::Index<'a>, QueryResult<()>)>>
-    {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::default().filter_map(
-            move |(index, membership): (I::Index<'a>, QueryResult<()>)| match membership {
-                Err(failure) => Some((index, Err(failure))),
-                Ok(()) => match M::resolve(&prepared, &index, label, OnMissing::Drop) {
-                    Ok(Some(true)) => Some((index, Ok(()))),
-                    Ok(Some(false) | None) => None,
-                    Err(failure) => Some((index, Err(failure))),
-                },
+            move |(index, item): (I::Index<'a>, QueryResult<V::Value<'a>>)| {
+                let value = match item {
+                    Ok(value) => value,
+                    Err(failure) => return Some((index, Err(failure))),
+                };
+
+                let step = M::resolve(&prepared, &index, label);
+
+                match <M::Retention as Retention>::collapse(step) {
+                    Some(Ok(true)) => Some((index, Ok(value))),
+                    Some(Ok(false)) | None => None,
+                    Some(Err(failure)) => Some((index, Err(failure))),
+                }
             },
         ))
+    }
+
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        match self.mask.estimate(stats).selectivity {
+            Some(selectivity) => input.scaled(selectivity),
+            None => input,
+        }
+    }
+}
+
+impl<V, M> ElementKernel<Bare<V>> for FilterOperation<M>
+where
+    V: ValueType,
+    for<'a> M: ArgumentSource<Unaligned, Value<'a> = bool>,
+{
+    type OutShape = Bare<V>;
+    type Retention = Dropping;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
+        let label = Self::LABEL;
+
+        Ok(
+            Pipeline::default().filter_map(move |item: QueryResult<V::Value<'a>>| {
+                let value = match item {
+                    Ok(value) => value,
+                    Err(failure) => return Some(Err(failure)),
+                };
+
+                let step = M::resolve(&prepared, &(), label);
+
+                match <M::Retention as Retention>::collapse(step) {
+                    Some(Ok(true)) => Some(Ok(value)),
+                    Some(Ok(false)) | None => None,
+                    Some(Err(failure)) => Some(Err(failure)),
+                }
+            }),
+        )
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {

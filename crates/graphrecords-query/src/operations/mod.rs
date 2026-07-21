@@ -14,6 +14,7 @@ mod numeric;
 mod on_error;
 mod on_missing;
 mod ordering;
+mod retention;
 mod string_operations;
 mod structure;
 mod traversal;
@@ -27,9 +28,9 @@ use crate::{
         PlanInputs, PlanNode, Session, Stats, Transformed,
     },
 };
-pub use aggregation::MaxOperation;
+pub use aggregation::{CountOperation, MaxOperation};
 pub use argument::{
-    Absent, Alignment, ArgumentAbsent, ArgumentSource, Keyed, Lookup, OnMissing, Prepare, Unaligned,
+    Absent, Alignment, ArgumentAbsent, ArgumentSource, Keyed, Lookup, Prepare, Unaligned,
 };
 pub use arithmetic::ModuloOperation;
 pub use cache::CacheContext;
@@ -41,14 +42,15 @@ pub use grouping::{
     UngroupContext, Ungroupable,
 };
 pub use indexing::{IndexOperation, SelectOperation};
-pub use kernel::{BareStream, ElementKernel, Kernel, KeyedStream, Pipeline};
+pub use kernel::{BareStream, ElementKernel, ElementPipeline, Kernel, KeyedStream, Pipeline};
 pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
 pub use on_error::{Drop, ErrorPolicy, Raise, Replace};
-pub use on_missing::{MissingPolicy, ReplacementAbsent, WithMissing};
+pub use on_missing::{MissingPolicy, WithMissing};
 pub use ordering::{
     EnsureSortable, FirstOperation, IncomparableIndices, LastOperation, SortByOperation,
     SortOperation, UnorderOperation, incomparable_with_first,
 };
+pub use retention::{Dropping, Preserving, Retention};
 use std::{
     any::Any,
     fmt,

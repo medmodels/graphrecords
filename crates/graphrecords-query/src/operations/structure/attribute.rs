@@ -2,7 +2,10 @@ use crate::{
     Diagnostic, Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled, Operand, OwnedIndex,
     QueryResult, Scalar, ToOwnedValue, Unit,
     execution::EvaluationCache,
-    operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
+    operations::{
+        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
+        Preserving,
+    },
     optimizer::{
         EdgeAttributeCardinality, Estimate, NodeAttributeCardinality, OperationInputs,
         OptimizerHints, PlanIdentity, PlanInputs, Stats,
@@ -12,7 +15,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     errors::GraphRecordError,
-    graphrecord::{AttributeMap, EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
+    graphrecord::{AttributeMap, EdgeIndex, GraphRecordAttribute, NodeIndex},
 };
 use std::{
     error::Error,
@@ -56,7 +59,7 @@ impl EntityAttributes for EdgeIndex {
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[explain(label = "Attribute")]
-#[plan(optimizer_hints(distinct, empty = if_any))]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct AttributeOperation {
     #[explain(label)]
     pub attribute: GraphRecordAttribute,
@@ -125,17 +128,12 @@ impl Prepare for AttributeOperation {
 
 impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation {
     type OutShape = Indexed<I, Scalar>;
+    type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         attribute: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<
-            'a,
-            (I::Index<'a>, QueryResult<()>),
-            (I::Index<'a>, QueryResult<GraphRecordValue>),
-        >,
-    > {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
         Ok(Pipeline::default().map(
             move |(index, membership): (I::Index<'a>, QueryResult<()>)| {
                 if let Err(failure) = membership {
@@ -186,17 +184,12 @@ impl<K: IndexDomain, E: EntityAttributes> ElementKernel<Indexed<K, IndexValue<E>
     for AttributeOperation
 {
     type OutShape = Indexed<K, Scalar>;
+    type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         attribute: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<
-            'a,
-            (K::Index<'a>, QueryResult<<E as IndexDomain>::Index<'a>>),
-            (K::Index<'a>, QueryResult<GraphRecordValue>),
-        >,
-    > {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<E>>, Self>> {
         Ok(Pipeline::default().map(
             move |(key, reference): (K::Index<'a>, QueryResult<<E as IndexDomain>::Index<'a>>)| {
                 let value = reference.and_then(|entity| {

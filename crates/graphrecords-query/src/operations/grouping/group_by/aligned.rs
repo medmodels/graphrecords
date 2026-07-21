@@ -4,8 +4,8 @@ use crate::{
     execution::EvaluationCache,
     operands::{GroupOperand, OperandHandle, try_partition_by},
     operations::{
-        Apply, ArgumentSource, Kernel, KeyOperand, Keyed, KeyedStream, OnMissing, Operation,
-        OperationContext, Prepare,
+        Apply, ArgumentSource, Kernel, KeyOperand, Keyed, KeyedStream, Operation, OperationContext,
+        Prepare, Retention,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::GroupBy,
@@ -48,7 +48,9 @@ where
         let label = Self::LABEL;
 
         let groups = try_partition_by(values, move |(index, _)| {
-            K::resolve(&keys, index, label, OnMissing::Raise)
+            let step = K::resolve(&keys, index, label);
+
+            <<K as ArgumentSource<Keyed<I>>>::Retention as Retention>::collapse(step).transpose()
         })?;
 
         Ok(Box::new(

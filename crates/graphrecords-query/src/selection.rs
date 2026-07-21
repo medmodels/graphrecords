@@ -4,7 +4,8 @@ use crate::{
     execution::EvaluationCache,
     operands::{
         AllEdges, AllNodes, AttributeOperand, AttributesOperand, BareAttributeOperand,
-        BareAttributesOperand, BareValueOperand, BareValuesOperand, BoolMaskOperand, BoolOperand,
+        BareAttributesOperand, BareBoolMaskOperand, BareBoolOperand, BareValueOperand,
+        BareValuesOperand, BoolMaskOperand, BoolOperand, DefiniteBoolOperand, DefiniteValueOperand,
         EdgeOperand, GroupOperand, GroupedIterator, IndexOperand, IndicesOperand,
         NestedAttributesOperand, NestedBoolMaskOperand, ValueOperand, ValuesOperand,
     },
@@ -238,9 +239,14 @@ impl_return_operand!(
     AttributeOperand<EdgeIndex> => Option<(&'a EdgeIndex, QueryResult<GraphRecordAttribute>)>,
     AttributeOperand<Positional> => Option<(Position, QueryResult<GraphRecordAttribute>)>,
     BareValueOperand => Option<QueryResult<GraphRecordValue>>,
+    DefiniteValueOperand => QueryResult<GraphRecordValue>,
     BareAttributeOperand => Option<QueryResult<GraphRecordAttribute>>,
-    BoolOperand<NodeIndex> => (&'a NodeIndex, QueryResult<bool>),
-    BoolOperand<EdgeIndex> => (&'a EdgeIndex, QueryResult<bool>),
+    BoolOperand<NodeIndex> => Option<(&'a NodeIndex, QueryResult<bool>)>,
+    BoolOperand<EdgeIndex> => Option<(&'a EdgeIndex, QueryResult<bool>)>,
+    BoolOperand<Positional> => Option<(Position, QueryResult<bool>)>,
+    {O} BareBoolMaskOperand<O> => BoxedIterator<'a, QueryResult<bool>>,
+    BareBoolOperand => Option<QueryResult<bool>>,
+    DefiniteBoolOperand => QueryResult<bool>,
 );
 
 impl<'a, T: 'static + Clone, O: OrderState> ReturnOperand<'a>

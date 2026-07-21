@@ -1,7 +1,10 @@
 use crate::{
     Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, Unit,
     execution::EvaluationCache,
-    operations::{Apply, ElementKernel, Operation, OperationContext, Pipeline, Prepare},
+    operations::{
+        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
+        Preserving,
+    },
     optimizer::{
         EdgeGroupSize, Estimate, NodeGroupSize, OperationInputs, OptimizerHints, PlanIdentity,
         PlanInputs, Stats,
@@ -57,7 +60,7 @@ impl IndicesInGroup for EdgeIndex {
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[explain(label = "InGroup")]
-#[plan(optimizer_hints(distinct, empty = if_any))]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct InGroupOperation {
     #[explain(label)]
     group: Group,
@@ -77,12 +80,12 @@ impl Prepare for InGroupOperation {
 
 impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
     type OutShape = Indexed<I, Mask>;
+    type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         group: Self::Prepared<'a>,
-    ) -> QueryResult<Pipeline<'a, (I::Index<'a>, QueryResult<()>), (I::Index<'a>, QueryResult<bool>)>>
-    {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
         let members = I::indices_in_group(graphrecord, group)?;
 
         Ok(Pipeline::default().map(

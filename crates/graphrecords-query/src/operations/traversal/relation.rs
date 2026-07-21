@@ -1,7 +1,7 @@
 use crate::{
     Explain, IndexDomain, IndexValue, Indexed, QueryResult,
     execution::EvaluationCache,
-    operations::{ElementKernel, Operation, Pipeline, Prepare},
+    operations::{ElementKernel, ElementPipeline, Operation, Pipeline, Prepare, Preserving},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
@@ -16,7 +16,8 @@ pub trait Relation: Prepare + Clone + Explain + PlanIdentity + PlanInputs {
         from: <Self::From as IndexDomain>::Index<'a>,
     ) -> QueryResult<<Self::To as IndexDomain>::Index<'a>>;
 
-    fn codomain_count(_stats: &Stats) -> Option<usize> {
+    #[allow(unused_variables)]
+    fn codomain_count(stats: &Stats) -> Option<usize> {
         None
     }
 }
@@ -54,20 +55,12 @@ impl<R: Relation, K: IndexDomain> ElementKernel<Indexed<K, IndexValue<R::From>>>
     for RelationOperation<R>
 {
     type OutShape = Indexed<K, IndexValue<R::To>>;
+    type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<
-            'a,
-            (
-                K::Index<'a>,
-                QueryResult<<R::From as IndexDomain>::Index<'a>>,
-            ),
-            (K::Index<'a>, QueryResult<<R::To as IndexDomain>::Index<'a>>),
-        >,
-    > {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<R::From>>, Self>> {
         Ok(Pipeline::default().map(
             move |(key, reference): (
                 K::Index<'a>,

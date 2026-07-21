@@ -2,7 +2,8 @@ use crate::{
     Bare, Explain, IndexDomain, Indexed, Operand, QueryResult, Scalar,
     execution::EvaluationCache,
     operations::{
-        Apply, ElementKernel, ErrorPolicy, Operation, OperationContext, Pipeline, Prepare,
+        Apply, Dropping, ElementKernel, ElementPipeline, ErrorPolicy, Operation, OperationContext,
+        Pipeline, Prepare,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
 };
@@ -26,17 +27,12 @@ impl Prepare for Drop {
 
 impl<I: IndexDomain> ElementKernel<Indexed<I, Scalar>> for Drop {
     type OutShape = Indexed<I, Scalar>;
+    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<
-        Pipeline<
-            'a,
-            (I::Index<'a>, QueryResult<GraphRecordValue>),
-            (I::Index<'a>, QueryResult<GraphRecordValue>),
-        >,
-    > {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Scalar>, Self>> {
         Ok(Pipeline::default().filter_map(
             |(index, result): (I::Index<'a>, QueryResult<GraphRecordValue>)| {
                 result.ok().map(|value| (index, Ok(value)))
@@ -47,12 +43,12 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, Scalar>> for Drop {
 
 impl ElementKernel<Bare<Scalar>> for Drop {
     type OutShape = Bare<Scalar>;
+    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<Pipeline<'a, QueryResult<GraphRecordValue>, QueryResult<GraphRecordValue>>>
-    {
+    ) -> QueryResult<ElementPipeline<'a, Bare<Scalar>, Self>> {
         Ok(Pipeline::default()
             .filter_map(|result: QueryResult<GraphRecordValue>| result.ok().map(Ok)))
     }
