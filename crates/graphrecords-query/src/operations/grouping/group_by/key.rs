@@ -1,6 +1,6 @@
 use crate::{
-    BoxedIterator, IndexDomain, OrderState,
-    operands::{ReferenceOperand, ValuesOperand},
+    BoxedIterator, FailureKind, IndexDomain, OrderState,
+    operands::{FailureKindsOperand, ReferenceOperand, ValuesOperand},
     operations::{ArgumentSource, Keyed, MissingPolicy, WithMissing},
     traits::MaybeAbsent,
 };
@@ -32,6 +32,10 @@ impl<I: IndexDomain, O: OrderState> GroupKey for ValuesOperand<I, O> {
     type Key<'a> = GraphRecordValue;
 }
 
+impl<I: IndexDomain, O: OrderState> GroupKey for FailureKindsOperand<I, O> {
+    type Key<'a> = FailureKind;
+}
+
 impl GroupKey for NodeIndex {
     type Key<'a> = <Self as IndexDomain>::Index<'a>;
 }
@@ -53,6 +57,23 @@ impl<I: IndexDomain, O: OrderState> KeyOperand for ValuesOperand<I, O> {
             prepared.iter().filter_map(|(index, key)| {
                 key.as_ref().ok().map(|key| (index.clone(), key.clone()))
             }),
+        )
+    }
+}
+
+impl<I: IndexDomain, O: OrderState> KeyOperand for FailureKindsOperand<I, O> {
+    type Subject = I;
+
+    fn assignments<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+    ) -> BoxedIterator<'prepared, (<Self::Subject as IndexDomain>::Index<'a>, Self::Key<'a>)>
+    where
+        Self: 'a,
+    {
+        Box::new(
+            prepared
+                .iter()
+                .filter_map(|(index, key)| key.as_ref().ok().map(|key| (index.clone(), *key))),
         )
     }
 }

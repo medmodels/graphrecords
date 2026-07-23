@@ -1,13 +1,14 @@
 mod attributes;
 mod bool;
 mod edges;
+mod errors;
 mod group;
 mod indices;
 mod nodes;
 mod values;
 
 use crate::{
-    BoxedIterator, IndexDomain, OperandContext, QueryResult, ToOwnedValue,
+    BoxedIterator, Failure, FailureKind, IndexDomain, OperandContext, QueryResult, ToOwnedValue,
     execution::EvaluationCache,
     explain::Explanation,
     optimizer::{Estimate, Estimated, PlanNode, Stats},
@@ -22,6 +23,10 @@ pub use bool::{
     NestedBoolMaskIterator, NestedBoolMaskOperand,
 };
 pub use edges::{AllEdges, EdgeOperand};
+pub use errors::{
+    BareFailureKindOperand, BareFailureKindsOperand, BareFailureOperand, BareFailuresOperand,
+    FailureKindOperand, FailureKindsOperand, FailureOperand, FailuresOperand,
+};
 use graphrecords_core::{
     GraphRecord,
     graphrecord::{GraphRecordAttribute, GraphRecordValue},
@@ -48,6 +53,8 @@ pub struct Unit;
 pub struct MaskMap<T: 'static + Clone>(PhantomData<T>);
 pub struct AttributeSet;
 pub struct IndexValue<I: IndexDomain>(PhantomData<I>);
+pub struct FailureValue;
+pub struct FailureKindValue;
 
 impl ValueType for Scalar {
     type Value<'a> = GraphRecordValue;
@@ -69,6 +76,12 @@ impl ValueType for AttributeSet {
 }
 impl<I: IndexDomain> ValueType for IndexValue<I> {
     type Value<'a> = I::Index<'a>;
+}
+impl ValueType for FailureValue {
+    type Value<'a> = Failure;
+}
+impl ValueType for FailureKindValue {
+    type Value<'a> = FailureKind;
 }
 
 pub trait ElementShape: 'static {

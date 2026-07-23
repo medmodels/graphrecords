@@ -1,0 +1,461 @@
+use crate::{
+    Bare, Diagnostic, ErrorGroup, Failure, FailureKind, FailureKindValue, FailureValue,
+    IndexDomain, Indexed, Mask, Operand, QueryResult, Scalar, ValueType,
+    execution::EvaluationCache,
+    operations::{
+        Apply, Dropping, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline,
+        Prepare, Preserving,
+    },
+    optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    traits::{ErrorKind, ErrorKindName, Errors, HasErrorCause, InErrorGroup, IsErrorKind},
+};
+use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
+use std::{any::type_name, error::Error, marker::PhantomData};
+
+#[derive(
+    Clone, crate::Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
+)]
+#[explain(label = "Errors")]
+pub struct ErrorsOperation;
+
+#[derive(
+    Clone, crate::Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
+)]
+#[explain(label = "ErrorKind")]
+pub struct ErrorKindOperation;
+
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+pub struct IsErrorKindOperation<D: Diagnostic> {
+    marker: PhantomData<fn() -> D>,
+}
+
+impl<D: Diagnostic> IsErrorKindOperation<D> {
+    const fn new() -> Self {
+        Self {
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<D: Diagnostic> Clone for IsErrorKindOperation<D> {
+    fn clone(&self) -> Self {
+        Self::new()
+    }
+}
+
+impl<D: Diagnostic> crate::Explain for IsErrorKindOperation<D> {
+    fn describe<'a>(
+        &'a self,
+        formatter: &mut crate::explain::ExplainFormatter<'a, '_>,
+    ) -> std::fmt::Result {
+        std::fmt::Write::write_fmt(formatter, format_args!("IsErrorKind kind={}", D::name()))
+    }
+}
+
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+pub struct InErrorGroupOperation<G: ErrorGroup> {
+    marker: PhantomData<fn() -> G>,
+}
+
+impl<G: ErrorGroup> InErrorGroupOperation<G> {
+    const fn new() -> Self {
+        Self {
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<G: ErrorGroup> Clone for InErrorGroupOperation<G> {
+    fn clone(&self) -> Self {
+        Self::new()
+    }
+}
+
+impl<G: ErrorGroup> crate::Explain for InErrorGroupOperation<G> {
+    fn describe<'a>(
+        &'a self,
+        formatter: &mut crate::explain::ExplainFormatter<'a, '_>,
+    ) -> std::fmt::Result {
+        std::fmt::Write::write_fmt(formatter, format_args!("InErrorGroup group={}", G::name()))
+    }
+}
+
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+pub struct HasErrorCauseOperation<C: Error + 'static> {
+    marker: PhantomData<fn() -> C>,
+}
+
+impl<C: Error + 'static> HasErrorCauseOperation<C> {
+    const fn new() -> Self {
+        Self {
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<C: Error + 'static> Clone for HasErrorCauseOperation<C> {
+    fn clone(&self) -> Self {
+        Self::new()
+    }
+}
+
+impl<C: Error + 'static> crate::Explain for HasErrorCauseOperation<C> {
+    fn describe<'a>(
+        &'a self,
+        formatter: &mut crate::explain::ExplainFormatter<'a, '_>,
+    ) -> std::fmt::Result {
+        std::fmt::Write::write_fmt(
+            formatter,
+            format_args!("HasErrorCause cause={}", type_name::<C>()),
+        )
+    }
+}
+
+#[derive(
+    Clone, crate::Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
+)]
+#[explain(label = "ErrorKindName")]
+pub struct ErrorKindNameOperation;
+
+impl Prepare for ErrorsOperation {
+    type Prepared<'a> = ();
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(())
+    }
+}
+
+impl Prepare for ErrorKindOperation {
+    type Prepared<'a> = ();
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(())
+    }
+}
+
+impl<D: Diagnostic> Prepare for IsErrorKindOperation<D> {
+    type Prepared<'a> = ();
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(())
+    }
+}
+
+impl<G: ErrorGroup> Prepare for InErrorGroupOperation<G> {
+    type Prepared<'a> = ();
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(())
+    }
+}
+
+impl<C: Error + 'static> Prepare for HasErrorCauseOperation<C> {
+    type Prepared<'a> = ();
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(())
+    }
+}
+
+impl Prepare for ErrorKindNameOperation {
+    type Prepared<'a> = ();
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(())
+    }
+}
+
+impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for ErrorsOperation {
+    type OutShape = Indexed<I, FailureValue>;
+    type Retention = Dropping;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
+        Ok(Pipeline::default().filter_map(
+            |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| {
+                result.err().map(|failure| (index, Ok(*failure)))
+            },
+        ))
+    }
+}
+
+impl<V: ValueType> ElementKernel<Bare<V>> for ErrorsOperation {
+    type OutShape = Bare<FailureValue>;
+    type Retention = Dropping;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
+        Ok(
+            Pipeline::default().filter_map(|result: QueryResult<V::Value<'a>>| {
+                result.err().map(|failure| Ok(*failure))
+            }),
+        )
+    }
+}
+
+impl<I: IndexDomain> ElementKernel<Indexed<I, FailureValue>> for ErrorKindOperation {
+    type OutShape = Indexed<I, FailureKindValue>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, FailureValue>, Self>> {
+        Ok(
+            Pipeline::default().map(|(index, result): (I::Index<'a>, QueryResult<Failure>)| {
+                (index, result.map(|failure| failure.kind()))
+            }),
+        )
+    }
+}
+
+impl ElementKernel<Bare<FailureValue>> for ErrorKindOperation {
+    type OutShape = Bare<FailureKindValue>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<FailureValue>, Self>> {
+        Ok(Pipeline::default()
+            .map(|result: QueryResult<Failure>| result.map(|failure| failure.kind())))
+    }
+}
+
+impl<I: IndexDomain, D: Diagnostic> ElementKernel<Indexed<I, FailureValue>>
+    for IsErrorKindOperation<D>
+{
+    type OutShape = Indexed<I, Mask>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, FailureValue>, Self>> {
+        Ok(
+            Pipeline::default().map(|(index, result): (I::Index<'a>, QueryResult<Failure>)| {
+                (index, result.map(|failure| failure.is_kind::<D>()))
+            }),
+        )
+    }
+}
+
+impl<D: Diagnostic> ElementKernel<Bare<FailureValue>> for IsErrorKindOperation<D> {
+    type OutShape = Bare<Mask>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<FailureValue>, Self>> {
+        Ok(Pipeline::default()
+            .map(|result: QueryResult<Failure>| result.map(|failure| failure.is_kind::<D>())))
+    }
+}
+
+impl<I: IndexDomain, G: ErrorGroup> ElementKernel<Indexed<I, FailureValue>>
+    for InErrorGroupOperation<G>
+{
+    type OutShape = Indexed<I, Mask>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, FailureValue>, Self>> {
+        Ok(
+            Pipeline::default().map(|(index, result): (I::Index<'a>, QueryResult<Failure>)| {
+                (index, result.map(|failure| G::contains(&failure.kind())))
+            }),
+        )
+    }
+}
+
+impl<G: ErrorGroup> ElementKernel<Bare<FailureValue>> for InErrorGroupOperation<G> {
+    type OutShape = Bare<Mask>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<FailureValue>, Self>> {
+        Ok(Pipeline::default()
+            .map(|result: QueryResult<Failure>| result.map(|failure| G::contains(&failure.kind()))))
+    }
+}
+
+impl<I: IndexDomain, C: Error + 'static> ElementKernel<Indexed<I, FailureValue>>
+    for HasErrorCauseOperation<C>
+{
+    type OutShape = Indexed<I, Mask>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, FailureValue>, Self>> {
+        Ok(
+            Pipeline::default().map(|(index, result): (I::Index<'a>, QueryResult<Failure>)| {
+                (index, result.map(|failure| failure.has_cause::<C>()))
+            }),
+        )
+    }
+}
+
+impl<C: Error + 'static> ElementKernel<Bare<FailureValue>> for HasErrorCauseOperation<C> {
+    type OutShape = Bare<Mask>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<FailureValue>, Self>> {
+        Ok(Pipeline::default()
+            .map(|result: QueryResult<Failure>| result.map(|failure| failure.has_cause::<C>())))
+    }
+}
+
+impl<I: IndexDomain> ElementKernel<Indexed<I, FailureKindValue>> for ErrorKindNameOperation {
+    type OutShape = Indexed<I, Scalar>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, FailureKindValue>, Self>> {
+        Ok(Pipeline::default().map(
+            |(index, result): (I::Index<'a>, QueryResult<FailureKind>)| {
+                (
+                    index,
+                    result.map(|kind| GraphRecordValue::from(kind.name())),
+                )
+            },
+        ))
+    }
+}
+
+impl ElementKernel<Bare<FailureKindValue>> for ErrorKindNameOperation {
+    type OutShape = Bare<Scalar>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<FailureKindValue>, Self>> {
+        Ok(Pipeline::default().map(|result: QueryResult<FailureKind>| {
+            result.map(|kind| GraphRecordValue::from(kind.name()))
+        }))
+    }
+}
+
+impl<O> Errors for O
+where
+    O: Apply<ErrorsOperation>,
+{
+    type ReturnOperand = <O as Apply<ErrorsOperation>>::Output;
+
+    fn errors(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), ErrorsOperation))
+    }
+}
+
+impl<O> ErrorKind for O
+where
+    O: Apply<ErrorKindOperation>,
+{
+    type ReturnOperand = <O as Apply<ErrorKindOperation>>::Output;
+
+    fn kind(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), ErrorKindOperation))
+    }
+}
+
+impl<O: Operand> IsErrorKind for O {
+    type ReturnOperand<D: Diagnostic>
+        = <O as Apply<IsErrorKindOperation<D>>>::Output
+    where
+        O: Apply<IsErrorKindOperation<D>>;
+
+    fn is<D: Diagnostic>(&self) -> Self::ReturnOperand<D>
+    where
+        Self: Apply<IsErrorKindOperation<D>>,
+    {
+        Self::ReturnOperand::<D>::new(OperationContext::new(
+            self.clone(),
+            IsErrorKindOperation::<D>::new(),
+        ))
+    }
+}
+
+impl<O: Operand> InErrorGroup for O {
+    type ReturnOperand<G: ErrorGroup>
+        = <O as Apply<InErrorGroupOperation<G>>>::Output
+    where
+        O: Apply<InErrorGroupOperation<G>>;
+
+    fn in_error_group<G: ErrorGroup>(&self) -> Self::ReturnOperand<G>
+    where
+        Self: Apply<InErrorGroupOperation<G>>,
+    {
+        Self::ReturnOperand::<G>::new(OperationContext::new(
+            self.clone(),
+            InErrorGroupOperation::<G>::new(),
+        ))
+    }
+}
+
+impl<O: Operand> HasErrorCause for O {
+    type ReturnOperand<C: Error + 'static>
+        = <O as Apply<HasErrorCauseOperation<C>>>::Output
+    where
+        O: Apply<HasErrorCauseOperation<C>>;
+
+    fn has_cause<C: Error + 'static>(&self) -> Self::ReturnOperand<C>
+    where
+        Self: Apply<HasErrorCauseOperation<C>>,
+    {
+        Self::ReturnOperand::<C>::new(OperationContext::new(
+            self.clone(),
+            HasErrorCauseOperation::<C>::new(),
+        ))
+    }
+}
+
+impl<O> ErrorKindName for O
+where
+    O: Apply<ErrorKindNameOperation>,
+{
+    type ReturnOperand = <O as Apply<ErrorKindNameOperation>>::Output;
+
+    fn name(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), ErrorKindNameOperation))
+    }
+}

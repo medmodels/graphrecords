@@ -4,8 +4,10 @@ use crate::{
     explain::ExplainFormatter,
     operands::{
         AttributeOperand, AttributesOperand, BareAttributeOperand, BareBoolOperand,
-        BareValueOperand, BoolMaskOperand, BoolOperand, IndexOperand, NestedAttributesOperand,
-        NestedBoolMaskOperand, ReferenceOperand, ValueOperand, ValuesOperand,
+        BareFailureKindOperand, BareFailureOperand, BareValueOperand, BoolMaskOperand, BoolOperand,
+        FailureKindOperand, FailureKindsOperand, FailureOperand, FailuresOperand, IndexOperand,
+        NestedAttributesOperand, NestedBoolMaskOperand, ReferenceOperand, ValueOperand,
+        ValuesOperand,
     },
     operations::{
         Absent, Alignment, ArgumentSource, Drop, Dropping, Keyed, Lookup, Prepare, Replace,
@@ -103,6 +105,12 @@ impl<A: Alignment> MaybeAbsent<A> for BareValueOperand {}
 impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for BoolMaskOperand<I, O> {}
 impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for BoolOperand<I> {}
 impl<A: Alignment> MaybeAbsent<A> for BareBoolOperand {}
+impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for FailuresOperand<I, O> {}
+impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for FailureOperand<I> {}
+impl<A: Alignment> MaybeAbsent<A> for BareFailureOperand {}
+impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for FailureKindsOperand<I, O> {}
+impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for FailureKindOperand<I> {}
+impl<A: Alignment> MaybeAbsent<A> for BareFailureKindOperand {}
 impl<I: IndexDomain, T: 'static + Clone, O: OrderState> MaybeAbsent<Keyed<I>>
     for NestedBoolMaskOperand<I, T, O>
 {

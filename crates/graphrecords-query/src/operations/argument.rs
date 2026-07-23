@@ -53,6 +53,10 @@ impl Error for ArgumentAbsent {
 }
 
 impl Diagnostic for ArgumentAbsent {
+    fn name() -> &'static str {
+        "ArgumentAbsent"
+    }
+
     fn help(&self) -> Option<String> {
         Some(
             "make the argument cover the subject's elements or state a policy with `on_missing(...)`"
@@ -150,6 +154,12 @@ impl Explain for GraphRecordValue {
     }
 }
 
+impl Explain for bool {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{self}")
+    }
+}
+
 impl PlanIdentity for GraphRecordValue {
     fn identity_eq(&self, other: &Self) -> bool {
         self == other
@@ -161,6 +171,7 @@ impl PlanIdentity for GraphRecordValue {
 }
 
 impl PlanInputs for GraphRecordValue {}
+impl PlanInputs for bool {}
 
 impl PlanIdentity for bool {
     fn identity_eq(&self, other: &Self) -> bool {
@@ -184,6 +195,18 @@ impl Prepare for GraphRecordValue {
     }
 }
 
+impl Prepare for bool {
+    type Prepared<'a> = QueryResult<Self>;
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(Ok(*self))
+    }
+}
+
 impl Estimated for GraphRecordValue {
     fn estimate(&self, _stats: &Stats) -> Estimate {
         Estimate {
@@ -193,7 +216,28 @@ impl Estimated for GraphRecordValue {
     }
 }
 
+impl Estimated for bool {
+    fn estimate(&self, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
 impl<A: Alignment> ArgumentSource<A> for GraphRecordValue {
+    type Retention = Preserving;
+    type Value<'a> = Self;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
+    }
+}
+
+impl<A: Alignment> ArgumentSource<A> for bool {
     type Retention = Preserving;
     type Value<'a> = Self;
 

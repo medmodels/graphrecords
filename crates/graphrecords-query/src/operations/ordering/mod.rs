@@ -4,7 +4,7 @@ mod sort;
 mod sort_by;
 mod unorder;
 
-use crate::{Diagnostic, OwnedIndex, Position};
+use crate::{Diagnostic, FailureKind, OwnedIndex, Position};
 pub use first::FirstOperation;
 use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue};
 pub use last::LastOperation;
@@ -71,6 +71,12 @@ impl EnsureSortable for EdgeIndex {
     }
 }
 
+impl EnsureSortable for FailureKind {
+    fn find_incomparable<'a>(_values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
+        None
+    }
+}
+
 #[derive(Debug)]
 pub struct IncomparableIndices<V, E: OwnedIndex> {
     pub value: V,
@@ -93,6 +99,10 @@ impl<V: Debug + Display, E: OwnedIndex> Error for IncomparableIndices<V, E> {}
 impl<V: Debug + Display + Send + Sync + 'static, E: OwnedIndex> Diagnostic
     for IncomparableIndices<V, E>
 {
+    fn name() -> &'static str {
+        "IncomparableIndices"
+    }
+
     fn help(&self) -> Option<String> {
         Some(
             "to order them deterministically, sort by a key that distinguishes these elements"

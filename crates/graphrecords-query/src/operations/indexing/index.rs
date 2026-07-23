@@ -1,5 +1,5 @@
 use crate::{
-    Explain, IndexDomain, IndexValue, Indexed, Operand, QueryResult, Unit,
+    Explain, IndexDomain, IndexValue, Indexed, Operand, QueryResult, ValueType,
     execution::EvaluationCache,
     operations::{
         Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
@@ -27,21 +27,21 @@ impl Prepare for IndexOperation {
     }
 }
 
-impl<I: IndexDomain> ElementKernel<Indexed<I, Unit>> for IndexOperation {
+impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for IndexOperation {
     type OutShape = Indexed<I, IndexValue<I>>;
     type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
-        Ok(
-            Pipeline::default().map(|(index, membership): (I::Index<'a>, QueryResult<()>)| {
-                let promoted = membership.map(|()| index.clone());
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
+        Ok(Pipeline::default().map(
+            |(index, value): (I::Index<'a>, QueryResult<V::Value<'a>>)| {
+                let promoted = value.map(|_| index.clone());
 
                 (index, promoted)
-            }),
-        )
+            },
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {

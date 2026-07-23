@@ -4,6 +4,7 @@ mod arithmetic;
 mod cache;
 mod comparison;
 mod conversion;
+mod errors;
 mod grouping;
 mod indexing;
 mod is_type;
@@ -11,7 +12,6 @@ mod kernel;
 mod logic;
 mod membership;
 mod numeric;
-mod on_error;
 mod on_missing;
 mod ordering;
 mod retention;
@@ -35,6 +35,11 @@ pub use argument::{
 pub use arithmetic::ModuloOperation;
 pub use cache::CacheContext;
 pub use conversion::EnumerateOperation;
+pub use errors::{
+    AbsenceErrors, Drop, ErrorKindNameOperation, ErrorKindOperation, ErrorPolicy, ErrorPolicyIn,
+    ErrorPolicyOf, ErrorPolicyWithCause, ErrorsOperation, HasErrorCauseOperation,
+    InErrorGroupOperation, IsErrorKindOperation, Raise, RaiseWhen, Replace,
+};
 use graphrecords_core::GraphRecord;
 pub use graphrecords_macros::Operation;
 pub use grouping::{
@@ -44,7 +49,6 @@ pub use grouping::{
 pub use indexing::{IndexOperation, SelectOperation};
 pub use kernel::{BareStream, ElementKernel, ElementPipeline, Kernel, KeyedStream, Pipeline};
 pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
-pub use on_error::{Drop, ErrorPolicy, Raise, Replace};
 pub use on_missing::{MissingPolicy, WithMissing};
 pub use ordering::{
     EnsureSortable, FirstOperation, IncomparableIndices, LastOperation, SortByOperation,

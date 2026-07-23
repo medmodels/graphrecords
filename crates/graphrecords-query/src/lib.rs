@@ -15,7 +15,8 @@ use crate::{
 };
 pub use context::{EvaluateContext, OperandContext};
 pub use error::{
-    Diagnostic, External, Failure, IncomparableValues, IncomparableValuesAt, QueryResult,
+    Diagnostic, ErrorGroup, External, Failure, FailureKind, IncomparableValues,
+    IncomparableValuesAt, QueryResult,
 };
 pub use explain::{Explain, Explanation, Labeled};
 use graphrecords_core::{
@@ -25,8 +26,8 @@ use graphrecords_core::{
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 pub use operands::{
     Arity, AttributeName, AttributeSet, Bare, Definite, EdgeOperand, ElementShape, EvaluateOperand,
-    IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand, Operand, OrderState, Ordered,
-    Return, Scalar, Single, Unit, Unordered, ValueType,
+    FailureKindValue, FailureValue, IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand,
+    Operand, OrderState, Ordered, Return, Scalar, Single, Unit, Unordered, ValueType,
 };
 use operations::EnsureSortable;
 use std::{
@@ -45,6 +46,7 @@ pub trait OwnedIndex: Any + Debug + Display + Send + Sync {}
 impl OwnedIndex for NodeIndex {}
 impl OwnedIndex for EdgeIndex {}
 impl OwnedIndex for Position {}
+impl OwnedIndex for FailureKind {}
 
 pub trait ToOwnedValue {
     type Owned: 'static;
@@ -77,6 +79,8 @@ owned_value_leaf!(bool);
 owned_value_leaf!(Position);
 owned_value_leaf!(GraphRecordValue);
 owned_value_leaf!(GraphRecordAttribute);
+owned_value_leaf!(Failure);
+owned_value_leaf!(FailureKind);
 owned_value_leaf!(GrHashSet<GraphRecordAttribute>);
 
 impl<T: Clone + 'static> ToOwnedValue for GrHashMap<T, bool> {
@@ -106,6 +110,10 @@ impl IndexDomain for EdgeIndex {
 
 impl IndexDomain for NodeIndex {
     type Index<'a> = &'a Self;
+}
+
+impl IndexDomain for FailureKind {
+    type Index<'a> = Self;
 }
 
 mod sealed {

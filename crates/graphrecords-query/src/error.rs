@@ -1,44 +1,125 @@
 use crate::{OwnedIndex, ToOwnedValue};
 use graphrecords_core::errors::GraphRecordError;
 use std::{
-    any::Any,
+    any::{Any, TypeId},
+    cmp::Ordering,
     error::Error,
     fmt::{self, Debug, Display, Formatter},
+    hash::{Hash, Hasher},
     sync::Arc,
 };
 
 pub type QueryResult<T> = Result<T, Box<Failure>>;
 
 pub trait Diagnostic: Error + Send + Sync + 'static {
+    fn name() -> &'static str
+    where
+        Self: Sized;
+
     fn help(&self) -> Option<String> {
         None
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct FailureKind {
+    identifier: TypeId,
+    name: &'static str,
+}
+
+impl FailureKind {
+    #[must_use]
+    pub fn of<D: Diagnostic>() -> Self {
+        Self {
+            identifier: TypeId::of::<D>(),
+            name: D::name(),
+        }
+    }
+
+    #[must_use]
+    pub fn is<D: Diagnostic>(&self) -> bool {
+        self.identifier == TypeId::of::<D>()
+    }
+
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+}
+
+impl Display for FailureKind {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.name)
+    }
+}
+
+impl PartialEq for FailureKind {
+    fn eq(&self, other: &Self) -> bool {
+        self.identifier == other.identifier
+    }
+}
+
+impl Eq for FailureKind {}
+
+impl Hash for FailureKind {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.identifier.hash(state);
+    }
+}
+
+impl PartialOrd for FailureKind {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for FailureKind {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.identifier == other.identifier {
+            return Ordering::Equal;
+        }
+
+        self.name
+            .cmp(other.name)
+            .then_with(|| self.identifier.cmp(&other.identifier))
+    }
+}
+
+pub trait ErrorGroup: 'static {
+    fn name() -> &'static str
+    where
+        Self: Sized;
+
+    fn contains(kind: &FailureKind) -> bool;
 }
 
 #[derive(Clone, Debug)]
 pub struct Failure {
     operation: &'static str,
     element: Option<Arc<dyn OwnedIndex>>,
+    kind: FailureKind,
     cause: Arc<dyn Diagnostic>,
 }
 
 impl Failure {
-    pub fn new(operation: &'static str, cause: impl Diagnostic) -> Box<Self> {
+    pub fn new<D: Diagnostic>(operation: &'static str, cause: D) -> Box<Self> {
         Box::new(Self {
             operation,
             element: None,
+            kind: FailureKind::of::<D>(),
             cause: Arc::new(cause),
         })
     }
 
-    pub fn new_at(
+    pub fn new_at<D: Diagnostic>(
         operation: &'static str,
-        cause: impl Diagnostic,
+        cause: D,
         element: &impl ToOwnedValue<Owned: OwnedIndex>,
     ) -> Box<Self> {
         Box::new(Self {
             operation,
             element: Some(Arc::new(element.to_owned_value())),
+            kind: FailureKind::of::<D>(),
             cause: Arc::new(cause),
         })
     }
@@ -63,6 +144,16 @@ impl Failure {
     #[must_use]
     pub fn cause(&self) -> &dyn Diagnostic {
         self.cause.as_ref()
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> FailureKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub fn is_kind<D: Diagnostic>(&self) -> bool {
+        self.kind.is::<D>()
     }
 
     #[must_use]
@@ -129,7 +220,11 @@ impl<E: Error + Send + Sync + 'static> Error for External<E> {
     }
 }
 
-impl<E: Error + Send + Sync + 'static> Diagnostic for External<E> {}
+impl<E: Error + Send + Sync + 'static> Diagnostic for External<E> {
+    fn name() -> &'static str {
+        "External"
+    }
+}
 
 #[derive(Debug)]
 pub struct IncomparableValues<T> {
@@ -150,6 +245,10 @@ impl<T: Display> Display for IncomparableValues<T> {
 impl<T: Debug + Display> Error for IncomparableValues<T> {}
 
 impl<T: Debug + Display + Send + Sync + 'static> Diagnostic for IncomparableValues<T> {
+    fn name() -> &'static str {
+        "IncomparableValues"
+    }
+
     fn help(&self) -> Option<String> {
         Some(
             "narrow the values down first using is_string(), is_int(), is_float(), is_bool(), is_datetime() or is_duration()"
@@ -181,6 +280,10 @@ impl<V: Debug + Display, E: OwnedIndex> Error for IncomparableValuesAt<V, E> {}
 impl<V: Debug + Display + Send + Sync + 'static, E: OwnedIndex> Diagnostic
     for IncomparableValuesAt<V, E>
 {
+    fn name() -> &'static str {
+        "IncomparableValuesAt"
+    }
+
     fn help(&self) -> Option<String> {
         Some(
             "narrow the values down first using is_string(), is_int(), is_float(), is_bool(), is_datetime() or is_duration()"
@@ -190,6 +293,10 @@ impl<V: Debug + Display + Send + Sync + 'static, E: OwnedIndex> Diagnostic
 }
 
 impl Diagnostic for GraphRecordError {
+    fn name() -> &'static str {
+        "GraphRecordError"
+    }
+
     fn help(&self) -> Option<String> {
         match self {
             Self::IncompatibleValueOperands { .. } | Self::IncompatibleAttributeOperands { .. } => {

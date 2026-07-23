@@ -1,13 +1,15 @@
 use crate::{
-    BoxedIterator, EvaluateOperand, Explanation, NodeOperand, Operand, OrderState, Position,
-    Positional, QueryResult, Unordered,
+    BoxedIterator, EvaluateOperand, Explanation, Failure, FailureKind, NodeOperand, Operand,
+    OrderState, Position, Positional, QueryResult, Unordered,
     execution::EvaluationCache,
     operands::{
         AllEdges, AllNodes, AttributeOperand, AttributesOperand, BareAttributeOperand,
-        BareAttributesOperand, BareBoolMaskOperand, BareBoolOperand, BareValueOperand,
+        BareAttributesOperand, BareBoolMaskOperand, BareBoolOperand, BareFailureKindOperand,
+        BareFailureKindsOperand, BareFailureOperand, BareFailuresOperand, BareValueOperand,
         BareValuesOperand, BoolMaskOperand, BoolOperand, DefiniteBoolOperand, DefiniteValueOperand,
-        EdgeOperand, GroupOperand, GroupedIterator, IndexOperand, IndicesOperand,
-        NestedAttributesOperand, NestedBoolMaskOperand, ValueOperand, ValuesOperand,
+        EdgeOperand, FailureKindOperand, FailureKindsOperand, FailureOperand, FailuresOperand,
+        GroupOperand, GroupedIterator, IndexOperand, IndicesOperand, NestedAttributesOperand,
+        NestedBoolMaskOperand, ValueOperand, ValuesOperand,
     },
     operations::GroupKey,
     optimizer::{OptimizationReport, Optimizer, Stats},
@@ -221,32 +223,62 @@ pub trait ReturnOperand<'a>: Clone {
 impl_return_operand!(
     {O} ValuesOperand<NodeIndex, O> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<GraphRecordValue>)>,
     {O} ValuesOperand<EdgeIndex, O> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<GraphRecordValue>)>,
-    {O} BoolMaskOperand<NodeIndex, O> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<bool>)>,
-    {O} BoolMaskOperand<EdgeIndex, O> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<bool>)>,
     {O} ValuesOperand<Positional, O> => BoxedIterator<'a, (Position, QueryResult<GraphRecordValue>)>,
-    {O} BoolMaskOperand<Positional, O> => BoxedIterator<'a, (Position, QueryResult<bool>)>,
-    {O} AttributesOperand<NodeIndex, O> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<GraphRecordAttribute>)>,
-    {O} AttributesOperand<EdgeIndex, O> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<GraphRecordAttribute>)>,
-    {O} AttributesOperand<Positional, O> => BoxedIterator<'a, (Position, QueryResult<GraphRecordAttribute>)>,
-    {O} NestedAttributesOperand<NodeIndex, O> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<GrHashSet<GraphRecordAttribute>>)>,
-    {O} NestedAttributesOperand<EdgeIndex, O> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<GrHashSet<GraphRecordAttribute>>)>,
+    {O} ValuesOperand<FailureKind, O> => BoxedIterator<'a, (FailureKind, QueryResult<GraphRecordValue>)>,
     {O} BareValuesOperand<O> => BoxedIterator<'a, QueryResult<GraphRecordValue>>,
-    {O} BareAttributesOperand<O> => BoxedIterator<'a, QueryResult<GraphRecordAttribute>>,
     ValueOperand<NodeIndex> => Option<(&'a NodeIndex, QueryResult<GraphRecordValue>)>,
     ValueOperand<EdgeIndex> => Option<(&'a EdgeIndex, QueryResult<GraphRecordValue>)>,
     ValueOperand<Positional> => Option<(Position, QueryResult<GraphRecordValue>)>,
-    AttributeOperand<NodeIndex> => Option<(&'a NodeIndex, QueryResult<GraphRecordAttribute>)>,
-    AttributeOperand<EdgeIndex> => Option<(&'a EdgeIndex, QueryResult<GraphRecordAttribute>)>,
-    AttributeOperand<Positional> => Option<(Position, QueryResult<GraphRecordAttribute>)>,
+    ValueOperand<FailureKind> => Option<(FailureKind, QueryResult<GraphRecordValue>)>,
     BareValueOperand => Option<QueryResult<GraphRecordValue>>,
     DefiniteValueOperand => QueryResult<GraphRecordValue>,
-    BareAttributeOperand => Option<QueryResult<GraphRecordAttribute>>,
+
+    {O} BoolMaskOperand<NodeIndex, O> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<bool>)>,
+    {O} BoolMaskOperand<EdgeIndex, O> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<bool>)>,
+    {O} BoolMaskOperand<Positional, O> => BoxedIterator<'a, (Position, QueryResult<bool>)>,
+    {O} BoolMaskOperand<FailureKind, O> => BoxedIterator<'a, (FailureKind, QueryResult<bool>)>,
+    {O} BareBoolMaskOperand<O> => BoxedIterator<'a, QueryResult<bool>>,
     BoolOperand<NodeIndex> => Option<(&'a NodeIndex, QueryResult<bool>)>,
     BoolOperand<EdgeIndex> => Option<(&'a EdgeIndex, QueryResult<bool>)>,
     BoolOperand<Positional> => Option<(Position, QueryResult<bool>)>,
-    {O} BareBoolMaskOperand<O> => BoxedIterator<'a, QueryResult<bool>>,
+    BoolOperand<FailureKind> => Option<(FailureKind, QueryResult<bool>)>,
     BareBoolOperand => Option<QueryResult<bool>>,
     DefiniteBoolOperand => QueryResult<bool>,
+
+    {O} NestedAttributesOperand<NodeIndex, O> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<GrHashSet<GraphRecordAttribute>>)>,
+    {O} NestedAttributesOperand<EdgeIndex, O> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<GrHashSet<GraphRecordAttribute>>)>,
+    {O} NestedAttributesOperand<FailureKind, O> => BoxedIterator<'a, (FailureKind, QueryResult<GrHashSet<GraphRecordAttribute>>)>,
+    {O} AttributesOperand<NodeIndex, O> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<GraphRecordAttribute>)>,
+    {O} AttributesOperand<EdgeIndex, O> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<GraphRecordAttribute>)>,
+    {O} AttributesOperand<Positional, O> => BoxedIterator<'a, (Position, QueryResult<GraphRecordAttribute>)>,
+    {O} AttributesOperand<FailureKind, O> => BoxedIterator<'a, (FailureKind, QueryResult<GraphRecordAttribute>)>,
+    {O} BareAttributesOperand<O> => BoxedIterator<'a, QueryResult<GraphRecordAttribute>>,
+    AttributeOperand<NodeIndex> => Option<(&'a NodeIndex, QueryResult<GraphRecordAttribute>)>,
+    AttributeOperand<EdgeIndex> => Option<(&'a EdgeIndex, QueryResult<GraphRecordAttribute>)>,
+    AttributeOperand<Positional> => Option<(Position, QueryResult<GraphRecordAttribute>)>,
+    AttributeOperand<FailureKind> => Option<(FailureKind, QueryResult<GraphRecordAttribute>)>,
+    BareAttributeOperand => Option<QueryResult<GraphRecordAttribute>>,
+
+    {O} FailuresOperand<NodeIndex, O> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<Failure>)>,
+    {O} FailuresOperand<EdgeIndex, O> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<Failure>)>,
+    {O} FailuresOperand<Positional, O> => BoxedIterator<'a, (Position, QueryResult<Failure>)>,
+    {O} FailuresOperand<FailureKind, O> => BoxedIterator<'a, (FailureKind, QueryResult<Failure>)>,
+    {O} FailureKindsOperand<NodeIndex, O> => BoxedIterator<'a, (&'a NodeIndex, QueryResult<FailureKind>)>,
+    {O} FailureKindsOperand<EdgeIndex, O> => BoxedIterator<'a, (&'a EdgeIndex, QueryResult<FailureKind>)>,
+    {O} FailureKindsOperand<Positional, O> => BoxedIterator<'a, (Position, QueryResult<FailureKind>)>,
+    {O} FailureKindsOperand<FailureKind, O> => BoxedIterator<'a, (FailureKind, QueryResult<FailureKind>)>,
+    {O} BareFailuresOperand<O> => BoxedIterator<'a, QueryResult<Failure>>,
+    {O} BareFailureKindsOperand<O> => BoxedIterator<'a, QueryResult<FailureKind>>,
+    FailureOperand<NodeIndex> => Option<(&'a NodeIndex, QueryResult<Failure>)>,
+    FailureOperand<EdgeIndex> => Option<(&'a EdgeIndex, QueryResult<Failure>)>,
+    FailureOperand<Positional> => Option<(Position, QueryResult<Failure>)>,
+    FailureOperand<FailureKind> => Option<(FailureKind, QueryResult<Failure>)>,
+    FailureKindOperand<NodeIndex> => Option<(&'a NodeIndex, QueryResult<FailureKind>)>,
+    FailureKindOperand<EdgeIndex> => Option<(&'a EdgeIndex, QueryResult<FailureKind>)>,
+    FailureKindOperand<Positional> => Option<(Position, QueryResult<FailureKind>)>,
+    FailureKindOperand<FailureKind> => Option<(FailureKind, QueryResult<FailureKind>)>,
+    BareFailureOperand => Option<QueryResult<Failure>>,
+    BareFailureKindOperand => Option<QueryResult<FailureKind>>,
 );
 
 impl<'a, T: 'static + Clone, O: OrderState> ReturnOperand<'a>
@@ -275,6 +307,28 @@ impl<'a, T: 'static + Clone, O: OrderState> ReturnOperand<'a>
     for NestedBoolMaskOperand<EdgeIndex, T, O>
 {
     type ReturnValue = BoxedIterator<'a, (&'a EdgeIndex, QueryResult<GrHashMap<T, bool>>)>;
+
+    fn evaluate(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::ReturnValue> {
+        <Self as EvaluateOperand>::evaluate(self, graphrecord, cache)
+    }
+
+    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
+        optimizer.run_reported(stats, &self)
+    }
+
+    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", Explanation::new(self))
+    }
+}
+
+impl<'a, T: 'static + Clone, O: OrderState> ReturnOperand<'a>
+    for NestedBoolMaskOperand<FailureKind, T, O>
+{
+    type ReturnValue = BoxedIterator<'a, (FailureKind, QueryResult<GrHashMap<T, bool>>)>;
 
     fn evaluate(
         &'a self,
@@ -335,6 +389,26 @@ impl<'a> ReturnOperand<'a> for IndexOperand<EdgeIndex> {
     }
 }
 
+impl<'a> ReturnOperand<'a> for IndexOperand<FailureKind> {
+    type ReturnValue = Option<QueryResult<FailureKind>>;
+
+    fn evaluate(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::ReturnValue> {
+        Ok(EvaluateOperand::evaluate(self, graphrecord, cache)?.map(|(_index, value)| value))
+    }
+
+    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
+        optimizer.run_reported(stats, &self)
+    }
+
+    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", Explanation::new(self))
+    }
+}
+
 impl<'a, O: OrderState> ReturnOperand<'a> for IndicesOperand<NodeIndex, O> {
     type ReturnValue = BoxedIterator<'a, QueryResult<NodeIndex>>;
 
@@ -369,6 +443,28 @@ impl<'a, O: OrderState> ReturnOperand<'a> for IndicesOperand<EdgeIndex, O> {
         Ok(Box::new(
             EvaluateOperand::evaluate(self, graphrecord, cache)?
                 .map(|(_index, value)| value.copied()),
+        ))
+    }
+
+    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
+        optimizer.run_reported(stats, &self)
+    }
+
+    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", Explanation::new(self))
+    }
+}
+
+impl<'a, O: OrderState> ReturnOperand<'a> for IndicesOperand<FailureKind, O> {
+    type ReturnValue = BoxedIterator<'a, QueryResult<FailureKind>>;
+
+    fn evaluate(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::ReturnValue> {
+        Ok(Box::new(
+            EvaluateOperand::evaluate(self, graphrecord, cache)?.map(|(_index, value)| value),
         ))
     }
 

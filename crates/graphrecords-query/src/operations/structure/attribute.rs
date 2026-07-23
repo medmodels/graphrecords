@@ -79,6 +79,10 @@ impl Display for MissingAttribute {
 impl Error for MissingAttribute {}
 
 impl Diagnostic for MissingAttribute {
+    fn name() -> &'static str {
+        "MissingAttribute"
+    }
+
     fn help(&self) -> Option<String> {
         Some(
             "filter the elements using `has_attribute(...)` first or handle missing attributes with `on_error(...)`"
@@ -106,6 +110,10 @@ impl<T: OwnedIndex> Display for MissingTraversedAttribute<T> {
 impl<T: OwnedIndex> Error for MissingTraversedAttribute<T> {}
 
 impl<T: OwnedIndex> Diagnostic for MissingTraversedAttribute<T> {
+    fn name() -> &'static str {
+        "MissingTraversedAttribute"
+    }
+
     fn help(&self) -> Option<String> {
         Some(
             "filter the elements using `has_attribute(...)` first or handle missing attributes with `on_error(...)`"

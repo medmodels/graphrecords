@@ -26,6 +26,10 @@ impl Display for MissingGroupAggregate {
 impl Error for MissingGroupAggregate {}
 
 impl Diagnostic for MissingGroupAggregate {
+    fn name() -> &'static str {
+        "MissingGroupAggregate"
+    }
+
     fn help(&self) -> Option<String> {
         Some(
             "compute the aggregate over every group being broadcast to or handle the gaps with `on_error(...)`"

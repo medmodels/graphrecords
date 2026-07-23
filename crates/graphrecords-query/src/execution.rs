@@ -1,4 +1,4 @@
-use crate::{BoxedIterator, QueryResult};
+use crate::{BoxedIterator, Failure, FailureKind, QueryResult};
 use elsa::FrozenMap;
 use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue};
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
@@ -130,6 +130,8 @@ cacheable_owned_leaf!(());
 cacheable_owned_leaf!(bool);
 cacheable_owned_leaf!(usize);
 cacheable_owned_leaf!(EdgeIndex);
+cacheable_owned_leaf!(Failure);
+cacheable_owned_leaf!(FailureKind);
 cacheable_owned_leaf!(GraphRecordValue);
 cacheable_owned_leaf!(GraphRecordAttribute);
 cacheable_owned_leaf!(Vec<GraphRecordAttribute>);
