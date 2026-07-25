@@ -4867,11 +4867,11 @@ class TestEdgeMultipleValuesWithoutIndexOperand(unittest.TestCase):
 
     def test_is_datetime(self) -> None:
         def query(edge: EdgeOperand) -> EdgeMultipleValuesWithoutIndexOperand:
-            query_specific_edge(edge, [3, 4, 26, 28])
+            query_specific_edge(edge, [3, 26])
             values = (
                 edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
                 .attribute("time")
-                .mean()
+                .mode()
                 .ungroup()
             )
             values.is_datetime()
@@ -4880,8 +4880,8 @@ class TestEdgeMultipleValuesWithoutIndexOperand(unittest.TestCase):
         assert sorted(
             self.graphrecord.query_edges(query), key=lambda x: (x is None, x)
         ) == [
-            datetime(1992, 9, 9, 12, 0),
-            datetime(2015, 1, 15, 0, 0),
+            datetime(1991, 3, 3),
+            datetime(2014, 10, 18),
         ]
 
     def test_is_float(self) -> None:
@@ -6403,9 +6403,9 @@ class TestNodeSingleValueWithoutIndexOperand(unittest.TestCase):
             single_value = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .attribute("datetime_attribute")
-                .mean()
+                .mode()
                 .ungroup()
-                .mean()
+                .mode()
             )
             single_value.is_datetime()
             return single_value
@@ -6966,7 +6966,7 @@ class TestNodeSingleValueWithoutIndexGroupOperand(unittest.TestCase):
             group = (
                 node.group_by(NodeOperandGroupDiscriminator.Attribute("gender"))
                 .attribute("datetime_attribute")
-                .mean()
+                .mode()
             )
             group.is_datetime()
             return group
@@ -8604,12 +8604,13 @@ class TestEdgeSingleValueWithoutIndexOperand(unittest.TestCase):
 
     def test_is_datetime(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleValueWithoutIndexOperand:
+            query_specific_edge(edge, 3)
             edge.attribute("time").is_datetime()
-            value = edge.attribute("time").mean()
+            value = edge.attribute("time").mode()
             value.is_datetime()
             return value
 
-        assert self.graphrecord.query_edges(query) == datetime(2014, 6, 7, 14, 4, 6)
+        assert self.graphrecord.query_edges(query) == datetime(2014, 10, 18)
 
     def test_greater_than(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleValueWithoutIndexOperand:
@@ -8968,20 +8969,21 @@ class TestEdgeSingleValueWithoutIndexGroupOperand(unittest.TestCase):
 
     def test_is_datetime(self) -> None:
         def query(edge: EdgeOperand) -> EdgeSingleValueWithoutIndexGroupOperand:
+            query_specific_edge(edge, [115, 132, 143, 150, 159])
             value = (
                 edge.group_by(EdgeOperandGroupDiscriminator.SourceNode())
                 .attribute("time")
-                .mean()
+                .mode()
             )
             value.is_datetime()
             return value
 
         assert self.sort_tuples(self.graphrecord.query_edges(query)) == [
-            ("pat_1", datetime(2018, 7, 5, 22, 40, 30)),
-            ("pat_2", datetime(2019, 12, 29, 22, 11, 7)),
-            ("pat_3", datetime(1995, 11, 14, 21, 38, 52)),
-            ("pat_4", datetime(2020, 11, 1, 14, 3, 11)),
-            ("pat_5", datetime(2019, 2, 11, 6, 53, 55)),
+            ("pat_1", datetime(2023, 5, 30, 13, 39, 26)),
+            ("pat_2", datetime(2024, 2, 20, 16, 58)),
+            ("pat_3", datetime(2001, 5, 20, 0, 38, 6)),
+            ("pat_4", datetime(2024, 4, 24, 3, 38, 35)),
+            ("pat_5", datetime(2024, 4, 12, 13, 23, 43)),
         ]
 
     def test_is_float(self) -> None:

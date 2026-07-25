@@ -1,5 +1,6 @@
 use crate::{
-    Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, Unit,
+    EntityDomain, EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand,
+    QueryResult, Unit,
     execution::EvaluationCache,
     operations::{
         Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
@@ -17,7 +18,7 @@ use graphrecords_core::{
 };
 use graphrecords_utils::aliases::GrHashSet;
 
-pub trait IndicesInGroup: IndexDomain {
+pub trait IndicesInGroup: EntityDomain {
     fn indices_in_group<'a>(
         graphrecord: &'a GraphRecord,
         group: &Group,
@@ -105,6 +106,35 @@ impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
 
         Estimate {
             selectivity,
+            ..input
+        }
+    }
+}
+
+impl<E: IndicesInGroup, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
+    for InGroupOperation
+{
+    type OutShape = Indexed<I, Mask>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        graphrecord: &'a GraphRecord,
+        group: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
+        let members = E::indices_in_group(graphrecord, group)?;
+
+        Ok(Pipeline::default().map(
+            move |(key, reference): (I::Index<'a>, QueryResult<E::Index<'a>>)| {
+                let in_group = reference.map(|entity| members.contains(&entity));
+
+                (key, in_group)
+            },
+        ))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            selectivity: None,
             ..input
         }
     }

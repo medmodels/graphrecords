@@ -3,8 +3,8 @@ use crate::{
     IndexDomain, Operand, OrderState, Ordered, Unordered,
     operands::{BoolMaskOperand, GroupOperand, ValueOperand, ValuesOperand},
     operations::{
-        FirstOperation, GroupByOperation, NotOperation, OperationContext, SortByOperation,
-        SortOperation,
+        EnsureSortable, FirstOperation, GroupByOperation, NotOperation, OperationContext,
+        SortByOperation, SortOperation,
     },
     traits::{First, GroupBy, Sort, SortBy},
 };
@@ -34,8 +34,11 @@ fn eliminate_double_negation<I: IndexDomain, O: OrderState>() -> impl Rule<BoolM
 
 pub struct SortBelowGroup;
 
-fn sort_below_group<I: IndexDomain>()
--> impl Rule<GroupOperand<ValueOperand<I>, ValuesOperand<I, Unordered>>> {
+fn sort_below_group<I>() -> impl Rule<GroupOperand<ValueOperand<I>, ValuesOperand<I, Unordered>>>
+where
+    I: IndexDomain,
+    for<'a> I::Index<'a>: EnsureSortable,
+{
     matching::<
         OperationContext<
             GroupOperand<ValuesOperand<I, Ordered>, ValuesOperand<I, Unordered>>,
@@ -67,8 +70,11 @@ fn sort_below_group<I: IndexDomain>()
 
 pub struct SortByBelowGroup;
 
-fn sort_by_below_group<I: IndexDomain>()
--> impl Rule<GroupOperand<ValueOperand<I>, ValuesOperand<I, Unordered>>> {
+fn sort_by_below_group<I>() -> impl Rule<GroupOperand<ValueOperand<I>, ValuesOperand<I, Unordered>>>
+where
+    I: IndexDomain,
+    for<'a> I::Index<'a>: EnsureSortable,
+{
     matching::<
         OperationContext<
             GroupOperand<ValuesOperand<I, Ordered>, ValuesOperand<I, Unordered>>,

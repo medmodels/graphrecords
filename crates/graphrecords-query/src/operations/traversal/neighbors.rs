@@ -1,14 +1,28 @@
 use crate::{
-    BoxedIterator, EdgeDirection, EvaluateOperand, Explain, Failure, Indexed, Labeled, Multiple,
-    Operand, OrderState, QueryResult, Unit, Unordered,
+    BoxedIterator, Definite, EdgeDirection, EvaluateOperand, Explain, Failure, Indexed, Labeled,
+    Multiple, Operand, OrderState, QueryResult, Single, Unit, Unordered,
     execution::EvaluationCache,
-    operands::NodeOperand,
-    operations::{Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operands::NodesOperand,
+    operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::Neighbors,
 };
 use graphrecords_core::{GraphRecord, graphrecord::NodeIndex};
 use graphrecords_utils::aliases::GrHashSet;
+
+fn neighbors_for_node<'a>(
+    graphrecord: &'a GraphRecord,
+    node: &'a NodeIndex,
+    direction: EdgeDirection,
+) -> QueryResult<BoxedIterator<'a, &'a NodeIndex>> {
+    let raise = |error| Failure::new_at(NeighborsOperation::LABEL, error, &node);
+
+    Ok(match direction {
+        EdgeDirection::Outgoing => Box::new(graphrecord.outgoing_neighbors(node).map_err(raise)?),
+        EdgeDirection::Incoming => Box::new(graphrecord.incoming_neighbors(node).map_err(raise)?),
+        EdgeDirection::Both => Box::new(graphrecord.neighbors(node).map_err(raise)?),
+    })
+}
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[explain(label = "Neighbors")]
@@ -30,51 +44,71 @@ impl Prepare for NeighborsOperation {
 }
 
 impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for NeighborsOperation {
-    type Output = NodeOperand<Unordered>;
+    type Output = NodesOperand<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, NodeIndex, Unit, Multiple<O>>,
         direction: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let neighbors: GrHashSet<_> =
-            values
-                .map(|(node, membership)| {
-                    membership.and_then(|()| -> QueryResult<BoxedIterator<'a, &'a NodeIndex>> {
-                        let raise = |error| Failure::new_at(Self::LABEL, error, &node);
-
-                        Ok(match direction {
-                            EdgeDirection::Outgoing => {
-                                Box::new(graphrecord.outgoing_edges(node).map_err(raise)?.map(
-                                    |edge| {
-                                        graphrecord.edge_endpoints(edge).expect("Edge must exist").1
-                                    },
-                                ))
-                            }
-                            EdgeDirection::Incoming => {
-                                Box::new(graphrecord.incoming_edges(node).map_err(raise)?.map(
-                                    |edge| {
-                                        graphrecord.edge_endpoints(edge).expect("Edge must exist").0
-                                    },
-                                ))
-                            }
-                            EdgeDirection::Both => {
-                                Box::new(graphrecord.neighbors(node).map_err(raise)?)
-                            }
-                        })
-                    })
-                })
-                .collect::<QueryResult<Vec<_>>>()?
-                .into_iter()
-                .flatten()
-                .collect();
+        let neighbors: GrHashSet<_> = values
+            .map(|(node, membership)| {
+                membership.and_then(|()| neighbors_for_node(graphrecord, node, direction))
+            })
+            .collect::<QueryResult<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(Box::new(neighbors.into_iter().map(|node| (node, Ok(())))))
     }
 }
 
-impl<O: OrderState> Neighbors for NodeOperand<O> {
-    type ReturnOperand = NodeOperand<Unordered>;
+impl Kernel<Indexed<NodeIndex, Unit>, Single> for NeighborsOperation {
+    type Output = NodesOperand<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, NodeIndex, Unit, Single>,
+        direction: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let Some((node, membership)) = value else {
+            return Ok(Box::new(std::iter::empty()));
+        };
+        membership?;
+
+        let neighbors: GrHashSet<_> = neighbors_for_node(graphrecord, node, direction)?.collect();
+
+        Ok(Box::new(
+            neighbors.into_iter().map(|neighbor| (neighbor, Ok(()))),
+        ))
+    }
+}
+
+impl Kernel<Indexed<NodeIndex, Unit>, Definite> for NeighborsOperation {
+    type Output = NodesOperand<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, NodeIndex, Unit, Definite>,
+        direction: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let (node, membership) = value;
+        membership?;
+
+        let neighbors: GrHashSet<_> = neighbors_for_node(graphrecord, node, direction)?.collect();
+
+        Ok(Box::new(
+            neighbors.into_iter().map(|neighbor| (neighbor, Ok(()))),
+        ))
+    }
+}
+
+impl<O> Neighbors for O
+where
+    O: Apply<NeighborsOperation>,
+{
+    type ReturnOperand = <O as Apply<NeighborsOperation>>::Output;
 
     fn neighbors(&self, direction: EdgeDirection) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

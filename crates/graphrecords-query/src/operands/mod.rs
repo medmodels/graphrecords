@@ -1,31 +1,43 @@
 mod attributes;
 mod bool;
 mod edges;
+mod elements;
 mod errors;
 mod group;
 mod indices;
 mod nodes;
+mod references;
 mod values;
 
 use crate::{
-    BoxedIterator, Failure, FailureKind, IndexDomain, OperandContext, QueryResult, ToOwnedValue,
+    BoxedIterator, EntityDomain, Failure, FailureKind, IndexDomain, OperandContext, QueryResult,
+    ToOwnedValue,
     execution::EvaluationCache,
     explain::Explanation,
+    operations::{Absent, Alignment, ArgumentSource, Keyed, Lookup, Prepare, Preserving},
     optimizer::{Estimate, Estimated, PlanNode, Stats},
     sealed::Sealed,
 };
 pub use attributes::{
     AttributeOperand, AttributesOperand, BareAttributeOperand, BareAttributesOperand,
-    NestedAttributesIterator, NestedAttributesOperand,
+    BareNestedAttributeOperand, BareNestedAttributesOperand, DefiniteAttributeOperand,
+    DefiniteBareAttributeOperand, DefiniteBareNestedAttributeOperand,
+    DefiniteNestedAttributeOperand, NestedAttributeOperand, NestedAttributesIterator,
+    NestedAttributesOperand,
 };
 pub use bool::{
-    BareBoolMaskOperand, BareBoolOperand, BoolMaskOperand, BoolOperand, DefiniteBoolOperand,
-    NestedBoolMaskIterator, NestedBoolMaskOperand,
+    BareBoolMaskOperand, BareBoolOperand, BareNestedBoolMaskOperand, BareNestedBoolOperand,
+    BoolMaskOperand, BoolOperand, DefiniteBareBoolOperand, DefiniteBareNestedBoolOperand,
+    DefiniteBoolOperand, DefiniteNestedBoolOperand, NestedBoolMaskIterator, NestedBoolMaskOperand,
+    NestedBoolOperand,
 };
-pub use edges::{AllEdges, EdgeOperand};
+pub use edges::{AllEdges, DefiniteEdgeOperand, EdgeOperand, EdgesOperand};
+pub use elements::{DefiniteElementOperand, ElementOperand, ElementsOperand};
 pub use errors::{
     BareFailureKindOperand, BareFailureKindsOperand, BareFailureOperand, BareFailuresOperand,
-    FailureKindOperand, FailureKindsOperand, FailureOperand, FailuresOperand,
+    DefiniteBareFailureKindOperand, DefiniteBareFailureOperand, DefiniteFailureKindOperand,
+    DefiniteFailureOperand, FailureKindOperand, FailureKindsOperand, FailureOperand,
+    FailuresOperand,
 };
 use graphrecords_core::{
     GraphRecord,
@@ -33,11 +45,20 @@ use graphrecords_core::{
 };
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 pub use group::{GroupOperand, Grouped, GroupedIterator, try_partition_by};
-pub use indices::{IndexOperand, IndicesOperand, ReferenceOperand};
-pub use nodes::{AllNodes, NodeOperand};
+pub use indices::{
+    BareIndexOperand, BareIndicesOperand, DefiniteBareIndexOperand, DefiniteIndexOperand,
+    IndexOperand, IndicesOperand,
+};
+pub use nodes::{AllNodes, DefiniteNodeOperand, NodeOperand, NodesOperand};
+pub use references::{
+    BareReferenceOperand, BareReferencesOperand, DefiniteBareReferenceOperand,
+    DefiniteReferenceIndexOperand, DefiniteReferenceOperand, ReferenceIndexOperand,
+    ReferenceIndicesOperand, ReferenceOperand, ReferencesOperand,
+};
 use std::{marker::PhantomData, sync::Arc};
 pub use values::{
-    BareValueOperand, BareValuesOperand, DefiniteValueOperand, ValueOperand, ValuesOperand,
+    BareValueOperand, BareValuesOperand, DefiniteBareValueOperand, DefiniteValueOperand,
+    ValueOperand, ValuesOperand,
 };
 
 pub trait ValueType: 'static {
@@ -46,6 +67,8 @@ pub trait ValueType: 'static {
         Self: 'a;
 }
 
+pub trait ReturnValueType: ValueType {}
+
 pub struct Scalar;
 pub struct Mask;
 pub struct AttributeName;
@@ -53,6 +76,7 @@ pub struct Unit;
 pub struct MaskMap<T: 'static + Clone>(PhantomData<T>);
 pub struct AttributeSet;
 pub struct IndexValue<I: IndexDomain>(PhantomData<I>);
+pub struct EntityReference<E: EntityDomain>(PhantomData<E>);
 pub struct FailureValue;
 pub struct FailureKindValue;
 
@@ -75,7 +99,10 @@ impl ValueType for AttributeSet {
     type Value<'a> = GrHashSet<GraphRecordAttribute>;
 }
 impl<I: IndexDomain> ValueType for IndexValue<I> {
-    type Value<'a> = I::Index<'a>;
+    type Value<'a> = I::Owned;
+}
+impl<E: EntityDomain> ValueType for EntityReference<E> {
+    type Value<'a> = E::Index<'a>;
 }
 impl ValueType for FailureValue {
     type Value<'a> = Failure;
@@ -84,8 +111,24 @@ impl ValueType for FailureKindValue {
     type Value<'a> = FailureKind;
 }
 
+impl ReturnValueType for Scalar {}
+impl ReturnValueType for Mask {}
+impl ReturnValueType for AttributeName {}
+impl<T: 'static + Clone> ReturnValueType for MaskMap<T> {}
+impl ReturnValueType for AttributeSet {}
+impl<I: IndexDomain> ReturnValueType for IndexValue<I> {}
+impl<E: EntityDomain> ReturnValueType for EntityReference<E> {}
+impl ReturnValueType for FailureValue {}
+impl ReturnValueType for FailureKindValue {}
+
 pub trait ElementShape: 'static {
     type Element<'a>: 'a;
+}
+
+pub trait ReturnShape: ElementShape {
+    type ReturnElement<'a>: 'a;
+
+    fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_>;
 }
 
 pub struct Indexed<K: IndexDomain, V: ValueType>(PhantomData<(K, V)>);
@@ -96,6 +139,32 @@ impl<K: IndexDomain, V: ValueType> ElementShape for Indexed<K, V> {
 }
 impl<V: ValueType> ElementShape for Bare<V> {
     type Element<'a> = QueryResult<V::Value<'a>>;
+}
+
+impl<K: IndexDomain, V: ReturnValueType> ReturnShape for Indexed<K, V> {
+    type ReturnElement<'a> = (K::Index<'a>, QueryResult<V::Value<'a>>);
+
+    fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_> {
+        element
+    }
+}
+
+impl<K: IndexDomain> ReturnShape for Indexed<K, Unit> {
+    type ReturnElement<'a> = QueryResult<K::Owned>;
+
+    fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_> {
+        let (index, value) = element;
+
+        value.map(|()| index.to_owned_value())
+    }
+}
+
+impl<V: ReturnValueType> ReturnShape for Bare<V> {
+    type ReturnElement<'a> = QueryResult<V::Value<'a>>;
+
+    fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_> {
+        element
+    }
 }
 
 pub trait Arity: 'static {
@@ -263,3 +332,174 @@ impl<S: ElementShape, C: Arity> Operand for OperandHandle<S, C> {
 }
 
 impl<S: ElementShape, C: Arity> Sealed for OperandHandle<S, C> {}
+
+impl<I: IndexDomain, V: ValueType, O: OrderState> Prepare
+    for OperandHandle<Indexed<I, V>, Multiple<O>>
+{
+    type Prepared<'a>
+        = Arc<GrHashMap<I::Index<'a>, QueryResult<V::Value<'a>>>>
+    where
+        Self: 'a;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(Arc::new(self.evaluate(graphrecord, cache)?.collect()))
+    }
+}
+
+impl<I: IndexDomain, V: ValueType, O: OrderState> ArgumentSource<Keyed<I>>
+    for OperandHandle<Indexed<I, V>, Multiple<O>>
+{
+    type Retention = Preserving;
+    type Value<'a> = V::Value<'a>;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        address: &<Keyed<I> as Alignment>::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        match prepared.get(address) {
+            Some(value) => Lookup::Present(value),
+            None => Lookup::Absent(Absent::Uncovered),
+        }
+    }
+}
+
+impl<I: IndexDomain, V: ValueType> Prepare for OperandHandle<Indexed<I, V>, Single> {
+    type Prepared<'a>
+        = Option<QueryResult<V::Value<'a>>>
+    where
+        Self: 'a;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(self
+            .evaluate(graphrecord, cache)?
+            .map(|(_index, value)| value))
+    }
+}
+
+impl<A: Alignment, I: IndexDomain, V: ValueType> ArgumentSource<A>
+    for OperandHandle<Indexed<I, V>, Single>
+{
+    type Retention = Preserving;
+    type Value<'a> = V::Value<'a>;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        match prepared {
+            Some(value) => Lookup::Present(value),
+            None => Lookup::Absent(Absent::Empty),
+        }
+    }
+}
+
+impl<I: IndexDomain, V: ValueType> Prepare for OperandHandle<Indexed<I, V>, Definite> {
+    type Prepared<'a>
+        = QueryResult<V::Value<'a>>
+    where
+        Self: 'a;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        let (_index, value) = self.evaluate(graphrecord, cache)?;
+
+        Ok(value)
+    }
+}
+
+impl<V: ValueType> Prepare for OperandHandle<Bare<V>, Single> {
+    type Prepared<'a>
+        = Option<QueryResult<V::Value<'a>>>
+    where
+        Self: 'a;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        self.evaluate(graphrecord, cache)
+    }
+}
+
+impl<A: Alignment, V: ValueType> ArgumentSource<A> for OperandHandle<Bare<V>, Single> {
+    type Retention = Preserving;
+    type Value<'a> = V::Value<'a>;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        match prepared {
+            Some(value) => Lookup::Present(value),
+            None => Lookup::Absent(Absent::Empty),
+        }
+    }
+}
+
+impl<V: ValueType> Prepare for OperandHandle<Bare<V>, Definite> {
+    type Prepared<'a>
+        = QueryResult<V::Value<'a>>
+    where
+        Self: 'a;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        self.evaluate(graphrecord, cache)
+    }
+}
+
+impl<A: Alignment, V: ValueType> ArgumentSource<A> for OperandHandle<Bare<V>, Definite> {
+    type Retention = Preserving;
+    type Value<'a> = V::Value<'a>;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
+    }
+}
+
+impl<A: Alignment, I: IndexDomain, V: ValueType> ArgumentSource<A>
+    for OperandHandle<Indexed<I, V>, Definite>
+{
+    type Retention = Preserving;
+    type Value<'a> = V::Value<'a>;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
+    }
+}

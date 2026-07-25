@@ -1,9 +1,9 @@
 use crate::{
-    EvaluateOperand, Explain, Failure, Indexed, Labeled, Multiple, Operand, OrderState,
-    QueryResult, Unit, Unordered,
+    Definite, EvaluateOperand, Explain, Failure, Indexed, Labeled, Multiple, Operand, OrderState,
+    QueryResult, Single, Unit, Unordered,
     execution::EvaluationCache,
-    operands::{EdgeOperand, NodeOperand},
-    operations::{Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operands::NodesOperand,
+    operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::Nodes,
 };
@@ -31,7 +31,7 @@ impl Prepare for NodesOperation {
 }
 
 impl<O: OrderState> Kernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesOperation {
-    type Output = NodeOperand<Unordered>;
+    type Output = NodesOperand<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
@@ -55,8 +55,57 @@ impl<O: OrderState> Kernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesOpera
     }
 }
 
-impl<O: OrderState> Nodes for EdgeOperand<O> {
-    type ReturnOperand = NodeOperand<Unordered>;
+impl Kernel<Indexed<EdgeIndex, Unit>, Single> for NodesOperation {
+    type Output = NodesOperand<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, EdgeIndex, Unit, Single>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let Some((edge, membership)) = value else {
+            return Ok(Box::new(std::iter::empty()));
+        };
+        membership?;
+
+        let (source, target) = graphrecord
+            .edge_endpoints(edge)
+            .map_err(|error| Failure::new_at(Self::LABEL, error, &edge))?;
+        let nodes: GrHashSet<_> = std::iter::once(source)
+            .chain(std::iter::once(target))
+            .collect();
+
+        Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
+    }
+}
+
+impl Kernel<Indexed<EdgeIndex, Unit>, Definite> for NodesOperation {
+    type Output = NodesOperand<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, EdgeIndex, Unit, Definite>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let (edge, membership) = value;
+        membership?;
+
+        let (source, target) = graphrecord
+            .edge_endpoints(edge)
+            .map_err(|error| Failure::new_at(Self::LABEL, error, &edge))?;
+        let nodes: GrHashSet<_> = std::iter::once(source)
+            .chain(std::iter::once(target))
+            .collect();
+
+        Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
+    }
+}
+
+impl<O> Nodes for O
+where
+    O: Apply<NodesOperation>,
+{
+    type ReturnOperand = <O as Apply<NodesOperation>>::Output;
 
     fn nodes(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), NodesOperation))

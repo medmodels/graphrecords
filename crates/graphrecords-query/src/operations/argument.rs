@@ -1,15 +1,18 @@
 use crate::{
-    Diagnostic, Explain, Failure, IndexDomain, QueryResult, ToOwnedValue,
+    Diagnostic, Explain, Failure, IndexDomain, Position, QueryResult, ToOwnedValue,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operations::{Preserving, Retention},
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, Stats},
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
+use graphrecords_core::{
+    GraphRecord,
+    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue},
+};
 use std::{
     error::Error,
     fmt::{self, Display, Formatter, Write},
-    hash::Hasher,
+    hash::{Hash, Hasher},
     marker::PhantomData,
 };
 
@@ -28,7 +31,7 @@ impl Display for Absent {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Uncovered => formatter.write_str("argument did not cover this index"),
-            Self::Empty => formatter.write_str("argument operand was empty"),
+            Self::Empty => formatter.write_str("argument provided no value for this lookup"),
         }
     }
 }
@@ -160,18 +163,39 @@ impl Explain for bool {
     }
 }
 
+impl Explain for GraphRecordAttribute {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{self}")
+    }
+}
+
+impl Explain for EdgeIndex {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{self}")
+    }
+}
+
+impl Explain for Position {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{self}")
+    }
+}
+
 impl PlanIdentity for GraphRecordValue {
     fn identity_eq(&self, other: &Self) -> bool {
         self == other
     }
 
     fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        std::hash::Hash::hash(self, state);
+        Hash::hash(self, state);
     }
 }
 
 impl PlanInputs for GraphRecordValue {}
 impl PlanInputs for bool {}
+impl PlanInputs for GraphRecordAttribute {}
+impl PlanInputs for EdgeIndex {}
+impl PlanInputs for Position {}
 
 impl PlanIdentity for bool {
     fn identity_eq(&self, other: &Self) -> bool {
@@ -179,7 +203,37 @@ impl PlanIdentity for bool {
     }
 
     fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        std::hash::Hash::hash(self, state);
+        Hash::hash(self, state);
+    }
+}
+
+impl PlanIdentity for GraphRecordAttribute {
+    fn identity_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn identity_hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(self, state);
+    }
+}
+
+impl PlanIdentity for EdgeIndex {
+    fn identity_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn identity_hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(self, state);
+    }
+}
+
+impl PlanIdentity for Position {
+    fn identity_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn identity_hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(self, state);
     }
 }
 
@@ -207,6 +261,42 @@ impl Prepare for bool {
     }
 }
 
+impl Prepare for GraphRecordAttribute {
+    type Prepared<'a> = QueryResult<Self>;
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(Ok(self.clone()))
+    }
+}
+
+impl Prepare for EdgeIndex {
+    type Prepared<'a> = QueryResult<Self>;
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(Ok(*self))
+    }
+}
+
+impl Prepare for Position {
+    type Prepared<'a> = QueryResult<Self>;
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(Ok(*self))
+    }
+}
+
 impl Estimated for GraphRecordValue {
     fn estimate(&self, _stats: &Stats) -> Estimate {
         Estimate {
@@ -217,6 +307,27 @@ impl Estimated for GraphRecordValue {
 }
 
 impl Estimated for bool {
+    fn estimate(&self, _stats: &Stats) -> Estimate {
+        Estimate {
+            selectivity: Some(if *self { 1.0 } else { 0.0 }),
+            ..Estimate::singleton()
+        }
+    }
+}
+
+impl Estimated for GraphRecordAttribute {
+    fn estimate(&self, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl Estimated for EdgeIndex {
+    fn estimate(&self, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl Estimated for Position {
     fn estimate(&self, _stats: &Stats) -> Estimate {
         Estimate::singleton()
     }
@@ -238,6 +349,51 @@ impl<A: Alignment> ArgumentSource<A> for GraphRecordValue {
 }
 
 impl<A: Alignment> ArgumentSource<A> for bool {
+    type Retention = Preserving;
+    type Value<'a> = Self;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
+    }
+}
+
+impl<A: Alignment> ArgumentSource<A> for GraphRecordAttribute {
+    type Retention = Preserving;
+    type Value<'a> = Self;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
+    }
+}
+
+impl<A: Alignment> ArgumentSource<A> for EdgeIndex {
+    type Retention = Preserving;
+    type Value<'a> = Self;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
+    }
+}
+
+impl<A: Alignment> ArgumentSource<A> for Position {
     type Retention = Preserving;
     type Value<'a> = Self;
 

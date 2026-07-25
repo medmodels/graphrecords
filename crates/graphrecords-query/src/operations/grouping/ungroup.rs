@@ -1,287 +1,239 @@
 use crate::{
-    Bare, Definite, EvaluateContext, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple,
-    Operand, OrderState, QueryResult, Single, Unordered, ValueType,
+    Bare, Definite, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
+    QueryResult, Single, Unordered, ValueType,
     execution::EvaluationCache,
-    operands::{GroupOperand, GroupedIterator, OperandHandle},
-    operations::GroupKey,
-    optimizer::{
-        Estimate, Estimated, MatchInputs, OptimizePlan, OptimizerHints, PlanNode, Session, Stats,
-        Transformed,
-    },
+    operands::{GroupOperand, OperandHandle},
+    operations::{Apply, KeyOperand, Operation, OperationContext, Prepare},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Ungroup,
 };
 use graphrecords_core::GraphRecord;
 
-pub trait Ungroupable: Operand {
-    type Ungrouped<K: GroupKey>: Operand;
-
-    #[must_use]
-    fn flatten_estimate(estimate: Estimate) -> Estimate {
-        let per_group = estimate.per_group.as_deref();
-        let elements = match (
-            estimate.elements,
-            per_group.and_then(|inner| inner.elements),
-        ) {
-            (Some(groups), Some(inner)) => Some(groups * inner),
-            _ => None,
-        };
-        let distinct = match (
-            estimate.elements,
-            per_group.and_then(|inner| inner.distinct),
-        ) {
-            (Some(groups), Some(inner)) => Some(groups * inner),
-            _ => None,
-        };
-
-        Estimate {
-            elements,
-            distinct: match (distinct, elements) {
-                (Some(distinct), Some(elements)) => Some(distinct.min(elements)),
-                (distinct, _) => distinct,
-            },
-            selectivity: per_group.and_then(|inner| inner.selectivity),
-            per_group: None,
-        }
-    }
-
-    fn flatten<'a, K: GroupKey>(
-        grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
-    ) -> QueryResult<<Self::Ungrouped<K> as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a;
-}
-
-impl<I: IndexDomain, V: ValueType, O: OrderState> Ungroupable
-    for OperandHandle<Indexed<I, V>, Multiple<O>>
-{
-    type Ungrouped<K: GroupKey> = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
-
-    fn flatten<'a, K: GroupKey>(
-        grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
-    ) -> QueryResult<<Self::Ungrouped<K> as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        let partitions: Vec<_> = grouped
-            .map(|(_key, partition)| partition)
-            .collect::<QueryResult<_>>()?;
-
-        Ok(Box::new(partitions.into_iter().flatten()))
-    }
-}
-
-impl<V: ValueType, O: OrderState> Ungroupable for OperandHandle<Bare<V>, Multiple<O>> {
-    type Ungrouped<K: GroupKey> = OperandHandle<Bare<V>, Multiple<Unordered>>;
-
-    fn flatten<'a, K: GroupKey>(
-        grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
-    ) -> QueryResult<<Self::Ungrouped<K> as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        let partitions: Vec<_> = grouped
-            .map(|(_key, partition)| partition)
-            .collect::<QueryResult<_>>()?;
-
-        Ok(Box::new(partitions.into_iter().flatten()))
-    }
-}
-
-impl<I: IndexDomain, V: ValueType> Ungroupable for OperandHandle<Indexed<I, V>, Single> {
-    type Ungrouped<K: GroupKey> = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
-
-    fn flatten_estimate(estimate: Estimate) -> Estimate {
-        Estimate {
-            elements: estimate.elements,
-            distinct: estimate.elements,
-            selectivity: estimate
-                .per_group
-                .as_deref()
-                .and_then(|inner| inner.selectivity),
-            per_group: None,
-        }
-    }
-
-    fn flatten<'a, K: GroupKey>(
-        grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
-    ) -> QueryResult<<Self::Ungrouped<K> as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        let partitions: Vec<_> = grouped
-            .map(|(_key, partition)| partition)
-            .collect::<QueryResult<_>>()?;
-
-        Ok(Box::new(partitions.into_iter().flatten()))
-    }
-}
-
-impl<V: ValueType> Ungroupable for OperandHandle<Bare<V>, Single> {
-    type Ungrouped<K: GroupKey> = OperandHandle<Bare<V>, Multiple<Unordered>>;
-
-    fn flatten_estimate(estimate: Estimate) -> Estimate {
-        Estimate {
-            elements: estimate.elements,
-            distinct: estimate.elements,
-            selectivity: estimate
-                .per_group
-                .as_deref()
-                .and_then(|inner| inner.selectivity),
-            per_group: None,
-        }
-    }
-
-    fn flatten<'a, K: GroupKey>(
-        grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
-    ) -> QueryResult<<Self::Ungrouped<K> as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        let partitions: Vec<_> = grouped
-            .map(|(_key, partition)| partition)
-            .collect::<QueryResult<_>>()?;
-
-        Ok(Box::new(partitions.into_iter().flatten()))
-    }
-}
-
-impl<I: IndexDomain, V: ValueType> Ungroupable for OperandHandle<Indexed<I, V>, Definite> {
-    type Ungrouped<K: GroupKey> = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
-
-    fn flatten_estimate(estimate: Estimate) -> Estimate {
-        Estimate {
-            elements: estimate.elements,
-            distinct: estimate.elements,
-            selectivity: estimate
-                .per_group
-                .as_deref()
-                .and_then(|inner| inner.selectivity),
-            per_group: None,
-        }
-    }
-
-    fn flatten<'a, K: GroupKey>(
-        grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
-    ) -> QueryResult<<Self::Ungrouped<K> as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        let partitions: Vec<_> = grouped
-            .map(|(_key, partition)| partition)
-            .collect::<QueryResult<_>>()?;
-
-        Ok(Box::new(partitions.into_iter()))
-    }
-}
-
-impl<V: ValueType> Ungroupable for OperandHandle<Bare<V>, Definite> {
-    type Ungrouped<K: GroupKey> = OperandHandle<Bare<V>, Multiple<Unordered>>;
-
-    fn flatten_estimate(estimate: Estimate) -> Estimate {
-        Estimate {
-            elements: estimate.elements,
-            distinct: estimate.elements,
-            selectivity: estimate
-                .per_group
-                .as_deref()
-                .and_then(|inner| inner.selectivity),
-            per_group: None,
-        }
-    }
-
-    fn flatten<'a, K: GroupKey>(
-        grouped: GroupedIterator<'a, K::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
-    ) -> QueryResult<<Self::Ungrouped<K> as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        let partitions: Vec<_> = grouped
-            .map(|(_key, partition)| partition)
-            .collect::<QueryResult<_>>()?;
-
-        Ok(Box::new(partitions.into_iter()))
-    }
-}
-
-impl<Inner: Ungroupable, KInner: GroupKey> Ungroupable for GroupOperand<Inner, KInner> {
-    type Ungrouped<KOuter: GroupKey> = GroupOperand<Inner::Ungrouped<KInner>, KOuter>;
-
-    fn flatten_estimate(estimate: Estimate) -> Estimate {
-        Estimate {
-            per_group: estimate
-                .per_group
-                .map(|inner| Box::new(Inner::flatten_estimate(*inner))),
-            ..estimate
-        }
-    }
-
-    fn flatten<'a, KOuter: GroupKey>(
-        grouped: GroupedIterator<'a, KOuter::Key<'a>, QueryResult<Self::ReturnValue<'a>>>,
-    ) -> QueryResult<<Self::Ungrouped<KOuter> as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        Ok(Box::new(grouped.map(|(key, inner)| {
-            (key, inner.and_then(Inner::flatten::<KInner>))
-        })))
-    }
-}
-
-#[derive(PlanNode, MatchInputs, OptimizerHints, Explain)]
+#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[explain(label = "Ungroup")]
-pub struct UngroupContext<O: Ungroupable, K: GroupKey> {
-    #[input]
-    group: GroupOperand<O, K>,
-}
+pub struct UngroupOperation;
 
-impl<O: Ungroupable, K: GroupKey> UngroupContext<O, K> {
-    #[must_use]
-    pub const fn new(group: GroupOperand<O, K>) -> Self {
-        Self { group }
+fn multiple_estimate(input: &Estimate) -> Estimate {
+    let per_group = input.per_group.as_deref();
+    let elements = match (input.elements, per_group.and_then(|inner| inner.elements)) {
+        (Some(groups), Some(elements_per_group)) => Some(groups * elements_per_group),
+        _ => None,
+    };
+    let distinct = match (input.elements, per_group.and_then(|inner| inner.distinct)) {
+        (Some(groups), Some(distinct_per_group)) => Some(groups * distinct_per_group),
+        _ => None,
+    };
+
+    Estimate {
+        elements,
+        distinct: match (distinct, elements) {
+            (Some(distinct), Some(elements)) => Some(distinct.min(elements)),
+            (distinct, _) => distinct,
+        },
+        selectivity: per_group.and_then(|inner| inner.selectivity),
+        per_group: None,
     }
 }
 
-impl<O: Ungroupable, K: GroupKey> Estimated for UngroupContext<O, K> {
-    fn estimate(&self, stats: &Stats) -> Estimate {
-        O::flatten_estimate(self.group.context().estimate(stats))
+fn single_estimate(input: &Estimate) -> Estimate {
+    Estimate {
+        elements: input.elements,
+        distinct: input.elements,
+        selectivity: input
+            .per_group
+            .as_deref()
+            .and_then(|inner| inner.selectivity),
+        per_group: None,
     }
 }
 
-impl<O: Ungroupable, K: GroupKey> OptimizePlan for UngroupContext<O, K> {
-    type Output = O::Ungrouped<K>;
+impl Prepare for UngroupOperation {
+    type Prepared<'a> = ();
 
-    fn optimize(&self, original: &Self::Output, session: &Session) -> Transformed<Self::Output> {
-        let group = session.optimize(&self.group);
-
-        if !group.changed {
-            return Transformed::unchanged(original.clone());
-        }
-
-        Transformed {
-            value: <O::Ungrouped<K> as Operand>::new(Self { group: group.value }),
-            changed: true,
-        }
-    }
-}
-
-impl<O: Ungroupable, K: GroupKey> EvaluateContext for UngroupContext<O, K> {
-    type Operand = O::Ungrouped<K>;
-
-    fn evaluate<'a>(
+    fn prepare<'a>(
         &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<<O::Ungrouped<K> as EvaluateOperand>::ReturnValue<'a>> {
-        let grouped = self.group.evaluate(graphrecord, cache)?;
-
-        O::flatten::<K>(grouped)
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(())
     }
 }
 
-impl<O: Ungroupable, K: GroupKey> Ungroup for GroupOperand<O, K> {
-    type ReturnOperand = O::Ungrouped<K>;
+impl<I, V, O, K> Apply<UngroupOperation>
+    for GroupOperand<OperandHandle<Indexed<I, V>, Multiple<O>>, K>
+where
+    I: IndexDomain,
+    V: ValueType,
+    O: OrderState,
+    K: KeyOperand,
+{
+    type Output = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+
+    fn apply<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: Self::ReturnValue<'a>,
+        _prepared: <UngroupOperation as Prepare>::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
+    where
+        Self: 'a,
+    {
+        let partitions: Vec<_> = values
+            .map(|(_key, partition)| partition)
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(partitions.into_iter().flatten()))
+    }
+
+    fn estimate(_operation: &UngroupOperation, input: Estimate, _stats: &Stats) -> Estimate {
+        multiple_estimate(&input)
+    }
+}
+
+impl<V, O, K> Apply<UngroupOperation> for GroupOperand<OperandHandle<Bare<V>, Multiple<O>>, K>
+where
+    V: ValueType,
+    O: OrderState,
+    K: KeyOperand,
+{
+    type Output = OperandHandle<Bare<V>, Multiple<Unordered>>;
+
+    fn apply<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: Self::ReturnValue<'a>,
+        _prepared: <UngroupOperation as Prepare>::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
+    where
+        Self: 'a,
+    {
+        let partitions: Vec<_> = values
+            .map(|(_key, partition)| partition)
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(partitions.into_iter().flatten()))
+    }
+
+    fn estimate(_operation: &UngroupOperation, input: Estimate, _stats: &Stats) -> Estimate {
+        multiple_estimate(&input)
+    }
+}
+
+impl<I, V, K> Apply<UngroupOperation> for GroupOperand<OperandHandle<Indexed<I, V>, Single>, K>
+where
+    I: IndexDomain,
+    V: ValueType,
+    K: KeyOperand,
+{
+    type Output = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+
+    fn apply<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: Self::ReturnValue<'a>,
+        _prepared: <UngroupOperation as Prepare>::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
+    where
+        Self: 'a,
+    {
+        let values: Vec<_> = values
+            .map(|(_key, value)| value)
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(values.into_iter().flatten()))
+    }
+
+    fn estimate(_operation: &UngroupOperation, input: Estimate, _stats: &Stats) -> Estimate {
+        single_estimate(&input)
+    }
+}
+
+impl<V, K> Apply<UngroupOperation> for GroupOperand<OperandHandle<Bare<V>, Single>, K>
+where
+    V: ValueType,
+    K: KeyOperand,
+{
+    type Output = OperandHandle<Bare<V>, Multiple<Unordered>>;
+
+    fn apply<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: Self::ReturnValue<'a>,
+        _prepared: <UngroupOperation as Prepare>::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
+    where
+        Self: 'a,
+    {
+        let values: Vec<_> = values
+            .map(|(_key, value)| value)
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(values.into_iter().flatten()))
+    }
+
+    fn estimate(_operation: &UngroupOperation, input: Estimate, _stats: &Stats) -> Estimate {
+        single_estimate(&input)
+    }
+}
+
+impl<I, V, K> Apply<UngroupOperation> for GroupOperand<OperandHandle<Indexed<I, V>, Definite>, K>
+where
+    I: IndexDomain,
+    V: ValueType,
+    K: KeyOperand,
+{
+    type Output = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+
+    fn apply<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: Self::ReturnValue<'a>,
+        _prepared: <UngroupOperation as Prepare>::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
+    where
+        Self: 'a,
+    {
+        let values: Vec<_> = values
+            .map(|(_key, value)| value)
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(values.into_iter()))
+    }
+
+    fn estimate(_operation: &UngroupOperation, input: Estimate, _stats: &Stats) -> Estimate {
+        single_estimate(&input)
+    }
+}
+
+impl<V, K> Apply<UngroupOperation> for GroupOperand<OperandHandle<Bare<V>, Definite>, K>
+where
+    V: ValueType,
+    K: KeyOperand,
+{
+    type Output = OperandHandle<Bare<V>, Multiple<Unordered>>;
+
+    fn apply<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: Self::ReturnValue<'a>,
+        _prepared: <UngroupOperation as Prepare>::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
+    where
+        Self: 'a,
+    {
+        let values: Vec<_> = values
+            .map(|(_key, value)| value)
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(values.into_iter()))
+    }
+
+    fn estimate(_operation: &UngroupOperation, input: Estimate, _stats: &Stats) -> Estimate {
+        single_estimate(&input)
+    }
+}
+
+impl<O> Ungroup for O
+where
+    O: Apply<UngroupOperation>,
+{
+    type ReturnOperand = <O as Apply<UngroupOperation>>::Output;
 
     fn ungroup(&self) -> Self::ReturnOperand {
-        <O::Ungrouped<K> as Operand>::new(UngroupContext::new(self.clone()))
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), UngroupOperation))
     }
 }

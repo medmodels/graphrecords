@@ -1,19 +1,19 @@
 use crate::{
     Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, Ordered, QueryResult,
-    Single, ValueType,
+    ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::Last,
+    traits::Reverse,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
-#[explain(label = "Last")]
-pub struct LastOperation;
+#[explain(label = "Reverse")]
+pub struct ReverseOperation;
 
-impl Prepare for LastOperation {
+impl Prepare for ReverseOperation {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -25,52 +25,49 @@ impl Prepare for LastOperation {
     }
 }
 
-impl<I, V> Kernel<Indexed<I, V>, Multiple<Ordered>> for LastOperation
-where
-    I: IndexDomain,
-    V: ValueType,
-{
-    type Output = OperandHandle<Indexed<I, V>, Single>;
+impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Multiple<Ordered>> for ReverseOperation {
+    type Output = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, V, Multiple<Ordered>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(values.last())
+        let values: Vec<_> = values.collect();
+
+        Ok(Box::new(values.into_iter().rev()))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 
-impl<V> Kernel<Bare<V>, Multiple<Ordered>> for LastOperation
-where
-    V: ValueType,
-{
-    type Output = OperandHandle<Bare<V>, Single>;
+impl<V: ValueType> Kernel<Bare<V>, Multiple<Ordered>> for ReverseOperation {
+    type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: BareStream<'a, V, Multiple<Ordered>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(values.last())
+        let values: Vec<_> = values.collect();
+
+        Ok(Box::new(values.into_iter().rev()))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 
-impl<O> Last for O
+impl<O> Reverse for O
 where
-    O: Apply<LastOperation>,
+    O: Apply<ReverseOperation>,
 {
-    type ReturnOperand = <O as Apply<LastOperation>>::Output;
+    type ReturnOperand = <O as Apply<ReverseOperation>>::Output;
 
-    fn last(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), LastOperation))
+    fn reverse(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), ReverseOperation))
     }
 }

@@ -10,6 +10,12 @@ pub trait Last {
     fn last(&self) -> Self::ReturnOperand;
 }
 
+pub trait Reverse {
+    type ReturnOperand;
+
+    fn reverse(&self) -> Self::ReturnOperand;
+}
+
 pub trait Sort {
     type ReturnOperand;
 
@@ -20,6 +26,12 @@ pub trait SortBy<A> {
     type ReturnOperand;
 
     fn sort_by(&self, key: A) -> Self::ReturnOperand;
+}
+
+pub trait Take {
+    type ReturnOperand;
+
+    fn take(&self, elements: usize) -> Self::ReturnOperand;
 }
 
 pub trait Unorder {

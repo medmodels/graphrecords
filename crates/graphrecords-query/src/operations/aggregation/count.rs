@@ -2,7 +2,7 @@ use crate::{
     Bare, Definite, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
     QueryResult, Single, ValueType,
     execution::EvaluationCache,
-    operands::DefiniteValueOperand,
+    operands::DefiniteBareValueOperand,
     operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Count,
@@ -28,7 +28,7 @@ impl Prepare for CountOperation {
 impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple<O>>
     for CountOperation
 {
-    type Output = DefiniteValueOperand;
+    type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -46,7 +46,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple
 }
 
 impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for CountOperation {
-    type Output = DefiniteValueOperand;
+    type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -64,7 +64,7 @@ impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for CountOperatio
 }
 
 impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Single> for CountOperation {
-    type Output = DefiniteValueOperand;
+    type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -85,7 +85,7 @@ impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Single> for CountOperat
 }
 
 impl<V: ValueType> Kernel<Bare<V>, Single> for CountOperation {
-    type Output = DefiniteValueOperand;
+    type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -105,8 +105,24 @@ impl<V: ValueType> Kernel<Bare<V>, Single> for CountOperation {
     }
 }
 
+impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Definite> for CountOperation {
+    type Output = DefiniteBareValueOperand;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, I, V, Definite>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(value.1.map(|_| GraphRecordValue::Int(1)))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
 impl<V: ValueType> Kernel<Bare<V>, Definite> for CountOperation {
-    type Output = DefiniteValueOperand;
+    type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -121,11 +137,11 @@ impl<V: ValueType> Kernel<Bare<V>, Definite> for CountOperation {
     }
 }
 
-impl<S> Count for S
+impl<O> Count for O
 where
-    S: Apply<CountOperation>,
+    O: Apply<CountOperation>,
 {
-    type ReturnOperand = <S as Apply<CountOperation>>::Output;
+    type ReturnOperand = <O as Apply<CountOperation>>::Output;
 
     fn count(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), CountOperation))

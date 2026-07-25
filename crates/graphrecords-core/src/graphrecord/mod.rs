@@ -429,6 +429,10 @@ impl GraphRecord {
         self.graph.node_indices()
     }
 
+    pub fn resolve_node_index(&self, node_index: &NodeIndex) -> GraphRecordResult<&NodeIndex> {
+        self.graph.resolve_node_index(node_index)
+    }
+
     pub fn node_attributes(&self, node_index: &NodeIndex) -> GraphRecordResult<&AttributeMap> {
         self.graph.node_attributes(node_index)
     }
@@ -456,6 +460,10 @@ impl GraphRecord {
 
     pub fn edge_indices(&self) -> impl Iterator<Item = &EdgeIndex> {
         self.graph.edge_indices()
+    }
+
+    pub fn resolve_edge_index(&self, edge_index: &EdgeIndex) -> GraphRecordResult<&EdgeIndex> {
+        self.graph.resolve_edge_index(edge_index)
     }
 
     pub fn edge_attributes(&self, edge_index: &EdgeIndex) -> GraphRecordResult<&AttributeMap> {

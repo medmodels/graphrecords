@@ -28,11 +28,16 @@ use crate::{
         PlanInputs, PlanNode, Session, Stats, Transformed,
     },
 };
-pub use aggregation::{CountOperation, MaxOperation};
+pub use aggregation::{
+    CountOperation, InvalidStandardDeviationValue, MaxOperation, MeanOperation, StdOperation,
+    SumOperation,
+};
 pub use argument::{
     Absent, Alignment, ArgumentAbsent, ArgumentSource, Keyed, Lookup, Prepare, Unaligned,
 };
-pub use arithmetic::ModuloOperation;
+pub use arithmetic::{
+    DivideOperation, DivisionByZero, ModuloByZero, ModuloOperation, SubtractOperation,
+};
 pub use cache::CacheContext;
 pub use conversion::EnumerateOperation;
 pub use errors::{
@@ -43,16 +48,16 @@ pub use errors::{
 use graphrecords_core::GraphRecord;
 pub use graphrecords_macros::Operation;
 pub use grouping::{
-    BroadcastOperation, GroupByOperation, GroupKey, KeyOperand, MissingGroupAggregate,
-    UngroupContext, Ungroupable,
+    BroadcastOperation, GroupByOperation, GroupKey, HavingOperation, KeyOperand, KeysOperation,
+    MissingGroupAggregate, UngroupKeyedOperation, UngroupOperation,
 };
-pub use indexing::{IndexOperation, SelectOperation};
+pub use indexing::{IndexOperation, ResolveOperation, SelectOperation};
 pub use kernel::{BareStream, ElementKernel, ElementPipeline, Kernel, KeyedStream, Pipeline};
 pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
 pub use on_missing::{MissingPolicy, WithMissing};
 pub use ordering::{
-    EnsureSortable, FirstOperation, IncomparableIndices, LastOperation, SortByOperation,
-    SortOperation, UnorderOperation, incomparable_with_first,
+    EnsureSortable, FirstOperation, IncomparableIndices, LastOperation, ReverseOperation,
+    SortByOperation, SortOperation, TakeOperation, UnorderOperation, incomparable_with_first,
 };
 pub use retention::{Dropping, Preserving, Retention};
 use std::{
@@ -66,7 +71,7 @@ pub use structure::{
 };
 pub use traversal::{
     EdgeSource, EdgeTarget, EdgesOperation, NeighborsOperation, NodesOperation, Relation,
-    RelationOperation,
+    RelationOperation, SelectRelationOperation,
 };
 
 pub trait Operation: Prepare + OperationInputs + Explain {}

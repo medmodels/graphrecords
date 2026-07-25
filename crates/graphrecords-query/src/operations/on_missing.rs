@@ -1,17 +1,12 @@
 use crate::{
-    Explain, IndexDomain, OrderState, QueryResult,
+    Bare, Definite, Explain, IndexDomain, Indexed, Multiple, OrderState, QueryResult, Single,
+    ValueType,
     execution::EvaluationCache,
     explain::ExplainFormatter,
-    operands::{
-        AttributeOperand, AttributesOperand, BareAttributeOperand, BareBoolOperand,
-        BareFailureKindOperand, BareFailureOperand, BareValueOperand, BoolMaskOperand, BoolOperand,
-        FailureKindOperand, FailureKindsOperand, FailureOperand, FailuresOperand, IndexOperand,
-        NestedAttributesOperand, NestedBoolMaskOperand, ReferenceOperand, ValueOperand,
-        ValuesOperand,
-    },
+    operands::{GroupOperand, OperandHandle},
     operations::{
-        Absent, Alignment, ArgumentSource, Drop, Dropping, Keyed, Lookup, Prepare, Replace,
-        Retention,
+        Absent, Alignment, ArgumentSource, Drop, Dropping, KeyOperand, Keyed, Lookup, Prepare,
+        Replace, Retention,
     },
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, PlanNode, Stats},
     traits::MaybeAbsent,
@@ -99,29 +94,39 @@ where
     }
 }
 
-impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for ValuesOperand<I, O> {}
-impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for ValueOperand<I> {}
-impl<A: Alignment> MaybeAbsent<A> for BareValueOperand {}
-impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for BoolMaskOperand<I, O> {}
-impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for BoolOperand<I> {}
-impl<A: Alignment> MaybeAbsent<A> for BareBoolOperand {}
-impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for FailuresOperand<I, O> {}
-impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for FailureOperand<I> {}
-impl<A: Alignment> MaybeAbsent<A> for BareFailureOperand {}
-impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for FailureKindsOperand<I, O> {}
-impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for FailureKindOperand<I> {}
-impl<A: Alignment> MaybeAbsent<A> for BareFailureKindOperand {}
-impl<I: IndexDomain, T: 'static + Clone, O: OrderState> MaybeAbsent<Keyed<I>>
-    for NestedBoolMaskOperand<I, T, O>
+impl<I: IndexDomain, V: ValueType, O: OrderState> MaybeAbsent<Keyed<I>>
+    for OperandHandle<Indexed<I, V>, Multiple<O>>
 {
 }
-impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for AttributesOperand<I, O> {}
-impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for AttributeOperand<I> {}
-impl<A: Alignment> MaybeAbsent<A> for BareAttributeOperand {}
-impl<I: IndexDomain, O: OrderState> MaybeAbsent<Keyed<I>> for NestedAttributesOperand<I, O> {}
-impl<A: Alignment, I: IndexDomain> MaybeAbsent<A> for IndexOperand<I> {}
-impl<K: IndexDomain, E: IndexDomain, O: OrderState> MaybeAbsent<Keyed<K>>
-    for ReferenceOperand<K, E, O>
+impl<A: Alignment, I: IndexDomain, V: ValueType> MaybeAbsent<A>
+    for OperandHandle<Indexed<I, V>, Single>
+{
+}
+impl<A: Alignment, V: ValueType> MaybeAbsent<A> for OperandHandle<Bare<V>, Single> {}
+impl<I, V, K> MaybeAbsent<Keyed<K::Key>> for GroupOperand<OperandHandle<Indexed<I, V>, Single>, K>
+where
+    I: IndexDomain,
+    V: ValueType,
+    K: KeyOperand,
+{
+}
+impl<V, K> MaybeAbsent<Keyed<K::Key>> for GroupOperand<OperandHandle<Bare<V>, Single>, K>
+where
+    V: ValueType,
+    K: KeyOperand,
+{
+}
+impl<I, V, K> MaybeAbsent<Keyed<K::Key>> for GroupOperand<OperandHandle<Indexed<I, V>, Definite>, K>
+where
+    I: IndexDomain,
+    V: ValueType,
+    K: KeyOperand,
+{
+}
+impl<V, K> MaybeAbsent<Keyed<K::Key>> for GroupOperand<OperandHandle<Bare<V>, Definite>, K>
+where
+    V: ValueType,
+    K: KeyOperand,
 {
 }
 

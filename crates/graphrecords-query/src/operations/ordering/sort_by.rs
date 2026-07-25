@@ -47,6 +47,7 @@ where
     V: ValueType,
     A: ArgumentSource<Keyed<I>>,
     O: OrderState,
+    for<'a> I::Index<'a>: EnsureSortable,
     for<'a> A::Value<'a>: EnsureSortable,
     for<'a> <A::Value<'a> as ToOwnedValue>::Owned: Debug + Display + Send + Sync,
 {

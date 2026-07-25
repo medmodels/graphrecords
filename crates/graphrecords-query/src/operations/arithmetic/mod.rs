@@ -6,4 +6,6 @@ mod multiply;
 mod power;
 mod subtract;
 
-pub use modulo::ModuloOperation;
+pub use divide::{DivideOperation, DivisionByZero};
+pub use modulo::{ModuloByZero, ModuloOperation};
+pub use subtract::SubtractOperation;

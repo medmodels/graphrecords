@@ -36,19 +36,20 @@ where
     I: IndexDomain,
     V: ValueType,
     O: OrderState,
-    for<'a> K: KeyOperand<Subject = I> + ArgumentSource<Keyed<I>, Value<'a> = K::Key<'a>>,
+    for<'a> K: KeyOperand<Subject = I>
+        + ArgumentSource<Keyed<I>, Value<'a> = <K::Key as IndexDomain>::Index<'a>>,
 {
     type Output = GroupOperand<OperandHandle<Indexed<I, V>, Multiple<O>>, K>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, V, Multiple<O>>,
-        keys: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let label = Self::LABEL;
 
         let groups = try_partition_by(values, move |(index, _)| {
-            let step = K::resolve(&keys, index, label);
+            let step = K::resolve(&prepared, index, label);
 
             <<K as ArgumentSource<Keyed<I>>>::Retention as Retention>::collapse(step).transpose()
         })?;
@@ -95,10 +96,10 @@ where
     O: Apply<GroupByOperation<K>>,
     K: KeyOperand,
 {
-    type Output = <O as Apply<GroupByOperation<K>>>::Output;
+    type ReturnOperand = <O as Apply<GroupByOperation<K>>>::Output;
 
-    fn group_by(&self, key: K) -> Self::Output {
-        Self::Output::new(OperationContext::new(
+    fn group_by(&self, key: K) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(
             self.clone(),
             GroupByOperation { key },
         ))

@@ -16,28 +16,7 @@ pub use xor::XorOperation;
 
 type MaskElement<'a, I> = (<I as IndexDomain>::Index<'a>, QueryResult<bool>);
 
-fn combine_bare_masks<'a, M>(
-    prepared: M::Prepared<'a>,
-    label: &'static str,
-    operation: fn(bool, bool) -> bool,
-) -> Pipeline<'a, QueryResult<bool>, QueryResult<bool>, M::Retention>
-where
-    M: ArgumentSource<Unaligned, Value<'a> = bool>,
-    M::Prepared<'a>: 'a,
-{
-    Pipeline::element_wise(move |left| match left {
-        Err(failure) => <M::Retention as Retention>::keep(Err(failure)),
-        Ok(left) => {
-            let step = M::resolve(&prepared, &(), label);
-
-            <M::Retention as Retention>::map_step(step, |resolved| {
-                resolved.map(|right| operation(left, right))
-            })
-        }
-    })
-}
-
-fn combine_masks<'a, I, M>(
+fn combine_masks_indexed<'a, I, M>(
     prepared: M::Prepared<'a>,
     label: &'static str,
     operation: fn(bool, bool) -> bool,
@@ -54,6 +33,27 @@ where
 
             <M::Retention as Retention>::map_step(step, |resolved| {
                 (index, resolved.map(|right| operation(left, right)))
+            })
+        }
+    })
+}
+
+fn combine_masks_bare<'a, M>(
+    prepared: M::Prepared<'a>,
+    label: &'static str,
+    operation: fn(bool, bool) -> bool,
+) -> Pipeline<'a, QueryResult<bool>, QueryResult<bool>, M::Retention>
+where
+    M: ArgumentSource<Unaligned, Value<'a> = bool>,
+    M::Prepared<'a>: 'a,
+{
+    Pipeline::element_wise(move |left| match left {
+        Err(failure) => <M::Retention as Retention>::keep(Err(failure)),
+        Ok(left) => {
+            let step = M::resolve(&prepared, &(), label);
+
+            <M::Retention as Retention>::map_step(step, |resolved| {
+                resolved.map(|right| operation(left, right))
             })
         }
     })

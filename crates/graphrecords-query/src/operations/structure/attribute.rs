@@ -1,6 +1,6 @@
 use crate::{
-    Diagnostic, Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled, Operand, OwnedIndex,
-    QueryResult, Scalar, ToOwnedValue, Unit,
+    Diagnostic, EntityDomain, EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Operand, OwnedIndex, QueryResult, Scalar, ToOwnedValue, Unit,
     execution::EvaluationCache,
     operations::{
         Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
@@ -22,7 +22,7 @@ use std::{
     fmt::{self, Debug, Display, Formatter},
 };
 
-pub trait EntityAttributes: IndexDomain {
+pub trait EntityAttributes: EntityDomain {
     fn attributes<'a>(
         graphrecord: &'a GraphRecord,
         index: &Self::Index<'a>,
@@ -188,18 +188,18 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation
     }
 }
 
-impl<K: IndexDomain, E: EntityAttributes> ElementKernel<Indexed<K, IndexValue<E>>>
+impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
     for AttributeOperation
 {
-    type OutShape = Indexed<K, Scalar>;
+    type OutShape = Indexed<I, Scalar>;
     type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         attribute: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<E>>, Self>> {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
         Ok(Pipeline::default().map(
-            move |(key, reference): (K::Index<'a>, QueryResult<<E as IndexDomain>::Index<'a>>)| {
+            move |(key, reference): (I::Index<'a>, QueryResult<<E as IndexDomain>::Index<'a>>)| {
                 let value = reference.and_then(|entity| {
                     let attributes = E::attributes(graphrecord, &entity)
                         .map_err(|error| Failure::new_at(Self::LABEL, error, &key))?;

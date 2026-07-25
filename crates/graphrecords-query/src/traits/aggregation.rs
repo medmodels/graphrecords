@@ -19,13 +19,13 @@ pub trait Count {
 pub trait Sum {
     type ReturnOperand;
 
-    fn sum(&mut self) -> Self::ReturnOperand;
+    fn sum(&self) -> Self::ReturnOperand;
 }
 
 pub trait Mean {
     type ReturnOperand;
 
-    fn mean(&mut self) -> Self::ReturnOperand;
+    fn mean(&self) -> Self::ReturnOperand;
 }
 
 pub trait Median {
@@ -43,7 +43,7 @@ pub trait Mode {
 pub trait Std {
     type ReturnOperand;
 
-    fn std(&mut self) -> Self::ReturnOperand;
+    fn std(&self) -> Self::ReturnOperand;
 }
 
 pub trait Var {

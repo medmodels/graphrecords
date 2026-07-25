@@ -1,14 +1,21 @@
 use crate::{
-    EvaluateOperand, Explain, Failure, IncomparableValuesAt, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, OrderState, QueryResult, Scalar, ToOwnedValue,
+    AttributeName, Bare, EvaluateOperand, Explain, Failure, FailureKindValue, IncomparableValues,
+    IncomparableValuesAt, IndexDomain, IndexValue, Indexed, Labeled, Mask, Multiple, Operand,
+    OrderState, QueryResult, Scalar, Single, ToOwnedValue, ValueType,
     execution::EvaluationCache,
-    operands::ValueOperand,
-    operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operands::OperandHandle,
+    operations::{
+        Apply, BareStream, IncomparableIndices, Kernel, KeyedStream, Operation, OperationContext,
+        Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Max,
 };
 use graphrecords_core::GraphRecord;
-use std::cmp::Ordering;
+use std::{
+    cmp::Ordering,
+    fmt::{Debug, Display},
+};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[explain(label = "Max")]
@@ -26,37 +33,112 @@ impl Prepare for MaxOperation {
     }
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for MaxOperation {
-    type Output = ValueOperand<I>;
+fn maximum_indexed<'a, I, V, O>(
+    mut values: KeyedStream<'a, I, V, Multiple<O>>,
+) -> <OperandHandle<Indexed<I, V>, Single> as EvaluateOperand>::ReturnValue<'a>
+where
+    I: IndexDomain,
+    V: ValueType,
+    O: OrderState,
+    for<'b> I::Index<'b>: PartialOrd,
+    for<'b> V::Value<'b>: PartialOrd,
+    for<'b> <V::Value<'b> as ToOwnedValue>::Owned: Debug + Display + Send + Sync,
+{
+    let maximum = values.try_fold(
+        None,
+        |maximum: Option<(I::Index<'a>, V::Value<'a>)>, (index, value)| {
+            let value = value.map_err(|failure| (index.clone(), failure))?;
 
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        mut values: KeyedStream<'a, I, Scalar, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let best = values.try_fold(None, |best, (index, result)| {
-            let value = result?;
-
-            let Some((best_index, current)) = &best else {
+            let Some((maximum_index, maximum_value)) = maximum else {
                 return Ok(Some((index, value)));
             };
 
-            match value.partial_cmp(current) {
-                Some(Ordering::Greater) => Ok(Some((index, value))),
-                Some(_) => Ok(best),
-                None => Err(Failure::new(
-                    Self::LABEL,
-                    IncomparableValuesAt {
-                        first: value,
-                        second: current.clone(),
+            match value.partial_cmp(&maximum_value) {
+                Some(Ordering::Greater) => return Ok(Some((index, value))),
+                Some(Ordering::Less) => return Ok(Some((maximum_index, maximum_value))),
+                Some(Ordering::Equal) => {}
+                None => {
+                    let cause = IncomparableValuesAt {
+                        first: value.to_owned_value(),
+                        second: maximum_value.to_owned_value(),
                         first_element: index.to_owned_value(),
-                        second_element: best_index.to_owned_value(),
-                    },
-                )),
-            }
-        })?;
+                        second_element: maximum_index.to_owned_value(),
+                    };
+                    let failure = Failure::new_at(MaxOperation::LABEL, cause, &index);
 
-        Ok(best.map(|(index, value)| (index, Ok(value))))
+                    return Err((index, failure));
+                }
+            }
+
+            match index.partial_cmp(&maximum_index) {
+                Some(Ordering::Greater) => Ok(Some((index, value))),
+                Some(Ordering::Less | Ordering::Equal) => Ok(Some((maximum_index, maximum_value))),
+                None => {
+                    let cause = IncomparableIndices {
+                        value: value.to_owned_value(),
+                        first: index.to_owned_value(),
+                        second: maximum_index.to_owned_value(),
+                    };
+                    let failure = Failure::new_at(MaxOperation::LABEL, cause, &index);
+
+                    Err((index, failure))
+                }
+            }
+        },
+    );
+
+    match maximum {
+        Ok(maximum) => maximum.map(|(index, value)| (index, Ok(value))),
+        Err((index, failure)) => Some((index, Err(failure))),
+    }
+}
+
+fn maximum_bare<'a, V, O>(
+    mut values: BareStream<'a, V, Multiple<O>>,
+) -> <OperandHandle<Bare<V>, Single> as EvaluateOperand>::ReturnValue<'a>
+where
+    V: ValueType,
+    O: OrderState,
+    for<'b> V::Value<'b>: PartialOrd,
+    for<'b> <V::Value<'b> as ToOwnedValue>::Owned: Debug + Display + Send + Sync,
+{
+    let maximum = values.try_fold(None, |maximum: Option<V::Value<'a>>, value| {
+        let value = value?;
+
+        let Some(maximum) = maximum else {
+            return Ok(Some(value));
+        };
+
+        match value.partial_cmp(&maximum) {
+            Some(Ordering::Greater) => Ok(Some(value)),
+            Some(Ordering::Less | Ordering::Equal) => Ok(Some(maximum)),
+            None => Err(Failure::new(
+                MaxOperation::LABEL,
+                IncomparableValues {
+                    first: value.to_owned_value(),
+                    second: maximum.to_owned_value(),
+                },
+            )),
+        }
+    });
+
+    maximum.transpose()
+}
+
+impl<I, O> Kernel<Indexed<I, Scalar>, Multiple<O>> for MaxOperation
+where
+    I: IndexDomain,
+    O: OrderState,
+    for<'a> I::Index<'a>: PartialOrd,
+{
+    type Output = OperandHandle<Indexed<I, Scalar>, Single>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, I, Scalar, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(maximum_indexed::<I, Scalar, O>(values))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
@@ -64,11 +146,182 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
     }
 }
 
-impl<S> Max for S
+impl<I, O> Kernel<Indexed<I, Mask>, Multiple<O>> for MaxOperation
 where
-    S: Apply<MaxOperation>,
+    I: IndexDomain,
+    O: OrderState,
+    for<'a> I::Index<'a>: PartialOrd,
 {
-    type ReturnOperand = <S as Apply<MaxOperation>>::Output;
+    type Output = OperandHandle<Indexed<I, Mask>, Single>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, I, Mask, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(maximum_indexed::<I, Mask, O>(values))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<I, O> Kernel<Indexed<I, AttributeName>, Multiple<O>> for MaxOperation
+where
+    I: IndexDomain,
+    O: OrderState,
+    for<'a> I::Index<'a>: PartialOrd,
+{
+    type Output = OperandHandle<Indexed<I, AttributeName>, Single>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, I, AttributeName, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(maximum_indexed::<I, AttributeName, O>(values))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<I, O> Kernel<Indexed<I, FailureKindValue>, Multiple<O>> for MaxOperation
+where
+    I: IndexDomain,
+    O: OrderState,
+    for<'a> I::Index<'a>: PartialOrd,
+{
+    type Output = OperandHandle<Indexed<I, FailureKindValue>, Single>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, I, FailureKindValue, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(maximum_indexed::<I, FailureKindValue, O>(values))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<K, I, O> Kernel<Indexed<K, IndexValue<I>>, Multiple<O>> for MaxOperation
+where
+    K: IndexDomain,
+    I: IndexDomain,
+    O: OrderState,
+    for<'a> K::Index<'a>: PartialOrd,
+    I::Owned: PartialOrd,
+{
+    type Output = OperandHandle<Indexed<K, IndexValue<I>>, Single>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, K, IndexValue<I>, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(maximum_indexed::<K, IndexValue<I>, O>(values))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for MaxOperation {
+    type Output = OperandHandle<Bare<Scalar>, Single>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: BareStream<'a, Scalar, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(maximum_bare::<Scalar, O>(values))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<O: OrderState> Kernel<Bare<Mask>, Multiple<O>> for MaxOperation {
+    type Output = OperandHandle<Bare<Mask>, Single>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: BareStream<'a, Mask, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(maximum_bare::<Mask, O>(values))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<O: OrderState> Kernel<Bare<AttributeName>, Multiple<O>> for MaxOperation {
+    type Output = OperandHandle<Bare<AttributeName>, Single>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: BareStream<'a, AttributeName, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(maximum_bare::<AttributeName, O>(values))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<O: OrderState> Kernel<Bare<FailureKindValue>, Multiple<O>> for MaxOperation {
+    type Output = OperandHandle<Bare<FailureKindValue>, Single>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: BareStream<'a, FailureKindValue, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(maximum_bare::<FailureKindValue, O>(values))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<I, O> Kernel<Bare<IndexValue<I>>, Multiple<O>> for MaxOperation
+where
+    I: IndexDomain,
+    O: OrderState,
+    I::Owned: PartialOrd,
+{
+    type Output = OperandHandle<Bare<IndexValue<I>>, Single>;
+
+    fn execute<'a>(
+        _graphrecord: &'a GraphRecord,
+        values: BareStream<'a, IndexValue<I>, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        Ok(maximum_bare::<IndexValue<I>, O>(values))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<O> Max for O
+where
+    O: Apply<MaxOperation>,
+{
+    type ReturnOperand = <O as Apply<MaxOperation>>::Output;
 
     fn max(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), MaxOperation))

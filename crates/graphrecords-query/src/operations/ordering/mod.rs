@@ -1,19 +1,23 @@
 mod first;
 mod last;
+mod reverse;
 mod sort;
 mod sort_by;
+mod take;
 mod unorder;
 
 use crate::{Diagnostic, FailureKind, OwnedIndex, Position};
 pub use first::FirstOperation;
 use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue};
 pub use last::LastOperation;
+pub use reverse::ReverseOperation;
 pub use sort::SortOperation;
 pub use sort_by::SortByOperation;
 use std::{
     error::Error,
     fmt::{self, Debug, Display, Formatter},
 };
+pub use take::TakeOperation;
 pub use unorder::UnorderOperation;
 
 pub fn incomparable_with_first<'a, V: PartialOrd + 'a>(

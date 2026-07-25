@@ -52,8 +52,8 @@ impl Statistic for NodeGroupSize {
     type Key = Group;
     type Value = usize;
 
-    fn compute(graphrecord: &GraphRecord, group: &Self::Key) -> Self::Value {
-        graphrecord.nodes_in_group(group).map_or(0, Iterator::count)
+    fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
+        graphrecord.nodes_in_group(key).map_or(0, Iterator::count)
     }
 }
 
@@ -63,8 +63,8 @@ impl Statistic for EdgeGroupSize {
     type Key = Group;
     type Value = usize;
 
-    fn compute(graphrecord: &GraphRecord, group: &Self::Key) -> Self::Value {
-        graphrecord.edges_in_group(group).map_or(0, Iterator::count)
+    fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
+        graphrecord.edges_in_group(key).map_or(0, Iterator::count)
     }
 }
 
@@ -74,14 +74,14 @@ impl Statistic for NodeAttributeCardinality {
     type Key = GraphRecordAttribute;
     type Value = usize;
 
-    fn compute(graphrecord: &GraphRecord, attribute: &Self::Key) -> Self::Value {
+    fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
         graphrecord
             .node_indices()
             .filter_map(|node_index| {
                 graphrecord
                     .node_attributes(node_index)
                     .ok()?
-                    .get(attribute)
+                    .get(key)
                     .cloned()
             })
             .collect::<GrHashSet<_>>()
@@ -95,14 +95,14 @@ impl Statistic for EdgeAttributeCardinality {
     type Key = GraphRecordAttribute;
     type Value = usize;
 
-    fn compute(graphrecord: &GraphRecord, attribute: &Self::Key) -> Self::Value {
+    fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
         graphrecord
             .edge_indices()
             .filter_map(|edge_index| {
                 graphrecord
                     .edge_attributes(edge_index)
                     .ok()?
-                    .get(attribute)
+                    .get(key)
                     .cloned()
             })
             .collect::<GrHashSet<_>>()

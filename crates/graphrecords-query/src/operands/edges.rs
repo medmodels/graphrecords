@@ -1,6 +1,6 @@
-use super::OperandHandle;
+use super::{DefiniteElementOperand, ElementOperand, ElementsOperand};
 use crate::{
-    EvaluateContext, EvaluateOperand, Explain, Indexed, Multiple, QueryResult, Unit, Unordered,
+    EvaluateContext, EvaluateOperand, Explain, QueryResult, Unordered,
     execution::EvaluationCache,
     optimizer::{
         Count, CountKind, Estimate, Estimated, MatchInputs, OptimizePlan, OptimizerHints, PlanNode,
@@ -9,10 +9,12 @@ use crate::{
 };
 use graphrecords_core::{GraphRecord, graphrecord::EdgeIndex};
 
-pub type EdgeOperand<O> = OperandHandle<Indexed<EdgeIndex, Unit>, Multiple<O>>;
+pub type EdgesOperand<O> = ElementsOperand<EdgeIndex, O>;
+pub type EdgeOperand = ElementOperand<EdgeIndex>;
+pub type DefiniteEdgeOperand = DefiniteElementOperand<EdgeIndex>;
 
 #[derive(PlanNode, MatchInputs, OptimizePlan, OptimizerHints, Explain)]
-#[plan(operand = EdgeOperand<Unordered>, optimizer_hints(distinct))]
+#[plan(operand = EdgesOperand<Unordered>, optimizer_hints(distinct))]
 pub struct AllEdges;
 
 impl Estimated for AllEdges {
@@ -24,7 +26,7 @@ impl Estimated for AllEdges {
 }
 
 impl EvaluateContext for AllEdges {
-    type Operand = EdgeOperand<Unordered>;
+    type Operand = EdgesOperand<Unordered>;
 
     fn evaluate<'a>(
         &'a self,

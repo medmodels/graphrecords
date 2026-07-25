@@ -214,7 +214,7 @@ where
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        replacement: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
@@ -222,7 +222,7 @@ where
             move |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
                 Ok(value) => <Self::Retention as Retention>::keep((index, Ok(value))),
                 Err(original) => {
-                    let step = R::resolve(&replacement, &index, label);
+                    let step = R::resolve(&prepared, &index, label);
 
                     <Self::Retention as Retention>::map_step(step, |replacement| {
                         let result = match replacement {
@@ -248,7 +248,7 @@ where
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        replacement: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
@@ -256,7 +256,7 @@ where
             move |result: QueryResult<V::Value<'a>>| match result {
                 Ok(value) => <Self::Retention as Retention>::keep(Ok(value)),
                 Err(original) => {
-                    let step = R::resolve(&replacement, &(), label);
+                    let step = R::resolve(&prepared, &(), label);
 
                     <Self::Retention as Retention>::map_step(
                         step,
@@ -283,14 +283,14 @@ where
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        replacement: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::element_wise(
             move |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
                 Err(original) if original.is_kind::<D>() => {
-                    let step = R::resolve(&replacement, &index, label);
+                    let step = R::resolve(&prepared, &index, label);
 
                     <Self::Retention as Retention>::map_step(step, |replacement| {
                         let result = match replacement {
@@ -318,14 +318,14 @@ where
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        replacement: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::element_wise(
             move |result: QueryResult<V::Value<'a>>| match result {
                 Err(original) if original.is_kind::<D>() => {
-                    let step = R::resolve(&replacement, &(), label);
+                    let step = R::resolve(&prepared, &(), label);
 
                     <Self::Retention as Retention>::map_step(
                         step,
@@ -353,14 +353,14 @@ where
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        replacement: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::element_wise(
             move |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
                 Err(original) if G::contains(&original.kind()) => {
-                    let step = R::resolve(&replacement, &index, label);
+                    let step = R::resolve(&prepared, &index, label);
 
                     <Self::Retention as Retention>::map_step(step, |replacement| {
                         let result = match replacement {
@@ -388,14 +388,14 @@ where
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        replacement: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::element_wise(
             move |result: QueryResult<V::Value<'a>>| match result {
                 Err(original) if G::contains(&original.kind()) => {
-                    let step = R::resolve(&replacement, &(), label);
+                    let step = R::resolve(&prepared, &(), label);
 
                     <Self::Retention as Retention>::map_step(
                         step,
@@ -423,14 +423,14 @@ where
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        replacement: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::element_wise(
             move |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
                 Err(original) if original.has_cause::<C>() => {
-                    let step = R::resolve(&replacement, &index, label);
+                    let step = R::resolve(&prepared, &index, label);
 
                     <Self::Retention as Retention>::map_step(step, |replacement| {
                         let result = match replacement {
@@ -458,14 +458,14 @@ where
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
-        replacement: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::element_wise(
             move |result: QueryResult<V::Value<'a>>| match result {
                 Err(original) if original.has_cause::<C>() => {
-                    let step = R::resolve(&replacement, &(), label);
+                    let step = R::resolve(&prepared, &(), label);
 
                     <Self::Retention as Retention>::map_step(
                         step,

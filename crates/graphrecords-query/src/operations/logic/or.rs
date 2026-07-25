@@ -1,4 +1,4 @@
-use super::{combine_bare_masks, combine_masks};
+use super::{combine_masks_bare, combine_masks_indexed};
 use crate::{
     Arity, Bare, ElementShape, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, Or,
     QueryResult,
@@ -44,7 +44,7 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
-        Ok(combine_masks::<I, M>(
+        Ok(combine_masks_indexed::<I, M>(
             prepared,
             Self::LABEL,
             |left, right| left || right,
@@ -75,7 +75,7 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<Mask>, Self>> {
-        Ok(combine_bare_masks::<M>(
+        Ok(combine_masks_bare::<M>(
             prepared,
             Self::LABEL,
             |left, right| left || right,

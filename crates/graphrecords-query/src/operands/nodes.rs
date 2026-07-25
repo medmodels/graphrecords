@@ -1,6 +1,6 @@
-use super::OperandHandle;
+use super::{DefiniteElementOperand, ElementOperand, ElementsOperand};
 use crate::{
-    EvaluateContext, EvaluateOperand, Explain, Indexed, Multiple, QueryResult, Unit, Unordered,
+    EvaluateContext, EvaluateOperand, Explain, QueryResult, Unordered,
     execution::EvaluationCache,
     optimizer::{
         Count, CountKind, Estimate, Estimated, MatchInputs, OptimizePlan, OptimizerHints, PlanNode,
@@ -9,10 +9,12 @@ use crate::{
 };
 use graphrecords_core::{GraphRecord, graphrecord::NodeIndex};
 
-pub type NodeOperand<O> = OperandHandle<Indexed<NodeIndex, Unit>, Multiple<O>>;
+pub type NodesOperand<O> = ElementsOperand<NodeIndex, O>;
+pub type NodeOperand = ElementOperand<NodeIndex>;
+pub type DefiniteNodeOperand = DefiniteElementOperand<NodeIndex>;
 
 #[derive(PlanNode, MatchInputs, OptimizePlan, OptimizerHints, Explain)]
-#[plan(operand = NodeOperand<Unordered>, optimizer_hints(distinct))]
+#[plan(operand = NodesOperand<Unordered>, optimizer_hints(distinct))]
 pub struct AllNodes;
 
 impl Estimated for AllNodes {
@@ -24,7 +26,7 @@ impl Estimated for AllNodes {
 }
 
 impl EvaluateContext for AllNodes {
-    type Operand = NodeOperand<Unordered>;
+    type Operand = NodesOperand<Unordered>;
 
     fn evaluate<'a>(
         &'a self,

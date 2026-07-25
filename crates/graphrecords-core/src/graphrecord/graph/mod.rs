@@ -229,6 +229,18 @@ impl Graph {
         self.nodes.keys()
     }
 
+    pub fn resolve_node_index(
+        &self,
+        node_index: &NodeIndex,
+    ) -> Result<&NodeIndex, GraphRecordError> {
+        self.nodes
+            .get_key_value(node_index)
+            .map(|(stored_index, _node)| stored_index)
+            .ok_or_else(|| GraphRecordError::NodeNotFound {
+                node_index: node_index.clone(),
+            })
+    }
+
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn edge_attributes(
         &self,
@@ -310,6 +322,19 @@ impl Graph {
 
     pub fn edge_indices(&self) -> impl Iterator<Item = &EdgeIndex> {
         self.edges.keys()
+    }
+
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn resolve_edge_index(
+        &self,
+        edge_index: &EdgeIndex,
+    ) -> Result<&EdgeIndex, GraphRecordError> {
+        self.edges
+            .get_key_value(edge_index)
+            .map(|(stored_index, _edge)| stored_index)
+            .ok_or(GraphRecordError::EdgeNotFound {
+                edge_index: *edge_index,
+            })
     }
 
     pub fn edges_connecting<'a, SN, TN>(

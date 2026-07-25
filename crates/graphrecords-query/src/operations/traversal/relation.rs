@@ -1,14 +1,36 @@
 use crate::{
-    Explain, IndexDomain, IndexValue, Indexed, QueryResult,
+    Definite, EntityDomain, EntityReference, EvaluateOperand, Explain, IndexDomain, Indexed,
+    Multiple, OrderState, QueryResult, Single, Unit, Unordered,
     execution::EvaluationCache,
-    operations::{ElementKernel, ElementPipeline, Operation, Pipeline, Prepare, Preserving},
+    operands::{DefiniteElementOperand, ElementOperand, ElementsOperand},
+    operations::{
+        ElementKernel, ElementPipeline, Kernel, KeyedStream, Operation, Pipeline, Prepare,
+        Preserving,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
+use graphrecords_utils::aliases::GrHashSet;
+
+fn relation_estimate<R: Relation>(input: Estimate, stats: &Stats) -> Estimate {
+    let mut distinct = match (R::codomain_count(stats), input.distinct) {
+        (Some(codomain), Some(distinct)) => Some(codomain.min(distinct)),
+        (codomain, distinct) => codomain.or(distinct),
+    };
+    if let Some(elements) = input.elements {
+        distinct = distinct.map(|distinct| distinct.min(elements));
+    }
+
+    Estimate {
+        distinct,
+        selectivity: None,
+        ..input
+    }
+}
 
 pub trait Relation: Prepare + Clone + Explain + PlanIdentity + PlanInputs {
-    type From: IndexDomain;
-    type To: IndexDomain;
+    type From: EntityDomain;
+    type To: EntityDomain;
 
     fn resolve<'a>(
         prepared: &Self::Prepared<'a>,
@@ -51,42 +73,163 @@ impl<R: Relation> Prepare for RelationOperation<R> {
     }
 }
 
-impl<R: Relation, K: IndexDomain> ElementKernel<Indexed<K, IndexValue<R::From>>>
-    for RelationOperation<R>
-{
-    type OutShape = Indexed<K, IndexValue<R::To>>;
+#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[explain(label = "Select Relation")]
+#[plan(optimizer_hints(distinct))]
+pub struct SelectRelationOperation<R> {
+    #[argument]
+    relation: R,
+}
+
+impl<R: Relation> SelectRelationOperation<R> {
+    #[must_use]
+    pub const fn new(relation: R) -> Self {
+        Self { relation }
+    }
+}
+
+impl<R: Relation> Prepare for SelectRelationOperation<R> {
+    type Prepared<'a>
+        = R::Prepared<'a>
+    where
+        Self: 'a;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        self.relation.prepare(graphrecord, cache)
+    }
+}
+
+impl<R: Relation> ElementKernel<Indexed<R::From, Unit>> for RelationOperation<R> {
+    type OutShape = Indexed<R::From, EntityReference<R::To>>;
     type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<R::From>>, Self>> {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<R::From, Unit>, Self>> {
         Ok(Pipeline::default().map(
-            move |(key, reference): (
-                K::Index<'a>,
-                QueryResult<<R::From as IndexDomain>::Index<'a>>,
-            )| {
-                let resolved =
-                    reference.and_then(|entity| R::resolve(&prepared, graphrecord, entity));
+            move |(index, membership): (<R::From as IndexDomain>::Index<'a>, QueryResult<()>)| {
+                let reference =
+                    membership.and_then(|()| R::resolve(&prepared, graphrecord, index.clone()));
 
-                (key, resolved)
+                (index, reference)
             },
         ))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        let mut distinct = match (R::codomain_count(stats), input.distinct) {
-            (Some(codomain), Some(distinct)) => Some(codomain.min(distinct)),
-            (codomain, distinct) => codomain.or(distinct),
-        };
-        if let Some(elements) = input.elements {
-            distinct = distinct.map(|distinct| distinct.min(elements));
-        }
+        relation_estimate::<R>(input, stats)
+    }
+}
+
+impl<R: Relation, O: OrderState> Kernel<Indexed<R::From, Unit>, Multiple<O>>
+    for SelectRelationOperation<R>
+{
+    type Output = ElementsOperand<R::To, Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, R::From, Unit, Multiple<O>>,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let targets: GrHashSet<_> = values
+            .map(|(from, membership)| {
+                membership.and_then(|()| R::resolve(&prepared, graphrecord, from))
+            })
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(targets.into_iter().map(|target| (target, Ok(())))))
+    }
+
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        let relation = relation_estimate::<R>(input, stats);
 
         Estimate {
-            distinct,
+            elements: relation.distinct,
+            distinct: relation.distinct,
             selectivity: None,
-            ..input
+            per_group: None,
         }
+    }
+}
+
+impl<R: Relation> Kernel<Indexed<R::From, Unit>, Single> for SelectRelationOperation<R> {
+    type Output = ElementOperand<R::To>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, R::From, Unit, Single>,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let Some((from, membership)) = value else {
+            return Ok(None);
+        };
+        membership?;
+
+        let target = R::resolve(&prepared, graphrecord, from)?;
+
+        Ok(Some((target, Ok(()))))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            elements: input.elements,
+            distinct: input.elements,
+            selectivity: None,
+            per_group: None,
+        }
+    }
+}
+
+impl<R: Relation> Kernel<Indexed<R::From, Unit>, Definite> for SelectRelationOperation<R> {
+    type Output = DefiniteElementOperand<R::To>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, R::From, Unit, Definite>,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let (from, membership) = value;
+        membership?;
+
+        let target = R::resolve(&prepared, graphrecord, from)?;
+
+        Ok((target, Ok(())))
+    }
+
+    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<R: Relation, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<R::From>>>
+    for RelationOperation<R>
+{
+    type OutShape = Indexed<I, EntityReference<R::To>>;
+    type Retention = Preserving;
+
+    fn pipeline<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<R::From>>, Self>> {
+        Ok(Pipeline::default().map(
+            move |(address, reference): (
+                I::Index<'a>,
+                QueryResult<<R::From as IndexDomain>::Index<'a>>,
+            )| {
+                let resolved =
+                    reference.and_then(|entity| R::resolve(&prepared, graphrecord, entity));
+
+                (address, resolved)
+            },
+        ))
+    }
+
+    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
+        relation_estimate::<R>(input, stats)
     }
 }

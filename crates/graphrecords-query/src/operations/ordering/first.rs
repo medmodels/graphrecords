@@ -64,11 +64,11 @@ where
     }
 }
 
-impl<S> First for S
+impl<O> First for O
 where
-    S: Apply<FirstOperation>,
+    O: Apply<FirstOperation>,
 {
-    type ReturnOperand = <S as Apply<FirstOperation>>::Output;
+    type ReturnOperand = <O as Apply<FirstOperation>>::Output;
 
     fn first(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), FirstOperation))

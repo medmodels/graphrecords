@@ -1,6 +1,9 @@
 pub use crate::{
     Operand, QueryEdges, QueryNodes,
-    operands::{EdgeOperand, NodeOperand},
+    operands::{
+        DefiniteEdgeOperand, DefiniteNodeOperand, EdgeOperand, EdgesOperand, NodeOperand,
+        NodesOperand,
+    },
     optimizer::Optimizer,
     selection::Selection,
     traits::*,

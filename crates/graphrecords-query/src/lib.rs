@@ -21,15 +21,17 @@ pub use error::{
 pub use explain::{Explain, Explanation, Labeled};
 use graphrecords_core::{
     GraphRecord,
+    errors::GraphRecordResult,
     graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
 };
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 pub use operands::{
-    Arity, AttributeName, AttributeSet, Bare, Definite, EdgeOperand, ElementShape, EvaluateOperand,
-    FailureKindValue, FailureValue, IndexValue, Indexed, Mask, MaskMap, Multiple, NodeOperand,
-    Operand, OrderState, Ordered, Return, Scalar, Single, Unit, Unordered, ValueType,
+    Arity, AttributeName, AttributeSet, Bare, Definite, DefiniteEdgeOperand, DefiniteNodeOperand,
+    DefiniteReferenceOperand, EdgeOperand, EdgesOperand, ElementShape, EntityReference,
+    EvaluateOperand, FailureKindValue, FailureValue, IndexValue, Indexed, Mask, MaskMap, Multiple,
+    NodeOperand, NodesOperand, Operand, OrderState, Ordered, ReferenceOperand, ReferencesOperand,
+    Return, ReturnShape, ReturnValueType, Scalar, Single, Unit, Unordered, ValueType,
 };
-use operations::EnsureSortable;
 use std::{
     any::Any,
     fmt::{Debug, Display},
@@ -46,6 +48,8 @@ pub trait OwnedIndex: Any + Debug + Display + Send + Sync {}
 impl OwnedIndex for NodeIndex {}
 impl OwnedIndex for EdgeIndex {}
 impl OwnedIndex for Position {}
+impl OwnedIndex for GraphRecordValue {}
+impl OwnedIndex for bool {}
 impl OwnedIndex for FailureKind {}
 
 pub trait ToOwnedValue {
@@ -77,6 +81,7 @@ macro_rules! owned_value_leaf {
 owned_value_leaf!(());
 owned_value_leaf!(bool);
 owned_value_leaf!(Position);
+owned_value_leaf!(EdgeIndex);
 owned_value_leaf!(GraphRecordValue);
 owned_value_leaf!(GraphRecordAttribute);
 owned_value_leaf!(Failure);
@@ -92,9 +97,18 @@ impl<T: Clone + 'static> ToOwnedValue for GrHashMap<T, bool> {
 }
 
 pub trait IndexDomain: 'static + Clone {
-    type Index<'a>: Clone + Eq + Hash + EnsureSortable + ToOwnedValue<Owned: OwnedIndex>
+    type Owned: 'static + Clone + Eq + Hash + ToOwnedValue<Owned = Self::Owned> + OwnedIndex;
+
+    type Index<'a>: Clone + Eq + Hash + ToOwnedValue<Owned = Self::Owned>
     where
         Self: 'a;
+}
+
+pub trait EntityDomain: IndexDomain {
+    fn resolve_index<'a>(
+        graphrecord: &'a GraphRecord,
+        index: &Self::Owned,
+    ) -> GraphRecordResult<Self::Index<'a>>;
 }
 
 #[derive(Clone, Debug)]
@@ -102,18 +116,50 @@ pub struct Positional;
 
 impl IndexDomain for Positional {
     type Index<'a> = Position;
+    type Owned = Position;
 }
 
 impl IndexDomain for EdgeIndex {
     type Index<'a> = &'a Self;
+    type Owned = Self;
 }
 
 impl IndexDomain for NodeIndex {
     type Index<'a> = &'a Self;
+    type Owned = Self;
 }
 
 impl IndexDomain for FailureKind {
     type Index<'a> = Self;
+    type Owned = Self;
+}
+
+impl IndexDomain for GraphRecordValue {
+    type Index<'a> = Self;
+    type Owned = Self;
+}
+
+impl IndexDomain for bool {
+    type Index<'a> = Self;
+    type Owned = Self;
+}
+
+impl EntityDomain for NodeIndex {
+    fn resolve_index<'a>(
+        graphrecord: &'a GraphRecord,
+        index: &Self::Owned,
+    ) -> GraphRecordResult<Self::Index<'a>> {
+        graphrecord.resolve_node_index(index)
+    }
+}
+
+impl EntityDomain for EdgeIndex {
+    fn resolve_index<'a>(
+        graphrecord: &'a GraphRecord,
+        index: &Self::Owned,
+    ) -> GraphRecordResult<Self::Index<'a>> {
+        graphrecord.resolve_edge_index(index)
+    }
 }
 
 mod sealed {
@@ -123,19 +169,19 @@ mod sealed {
 pub trait QueryNodes {
     fn query_nodes<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&NodeOperand<Unordered>) -> R,
+        Q: FnOnce(&NodesOperand<Unordered>) -> R,
         R: ReturnOperand<'a>;
 
     fn query_nodes_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&NodeOperand<Unordered>) -> R,
+        Q: FnOnce(&NodesOperand<Unordered>) -> R,
         R: ReturnOperand<'a>;
 }
 
 impl QueryNodes for GraphRecord {
     fn query_nodes<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&NodeOperand<Unordered>) -> R,
+        Q: FnOnce(&NodesOperand<Unordered>) -> R,
         R: ReturnOperand<'a>,
     {
         Selection::new_node(self, query)
@@ -143,7 +189,7 @@ impl QueryNodes for GraphRecord {
 
     fn query_nodes_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&NodeOperand<Unordered>) -> R,
+        Q: FnOnce(&NodesOperand<Unordered>) -> R,
         R: ReturnOperand<'a>,
     {
         Selection::new_node_with(self, optimizer, query)
@@ -153,19 +199,19 @@ impl QueryNodes for GraphRecord {
 pub trait QueryEdges {
     fn query_edges<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&EdgeOperand<Unordered>) -> R,
+        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
         R: ReturnOperand<'a>;
 
     fn query_edges_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&EdgeOperand<Unordered>) -> R,
+        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
         R: ReturnOperand<'a>;
 }
 
 impl QueryEdges for GraphRecord {
     fn query_edges<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&EdgeOperand<Unordered>) -> R,
+        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
         R: ReturnOperand<'a>,
     {
         Selection::new_edge(self, query)
@@ -173,7 +219,7 @@ impl QueryEdges for GraphRecord {
 
     fn query_edges_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
     where
-        Q: FnOnce(&EdgeOperand<Unordered>) -> R,
+        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
         R: ReturnOperand<'a>,
     {
         Selection::new_edge_with(self, optimizer, query)

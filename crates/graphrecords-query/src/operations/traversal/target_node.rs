@@ -1,10 +1,11 @@
 use crate::{
-    Explain, Failure, IndexDomain, Labeled, Operand, OrderState, QueryResult, Unordered,
+    Explain, Failure, IndexDomain, Labeled, Operand, QueryResult,
     execution::EvaluationCache,
-    operands::{EdgeOperand, NodeOperand, ReferenceOperand},
-    operations::{OperationContext, Prepare, Relation, RelationOperation},
+    operations::{
+        Apply, OperationContext, Prepare, Relation, RelationOperation, SelectRelationOperation,
+    },
     optimizer::{Count, CountKind, PlanIdentity, PlanInputs, Stats},
-    traits::{Index, Select, TargetNode, ViaTargetNode},
+    traits::{TargetNode, ViaTargetNode},
 };
 use graphrecords_core::{
     GraphRecord,
@@ -48,19 +49,11 @@ impl Relation for EdgeTarget {
     }
 }
 
-impl<O: OrderState> ViaTargetNode for EdgeOperand<O> {
-    type ReturnOperand = ReferenceOperand<EdgeIndex, NodeIndex, O>;
-
-    fn via_target_node(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.index(),
-            RelationOperation::new(EdgeTarget),
-        ))
-    }
-}
-
-impl<K: IndexDomain, O: OrderState> ViaTargetNode for ReferenceOperand<K, EdgeIndex, O> {
-    type ReturnOperand = ReferenceOperand<K, NodeIndex, O>;
+impl<O> ViaTargetNode for O
+where
+    O: Apply<RelationOperation<EdgeTarget>>,
+{
+    type ReturnOperand = <O as Apply<RelationOperation<EdgeTarget>>>::Output;
 
     fn via_target_node(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(
@@ -70,10 +63,16 @@ impl<K: IndexDomain, O: OrderState> ViaTargetNode for ReferenceOperand<K, EdgeIn
     }
 }
 
-impl<O: OrderState> TargetNode for EdgeOperand<O> {
-    type ReturnOperand = NodeOperand<Unordered>;
+impl<O> TargetNode for O
+where
+    O: Apply<SelectRelationOperation<EdgeTarget>>,
+{
+    type ReturnOperand = <O as Apply<SelectRelationOperation<EdgeTarget>>>::Output;
 
     fn target_node(&self) -> Self::ReturnOperand {
-        self.via_target_node().select()
+        Self::ReturnOperand::new(OperationContext::new(
+            self.clone(),
+            SelectRelationOperation::new(EdgeTarget),
+        ))
     }
 }
