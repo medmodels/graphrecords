@@ -1,43 +1,20 @@
+use super::{ValueDivide, arithmetic_bare, arithmetic_indexed};
 use crate::{
-    Bare, Diagnostic, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult,
-    Scalar,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
     execution::EvaluationCache,
     operations::{
-        Apply, ArgumentSource, BarePipeline, ElementKernel, ElementPipeline, IndexedValuePipeline,
-        Keyed, Operation, OperationContext, Pipeline, Prepare, Retention, Unaligned,
+        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
+        Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Divide,
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
-use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
-    ops::Div,
-};
-
-#[derive(Debug)]
-pub struct DivisionByZero {
-    pub dividend: GraphRecordValue,
-}
-
-impl Display for DivisionByZero {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "cannot divide `{}` by zero", self.dividend)
-    }
-}
-
-impl Error for DivisionByZero {}
-
-impl Diagnostic for DivisionByZero {
-    fn name() -> &'static str {
-        "DivisionByZero"
-    }
-}
+use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Divide")]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct DivideOperation<A> {
     #[argument]
     argument: A,
@@ -58,102 +35,24 @@ impl<A: Prepare> Prepare for DivideOperation<A> {
     }
 }
 
-fn is_division_by_zero(dividend: &GraphRecordValue, divisor: &GraphRecordValue) -> bool {
-    match (dividend, divisor) {
-        (
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_) | GraphRecordValue::Duration(_),
-            GraphRecordValue::Int(0),
-        ) => true,
-        (
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_),
-            GraphRecordValue::Float(divisor),
-        ) => *divisor == 0.0,
-        _ => false,
-    }
-}
-
-fn divide_indexed<'a, I, A>(
-    prepared: A::Prepared<'a>,
-) -> IndexedValuePipeline<'a, I, Scalar, Scalar, A::Retention>
+impl<I, V, A> ElementKernel<Indexed<I, V>> for DivideOperation<A>
 where
     I: IndexDomain,
-    A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
-    A::Prepared<'a>: 'a,
-{
-    let label = DivideOperation::<A>::LABEL;
-
-    Pipeline::keyed(move |index, item| {
-        let value = match item {
-            Ok(value) => value,
-            Err(original) => {
-                return <A::Retention as Retention>::keep(Err(original));
-            }
-        };
-
-        let step = A::resolve(&prepared, &index, label);
-
-        <A::Retention as Retention>::map_step(step, |resolved| {
-            resolved.and_then(|argument| {
-                if is_division_by_zero(&value, &argument) {
-                    return Err(Failure::new_at::<I, _>(
-                        label,
-                        DivisionByZero { dividend: value },
-                        &index,
-                    ));
-                }
-
-                value
-                    .div(argument)
-                    .map_err(|error| Failure::new_at::<I, _>(label, error, &index))
-            })
-        })
-    })
-}
-
-fn divide_bare<'a, A>(prepared: A::Prepared<'a>) -> BarePipeline<'a, Scalar, Scalar, A::Retention>
-where
-    A: ArgumentSource<Unaligned, Value<'a> = GraphRecordValue>,
-    A::Prepared<'a>: 'a,
-{
-    let label = DivideOperation::<A>::LABEL;
-
-    Pipeline::new(move |item| {
-        let value = match item {
-            Ok(value) => value,
-            Err(original) => {
-                return <A::Retention as Retention>::keep(Err(original));
-            }
-        };
-
-        let step = A::resolve(&prepared, &(), label);
-
-        <A::Retention as Retention>::map_step(step, |resolved| {
-            resolved.and_then(|argument| {
-                if is_division_by_zero(&value, &argument) {
-                    return Err(Failure::new(label, DivisionByZero { dividend: value }));
-                }
-
-                value
-                    .div(argument)
-                    .map_err(|error| Failure::new(label, error))
-            })
-        })
-    })
-}
-
-impl<I, A> ElementKernel<Indexed<I, Scalar>> for DivideOperation<A>
-where
-    I: IndexDomain,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
+    for<'a> V: ValueDivide + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
 {
     type Emission = A::Retention;
-    type OutShape = Indexed<I, Scalar>;
+    type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Scalar>, Self>> {
-        Ok(divide_indexed::<_, A>(prepared))
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
+        Ok(arithmetic_indexed::<_, A, V>(
+            prepared,
+            Self::LABEL,
+            V::divide,
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -164,18 +63,19 @@ where
     }
 }
 
-impl<A> ElementKernel<Bare<Scalar>> for DivideOperation<A>
+impl<V, A> ElementKernel<Bare<V>> for DivideOperation<A>
 where
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordValue>,
+    for<'a> V: ValueDivide + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    for<'a> A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
 {
     type Emission = A::Retention;
-    type OutShape = Bare<Scalar>;
+    type OutShape = Bare<V>;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<Scalar>, Self>> {
-        Ok(divide_bare::<A>(prepared))
+    ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
+        Ok(arithmetic_bare::<A, V>(prepared, Self::LABEL, V::divide))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {

@@ -39,7 +39,9 @@ pub use argument::{
     SetSource, Unaligned,
 };
 pub use arithmetic::{
-    DivideOperation, DivisionByZero, ModuloByZero, ModuloOperation, SubtractOperation,
+    AddOperation, DivideOperation, DivisionByZero, ModuloByZero, ModuloOperation,
+    MultiplyOperation, PowerOperation, SubtractOperation, ValueAdd, ValueDivide, ValueModulo,
+    ValueMultiply, ValuePower, ValueSubtract,
 };
 pub use cache::CacheContext;
 pub use comparison::{

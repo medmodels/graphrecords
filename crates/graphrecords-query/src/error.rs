@@ -125,6 +125,12 @@ impl Failure {
     }
 
     #[must_use]
+    pub fn at<I: IndexDomain>(mut self: Box<Self>, index: &I::Index<'_>) -> Box<Self> {
+        self.element = Some(Arc::new(I::to_owned(index)));
+        self
+    }
+
+    #[must_use]
     pub const fn operation(&self) -> &'static str {
         self.operation
     }

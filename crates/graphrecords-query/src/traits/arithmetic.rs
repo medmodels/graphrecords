@@ -1,8 +1,7 @@
-pub trait Add {
-    type OtherOperand;
+pub trait Add<A> {
     type ReturnOperand;
 
-    fn add<O: Into<Self::OtherOperand>>(&mut self, other: O) -> Self::ReturnOperand;
+    fn add(&self, argument: A) -> Self::ReturnOperand;
 }
 
 pub trait Subtract<A> {
@@ -11,11 +10,10 @@ pub trait Subtract<A> {
     fn subtract(&self, argument: A) -> Self::ReturnOperand;
 }
 
-pub trait Multiply {
-    type OtherOperand;
+pub trait Multiply<A> {
     type ReturnOperand;
 
-    fn multiply<O: Into<Self::OtherOperand>>(&mut self, other: O) -> Self::ReturnOperand;
+    fn multiply(&self, argument: A) -> Self::ReturnOperand;
 }
 
 pub trait Divide<A> {
@@ -24,11 +22,10 @@ pub trait Divide<A> {
     fn divide(&self, argument: A) -> Self::ReturnOperand;
 }
 
-pub trait Power {
-    type ExponentOperand;
+pub trait Power<A> {
     type ReturnOperand;
 
-    fn power<O: Into<Self::ExponentOperand>>(&mut self, exponent: O) -> Self::ReturnOperand;
+    fn power(&self, argument: A) -> Self::ReturnOperand;
 }
 
 pub trait Modulo<A> {
