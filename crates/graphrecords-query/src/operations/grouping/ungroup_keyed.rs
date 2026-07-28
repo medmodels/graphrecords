@@ -1,15 +1,19 @@
+use super::UnresolvedGroupKeyFailures;
 use crate::{
     Bare, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple,
     Operand, QueryResult, Single, Unordered, ValueType,
     execution::EvaluationCache,
-    operands::{GroupOperand, OperandHandle},
-    operations::{Apply, KeyOperand, MissingGroupAggregate, Operation, OperationContext, Prepare},
+    operands::{OperandHandle, Partition},
+    operations::{
+        Apply, GroupKernel, GroupKey, MissingGroupAggregate, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::UngroupKeyed,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Group)]
 #[explain(label = "UngroupKeyed")]
 pub struct UngroupKeyedOperation;
 
@@ -37,132 +41,198 @@ impl Prepare for UngroupKeyedOperation {
     }
 }
 
-impl<I, V, K> Apply<UngroupKeyedOperation> for GroupOperand<OperandHandle<Indexed<I, V>, Single>, K>
-where
-    I: IndexDomain,
-    V: ValueType,
-    K: KeyOperand,
+impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
+    GroupKernel<M, K, OperandHandle<Indexed<I, V>, Single>> for UngroupKeyedOperation
 {
-    type Output = OperandHandle<Indexed<K::Key, V>, Multiple<Unordered>>;
+    type Output = OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
 
-    fn apply<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: Self::ReturnValue<'a>,
-        _prepared: <UngroupKeyedOperation as Prepare>::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        let label = UngroupKeyedOperation::LABEL;
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        partition: Partition<'a, M, K, OperandHandle<Indexed<I, V>, Single>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let (buckets, key_failures) = partition.into_parts();
 
-        Ok(Box::new(values.map(move |(key, value)| {
-            let value = match value {
-                Ok(Some((_index, value))) => value,
-                Ok(None) => Err(Failure::new_at(label, MissingGroupAggregate, &key)),
-                Err(failure) => Err(failure),
-            };
+        if !key_failures.is_empty() {
+            return Err(Failure::new(
+                Self::LABEL,
+                UnresolvedGroupKeyFailures::new(
+                    key_failures
+                        .into_iter()
+                        .map(|key_failure| *key_failure.1)
+                        .collect(),
+                ),
+            ));
+        }
 
-            (key, value)
-        })))
+        let elements: Vec<_> = buckets
+            .into_iter()
+            .map(|(key, _, payload)| {
+                let index = K::resolve_key(graphrecord, &key)?;
+                let outcome = match payload {
+                    Ok(Some((_, outcome))) => outcome,
+                    Ok(None) => Err(Failure::new_at::<K, _>(
+                        Self::LABEL,
+                        MissingGroupAggregate,
+                        &index,
+                    )),
+                    Err(failure) => Err(failure),
+                };
+
+                Ok((index, outcome))
+            })
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(elements.into_iter()))
     }
 
-    fn estimate(_operation: &UngroupKeyedOperation, input: Estimate, _stats: &Stats) -> Estimate {
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
         single_estimate(&input)
     }
 }
 
-impl<V, K> Apply<UngroupKeyedOperation> for GroupOperand<OperandHandle<Bare<V>, Single>, K>
-where
-    V: ValueType,
-    K: KeyOperand,
+impl<M: IndexDomain, K: GroupKey, V: ValueType> GroupKernel<M, K, OperandHandle<Bare<V>, Single>>
+    for UngroupKeyedOperation
 {
-    type Output = OperandHandle<Indexed<K::Key, V>, Multiple<Unordered>>;
+    type Output = OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
 
-    fn apply<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: Self::ReturnValue<'a>,
-        _prepared: <UngroupKeyedOperation as Prepare>::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        let label = UngroupKeyedOperation::LABEL;
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        partition: Partition<'a, M, K, OperandHandle<Bare<V>, Single>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let (buckets, key_failures) = partition.into_parts();
 
-        Ok(Box::new(values.map(move |(key, value)| {
-            let value = match value {
-                Ok(Some(value)) => value,
-                Ok(None) => Err(Failure::new_at(label, MissingGroupAggregate, &key)),
-                Err(failure) => Err(failure),
-            };
+        if !key_failures.is_empty() {
+            return Err(Failure::new(
+                Self::LABEL,
+                UnresolvedGroupKeyFailures::new(
+                    key_failures
+                        .into_iter()
+                        .map(|key_failure| *key_failure.1)
+                        .collect(),
+                ),
+            ));
+        }
 
-            (key, value)
-        })))
+        let elements: Vec<_> = buckets
+            .into_iter()
+            .map(|(key, _, payload)| {
+                let index = K::resolve_key(graphrecord, &key)?;
+                let outcome = match payload {
+                    Ok(Some(outcome)) => outcome,
+                    Ok(None) => Err(Failure::new_at::<K, _>(
+                        Self::LABEL,
+                        MissingGroupAggregate,
+                        &index,
+                    )),
+                    Err(failure) => Err(failure),
+                };
+
+                Ok((index, outcome))
+            })
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(elements.into_iter()))
     }
 
-    fn estimate(_operation: &UngroupKeyedOperation, input: Estimate, _stats: &Stats) -> Estimate {
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
         single_estimate(&input)
     }
 }
 
-impl<I, V, K> Apply<UngroupKeyedOperation>
-    for GroupOperand<OperandHandle<Indexed<I, V>, Definite>, K>
-where
-    I: IndexDomain,
-    V: ValueType,
-    K: KeyOperand,
+impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
+    GroupKernel<M, K, OperandHandle<Indexed<I, V>, Definite>> for UngroupKeyedOperation
 {
-    type Output = OperandHandle<Indexed<K::Key, V>, Multiple<Unordered>>;
+    type Output = OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
 
-    fn apply<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: Self::ReturnValue<'a>,
-        _prepared: <UngroupKeyedOperation as Prepare>::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        Ok(Box::new(values.map(|(key, value)| {
-            let value = value.and_then(|(_index, value)| value);
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        partition: Partition<'a, M, K, OperandHandle<Indexed<I, V>, Definite>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let (buckets, key_failures) = partition.into_parts();
 
-            (key, value)
-        })))
+        if !key_failures.is_empty() {
+            return Err(Failure::new(
+                Self::LABEL,
+                UnresolvedGroupKeyFailures::new(
+                    key_failures
+                        .into_iter()
+                        .map(|key_failure| *key_failure.1)
+                        .collect(),
+                ),
+            ));
+        }
+
+        let elements: Vec<_> = buckets
+            .into_iter()
+            .map(|(key, _, payload)| {
+                let index = K::resolve_key(graphrecord, &key)?;
+                let outcome = match payload {
+                    Ok((_, outcome)) => outcome,
+                    Err(failure) => Err(failure),
+                };
+
+                Ok((index, outcome))
+            })
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(elements.into_iter()))
     }
 
-    fn estimate(_operation: &UngroupKeyedOperation, input: Estimate, _stats: &Stats) -> Estimate {
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
         single_estimate(&input)
     }
 }
 
-impl<V, K> Apply<UngroupKeyedOperation> for GroupOperand<OperandHandle<Bare<V>, Definite>, K>
-where
-    V: ValueType,
-    K: KeyOperand,
+impl<M: IndexDomain, K: GroupKey, V: ValueType> GroupKernel<M, K, OperandHandle<Bare<V>, Definite>>
+    for UngroupKeyedOperation
 {
-    type Output = OperandHandle<Indexed<K::Key, V>, Multiple<Unordered>>;
+    type Output = OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
 
-    fn apply<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: Self::ReturnValue<'a>,
-        _prepared: <UngroupKeyedOperation as Prepare>::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        Ok(Box::new(
-            values.map(|(key, value)| (key, value.and_then(|value| value))),
-        ))
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        partition: Partition<'a, M, K, OperandHandle<Bare<V>, Definite>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let (buckets, key_failures) = partition.into_parts();
+
+        if !key_failures.is_empty() {
+            return Err(Failure::new(
+                Self::LABEL,
+                UnresolvedGroupKeyFailures::new(
+                    key_failures
+                        .into_iter()
+                        .map(|key_failure| *key_failure.1)
+                        .collect(),
+                ),
+            ));
+        }
+
+        let elements: Vec<_> = buckets
+            .into_iter()
+            .map(|(key, _, payload)| {
+                let index = K::resolve_key(graphrecord, &key)?;
+                let outcome = match payload {
+                    Ok(outcome) => outcome,
+                    Err(failure) => Err(failure),
+                };
+
+                Ok((index, outcome))
+            })
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(elements.into_iter()))
     }
 
-    fn estimate(_operation: &UngroupKeyedOperation, input: Estimate, _stats: &Stats) -> Estimate {
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
         single_estimate(&input)
     }
 }
 
-impl<O> UngroupKeyed for O
-where
-    O: Apply<UngroupKeyedOperation>,
-{
-    type ReturnOperand = <O as Apply<UngroupKeyedOperation>>::Output;
+impl<O: Apply<UngroupKeyedOperation>> UngroupKeyed for O {
+    type ReturnOperand = O::Output;
 
     fn ungroup_keyed(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), UngroupKeyedOperation))

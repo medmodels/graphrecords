@@ -3,19 +3,16 @@ use crate::{
     QueryResult, Single, Unit, Unordered,
     execution::EvaluationCache,
     operands::NodesOperand,
-    operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{Apply, KeyedStream, LaneKernel, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::Nodes,
 };
-use graphrecords_core::{
-    GraphRecord,
-    graphrecord::{EdgeIndex, NodeIndex},
-};
+use graphrecords_core::{GraphRecord, graphrecord::EdgeIndex};
 use graphrecords_utils::aliases::GrHashSet;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Nodes")]
-#[plan(optimizer_hints(distinct))]
 pub struct NodesOperation;
 
 impl Prepare for NodesOperation {
@@ -30,7 +27,7 @@ impl Prepare for NodesOperation {
     }
 }
 
-impl<O: OrderState> Kernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesOperation {
+impl<O: OrderState> LaneKernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesOperation {
     type Output = NodesOperand<Unordered>;
 
     fn execute<'a>(
@@ -43,10 +40,10 @@ impl<O: OrderState> Kernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesOpera
                 membership.and_then(|()| {
                     graphrecord
                         .edge_endpoints(edge)
-                        .map_err(|error| Failure::new_at(Self::LABEL, error, &edge))
+                        .map_err(|error| Failure::new_at::<EdgeIndex, _>(Self::LABEL, error, &edge))
                 })
             })
-            .collect::<QueryResult<Vec<(&NodeIndex, &NodeIndex)>>>()?
+            .collect::<QueryResult<Vec<_>>>()?
             .into_iter()
             .flat_map(|(source, target)| std::iter::once(source).chain(std::iter::once(target)))
             .collect();
@@ -55,7 +52,7 @@ impl<O: OrderState> Kernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesOpera
     }
 }
 
-impl Kernel<Indexed<EdgeIndex, Unit>, Single> for NodesOperation {
+impl LaneKernel<Indexed<EdgeIndex, Unit>, Single> for NodesOperation {
     type Output = NodesOperand<Unordered>;
 
     fn execute<'a>(
@@ -70,7 +67,7 @@ impl Kernel<Indexed<EdgeIndex, Unit>, Single> for NodesOperation {
 
         let (source, target) = graphrecord
             .edge_endpoints(edge)
-            .map_err(|error| Failure::new_at(Self::LABEL, error, &edge))?;
+            .map_err(|error| Failure::new_at::<EdgeIndex, _>(Self::LABEL, error, &edge))?;
         let nodes: GrHashSet<_> = std::iter::once(source)
             .chain(std::iter::once(target))
             .collect();
@@ -79,7 +76,7 @@ impl Kernel<Indexed<EdgeIndex, Unit>, Single> for NodesOperation {
     }
 }
 
-impl Kernel<Indexed<EdgeIndex, Unit>, Definite> for NodesOperation {
+impl LaneKernel<Indexed<EdgeIndex, Unit>, Definite> for NodesOperation {
     type Output = NodesOperand<Unordered>;
 
     fn execute<'a>(
@@ -92,7 +89,7 @@ impl Kernel<Indexed<EdgeIndex, Unit>, Definite> for NodesOperation {
 
         let (source, target) = graphrecord
             .edge_endpoints(edge)
-            .map_err(|error| Failure::new_at(Self::LABEL, error, &edge))?;
+            .map_err(|error| Failure::new_at::<EdgeIndex, _>(Self::LABEL, error, &edge))?;
         let nodes: GrHashSet<_> = std::iter::once(source)
             .chain(std::iter::once(target))
             .collect();
@@ -101,11 +98,8 @@ impl Kernel<Indexed<EdgeIndex, Unit>, Definite> for NodesOperation {
     }
 }
 
-impl<O> Nodes for O
-where
-    O: Apply<NodesOperation>,
-{
-    type ReturnOperand = <O as Apply<NodesOperation>>::Output;
+impl<O: Apply<NodesOperation>> Nodes for O {
+    type ReturnOperand = O::Output;
 
     fn nodes(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), NodesOperation))

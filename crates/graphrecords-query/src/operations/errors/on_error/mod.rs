@@ -37,48 +37,54 @@ pub trait ErrorPolicyWithCause<I: Operand, C: Error + 'static>: Clone + 'static 
 
 impl<O: Operand> OnError for O {
     fn on_error<A: ErrorPolicy<Self>>(&self, policy: A) -> A::Output {
-        <A as ErrorPolicy<Self>>::build(&policy, self.clone())
+        A::build(&policy, self.clone())
     }
 }
 
 impl<O: Operand, A> OnErrorOf<A> for O {
-    type Output<D: Diagnostic>
-        = <A as ErrorPolicyOf<Self, D>>::Output
+    type Output<D>
+        = A::Output
     where
+        D: Diagnostic,
         A: ErrorPolicyOf<Self, D>;
 
-    fn on_error_of<D: Diagnostic>(&self, policy: A) -> Self::Output<D>
+    fn on_error_of<D>(&self, policy: A) -> Self::Output<D>
     where
+        D: Diagnostic,
         A: ErrorPolicyOf<Self, D>,
     {
-        <A as ErrorPolicyOf<Self, D>>::build(&policy, self.clone())
+        A::build(&policy, self.clone())
     }
 }
 
 impl<O: Operand, A> OnErrorIn<A> for O {
-    type Output<G: ErrorGroup>
-        = <A as ErrorPolicyIn<Self, G>>::Output
+    type Output<G>
+        = A::Output
     where
+        G: ErrorGroup,
         A: ErrorPolicyIn<Self, G>;
 
-    fn on_error_in<G: ErrorGroup>(&self, policy: A) -> Self::Output<G>
+    fn on_error_in<G>(&self, policy: A) -> Self::Output<G>
     where
+        G: ErrorGroup,
         A: ErrorPolicyIn<Self, G>,
     {
-        <A as ErrorPolicyIn<Self, G>>::build(&policy, self.clone())
+        A::build(&policy, self.clone())
     }
 }
 
 impl<O: Operand, A> OnErrorWithCause<A> for O {
-    type Output<C: Error + 'static>
-        = <A as ErrorPolicyWithCause<Self, C>>::Output
+    type Output<C>
+        = A::Output
     where
+        C: Error + 'static,
         A: ErrorPolicyWithCause<Self, C>;
 
-    fn on_error_with_cause<C: Error + 'static>(&self, policy: A) -> Self::Output<C>
+    fn on_error_with_cause<C>(&self, policy: A) -> Self::Output<C>
     where
+        C: Error + 'static,
         A: ErrorPolicyWithCause<Self, C>,
     {
-        <A as ErrorPolicyWithCause<Self, C>>::build(&policy, self.clone())
+        A::build(&policy, self.clone())
     }
 }

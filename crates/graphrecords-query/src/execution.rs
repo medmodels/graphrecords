@@ -1,196 +1,204 @@
-use crate::{BoxedIterator, Failure, FailureKind, QueryResult};
+use crate::{
+    Arity, Bare, Definite, Diagnostic, ElementShape, IndexDomain, Indexed, Multiple, Operand,
+    OrderState, QueryResult, Single, ValueType, operands::OperandHandle,
+};
 use elsa::FrozenMap;
-use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue};
-use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
+use graphrecords_core::GraphRecord;
 use std::{
-    any::{Any, TypeId},
-    hash::Hash,
-    marker::PhantomData,
+    any::Any,
+    error::Error,
+    fmt::{self, Display, Formatter},
+    hash::{Hash, Hasher},
+    ptr,
+    sync::Arc,
 };
 
-pub trait Cacheable<'a>: Sized {
-    type Owned: 'static;
+pub trait CacheableShape: ElementShape {
+    type CachedElement: 'static;
 
-    fn into_owned(self) -> Self::Owned;
+    fn into_cached_element(element: Self::Element<'_>) -> Self::CachedElement;
 
-    fn from_owned(owned: &'a Self::Owned) -> Self;
+    fn from_cached_element(cached: &Self::CachedElement) -> Self::Element<'_>;
 }
 
-macro_rules! cacheable_owned_leaf {
-    ($Type:ty) => {
-        impl<'a> Cacheable<'a> for $Type {
-            type Owned = $Type;
+pub trait CacheableArity<S: CacheableShape>: Arity {
+    type Cached: 'static;
 
-            fn into_owned(self) -> Self::Owned {
-                self
-            }
+    fn into_cached<'a>(values: Self::Container<'a, S::Element<'a>>) -> Self::Cached;
 
-            fn from_owned(owned: &'a Self::Owned) -> Self {
-                owned.clone()
-            }
-        }
-    };
+    fn from_cached(cached: &Self::Cached) -> Self::Container<'_, S::Element<'_>>;
 }
 
-macro_rules! cacheable_tuple {
-    ($($F:ident),+) => {
-        impl<'a, $($F: Cacheable<'a>),+> Cacheable<'a> for ($($F,)+) {
-            type Owned = ($($F::Owned,)+);
+pub trait CacheableOperand: Operand {
+    type Cached: 'static;
 
-            #[allow(non_snake_case)]
-            fn into_owned(self) -> Self::Owned {
-                let ($($F,)+) = self;
+    fn into_cached(values: Self::ReturnValue<'_>) -> Self::Cached;
 
-                ($($F.into_owned(),)+)
-            }
-
-            #[allow(non_snake_case)]
-            fn from_owned(owned: &'a Self::Owned) -> Self {
-                let ($($F,)+) = owned;
-
-                ($($F::from_owned($F),)+)
-            }
-        }
-    };
+    fn from_cached(cached: &Self::Cached) -> Self::ReturnValue<'_>;
 }
 
-impl<'a, T: Clone + 'static> Cacheable<'a> for &'a T {
-    type Owned = T;
+impl<I: IndexDomain, V: ValueType> CacheableShape for Indexed<I, V> {
+    type CachedElement = (I::Owned, QueryResult<V::Owned>);
 
-    fn into_owned(self) -> Self::Owned {
-        self.clone()
+    fn into_cached_element(element: Self::Element<'_>) -> Self::CachedElement {
+        let (index, outcome) = element;
+
+        (I::to_owned(&index), outcome.map(V::into_owned))
     }
 
-    fn from_owned(owned: &'a Self::Owned) -> Self {
-        owned
+    fn from_cached_element(cached: &Self::CachedElement) -> Self::Element<'_> {
+        let outcome = match &cached.1 {
+            Ok(value) => Ok(V::from_owned(value)),
+            Err(failure) => Err(failure.clone()),
+        };
+
+        (I::from_owned(&cached.0), outcome)
     }
 }
 
-impl<'a, I> Cacheable<'a> for BoxedIterator<'a, I>
-where
-    I: Cacheable<'a> + 'a,
-{
-    type Owned = Vec<I::Owned>;
+impl<V: ValueType> CacheableShape for Bare<V> {
+    type CachedElement = QueryResult<V::Owned>;
 
-    fn into_owned(self) -> Self::Owned {
-        self.map(I::into_owned).collect()
+    fn into_cached_element(element: Self::Element<'_>) -> Self::CachedElement {
+        element.map(V::into_owned)
     }
 
-    fn from_owned(owned: &'a Self::Owned) -> Self {
-        Box::new(owned.iter().map(I::from_owned))
-    }
-}
-
-impl<'a, I> Cacheable<'a> for Option<I>
-where
-    I: Cacheable<'a>,
-{
-    type Owned = Option<I::Owned>;
-
-    fn into_owned(self) -> Self::Owned {
-        self.map(I::into_owned)
-    }
-
-    fn from_owned(owned: &'a Self::Owned) -> Self {
-        owned.as_ref().map(I::from_owned)
-    }
-}
-
-impl<'a, T> Cacheable<'a> for QueryResult<T>
-where
-    T: Cacheable<'a>,
-{
-    type Owned = QueryResult<T::Owned>;
-
-    fn into_owned(self) -> Self::Owned {
-        self.map(T::into_owned)
-    }
-
-    fn from_owned(owned: &'a Self::Owned) -> Self {
-        match owned {
-            Ok(value) => Ok(T::from_owned(value)),
+    fn from_cached_element(cached: &Self::CachedElement) -> Self::Element<'_> {
+        match cached {
+            Ok(value) => Ok(V::from_owned(value)),
             Err(failure) => Err(failure.clone()),
         }
     }
 }
 
-impl<'a, T: 'static + Clone + Eq + Hash> Cacheable<'a> for GrHashMap<T, bool> {
-    type Owned = Self;
+impl<S: CacheableShape> CacheableArity<S> for Definite {
+    type Cached = S::CachedElement;
 
-    fn into_owned(self) -> Self::Owned {
-        self
+    fn into_cached<'a>(values: Self::Container<'a, S::Element<'a>>) -> Self::Cached {
+        S::into_cached_element(values)
     }
 
-    fn from_owned(owned: &'a Self::Owned) -> Self {
-        owned.clone()
+    fn from_cached(cached: &Self::Cached) -> Self::Container<'_, S::Element<'_>> {
+        S::from_cached_element(cached)
     }
 }
 
-cacheable_owned_leaf!(());
-cacheable_owned_leaf!(bool);
-cacheable_owned_leaf!(usize);
-cacheable_owned_leaf!(EdgeIndex);
-cacheable_owned_leaf!(Failure);
-cacheable_owned_leaf!(FailureKind);
-cacheable_owned_leaf!(GraphRecordValue);
-cacheable_owned_leaf!(GraphRecordAttribute);
-cacheable_owned_leaf!(Vec<GraphRecordAttribute>);
-cacheable_owned_leaf!(GrHashSet<GraphRecordAttribute>);
+impl<S: CacheableShape> CacheableArity<S> for Single {
+    type Cached = Option<S::CachedElement>;
 
-cacheable_tuple!(A, B);
-cacheable_tuple!(A, B, C);
-cacheable_tuple!(A, B, C, D);
-cacheable_tuple!(A, B, C, D, E);
-cacheable_tuple!(A, B, C, D, E, F);
-cacheable_tuple!(A, B, C, D, E, F, G);
-cacheable_tuple!(A, B, C, D, E, F, G, H);
-cacheable_tuple!(A, B, C, D, E, F, G, H, I);
-cacheable_tuple!(A, B, C, D, E, F, G, H, I, J);
-cacheable_tuple!(A, B, C, D, E, F, G, H, I, J, K);
-cacheable_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
+    fn into_cached<'a>(values: Self::Container<'a, S::Element<'a>>) -> Self::Cached {
+        values.map(S::into_cached_element)
+    }
+
+    fn from_cached(cached: &Self::Cached) -> Self::Container<'_, S::Element<'_>> {
+        cached.as_ref().map(S::from_cached_element)
+    }
+}
+
+impl<S: CacheableShape, O: OrderState> CacheableArity<S> for Multiple<O> {
+    type Cached = Vec<S::CachedElement>;
+
+    fn into_cached<'a>(values: Self::Container<'a, S::Element<'a>>) -> Self::Cached {
+        values.map(S::into_cached_element).collect()
+    }
+
+    fn from_cached(cached: &Self::Cached) -> Self::Container<'_, S::Element<'_>> {
+        Box::new(cached.iter().map(S::from_cached_element))
+    }
+}
+
+impl<S: CacheableShape, C: CacheableArity<S>> CacheableOperand for OperandHandle<S, C> {
+    type Cached = C::Cached;
+
+    fn into_cached(values: Self::ReturnValue<'_>) -> Self::Cached {
+        C::into_cached(values)
+    }
+
+    fn from_cached(cached: &Self::Cached) -> Self::ReturnValue<'_> {
+        C::from_cached(cached)
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct CacheSlot(Arc<CacheSlotMarker>);
+
+struct CacheSlotMarker;
+
+impl CacheSlot {
+    #[must_use]
+    pub(crate) fn new() -> Self {
+        Self(Arc::new(CacheSlotMarker))
+    }
+}
+
+impl PartialEq for CacheSlot {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for CacheSlot {}
+
+impl Hash for CacheSlot {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        ptr::hash(Arc::as_ptr(&self.0), state);
+    }
+}
 
 pub struct EvaluationCache<'a> {
-    cache: FrozenMap<(u64, TypeId), Box<dyn Any>>,
-    marker: PhantomData<&'a ()>,
-}
-
-impl Default for EvaluationCache<'_> {
-    fn default() -> Self {
-        Self::new()
-    }
+    graphrecord: &'a GraphRecord,
+    values: FrozenMap<CacheSlot, Box<dyn Any>>,
 }
 
 impl<'a> EvaluationCache<'a> {
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(graphrecord: &'a GraphRecord) -> Self {
         Self {
-            cache: FrozenMap::new(),
-            marker: PhantomData,
+            graphrecord,
+            values: FrozenMap::new(),
         }
     }
 
-    pub fn materialize<V>(
-        &'a self,
-        key: u64,
-        compute: impl FnOnce() -> QueryResult<V>,
-    ) -> QueryResult<V>
-    where
-        V: Cacheable<'a>,
-    {
-        let identifier = (key, TypeId::of::<V::Owned>());
+    pub(crate) fn is_bound_to(&self, graphrecord: &GraphRecord) -> bool {
+        ptr::eq(self.graphrecord, graphrecord)
+    }
 
-        let stored = match self.cache.get(&identifier) {
-            Some(stored) => stored,
-            None => self
-                .cache
-                .insert(identifier, Box::new(compute()?.into_owned())),
+    pub(crate) fn materialize<O: CacheableOperand>(
+        &'a self,
+        slot: &CacheSlot,
+        compute: impl FnOnce() -> QueryResult<O::ReturnValue<'a>>,
+    ) -> QueryResult<O::ReturnValue<'a>> {
+        let stored = if let Some(stored) = self.values.get(slot) {
+            stored
+        } else {
+            let computed = Box::new(compute().map(O::into_cached));
+            self.values.insert(slot.clone(), computed)
         };
 
-        #[allow(clippy::missing_panics_doc)]
-        Ok(V::from_owned(
-            stored
-                .downcast_ref()
-                .expect("Cache entry type must match its TypeId key"),
-        ))
+        let stored = stored
+            .downcast_ref::<QueryResult<O::Cached>>()
+            .expect("Cache entry must match its slot's operand type");
+
+        match stored {
+            Ok(cached) => Ok(O::from_cached(cached)),
+            Err(failure) => Err(failure.clone()),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct EvaluationCacheGraphRecordMismatch;
+
+impl Display for EvaluationCacheGraphRecordMismatch {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str("the evaluation cache belongs to a different graphrecord")
+    }
+}
+
+impl Error for EvaluationCacheGraphRecordMismatch {}
+
+impl Diagnostic for EvaluationCacheGraphRecordMismatch {
+    fn name() -> &'static str {
+        "EvaluationCacheGraphRecordMismatch"
     }
 }

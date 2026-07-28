@@ -6,7 +6,10 @@ mod sort_by;
 mod take;
 mod unorder;
 
-use crate::{Diagnostic, FailureKind, OwnedIndex, Position};
+use crate::{
+    Diagnostic, ExpandedIndexOwned, ExpandedIndexReference, FailureKind, IndexDomain, OwnedIndex,
+    Position,
+};
 pub use first::FirstOperation;
 use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue};
 pub use last::LastOperation;
@@ -28,6 +31,25 @@ pub fn incomparable_with_first<'a, V: PartialOrd + 'a>(
     values
         .position(|value| value.partial_cmp(first).is_none())
         .map(|position| (0, position + 1))
+}
+
+pub fn incomparable_pair<'a, V: PartialOrd + 'a>(
+    values: impl Iterator<Item = &'a V>,
+) -> Option<(usize, usize)> {
+    let values: Vec<_> = values.collect();
+
+    for first_position in 0..values.len() {
+        for second_position in (first_position + 1)..values.len() {
+            if values[first_position]
+                .partial_cmp(values[second_position])
+                .is_none()
+            {
+                return Some((first_position, second_position));
+            }
+        }
+    }
+
+    None
 }
 
 pub trait EnsureSortable: PartialOrd + Sized {
@@ -78,6 +100,36 @@ impl EnsureSortable for EdgeIndex {
 impl EnsureSortable for FailureKind {
     fn find_incomparable<'a>(_values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
         None
+    }
+}
+
+impl<P, C> EnsureSortable for ExpandedIndexOwned<P, C>
+where
+    P: IndexDomain,
+    C: IndexDomain,
+    P::Owned: EnsureSortable,
+    C::Owned: EnsureSortable,
+{
+    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
+    where
+        Self: 'a,
+    {
+        incomparable_pair(values)
+    }
+}
+
+impl<'index, P, C> EnsureSortable for ExpandedIndexReference<'index, P, C>
+where
+    P: IndexDomain,
+    C: IndexDomain,
+    P::Index<'index>: EnsureSortable,
+    C::Index<'index>: EnsureSortable,
+{
+    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
+    where
+        Self: 'a,
+    {
+        incomparable_pair(values)
     }
 }
 

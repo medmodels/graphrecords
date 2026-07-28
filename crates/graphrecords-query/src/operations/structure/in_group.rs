@@ -60,6 +60,7 @@ impl IndicesInGroup for EdgeIndex {
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "InGroup")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct InGroupOperation {
@@ -80,22 +81,18 @@ impl Prepare for InGroupOperation {
 }
 
 impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
+    type Emission = Preserving;
     type OutShape = Indexed<I, Mask>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
-        group: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
-        let members = I::indices_in_group(graphrecord, group)?;
+        let members = I::indices_in_group(graphrecord, prepared)?;
 
-        Ok(Pipeline::default().map(
-            move |(index, membership): (I::Index<'a>, QueryResult<()>)| {
-                let in_group = membership.map(|()| members.contains(&index));
-
-                (index, in_group)
-            },
-        ))
+        Ok(Pipeline::keyed(move |index, membership: QueryResult<_>| {
+            membership.map(|()| members.contains(&index))
+        }))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -114,22 +111,18 @@ impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
 impl<E: IndicesInGroup, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
     for InGroupOperation
 {
+    type Emission = Preserving;
     type OutShape = Indexed<I, Mask>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
-        group: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
-        let members = E::indices_in_group(graphrecord, group)?;
+        let members = E::indices_in_group(graphrecord, prepared)?;
 
-        Ok(Pipeline::default().map(
-            move |(key, reference): (I::Index<'a>, QueryResult<E::Index<'a>>)| {
-                let in_group = reference.map(|entity| members.contains(&entity));
-
-                (key, in_group)
-            },
-        ))
+        Ok(Pipeline::unkeyed(move |reference: QueryResult<_>| {
+            reference.map(|entity| members.contains(&entity))
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -140,11 +133,8 @@ impl<E: IndicesInGroup, I: IndexDomain> ElementKernel<Indexed<I, EntityReference
     }
 }
 
-impl<O> InGroup for O
-where
-    O: Apply<InGroupOperation>,
-{
-    type ReturnOperand = <O as Apply<InGroupOperation>>::Output;
+impl<O: Apply<InGroupOperation>> InGroup for O {
+    type ReturnOperand = O::Output;
 
     fn in_group(&self, group: Group) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

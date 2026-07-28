@@ -11,9 +11,15 @@ use crate::{
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
 };
 use graphrecords_core::GraphRecord;
-use std::{any::type_name, error::Error, fmt, marker::PhantomData};
+use std::{
+    any::type_name,
+    error::Error,
+    fmt::{self, Write},
+    marker::PhantomData,
+};
 
 #[derive(Clone, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 pub struct Replace<A>(#[argument] pub A);
 
 impl<A> Labeled for Replace<A> {
@@ -21,6 +27,7 @@ impl<A> Labeled for Replace<A> {
 }
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 pub struct ReplaceErrorsOf<D: Diagnostic, R> {
     #[argument]
     replacement: R,
@@ -48,10 +55,7 @@ impl<D: Diagnostic, R: Clone> Clone for ReplaceErrorsOf<D, R> {
 
 impl<D: Diagnostic, R: Explain> Explain for ReplaceErrorsOf<D, R> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        fmt::Write::write_fmt(
-            formatter,
-            format_args!("ReplaceErrorsOf kind={}", D::name()),
-        )?;
+        write!(formatter, "{} kind={}", Self::LABEL, D::name())?;
         formatter.labeled_child("replacement", &self.replacement);
 
         Ok(())
@@ -59,6 +63,7 @@ impl<D: Diagnostic, R: Explain> Explain for ReplaceErrorsOf<D, R> {
 }
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 pub struct ReplaceErrorsIn<G: ErrorGroup, R> {
     #[argument]
     replacement: R,
@@ -86,10 +91,7 @@ impl<G: ErrorGroup, R: Clone> Clone for ReplaceErrorsIn<G, R> {
 
 impl<G: ErrorGroup, R: Explain> Explain for ReplaceErrorsIn<G, R> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        fmt::Write::write_fmt(
-            formatter,
-            format_args!("ReplaceErrorsIn group={}", G::name()),
-        )?;
+        write!(formatter, "{} group={}", Self::LABEL, G::name())?;
         formatter.labeled_child("replacement", &self.replacement);
 
         Ok(())
@@ -97,6 +99,7 @@ impl<G: ErrorGroup, R: Explain> Explain for ReplaceErrorsIn<G, R> {
 }
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 pub struct ReplaceErrorsWithCause<C: Error + 'static, R> {
     #[argument]
     replacement: R,
@@ -124,10 +127,7 @@ impl<C: Error + 'static, R: Clone> Clone for ReplaceErrorsWithCause<C, R> {
 
 impl<C: Error + 'static, R: Explain> Explain for ReplaceErrorsWithCause<C, R> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        fmt::Write::write_fmt(
-            formatter,
-            format_args!("ReplaceErrorsWithCause cause={}", type_name::<C>()),
-        )?;
+        write!(formatter, "{} cause={}", Self::LABEL, type_name::<C>())?;
         formatter.labeled_child("replacement", &self.replacement);
 
         Ok(())
@@ -136,7 +136,7 @@ impl<C: Error + 'static, R: Explain> Explain for ReplaceErrorsWithCause<C, R> {
 
 impl<A: Explain> Explain for Replace<A> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        fmt::Write::write_str(formatter, "Replace")?;
+        formatter.write_str(Self::LABEL)?;
         formatter.labeled_child("replacement", &self.0);
 
         Ok(())
@@ -209,8 +209,8 @@ where
     V: ValueType,
     for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
+    type Emission = R::Retention;
     type OutShape = Indexed<I, V>;
-    type Retention = <R as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -218,23 +218,17 @@ where
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::element_wise(
-            move |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
-                Ok(value) => <Self::Retention as Retention>::keep((index, Ok(value))),
-                Err(original) => {
-                    let step = R::resolve(&prepared, &index, label);
+        Ok(Pipeline::keyed(move |index, result| match result {
+            Ok(value) => <Self::Emission as Retention>::keep(Ok(value)),
+            Err(original) => {
+                let step = R::resolve(&prepared, &index, label);
 
-                    <Self::Retention as Retention>::map_step(step, |replacement| {
-                        let result = match replacement {
-                            Ok(value) => Ok(value),
-                            Err(_) => Err(original),
-                        };
-
-                        (index, result)
-                    })
-                }
-            },
-        ))
+                <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                    Ok(value) => Ok(value),
+                    Err(_) => Err(original),
+                })
+            }
+        }))
     }
 }
 
@@ -243,8 +237,8 @@ where
     V: ValueType,
     for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
+    type Emission = R::Retention;
     type OutShape = Bare<V>;
-    type Retention = <R as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -252,22 +246,17 @@ where
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::element_wise(
-            move |result: QueryResult<V::Value<'a>>| match result {
-                Ok(value) => <Self::Retention as Retention>::keep(Ok(value)),
-                Err(original) => {
-                    let step = R::resolve(&prepared, &(), label);
+        Ok(Pipeline::new(move |result| match result {
+            Ok(value) => <Self::Emission as Retention>::keep(Ok(value)),
+            Err(original) => {
+                let step = R::resolve(&prepared, &(), label);
 
-                    <Self::Retention as Retention>::map_step(
-                        step,
-                        |replacement| match replacement {
-                            Ok(value) => Ok(value),
-                            Err(_) => Err(original),
-                        },
-                    )
-                }
-            },
-        ))
+                <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                    Ok(value) => Ok(value),
+                    Err(_) => Err(original),
+                })
+            }
+        }))
     }
 }
 
@@ -278,8 +267,8 @@ where
     D: Diagnostic,
     for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
+    type Emission = R::Retention;
     type OutShape = Indexed<I, V>;
-    type Retention = <R as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -287,21 +276,17 @@ where
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::element_wise(
-            move |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
+        Ok(Pipeline::keyed(
+            move |index, result: QueryResult<_>| match result {
                 Err(original) if original.is_kind::<D>() => {
                     let step = R::resolve(&prepared, &index, label);
 
-                    <Self::Retention as Retention>::map_step(step, |replacement| {
-                        let result = match replacement {
-                            Ok(value) => Ok(value),
-                            Err(_) => Err(original),
-                        };
-
-                        (index, result)
+                    <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                        Ok(value) => Ok(value),
+                        Err(_) => Err(original),
                     })
                 }
-                result => <Self::Retention as Retention>::keep((index, result)),
+                result => <Self::Emission as Retention>::keep(result),
             },
         ))
     }
@@ -313,8 +298,8 @@ where
     D: Diagnostic,
     for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
+    type Emission = R::Retention;
     type OutShape = Bare<V>;
-    type Retention = <R as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -322,22 +307,17 @@ where
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::element_wise(
-            move |result: QueryResult<V::Value<'a>>| match result {
-                Err(original) if original.is_kind::<D>() => {
-                    let step = R::resolve(&prepared, &(), label);
+        Ok(Pipeline::new(move |result: QueryResult<_>| match result {
+            Err(original) if original.is_kind::<D>() => {
+                let step = R::resolve(&prepared, &(), label);
 
-                    <Self::Retention as Retention>::map_step(
-                        step,
-                        |replacement| match replacement {
-                            Ok(value) => Ok(value),
-                            Err(_) => Err(original),
-                        },
-                    )
-                }
-                result => <Self::Retention as Retention>::keep(result),
-            },
-        ))
+                <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                    Ok(value) => Ok(value),
+                    Err(_) => Err(original),
+                })
+            }
+            result => <Self::Emission as Retention>::keep(result),
+        }))
     }
 }
 
@@ -348,8 +328,8 @@ where
     G: ErrorGroup,
     for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
+    type Emission = R::Retention;
     type OutShape = Indexed<I, V>;
-    type Retention = <R as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -357,21 +337,17 @@ where
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::element_wise(
-            move |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
+        Ok(Pipeline::keyed(
+            move |index, result: QueryResult<_>| match result {
                 Err(original) if G::contains(&original.kind()) => {
                     let step = R::resolve(&prepared, &index, label);
 
-                    <Self::Retention as Retention>::map_step(step, |replacement| {
-                        let result = match replacement {
-                            Ok(value) => Ok(value),
-                            Err(_) => Err(original),
-                        };
-
-                        (index, result)
+                    <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                        Ok(value) => Ok(value),
+                        Err(_) => Err(original),
                     })
                 }
-                result => <Self::Retention as Retention>::keep((index, result)),
+                result => <Self::Emission as Retention>::keep(result),
             },
         ))
     }
@@ -383,8 +359,8 @@ where
     G: ErrorGroup,
     for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
+    type Emission = R::Retention;
     type OutShape = Bare<V>;
-    type Retention = <R as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -392,22 +368,17 @@ where
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::element_wise(
-            move |result: QueryResult<V::Value<'a>>| match result {
-                Err(original) if G::contains(&original.kind()) => {
-                    let step = R::resolve(&prepared, &(), label);
+        Ok(Pipeline::new(move |result: QueryResult<_>| match result {
+            Err(original) if G::contains(&original.kind()) => {
+                let step = R::resolve(&prepared, &(), label);
 
-                    <Self::Retention as Retention>::map_step(
-                        step,
-                        |replacement| match replacement {
-                            Ok(value) => Ok(value),
-                            Err(_) => Err(original),
-                        },
-                    )
-                }
-                result => <Self::Retention as Retention>::keep(result),
-            },
-        ))
+                <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                    Ok(value) => Ok(value),
+                    Err(_) => Err(original),
+                })
+            }
+            result => <Self::Emission as Retention>::keep(result),
+        }))
     }
 }
 
@@ -418,8 +389,8 @@ where
     C: Error + 'static,
     for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
+    type Emission = R::Retention;
     type OutShape = Indexed<I, V>;
-    type Retention = <R as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -427,21 +398,17 @@ where
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::element_wise(
-            move |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
+        Ok(Pipeline::keyed(
+            move |index, result: QueryResult<_>| match result {
                 Err(original) if original.has_cause::<C>() => {
                     let step = R::resolve(&prepared, &index, label);
 
-                    <Self::Retention as Retention>::map_step(step, |replacement| {
-                        let result = match replacement {
-                            Ok(value) => Ok(value),
-                            Err(_) => Err(original),
-                        };
-
-                        (index, result)
+                    <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                        Ok(value) => Ok(value),
+                        Err(_) => Err(original),
                     })
                 }
-                result => <Self::Retention as Retention>::keep((index, result)),
+                result => <Self::Emission as Retention>::keep(result),
             },
         ))
     }
@@ -453,8 +420,8 @@ where
     C: Error + 'static,
     for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
+    type Emission = R::Retention;
     type OutShape = Bare<V>;
-    type Retention = <R as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -462,22 +429,17 @@ where
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::element_wise(
-            move |result: QueryResult<V::Value<'a>>| match result {
-                Err(original) if original.has_cause::<C>() => {
-                    let step = R::resolve(&prepared, &(), label);
+        Ok(Pipeline::new(move |result: QueryResult<_>| match result {
+            Err(original) if original.has_cause::<C>() => {
+                let step = R::resolve(&prepared, &(), label);
 
-                    <Self::Retention as Retention>::map_step(
-                        step,
-                        |replacement| match replacement {
-                            Ok(value) => Ok(value),
-                            Err(_) => Err(original),
-                        },
-                    )
-                }
-                result => <Self::Retention as Retention>::keep(result),
-            },
-        ))
+                <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                    Ok(value) => Ok(value),
+                    Err(_) => Err(original),
+                })
+            }
+            result => <Self::Emission as Retention>::keep(result),
+        }))
     }
 }
 
@@ -487,7 +449,7 @@ where
     Self: Operation,
     I: Apply<Self>,
 {
-    type Output = <I as Apply<Self>>::Output;
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, self.clone()))
@@ -501,7 +463,7 @@ where
     ReplaceErrorsOf<D, A>: Operation,
     I: Apply<ReplaceErrorsOf<D, A>>,
 {
-    type Output = <I as Apply<ReplaceErrorsOf<D, A>>>::Output;
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(
@@ -518,7 +480,7 @@ where
     ReplaceErrorsIn<G, A>: Operation,
     I: Apply<ReplaceErrorsIn<G, A>>,
 {
-    type Output = <I as Apply<ReplaceErrorsIn<G, A>>>::Output;
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(
@@ -535,7 +497,7 @@ where
     ReplaceErrorsWithCause<C, A>: Operation,
     I: Apply<ReplaceErrorsWithCause<C, A>>,
 {
-    type Output = <I as Apply<ReplaceErrorsWithCause<C, A>>>::Output;
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(

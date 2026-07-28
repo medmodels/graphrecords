@@ -1,26 +1,19 @@
+use super::UnresolvedGroupKeyFailures;
 use crate::{
-    Bare, Definite, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Single, Unordered, ValueType,
+    Arity, ElementShape, EvaluateOperand, Explain, Failure, IndexDomain, Labeled, Operand,
+    QueryResult, Unordered,
     execution::EvaluationCache,
-    operands::{ElementsOperand, GroupOperand, OperandHandle},
-    operations::{Apply, KeyOperand, Operation, OperationContext, Prepare},
+    operands::{ElementsOperand, OperandHandle, Partition},
+    operations::{Apply, GroupKernel, GroupKey, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Keys,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Group)]
 #[explain(label = "Keys")]
 pub struct KeysOperation;
-
-const fn keys_estimate(input: &Estimate) -> Estimate {
-    Estimate {
-        elements: input.elements,
-        distinct: input.elements,
-        selectivity: None,
-        per_group: None,
-    }
-}
 
 impl Prepare for KeysOperation {
     type Prepared<'a> = ();
@@ -34,182 +27,54 @@ impl Prepare for KeysOperation {
     }
 }
 
-impl<I, V, O, K> Apply<KeysOperation> for GroupOperand<OperandHandle<Indexed<I, V>, Multiple<O>>, K>
-where
-    I: IndexDomain,
-    V: ValueType,
-    O: OrderState,
-    K: KeyOperand,
+impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: Arity> GroupKernel<M, K, OperandHandle<S, C>>
+    for KeysOperation
 {
-    type Output = ElementsOperand<K::Key, Unordered>;
+    type Output = ElementsOperand<K, Unordered>;
 
-    fn apply<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: Self::ReturnValue<'a>,
-        _prepared: <KeysOperation as Prepare>::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        Ok(Box::new(
-            values.map(|(key, values)| (key, values.map(|_values| ()))),
-        ))
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        partition: Partition<'a, M, K, OperandHandle<S, C>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let (buckets, key_failures) = partition.into_parts();
+
+        if !key_failures.is_empty() {
+            return Err(Failure::new(
+                Self::LABEL,
+                UnresolvedGroupKeyFailures::new(
+                    key_failures
+                        .into_iter()
+                        .map(|key_failure| *key_failure.1)
+                        .collect(),
+                ),
+            ));
+        }
+
+        let elements: Vec<_> = buckets
+            .into_iter()
+            .map(|(key, _, payload)| {
+                let index = K::resolve_key(graphrecord, &key)?;
+
+                Ok((index, payload.map(|_| ())))
+            })
+            .collect::<QueryResult<_>>()?;
+
+        Ok(Box::new(elements.into_iter()))
     }
 
-    fn estimate(_operation: &KeysOperation, input: Estimate, _stats: &Stats) -> Estimate {
-        keys_estimate(&input)
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            elements: input.elements,
+            distinct: input.elements,
+            selectivity: None,
+            per_group: None,
+        }
     }
 }
 
-impl<V, O, K> Apply<KeysOperation> for GroupOperand<OperandHandle<Bare<V>, Multiple<O>>, K>
-where
-    V: ValueType,
-    O: OrderState,
-    K: KeyOperand,
-{
-    type Output = ElementsOperand<K::Key, Unordered>;
-
-    fn apply<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: Self::ReturnValue<'a>,
-        _prepared: <KeysOperation as Prepare>::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        Ok(Box::new(
-            values.map(|(key, values)| (key, values.map(|_values| ()))),
-        ))
-    }
-
-    fn estimate(_operation: &KeysOperation, input: Estimate, _stats: &Stats) -> Estimate {
-        keys_estimate(&input)
-    }
-}
-
-impl<I, V, K> Apply<KeysOperation> for GroupOperand<OperandHandle<Indexed<I, V>, Single>, K>
-where
-    I: IndexDomain,
-    V: ValueType,
-    K: KeyOperand,
-{
-    type Output = ElementsOperand<K::Key, Unordered>;
-
-    fn apply<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: Self::ReturnValue<'a>,
-        _prepared: <KeysOperation as Prepare>::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        Ok(Box::new(values.map(|(key, value)| {
-            let value = match value {
-                Ok(Some((_index, value))) => value.map(|_value| ()),
-                Ok(None) => Ok(()),
-                Err(failure) => Err(failure),
-            };
-
-            (key, value)
-        })))
-    }
-
-    fn estimate(_operation: &KeysOperation, input: Estimate, _stats: &Stats) -> Estimate {
-        keys_estimate(&input)
-    }
-}
-
-impl<V, K> Apply<KeysOperation> for GroupOperand<OperandHandle<Bare<V>, Single>, K>
-where
-    V: ValueType,
-    K: KeyOperand,
-{
-    type Output = ElementsOperand<K::Key, Unordered>;
-
-    fn apply<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: Self::ReturnValue<'a>,
-        _prepared: <KeysOperation as Prepare>::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        Ok(Box::new(values.map(|(key, value)| {
-            let value = match value {
-                Ok(Some(value)) => value.map(|_value| ()),
-                Ok(None) => Ok(()),
-                Err(failure) => Err(failure),
-            };
-
-            (key, value)
-        })))
-    }
-
-    fn estimate(_operation: &KeysOperation, input: Estimate, _stats: &Stats) -> Estimate {
-        keys_estimate(&input)
-    }
-}
-
-impl<I, V, K> Apply<KeysOperation> for GroupOperand<OperandHandle<Indexed<I, V>, Definite>, K>
-where
-    I: IndexDomain,
-    V: ValueType,
-    K: KeyOperand,
-{
-    type Output = ElementsOperand<K::Key, Unordered>;
-
-    fn apply<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: Self::ReturnValue<'a>,
-        _prepared: <KeysOperation as Prepare>::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        Ok(Box::new(values.map(|(key, value)| {
-            let value = value.and_then(|(_index, value)| value.map(|_value| ()));
-
-            (key, value)
-        })))
-    }
-
-    fn estimate(_operation: &KeysOperation, input: Estimate, _stats: &Stats) -> Estimate {
-        keys_estimate(&input)
-    }
-}
-
-impl<V, K> Apply<KeysOperation> for GroupOperand<OperandHandle<Bare<V>, Definite>, K>
-where
-    V: ValueType,
-    K: KeyOperand,
-{
-    type Output = ElementsOperand<K::Key, Unordered>;
-
-    fn apply<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: Self::ReturnValue<'a>,
-        _prepared: <KeysOperation as Prepare>::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
-    where
-        Self: 'a,
-    {
-        Ok(Box::new(values.map(|(key, value)| {
-            let value = value.and_then(|value| value.map(|_value| ()));
-
-            (key, value)
-        })))
-    }
-
-    fn estimate(_operation: &KeysOperation, input: Estimate, _stats: &Stats) -> Estimate {
-        keys_estimate(&input)
-    }
-}
-
-impl<O> Keys for O
-where
-    O: Apply<KeysOperation>,
-{
-    type ReturnOperand = <O as Apply<KeysOperation>>::Output;
+impl<O: Apply<KeysOperation>> Keys for O {
+    type ReturnOperand = O::Output;
 
     fn keys(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), KeysOperation))

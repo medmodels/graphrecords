@@ -41,7 +41,7 @@ where
 {
     ContextRule {
         rewrite,
-        matched: PhantomData::<fn() -> (C, O)>,
+        matched: PhantomData,
     }
 }
 
@@ -57,7 +57,7 @@ where
     F: Fn(&C, &Stats) -> Option<O> + Send + Sync + 'static,
 {
     fn apply(&self, operand: O, stats: &Stats) -> Transformed<O> {
-        let Some(context) = operand.downcast::<C>() else {
+        let Some(context) = operand.as_plan_node().downcast::<C>() else {
             return Transformed::unchanged(operand);
         };
 

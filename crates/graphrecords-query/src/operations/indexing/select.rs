@@ -3,7 +3,9 @@ use crate::{
     Multiple, Operand, OrderState, QueryResult, Single, Unordered,
     execution::EvaluationCache,
     operands::{DefiniteElementOperand, ElementOperand, ElementsOperand},
-    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Select,
 };
@@ -11,8 +13,8 @@ use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashSet;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Select")]
-#[plan(optimizer_hints(distinct))]
 pub struct SelectOperation;
 
 const fn multiple_estimate(input: &Estimate) -> Estimate {
@@ -46,7 +48,7 @@ impl Prepare for SelectOperation {
 }
 
 impl<E: EntityDomain, I: IndexDomain, O: OrderState>
-    Kernel<Indexed<I, EntityReference<E>>, Multiple<O>> for SelectOperation
+    LaneKernel<Indexed<I, EntityReference<E>>, Multiple<O>> for SelectOperation
 {
     type Output = ElementsOperand<E, Unordered>;
 
@@ -56,7 +58,7 @@ impl<E: EntityDomain, I: IndexDomain, O: OrderState>
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let targets: GrHashSet<_> = values
-            .map(|(_address, reference)| reference)
+            .map(|(_, reference)| reference)
             .collect::<QueryResult<_>>()?;
 
         Ok(Box::new(targets.into_iter().map(|target| (target, Ok(())))))
@@ -67,7 +69,7 @@ impl<E: EntityDomain, I: IndexDomain, O: OrderState>
     }
 }
 
-impl<E: EntityDomain, I: IndexDomain> Kernel<Indexed<I, EntityReference<E>>, Single>
+impl<E: EntityDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>, Single>
     for SelectOperation
 {
     type Output = ElementOperand<E>;
@@ -77,7 +79,7 @@ impl<E: EntityDomain, I: IndexDomain> Kernel<Indexed<I, EntityReference<E>>, Sin
         value: KeyedStream<'a, I, EntityReference<E>, Single>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let Some((_address, reference)) = value else {
+        let Some((_, reference)) = value else {
             return Ok(None);
         };
         let target = reference?;
@@ -90,7 +92,7 @@ impl<E: EntityDomain, I: IndexDomain> Kernel<Indexed<I, EntityReference<E>>, Sin
     }
 }
 
-impl<E: EntityDomain, I: IndexDomain> Kernel<Indexed<I, EntityReference<E>>, Definite>
+impl<E: EntityDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>, Definite>
     for SelectOperation
 {
     type Output = DefiniteElementOperand<E>;
@@ -100,8 +102,7 @@ impl<E: EntityDomain, I: IndexDomain> Kernel<Indexed<I, EntityReference<E>>, Def
         value: KeyedStream<'a, I, EntityReference<E>, Definite>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let (_address, reference) = value;
-        let target = reference?;
+        let target = value.1?;
 
         Ok((target, Ok(())))
     }
@@ -111,7 +112,7 @@ impl<E: EntityDomain, I: IndexDomain> Kernel<Indexed<I, EntityReference<E>>, Def
     }
 }
 
-impl<E: EntityDomain, O: OrderState> Kernel<Bare<EntityReference<E>>, Multiple<O>>
+impl<E: EntityDomain, O: OrderState> LaneKernel<Bare<EntityReference<E>>, Multiple<O>>
     for SelectOperation
 {
     type Output = ElementsOperand<E, Unordered>;
@@ -131,7 +132,7 @@ impl<E: EntityDomain, O: OrderState> Kernel<Bare<EntityReference<E>>, Multiple<O
     }
 }
 
-impl<E: EntityDomain> Kernel<Bare<EntityReference<E>>, Single> for SelectOperation {
+impl<E: EntityDomain> LaneKernel<Bare<EntityReference<E>>, Single> for SelectOperation {
     type Output = ElementOperand<E>;
 
     fn execute<'a>(
@@ -147,7 +148,7 @@ impl<E: EntityDomain> Kernel<Bare<EntityReference<E>>, Single> for SelectOperati
     }
 }
 
-impl<E: EntityDomain> Kernel<Bare<EntityReference<E>>, Definite> for SelectOperation {
+impl<E: EntityDomain> LaneKernel<Bare<EntityReference<E>>, Definite> for SelectOperation {
     type Output = DefiniteElementOperand<E>;
 
     fn execute<'a>(
@@ -163,11 +164,8 @@ impl<E: EntityDomain> Kernel<Bare<EntityReference<E>>, Definite> for SelectOpera
     }
 }
 
-impl<O> Select for O
-where
-    O: Apply<SelectOperation>,
-{
-    type ReturnOperand = <O as Apply<SelectOperation>>::Output;
+impl<O: Apply<SelectOperation>> Select for O {
+    type ReturnOperand = O::Output;
 
     fn select(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), SelectOperation))

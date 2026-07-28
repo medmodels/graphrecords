@@ -1,11 +1,11 @@
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple, Operand, OrderState,
-    QueryResult, ValueType,
+    EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
     execution::EvaluationCache,
-    operands::{GroupOperand, OperandHandle, try_partition_by},
+    operands::{
+        GroupOperand, OperandHandle, PartitionArity, PartitionBuilder, PartitionClassification,
+    },
     operations::{
-        Apply, ArgumentSource, Kernel, KeyOperand, Keyed, KeyedStream, Operation, OperationContext,
-        Prepare, Retention,
+        Apply, KeyOperand, KeyedStream, LaneKernel, Operation, OperationContext, Prepare, Retention,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::GroupBy,
@@ -13,14 +13,18 @@ use crate::{
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "GroupBy")]
-pub struct GroupByOperation<K: KeyOperand> {
+pub struct GroupByOperation<K> {
     #[argument]
-    pub key: K,
+    key: K,
 }
 
-impl<K: KeyOperand> Prepare for GroupByOperation<K> {
-    type Prepared<'a> = K::Prepared<'a>;
+impl<K: Prepare> Prepare for GroupByOperation<K> {
+    type Prepared<'a>
+        = K::Prepared<'a>
+    where
+        Self: 'a;
 
     fn prepare<'a>(
         &'a self,
@@ -31,32 +35,28 @@ impl<K: KeyOperand> Prepare for GroupByOperation<K> {
     }
 }
 
-impl<I, V, K, O> Kernel<Indexed<I, V>, Multiple<O>> for GroupByOperation<K>
-where
-    I: IndexDomain,
-    V: ValueType,
-    O: OrderState,
-    for<'a> K: KeyOperand<Subject = I>
-        + ArgumentSource<Keyed<I>, Value<'a> = <K::Key as IndexDomain>::Index<'a>>,
+impl<I: IndexDomain, V: ValueType, K: KeyOperand<I>, C: PartitionArity<Indexed<I, V>>>
+    LaneKernel<Indexed<I, V>, C> for GroupByOperation<K>
 {
-    type Output = GroupOperand<OperandHandle<Indexed<I, V>, Multiple<O>>, K>;
+    type Output = GroupOperand<I, K::Key, OperandHandle<Indexed<I, V>, C>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, V, Multiple<O>>,
+        values: KeyedStream<'a, I, V, C>,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let label = Self::LABEL;
 
-        let groups = try_partition_by(values, move |(index, _)| {
-            let step = K::resolve(&prepared, index, label);
+        PartitionBuilder::<_, _, _, C>::new(values).build(|element| {
+            let member = &element.0;
+            let step = K::resolve(&prepared, member, label);
 
-            <<K as ArgumentSource<Keyed<I>>>::Retention as Retention>::collapse(step).transpose()
-        })?;
-
-        Ok(Box::new(
-            groups.map(|(key, partition)| (key, Ok(partition))),
-        ))
+            match <K::Retention as Retention>::collapse(step) {
+                None => PartitionClassification::Omit,
+                Some(Err(failure)) => PartitionClassification::KeyFailure(failure),
+                Some(Ok(value)) => PartitionClassification::Key(K::to_key(&value)),
+            }
+        })
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -94,9 +94,9 @@ where
 impl<O, K> GroupBy<K> for O
 where
     O: Apply<GroupByOperation<K>>,
-    K: KeyOperand,
+    GroupByOperation<K>: Operation,
 {
-    type ReturnOperand = <O as Apply<GroupByOperation<K>>>::Output;
+    type ReturnOperand = O::Output;
 
     fn group_by(&self, key: K) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

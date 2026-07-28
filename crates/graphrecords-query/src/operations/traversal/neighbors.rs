@@ -3,7 +3,7 @@ use crate::{
     Multiple, Operand, OrderState, QueryResult, Single, Unit, Unordered,
     execution::EvaluationCache,
     operands::NodesOperand,
-    operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{Apply, KeyedStream, LaneKernel, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::Neighbors,
 };
@@ -15,7 +15,7 @@ fn neighbors_for_node<'a>(
     node: &'a NodeIndex,
     direction: EdgeDirection,
 ) -> QueryResult<BoxedIterator<'a, &'a NodeIndex>> {
-    let raise = |error| Failure::new_at(NeighborsOperation::LABEL, error, &node);
+    let raise = |error| Failure::new_at::<NodeIndex, _>(NeighborsOperation::LABEL, error, &node);
 
     Ok(match direction {
         EdgeDirection::Outgoing => Box::new(graphrecord.outgoing_neighbors(node).map_err(raise)?),
@@ -25,8 +25,8 @@ fn neighbors_for_node<'a>(
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Neighbors")]
-#[plan(optimizer_hints(distinct))]
 pub struct NeighborsOperation {
     direction: EdgeDirection,
 }
@@ -43,7 +43,7 @@ impl Prepare for NeighborsOperation {
     }
 }
 
-impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for NeighborsOperation {
+impl<O: OrderState> LaneKernel<Indexed<NodeIndex, Unit>, Multiple<O>> for NeighborsOperation {
     type Output = NodesOperand<Unordered>;
 
     fn execute<'a>(
@@ -64,7 +64,7 @@ impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for NeighborsO
     }
 }
 
-impl Kernel<Indexed<NodeIndex, Unit>, Single> for NeighborsOperation {
+impl LaneKernel<Indexed<NodeIndex, Unit>, Single> for NeighborsOperation {
     type Output = NodesOperand<Unordered>;
 
     fn execute<'a>(
@@ -85,7 +85,7 @@ impl Kernel<Indexed<NodeIndex, Unit>, Single> for NeighborsOperation {
     }
 }
 
-impl Kernel<Indexed<NodeIndex, Unit>, Definite> for NeighborsOperation {
+impl LaneKernel<Indexed<NodeIndex, Unit>, Definite> for NeighborsOperation {
     type Output = NodesOperand<Unordered>;
 
     fn execute<'a>(
@@ -104,11 +104,8 @@ impl Kernel<Indexed<NodeIndex, Unit>, Definite> for NeighborsOperation {
     }
 }
 
-impl<O> Neighbors for O
-where
-    O: Apply<NeighborsOperation>,
-{
-    type ReturnOperand = <O as Apply<NeighborsOperation>>::Output;
+impl<O: Apply<NeighborsOperation>> Neighbors for O {
+    type ReturnOperand = O::Output;
 
     fn neighbors(&self, direction: EdgeDirection) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

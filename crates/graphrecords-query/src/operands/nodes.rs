@@ -14,7 +14,7 @@ pub type NodeOperand = ElementOperand<NodeIndex>;
 pub type DefiniteNodeOperand = DefiniteElementOperand<NodeIndex>;
 
 #[derive(PlanNode, MatchInputs, OptimizePlan, OptimizerHints, Explain)]
-#[plan(operand = NodesOperand<Unordered>, optimizer_hints(distinct))]
+#[plan(operand = NodesOperand<Unordered>)]
 pub struct AllNodes;
 
 impl Estimated for AllNodes {

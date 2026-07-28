@@ -17,10 +17,12 @@ use std::{
 };
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "Drop")]
 pub struct Drop;
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 pub struct DropErrorsOf<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
 }
@@ -46,6 +48,7 @@ impl<D: Diagnostic> Explain for DropErrorsOf<D> {
 }
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 pub struct DropErrorsIn<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
 }
@@ -71,6 +74,7 @@ impl<G: ErrorGroup> Explain for DropErrorsIn<G> {
 }
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 pub struct DropErrorsWithCause<C: Error + 'static> {
     marker: PhantomData<fn() -> C>,
 }
@@ -144,178 +148,149 @@ impl<C: Error + 'static> Prepare for DropErrorsWithCause<C> {
 }
 
 impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for Drop {
+    type Emission = Dropping;
     type OutShape = Indexed<I, V>;
-    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(Pipeline::default().filter_map(
-            |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| {
-                result.ok().map(|value| (index, Ok(value)))
-            },
-        ))
+        Ok(Pipeline::unkeyed(|result: QueryResult<_>| {
+            result.ok().map(Ok)
+        }))
     }
 }
 
 impl<V: ValueType> ElementKernel<Bare<V>> for Drop {
+    type Emission = Dropping;
     type OutShape = Bare<V>;
-    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(Pipeline::default().filter_map(|result: QueryResult<V::Value<'a>>| result.ok().map(Ok)))
+        Ok(Pipeline::new(|result: QueryResult<_>| result.ok().map(Ok)))
     }
 }
 
 impl<I: IndexDomain, V: ValueType, D: Diagnostic> ElementKernel<Indexed<I, V>> for DropErrorsOf<D> {
+    type Emission = Dropping;
     type OutShape = Indexed<I, V>;
-    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(Pipeline::default().filter_map(
-            |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
-                Err(failure) if failure.is_kind::<D>() => None,
-                result => Some((index, result)),
-            },
-        ))
+        Ok(Pipeline::unkeyed(|result: QueryResult<_>| match result {
+            Err(failure) if failure.is_kind::<D>() => None,
+            result => Some(result),
+        }))
     }
 }
 
 impl<V: ValueType, D: Diagnostic> ElementKernel<Bare<V>> for DropErrorsOf<D> {
+    type Emission = Dropping;
     type OutShape = Bare<V>;
-    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(
-            Pipeline::default().filter_map(|result: QueryResult<V::Value<'a>>| match result {
-                Err(failure) if failure.is_kind::<D>() => None,
-                result => Some(result),
-            }),
-        )
+        Ok(Pipeline::new(|result: QueryResult<_>| match result {
+            Err(failure) if failure.is_kind::<D>() => None,
+            result => Some(result),
+        }))
     }
 }
 
 impl<I: IndexDomain, V: ValueType, G: ErrorGroup> ElementKernel<Indexed<I, V>> for DropErrorsIn<G> {
+    type Emission = Dropping;
     type OutShape = Indexed<I, V>;
-    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(Pipeline::default().filter_map(
-            |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
-                Err(failure) if G::contains(&failure.kind()) => None,
-                result => Some((index, result)),
-            },
-        ))
+        Ok(Pipeline::unkeyed(|result: QueryResult<_>| match result {
+            Err(failure) if G::contains(&failure.kind()) => None,
+            result => Some(result),
+        }))
     }
 }
 
 impl<V: ValueType, G: ErrorGroup> ElementKernel<Bare<V>> for DropErrorsIn<G> {
+    type Emission = Dropping;
     type OutShape = Bare<V>;
-    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(
-            Pipeline::default().filter_map(|result: QueryResult<V::Value<'a>>| match result {
-                Err(failure) if G::contains(&failure.kind()) => None,
-                result => Some(result),
-            }),
-        )
+        Ok(Pipeline::new(|result: QueryResult<_>| match result {
+            Err(failure) if G::contains(&failure.kind()) => None,
+            result => Some(result),
+        }))
     }
 }
 
 impl<I: IndexDomain, V: ValueType, C: Error + 'static> ElementKernel<Indexed<I, V>>
     for DropErrorsWithCause<C>
 {
+    type Emission = Dropping;
     type OutShape = Indexed<I, V>;
-    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(Pipeline::default().filter_map(
-            |(index, result): (I::Index<'a>, QueryResult<V::Value<'a>>)| match result {
-                Err(failure) if failure.has_cause::<C>() => None,
-                result => Some((index, result)),
-            },
-        ))
+        Ok(Pipeline::unkeyed(|result: QueryResult<_>| match result {
+            Err(failure) if failure.has_cause::<C>() => None,
+            result => Some(result),
+        }))
     }
 }
 
 impl<V: ValueType, C: Error + 'static> ElementKernel<Bare<V>> for DropErrorsWithCause<C> {
+    type Emission = Dropping;
     type OutShape = Bare<V>;
-    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(
-            Pipeline::default().filter_map(|result: QueryResult<V::Value<'a>>| match result {
-                Err(failure) if failure.has_cause::<C>() => None,
-                result => Some(result),
-            }),
-        )
+        Ok(Pipeline::new(|result: QueryResult<_>| match result {
+            Err(failure) if failure.has_cause::<C>() => None,
+            result => Some(result),
+        }))
     }
 }
 
-impl<I> ErrorPolicy<I> for Drop
-where
-    I: Apply<Self>,
-{
-    type Output = <I as Apply<Self>>::Output;
+impl<I: Apply<Self>> ErrorPolicy<I> for Drop {
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, Self))
     }
 }
 
-impl<I, D> ErrorPolicyOf<I, D> for Drop
-where
-    I: Apply<DropErrorsOf<D>>,
-    D: Diagnostic,
-{
-    type Output = <I as Apply<DropErrorsOf<D>>>::Output;
+impl<I: Apply<DropErrorsOf<D>>, D: Diagnostic> ErrorPolicyOf<I, D> for Drop {
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, DropErrorsOf::new()))
     }
 }
 
-impl<I, G> ErrorPolicyIn<I, G> for Drop
-where
-    I: Apply<DropErrorsIn<G>>,
-    G: ErrorGroup,
-{
-    type Output = <I as Apply<DropErrorsIn<G>>>::Output;
+impl<I: Apply<DropErrorsIn<G>>, G: ErrorGroup> ErrorPolicyIn<I, G> for Drop {
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, DropErrorsIn::new()))
     }
 }
 
-impl<I, C> ErrorPolicyWithCause<I, C> for Drop
-where
-    I: Apply<DropErrorsWithCause<C>>,
-    C: Error + 'static,
-{
-    type Output = <I as Apply<DropErrorsWithCause<C>>>::Output;
+impl<I: Apply<DropErrorsWithCause<C>>, C: Error + 'static> ErrorPolicyWithCause<I, C> for Drop {
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, DropErrorsWithCause::new()))

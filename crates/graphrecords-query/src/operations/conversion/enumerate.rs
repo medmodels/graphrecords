@@ -3,15 +3,17 @@ use crate::{
     QueryResult, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
-    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Enumerate,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Enumerate")]
-#[plan(optimizer_hints(distinct))]
 pub struct EnumerateOperation;
 
 impl Prepare for EnumerateOperation {
@@ -26,7 +28,7 @@ impl Prepare for EnumerateOperation {
     }
 }
 
-impl<V: ValueType> Kernel<Bare<V>, Multiple<Ordered>> for EnumerateOperation {
+impl<V: ValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for EnumerateOperation {
     type Output = OperandHandle<Indexed<Positional, V>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -42,7 +44,9 @@ impl<V: ValueType> Kernel<Bare<V>, Multiple<Ordered>> for EnumerateOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Multiple<Ordered>> for EnumerateOperation {
+impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
+    for EnumerateOperation
+{
     type Output = OperandHandle<Indexed<Positional, V>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -53,7 +57,7 @@ impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Multiple<Ordered>> for 
         Ok(Box::new(
             values
                 .enumerate()
-                .map(|(position, (_index, value))| (position, value)),
+                .map(|(position, (_, value))| (position, value)),
         ))
     }
 
@@ -62,11 +66,8 @@ impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Multiple<Ordered>> for 
     }
 }
 
-impl<O> Enumerate for O
-where
-    O: Apply<EnumerateOperation>,
-{
-    type ReturnOperand = <O as Apply<EnumerateOperation>>::Output;
+impl<O: Apply<EnumerateOperation>> Enumerate for O {
+    type ReturnOperand = O::Output;
 
     fn enumerate(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), EnumerateOperation))

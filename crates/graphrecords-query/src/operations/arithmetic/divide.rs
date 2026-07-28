@@ -3,8 +3,8 @@ use crate::{
     Scalar,
     execution::EvaluationCache,
     operations::{
-        Alignment, Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation,
-        OperationContext, Pipeline, Prepare, Retention, Unaligned,
+        Apply, ArgumentSource, BarePipeline, ElementKernel, ElementPipeline, IndexedValuePipeline,
+        Keyed, Operation, OperationContext, Pipeline, Prepare, Retention, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Divide,
@@ -15,11 +15,6 @@ use std::{
     fmt::{self, Display, Formatter},
     ops::Div,
 };
-
-type IndexedDivisionElement<'a, I> = (
-    <Keyed<I> as Alignment>::Address<'a>,
-    QueryResult<GraphRecordValue>,
-);
 
 #[derive(Debug)]
 pub struct DivisionByZero {
@@ -41,6 +36,7 @@ impl Diagnostic for DivisionByZero {
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "Divide")]
 pub struct DivideOperation<A> {
     #[argument]
@@ -78,7 +74,7 @@ fn is_division_by_zero(dividend: &GraphRecordValue, divisor: &GraphRecordValue) 
 
 fn divide_indexed<'a, I, A>(
     prepared: A::Prepared<'a>,
-) -> Pipeline<'a, IndexedDivisionElement<'a, I>, IndexedDivisionElement<'a, I>, A::Retention>
+) -> IndexedValuePipeline<'a, I, Scalar, Scalar, A::Retention>
 where
     I: IndexDomain,
     A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
@@ -86,20 +82,20 @@ where
 {
     let label = DivideOperation::<A>::LABEL;
 
-    Pipeline::element_wise(move |(index, item)| {
+    Pipeline::keyed(move |index, item| {
         let value = match item {
             Ok(value) => value,
             Err(original) => {
-                return <A::Retention as Retention>::keep((index, Err(original)));
+                return <A::Retention as Retention>::keep(Err(original));
             }
         };
 
         let step = A::resolve(&prepared, &index, label);
 
         <A::Retention as Retention>::map_step(step, |resolved| {
-            let result = resolved.and_then(|argument| {
+            resolved.and_then(|argument| {
                 if is_division_by_zero(&value, &argument) {
-                    return Err(Failure::new_at(
+                    return Err(Failure::new_at::<I, _>(
                         label,
                         DivisionByZero { dividend: value },
                         &index,
@@ -108,24 +104,20 @@ where
 
                 value
                     .div(argument)
-                    .map_err(|error| Failure::new_at(label, error, &index))
-            });
-
-            (index, result)
+                    .map_err(|error| Failure::new_at::<I, _>(label, error, &index))
+            })
         })
     })
 }
 
-fn divide_bare<'a, A>(
-    prepared: A::Prepared<'a>,
-) -> Pipeline<'a, QueryResult<GraphRecordValue>, QueryResult<GraphRecordValue>, A::Retention>
+fn divide_bare<'a, A>(prepared: A::Prepared<'a>) -> BarePipeline<'a, Scalar, Scalar, A::Retention>
 where
     A: ArgumentSource<Unaligned, Value<'a> = GraphRecordValue>,
     A::Prepared<'a>: 'a,
 {
     let label = DivideOperation::<A>::LABEL;
 
-    Pipeline::element_wise(move |item| {
+    Pipeline::new(move |item| {
         let value = match item {
             Ok(value) => value,
             Err(original) => {
@@ -154,14 +146,14 @@ where
     I: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<I, Scalar>;
-    type Retention = <A as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Scalar>, Self>> {
-        Ok(divide_indexed::<I, A>(prepared))
+        Ok(divide_indexed::<_, A>(prepared))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -176,8 +168,8 @@ impl<A> ElementKernel<Bare<Scalar>> for DivideOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordValue>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<Scalar>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -199,7 +191,7 @@ where
     DivideOperation<A>: Operation,
     O: Apply<DivideOperation<A>>,
 {
-    type ReturnOperand = <O as Apply<DivideOperation<A>>>::Output;
+    type ReturnOperand = O::Output;
 
     fn divide(&self, argument: A) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

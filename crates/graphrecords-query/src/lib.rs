@@ -15,7 +15,7 @@ use crate::{
 };
 pub use context::{EvaluateContext, OperandContext};
 pub use error::{
-    Diagnostic, ErrorGroup, External, Failure, FailureKind, IncomparableValues,
+    Diagnostic, DuplicateIndex, ErrorGroup, External, Failure, FailureKind, IncomparableValues,
     IncomparableValuesAt, QueryResult,
 };
 pub use explain::{Explain, Explanation, Labeled};
@@ -24,13 +24,16 @@ use graphrecords_core::{
     errors::GraphRecordResult,
     graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
 };
-use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 pub use operands::{
-    Arity, AttributeName, AttributeSet, Bare, Definite, DefiniteEdgeOperand, DefiniteNodeOperand,
-    DefiniteReferenceOperand, EdgeOperand, EdgesOperand, ElementShape, EntityReference,
-    EvaluateOperand, FailureKindValue, FailureValue, IndexValue, Indexed, Mask, MaskMap, Multiple,
-    NodeOperand, NodesOperand, Operand, OrderState, Ordered, ReferenceOperand, ReferencesOperand,
-    Return, ReturnShape, ReturnValueType, Scalar, Single, Unit, Unordered, ValueType,
+    Arity, AttributeName, Bare, BucketOwned, CheckedIndexedLaneBuilder, Definite,
+    DefiniteEdgeOperand, DefiniteNodeOperand, DefiniteReferenceOperand,
+    DuplicateExpandedChildIndex, EdgeOperand, EdgesOperand, ElementShape, EntityReference,
+    EvaluateOperand, ExpandedChild, ExpandedIndex, ExpandedIndexOwned, ExpandedIndexReference,
+    FailureKindValue, FailureValue, GroupOperand, IndexValue, Indexed, KeyFailureOwned, Mask,
+    Multiple, NoChildIndex, NodeOperand, NodesOperand, Operand, OrderState, Ordered,
+    PartitionBucketParts, PartitionKeyFailureParts, PartitionOwned, PartitionOwnedParts,
+    PartitionParts, PreparedIndexedMultiple, ReferenceOperand, ReferencesOperand, Return,
+    ReturnShape, ReturnValueType, Scalar, Single, Unit, Unordered, ValueType,
 };
 use std::{
     any::Any,
@@ -45,63 +48,18 @@ pub type Position = usize;
 
 pub trait OwnedIndex: Any + Debug + Display + Send + Sync {}
 
-impl OwnedIndex for NodeIndex {}
-impl OwnedIndex for EdgeIndex {}
-impl OwnedIndex for Position {}
-impl OwnedIndex for GraphRecordValue {}
-impl OwnedIndex for bool {}
-impl OwnedIndex for FailureKind {}
-
-pub trait ToOwnedValue {
-    type Owned: 'static;
-
-    fn to_owned_value(&self) -> Self::Owned;
-}
-
-impl<T: Clone + 'static> ToOwnedValue for &T {
-    type Owned = T;
-
-    fn to_owned_value(&self) -> T {
-        (*self).clone()
-    }
-}
-
-macro_rules! owned_value_leaf {
-    ($Type:ty) => {
-        impl ToOwnedValue for $Type {
-            type Owned = Self;
-
-            fn to_owned_value(&self) -> Self::Owned {
-                self.clone()
-            }
-        }
-    };
-}
-
-owned_value_leaf!(());
-owned_value_leaf!(bool);
-owned_value_leaf!(Position);
-owned_value_leaf!(EdgeIndex);
-owned_value_leaf!(GraphRecordValue);
-owned_value_leaf!(GraphRecordAttribute);
-owned_value_leaf!(Failure);
-owned_value_leaf!(FailureKind);
-owned_value_leaf!(GrHashSet<GraphRecordAttribute>);
-
-impl<T: Clone + 'static> ToOwnedValue for GrHashMap<T, bool> {
-    type Owned = Self;
-
-    fn to_owned_value(&self) -> Self::Owned {
-        self.clone()
-    }
-}
+impl<T: Any + Debug + Display + Send + Sync> OwnedIndex for T {}
 
 pub trait IndexDomain: 'static + Clone {
-    type Owned: 'static + Clone + Eq + Hash + ToOwnedValue<Owned = Self::Owned> + OwnedIndex;
+    type Owned: 'static + Clone + Eq + Hash + OwnedIndex;
 
-    type Index<'a>: Clone + Eq + Hash + ToOwnedValue<Owned = Self::Owned>
+    type Index<'a>: Clone + Eq + Hash
     where
         Self: 'a;
+
+    fn to_owned(index: &Self::Index<'_>) -> Self::Owned;
+
+    fn from_owned(owned: &Self::Owned) -> Self::Index<'_>;
 }
 
 pub trait EntityDomain: IndexDomain {
@@ -117,31 +75,92 @@ pub struct Positional;
 impl IndexDomain for Positional {
     type Index<'a> = Position;
     type Owned = Position;
+
+    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+        *index
+    }
+
+    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+        *owned
+    }
 }
 
 impl IndexDomain for EdgeIndex {
     type Index<'a> = &'a Self;
     type Owned = Self;
+
+    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+        **index
+    }
+
+    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+        owned
+    }
 }
 
 impl IndexDomain for NodeIndex {
     type Index<'a> = &'a Self;
     type Owned = Self;
+
+    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+        (*index).clone()
+    }
+
+    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+        owned
+    }
 }
 
 impl IndexDomain for FailureKind {
     type Index<'a> = Self;
     type Owned = Self;
+
+    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+        *index
+    }
+
+    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+        *owned
+    }
 }
 
 impl IndexDomain for GraphRecordValue {
     type Index<'a> = Self;
     type Owned = Self;
+
+    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+        index.clone()
+    }
+
+    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+        owned.clone()
+    }
+}
+
+impl IndexDomain for AttributeName {
+    type Index<'a> = GraphRecordAttribute;
+    type Owned = GraphRecordAttribute;
+
+    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+        index.clone()
+    }
+
+    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+        owned.clone()
+    }
 }
 
 impl IndexDomain for bool {
     type Index<'a> = Self;
     type Owned = Self;
+
+    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+        *index
+    }
+
+    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+        *owned
+    }
 }
 
 impl EntityDomain for NodeIndex {

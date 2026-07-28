@@ -3,7 +3,9 @@ use crate::{
     Labeled, Mask, Multiple, Operand, OrderState, Positional, QueryResult, Scalar,
     execution::EvaluationCache,
     operands::{BareAttributeOperand, BareBoolOperand, BareIndexOperand, BareValueOperand},
-    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Sum,
 };
@@ -14,6 +16,7 @@ use graphrecords_core::{
 use std::ops::Add;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Sum")]
 pub struct SumOperation;
 
@@ -29,7 +32,7 @@ impl Prepare for SumOperation {
     }
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for SumOperation {
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Scalar>, Multiple<O>> for SumOperation {
     type Output = BareValueOperand;
 
     fn execute<'a>(
@@ -44,7 +47,7 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
                 Some(sum) => sum
                     .add(value)
                     .map(Some)
-                    .map_err(|error| Failure::new_at(Self::LABEL, error, &index)),
+                    .map_err(|error| Failure::new_at::<I, _>(Self::LABEL, error, &index)),
                 None => Ok(Some(value)),
             }
         });
@@ -52,12 +55,12 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for SumOperation {
+impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for SumOperation {
     type Output = BareValueOperand;
 
     fn execute<'a>(
@@ -80,12 +83,12 @@ impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for SumOperation {
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Mask>, Multiple<O>> for SumOperation {
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Mask>, Multiple<O>> for SumOperation {
     type Output = BareBoolOperand;
 
     fn execute<'a>(
@@ -93,21 +96,21 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Mask>, Multiple<O>> for Su
         mut values: KeyedStream<'a, I, Mask, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum: Option<bool>, (_index, value)| {
+        let sum = values.try_fold(None, |sum, (_, value)| {
             let value = value?;
 
-            Ok::<_, Box<Failure>>(Some(sum.map_or(value, |sum| sum || value)))
+            Ok(Some(sum.map_or(value, |sum| sum || value)))
         });
 
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<Mask>, Multiple<O>> for SumOperation {
+impl<O: OrderState> LaneKernel<Bare<Mask>, Multiple<O>> for SumOperation {
     type Output = BareBoolOperand;
 
     fn execute<'a>(
@@ -115,21 +118,21 @@ impl<O: OrderState> Kernel<Bare<Mask>, Multiple<O>> for SumOperation {
         mut values: BareStream<'a, Mask, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum: Option<bool>, value| {
+        let sum = values.try_fold(None, |sum, value| {
             let value = value?;
 
-            Ok::<_, Box<Failure>>(Some(sum.map_or(value, |sum| sum || value)))
+            Ok(Some(sum.map_or(value, |sum| sum || value)))
         });
 
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, AttributeName>, Multiple<O>>
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, AttributeName>, Multiple<O>>
     for SumOperation
 {
     type Output = BareAttributeOperand;
@@ -146,7 +149,7 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, AttributeName>, Multiple<O
                 Some(sum) => sum
                     .add(value)
                     .map(Some)
-                    .map_err(|error| Failure::new_at(Self::LABEL, error, &index)),
+                    .map_err(|error| Failure::new_at::<I, _>(Self::LABEL, error, &index)),
                 None => Ok(Some(value)),
             }
         });
@@ -154,12 +157,12 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, AttributeName>, Multiple<O
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<AttributeName>, Multiple<O>> for SumOperation {
+impl<O: OrderState> LaneKernel<Bare<AttributeName>, Multiple<O>> for SumOperation {
     type Output = BareAttributeOperand;
 
     fn execute<'a>(
@@ -182,12 +185,12 @@ impl<O: OrderState> Kernel<Bare<AttributeName>, Multiple<O>> for SumOperation {
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<Positional>>, Multiple<O>>
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, IndexValue<Positional>>, Multiple<O>>
     for SumOperation
 {
     type Output = BareIndexOperand<Positional>;
@@ -197,7 +200,7 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<Positional>>, M
         mut values: KeyedStream<'a, I, IndexValue<Positional>, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum: Option<usize>, (_index, value)| {
+        let sum = values.try_fold(None, |sum, (_, value)| {
             let value = value?;
 
             match sum {
@@ -209,12 +212,12 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<Positional>>, M
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<IndexValue<Positional>>, Multiple<O>> for SumOperation {
+impl<O: OrderState> LaneKernel<Bare<IndexValue<Positional>>, Multiple<O>> for SumOperation {
     type Output = BareIndexOperand<Positional>;
 
     fn execute<'a>(
@@ -222,7 +225,7 @@ impl<O: OrderState> Kernel<Bare<IndexValue<Positional>>, Multiple<O>> for SumOpe
         mut values: BareStream<'a, IndexValue<Positional>, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum: Option<usize>, value| {
+        let sum = values.try_fold(None, |sum, value| {
             let value = value?;
 
             match sum {
@@ -234,12 +237,12 @@ impl<O: OrderState> Kernel<Bare<IndexValue<Positional>>, Multiple<O>> for SumOpe
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<NodeIndex>>, Multiple<O>>
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, IndexValue<NodeIndex>>, Multiple<O>>
     for SumOperation
 {
     type Output = BareIndexOperand<NodeIndex>;
@@ -256,7 +259,7 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<NodeIndex>>, Mu
                 Some(sum) => sum
                     .add(value)
                     .map(Some)
-                    .map_err(|error| Failure::new_at(Self::LABEL, error, &index)),
+                    .map_err(|error| Failure::new_at::<I, _>(Self::LABEL, error, &index)),
                 None => Ok(Some(value)),
             }
         });
@@ -264,12 +267,12 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<NodeIndex>>, Mu
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<IndexValue<NodeIndex>>, Multiple<O>> for SumOperation {
+impl<O: OrderState> LaneKernel<Bare<IndexValue<NodeIndex>>, Multiple<O>> for SumOperation {
     type Output = BareIndexOperand<NodeIndex>;
 
     fn execute<'a>(
@@ -292,12 +295,12 @@ impl<O: OrderState> Kernel<Bare<IndexValue<NodeIndex>>, Multiple<O>> for SumOper
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<EdgeIndex>>, Multiple<O>>
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, IndexValue<EdgeIndex>>, Multiple<O>>
     for SumOperation
 {
     type Output = BareIndexOperand<EdgeIndex>;
@@ -307,7 +310,7 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<EdgeIndex>>, Mu
         mut values: KeyedStream<'a, I, IndexValue<EdgeIndex>, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum: Option<EdgeIndex>, (_index, value)| {
+        let sum = values.try_fold(None, |sum, (_, value)| {
             let value = value?;
 
             match sum {
@@ -319,12 +322,12 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<EdgeIndex>>, Mu
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<IndexValue<EdgeIndex>>, Multiple<O>> for SumOperation {
+impl<O: OrderState> LaneKernel<Bare<IndexValue<EdgeIndex>>, Multiple<O>> for SumOperation {
     type Output = BareIndexOperand<EdgeIndex>;
 
     fn execute<'a>(
@@ -332,7 +335,7 @@ impl<O: OrderState> Kernel<Bare<IndexValue<EdgeIndex>>, Multiple<O>> for SumOper
         mut values: BareStream<'a, IndexValue<EdgeIndex>, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum: Option<EdgeIndex>, value| {
+        let sum = values.try_fold(None, |sum, value| {
             let value = value?;
 
             match sum {
@@ -344,13 +347,13 @@ impl<O: OrderState> Kernel<Bare<IndexValue<EdgeIndex>>, Multiple<O>> for SumOper
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<GraphRecordValue>>, Multiple<O>>
-    for SumOperation
+impl<I: IndexDomain, O: OrderState>
+    LaneKernel<Indexed<I, IndexValue<GraphRecordValue>>, Multiple<O>> for SumOperation
 {
     type Output = BareIndexOperand<GraphRecordValue>;
 
@@ -366,7 +369,7 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<GraphRecordValu
                 Some(sum) => sum
                     .add(value)
                     .map(Some)
-                    .map_err(|error| Failure::new_at(Self::LABEL, error, &index)),
+                    .map_err(|error| Failure::new_at::<I, _>(Self::LABEL, error, &index)),
                 None => Ok(Some(value)),
             }
         });
@@ -374,12 +377,12 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<GraphRecordValu
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<IndexValue<GraphRecordValue>>, Multiple<O>> for SumOperation {
+impl<O: OrderState> LaneKernel<Bare<IndexValue<GraphRecordValue>>, Multiple<O>> for SumOperation {
     type Output = BareIndexOperand<GraphRecordValue>;
 
     fn execute<'a>(
@@ -402,12 +405,12 @@ impl<O: OrderState> Kernel<Bare<IndexValue<GraphRecordValue>>, Multiple<O>> for 
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<bool>>, Multiple<O>>
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, IndexValue<bool>>, Multiple<O>>
     for SumOperation
 {
     type Output = BareIndexOperand<bool>;
@@ -417,21 +420,21 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, IndexValue<bool>>, Multipl
         mut values: KeyedStream<'a, I, IndexValue<bool>, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum: Option<bool>, (_index, value)| {
+        let sum = values.try_fold(None, |sum, (_, value)| {
             let value = value?;
 
-            Ok::<_, Box<Failure>>(Some(sum.map_or(value, |sum| sum || value)))
+            Ok(Some(sum.map_or(value, |sum| sum || value)))
         });
 
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<IndexValue<bool>>, Multiple<O>> for SumOperation {
+impl<O: OrderState> LaneKernel<Bare<IndexValue<bool>>, Multiple<O>> for SumOperation {
     type Output = BareIndexOperand<bool>;
 
     fn execute<'a>(
@@ -439,25 +442,22 @@ impl<O: OrderState> Kernel<Bare<IndexValue<bool>>, Multiple<O>> for SumOperation
         mut values: BareStream<'a, IndexValue<bool>, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum: Option<bool>, value| {
+        let sum = values.try_fold(None, |sum, value| {
             let value = value?;
 
-            Ok::<_, Box<Failure>>(Some(sum.map_or(value, |sum| sum || value)))
+            Ok(Some(sum.map_or(value, |sum| sum || value)))
         });
 
         Ok(sum.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O> Sum for O
-where
-    O: Apply<SumOperation>,
-{
-    type ReturnOperand = <O as Apply<SumOperation>>::Output;
+impl<O: Apply<SumOperation>> Sum for O {
+    type ReturnOperand = O::Output;
 
     fn sum(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), SumOperation))

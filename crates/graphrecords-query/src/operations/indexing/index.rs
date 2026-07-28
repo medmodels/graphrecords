@@ -1,7 +1,6 @@
 use crate::{
-    AttributeName, AttributeSet, EntityDomain, EntityReference, Explain, FailureKindValue,
-    FailureValue, IndexDomain, IndexValue, Indexed, Mask, MaskMap, Operand, QueryResult, Scalar,
-    ToOwnedValue, Unit, ValueType,
+    AttributeName, Bare, EntityDomain, EntityReference, Explain, FailureKindValue, FailureValue,
+    IndexDomain, IndexValue, Indexed, Mask, Operand, QueryResult, Scalar, Unit,
     execution::EvaluationCache,
     operations::{
         Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
@@ -13,7 +12,9 @@ use crate::{
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "Index")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct IndexOperation;
 
 impl Prepare for IndexOperation {
@@ -29,20 +30,16 @@ impl Prepare for IndexOperation {
 }
 
 impl<K: IndexDomain> ElementKernel<Indexed<K, Scalar>> for IndexOperation {
+    type Emission = Preserving;
     type OutShape = Indexed<K, IndexValue<K>>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, Scalar>, Self>> {
-        Ok(Pipeline::default().map(
-            |(index, value): (K::Index<'a>, QueryResult<<Scalar as ValueType>::Value<'a>>)| {
-                let promoted = value.map(|_| index.to_owned_value());
-
-                (index, promoted)
-            },
-        ))
+        Ok(Pipeline::keyed(|index, value: QueryResult<_>| {
+            value.map(|_| K::to_owned(&index))
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -54,20 +51,16 @@ impl<K: IndexDomain> ElementKernel<Indexed<K, Scalar>> for IndexOperation {
 }
 
 impl<K: IndexDomain> ElementKernel<Indexed<K, Mask>> for IndexOperation {
+    type Emission = Preserving;
     type OutShape = Indexed<K, IndexValue<K>>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, Mask>, Self>> {
-        Ok(Pipeline::default().map(
-            |(index, value): (K::Index<'a>, QueryResult<<Mask as ValueType>::Value<'a>>)| {
-                let promoted = value.map(|_| index.to_owned_value());
-
-                (index, promoted)
-            },
-        ))
+        Ok(Pipeline::keyed(|index, value: QueryResult<_>| {
+            value.map(|_| K::to_owned(&index))
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -79,23 +72,16 @@ impl<K: IndexDomain> ElementKernel<Indexed<K, Mask>> for IndexOperation {
 }
 
 impl<K: IndexDomain> ElementKernel<Indexed<K, AttributeName>> for IndexOperation {
+    type Emission = Preserving;
     type OutShape = Indexed<K, IndexValue<K>>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, AttributeName>, Self>> {
-        Ok(Pipeline::default().map(
-            |(index, value): (
-                K::Index<'a>,
-                QueryResult<<AttributeName as ValueType>::Value<'a>>,
-            )| {
-                let promoted = value.map(|_| index.to_owned_value());
-
-                (index, promoted)
-            },
-        ))
+        Ok(Pipeline::keyed(|index, value: QueryResult<_>| {
+            value.map(|_| K::to_owned(&index))
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -107,48 +93,16 @@ impl<K: IndexDomain> ElementKernel<Indexed<K, AttributeName>> for IndexOperation
 }
 
 impl<K: IndexDomain> ElementKernel<Indexed<K, Unit>> for IndexOperation {
+    type Emission = Preserving;
     type OutShape = Indexed<K, IndexValue<K>>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, Unit>, Self>> {
-        Ok(Pipeline::default().map(
-            |(index, value): (K::Index<'a>, QueryResult<<Unit as ValueType>::Value<'a>>)| {
-                let promoted = value.map(|()| index.to_owned_value());
-
-                (index, promoted)
-            },
-        ))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate {
-            distinct: input.elements,
-            ..input
-        }
-    }
-}
-
-impl<K: IndexDomain> ElementKernel<Indexed<K, AttributeSet>> for IndexOperation {
-    type OutShape = Indexed<K, IndexValue<K>>;
-    type Retention = Preserving;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<K, AttributeSet>, Self>> {
-        Ok(Pipeline::default().map(
-            |(index, value): (
-                K::Index<'a>,
-                QueryResult<<AttributeSet as ValueType>::Value<'a>>,
-            )| {
-                let promoted = value.map(|_| index.to_owned_value());
-
-                (index, promoted)
-            },
-        ))
+        Ok(Pipeline::keyed(|index, value: QueryResult<_>| {
+            value.map(|()| K::to_owned(&index))
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -160,23 +114,16 @@ impl<K: IndexDomain> ElementKernel<Indexed<K, AttributeSet>> for IndexOperation 
 }
 
 impl<K: IndexDomain> ElementKernel<Indexed<K, FailureValue>> for IndexOperation {
+    type Emission = Preserving;
     type OutShape = Indexed<K, IndexValue<K>>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, FailureValue>, Self>> {
-        Ok(Pipeline::default().map(
-            |(index, value): (
-                K::Index<'a>,
-                QueryResult<<FailureValue as ValueType>::Value<'a>>,
-            )| {
-                let promoted = value.map(|_| index.to_owned_value());
-
-                (index, promoted)
-            },
-        ))
+        Ok(Pipeline::keyed(|index, value: QueryResult<_>| {
+            value.map(|_| K::to_owned(&index))
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -188,51 +135,16 @@ impl<K: IndexDomain> ElementKernel<Indexed<K, FailureValue>> for IndexOperation 
 }
 
 impl<K: IndexDomain> ElementKernel<Indexed<K, FailureKindValue>> for IndexOperation {
+    type Emission = Preserving;
     type OutShape = Indexed<K, IndexValue<K>>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, FailureKindValue>, Self>> {
-        Ok(Pipeline::default().map(
-            |(index, value): (
-                K::Index<'a>,
-                QueryResult<<FailureKindValue as ValueType>::Value<'a>>,
-            )| {
-                let promoted = value.map(|_| index.to_owned_value());
-
-                (index, promoted)
-            },
-        ))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate {
-            distinct: input.elements,
-            ..input
-        }
-    }
-}
-
-impl<K: IndexDomain, T: 'static + Clone> ElementKernel<Indexed<K, MaskMap<T>>> for IndexOperation {
-    type OutShape = Indexed<K, IndexValue<K>>;
-    type Retention = Preserving;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<K, MaskMap<T>>, Self>> {
-        Ok(Pipeline::default().map(
-            |(index, value): (
-                K::Index<'a>,
-                QueryResult<<MaskMap<T> as ValueType>::Value<'a>>,
-            )| {
-                let promoted = value.map(|_| index.to_owned_value());
-
-                (index, promoted)
-            },
-        ))
+        Ok(Pipeline::keyed(|index, value: QueryResult<_>| {
+            value.map(|_| K::to_owned(&index))
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -244,23 +156,16 @@ impl<K: IndexDomain, T: 'static + Clone> ElementKernel<Indexed<K, MaskMap<T>>> f
 }
 
 impl<K: IndexDomain, I: IndexDomain> ElementKernel<Indexed<K, IndexValue<I>>> for IndexOperation {
+    type Emission = Preserving;
     type OutShape = Indexed<K, IndexValue<K>>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<I>>, Self>> {
-        Ok(Pipeline::default().map(
-            |(index, value): (
-                K::Index<'a>,
-                QueryResult<<IndexValue<I> as ValueType>::Value<'a>>,
-            )| {
-                let promoted = value.map(|_| index.to_owned_value());
-
-                (index, promoted)
-            },
-        ))
+        Ok(Pipeline::keyed(|index, value: QueryResult<_>| {
+            value.map(|_| K::to_owned(&index))
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -274,18 +179,16 @@ impl<K: IndexDomain, I: IndexDomain> ElementKernel<Indexed<K, IndexValue<I>>> fo
 impl<E: EntityDomain, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
     for IndexOperation
 {
+    type Emission = Preserving;
     type OutShape = Indexed<I, IndexValue<E>>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
-        Ok(Pipeline::default().map(
-            |(index, reference): (I::Index<'a>, QueryResult<E::Index<'a>>)| {
-                (index, reference.map(|entity| entity.to_owned_value()))
-            },
-        ))
+        Ok(Pipeline::unkeyed(|reference: QueryResult<_>| {
+            reference.map(|entity| E::to_owned(&entity))
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -293,11 +196,26 @@ impl<E: EntityDomain, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E
     }
 }
 
-impl<O> Index for O
-where
-    O: Apply<IndexOperation>,
-{
-    type ReturnOperand = <O as Apply<IndexOperation>>::Output;
+impl<E: EntityDomain> ElementKernel<Bare<EntityReference<E>>> for IndexOperation {
+    type Emission = Preserving;
+    type OutShape = Bare<IndexValue<E>>;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<EntityReference<E>>, Self>> {
+        Ok(Pipeline::new(|reference: QueryResult<_>| {
+            reference.map(|entity| E::to_owned(&entity))
+        }))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<O: Apply<IndexOperation>> Index for O {
+    type ReturnOperand = O::Output;
 
     fn index(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), IndexOperation))

@@ -78,7 +78,7 @@ pub fn derive_optimizer_hints(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(Operation, attributes(plan, input, argument))]
+#[proc_macro_derive(Operation, attributes(operation, plan, input, argument))]
 pub fn derive_operation(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 

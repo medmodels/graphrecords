@@ -27,19 +27,24 @@ use crate::{
         EmptyRule, Estimate, Estimated, MatchInputs, OperationInputs, OptimizePlan, OptimizerHints,
         PlanInputs, PlanNode, Session, Stats, Transformed,
     },
+    sealed::Sealed,
 };
 pub use aggregation::{
     CountOperation, InvalidStandardDeviationValue, MaxOperation, MeanOperation, StdOperation,
     SumOperation,
 };
 pub use argument::{
-    Absent, Alignment, ArgumentAbsent, ArgumentSource, Keyed, Lookup, Prepare, Unaligned,
+    Absent, AlignableArity, Alignment, ArgumentAbsent, ArgumentSource, EnumerableArity,
+    IndexedElementContainer, IndexedElementSource, Keyed, Lookup, Prepare, PreparedArity,
+    Unaligned,
 };
 pub use arithmetic::{
     DivideOperation, DivisionByZero, ModuloByZero, ModuloOperation, SubtractOperation,
 };
 pub use cache::CacheContext;
-pub use conversion::EnumerateOperation;
+pub use conversion::{
+    DiscardOperation, EnumerateOperation, ExpandToOperation, ExpandToSource, ParentResolution,
+};
 pub use errors::{
     AbsenceErrors, Drop, ErrorKindNameOperation, ErrorKindOperation, ErrorPolicy, ErrorPolicyIn,
     ErrorPolicyOf, ErrorPolicyWithCause, ErrorsOperation, HasErrorCauseOperation,
@@ -48,35 +53,64 @@ pub use errors::{
 use graphrecords_core::GraphRecord;
 pub use graphrecords_macros::Operation;
 pub use grouping::{
-    BroadcastOperation, GroupByOperation, GroupKey, HavingOperation, KeyOperand, KeysOperation,
-    MissingGroupAggregate, UngroupKeyedOperation, UngroupOperation,
+    BroadcastOperation, BroadcastViaOperation, BucketErrorPolicy, BucketErrorPolicyIn,
+    BucketErrorPolicyOf, BucketErrorPolicyWithCause, BucketErrorsOperation, BucketFailureArity,
+    GroupByOperation, GroupKey, GroupingValue, HavingOperation, KeyErrorPolicy, KeyErrorPolicyIn,
+    KeyErrorPolicyOf, KeyErrorPolicyWithCause, KeyErrorsOperation, KeyOperand, KeysOperation,
+    MissingGroupAggregate, UngroupKeyedOperation, UngroupOperation, UnresolvedBucketFailures,
+    UnresolvedGroupKeyFailures,
 };
-pub use indexing::{IndexOperation, ResolveOperation, SelectOperation};
-pub use kernel::{BareStream, ElementKernel, ElementPipeline, Kernel, KeyedStream, Pipeline};
+pub use indexing::{
+    ChildIndexOperation, IndexOperation, ParentIndexOperation, ResolveOperation, SelectOperation,
+};
+pub use kernel::{
+    BarePipeline, BareStream, ElementKernel, ElementPipeline, ElementTransition, GroupKernel,
+    IndexedExpansionPipeline, IndexedToBarePipeline, IndexedValuePipeline, KeyedStream, LaneKernel,
+    Pipeline,
+};
 pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
 pub use on_missing::{MissingPolicy, WithMissing};
 pub use ordering::{
     EnsureSortable, FirstOperation, IncomparableIndices, LastOperation, ReverseOperation,
-    SortByOperation, SortOperation, TakeOperation, UnorderOperation, incomparable_with_first,
+    SortByOperation, SortOperation, TakeOperation, UnorderOperation, incomparable_pair,
+    incomparable_with_first,
 };
-pub use retention::{Dropping, Preserving, Retention};
+pub use retention::{Dropping, ElementEmission, Expanding, Preserving, Retention};
 use std::{
     any::Any,
     fmt,
     hash::{Hash, Hasher},
 };
 pub use structure::{
-    AttributeOperation, EntityAttributes, FilterOperation, InGroupOperation, IndicesInGroup,
-    MissingAttribute, MissingTraversedAttribute,
+    AttributeOperation, AttributesOperation, EntityAttributes, FilterOperation, InGroupOperation,
+    IndicesInGroup, MissingAttribute, MissingTraversedAttribute,
 };
 pub use traversal::{
     EdgeSource, EdgeTarget, EdgesOperation, NeighborsOperation, NodesOperation, Relation,
     RelationOperation, SelectRelationOperation,
 };
 
-pub trait Operation: Prepare + OperationInputs + Explain {}
+pub trait OperationScope: Sealed + 'static {}
 
-pub trait Apply<P: Operation>: Operand {
+pub struct Element;
+pub struct Lane;
+pub struct Group;
+
+impl Sealed for Element {}
+impl Sealed for Lane {}
+impl Sealed for Group {}
+
+impl OperationScope for Element {}
+impl OperationScope for Lane {}
+impl OperationScope for Group {}
+
+pub trait Operation: Prepare + OperationInputs + Explain {
+    type Scope: OperationScope;
+}
+
+pub trait Apply<P: Operation<Scope = S>, S: OperationScope = <P as Operation>::Scope>:
+    Operand
+{
     type Output: Operand;
 
     fn apply<'a>(
@@ -90,20 +124,12 @@ pub trait Apply<P: Operation>: Operand {
     fn estimate(operation: &P, input: Estimate, stats: &Stats) -> Estimate;
 }
 
-pub struct OperationContext<I, P>
-where
-    I: Apply<P>,
-    P: Operation,
-{
+pub struct OperationContext<I: Apply<P>, P: Operation> {
     input: I,
     operation: P,
 }
 
-impl<I, P> OperationContext<I, P>
-where
-    I: Apply<P>,
-    P: Operation,
-{
+impl<I: Apply<P>, P: Operation> OperationContext<I, P> {
     #[must_use]
     pub const fn new(input: I, operation: P) -> Self {
         Self { input, operation }
@@ -115,11 +141,7 @@ where
     }
 }
 
-impl<I, P> MatchInputs for OperationContext<I, P>
-where
-    I: Apply<P>,
-    P: Operation,
-{
+impl<I: Apply<P>, P: Operation> MatchInputs for OperationContext<I, P> {
     type Inputs<'a> = P::Inputs<'a, I>;
 
     fn inputs(&self) -> Self::Inputs<'_> {
@@ -127,11 +149,7 @@ where
     }
 }
 
-impl<I, P> PlanNode for OperationContext<I, P>
-where
-    I: Apply<P>,
-    P: Operation,
-{
+impl<I: Apply<P>, P: Operation> PlanNode for OperationContext<I, P> {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         let mut inputs = vec![self.input.as_plan_node()];
         inputs.extend(PlanInputs::inputs(&self.operation));
@@ -155,21 +173,13 @@ where
     }
 }
 
-impl<I, P> OptimizerHints for OperationContext<I, P>
-where
-    I: Apply<P>,
-    P: Operation,
-{
+impl<I: Apply<P>, P: Operation> OptimizerHints for OperationContext<I, P> {
     fn commutes_with_filter(&self) -> bool {
         self.operation.commutes_with_filter()
     }
 
     fn allows_limit_pushdown(&self) -> bool {
         self.operation.allows_limit_pushdown()
-    }
-
-    fn is_distinct(&self) -> bool {
-        self.operation.is_distinct()
     }
 
     fn is_volatile(&self) -> bool {
@@ -181,11 +191,7 @@ where
     }
 }
 
-impl<I, P> Explain for OperationContext<I, P>
-where
-    I: Apply<P>,
-    P: Operation,
-{
+impl<I: Apply<P>, P: Operation> Explain for OperationContext<I, P> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         formatter.child(&self.input);
         self.operation.describe(formatter)?;
@@ -194,12 +200,8 @@ where
     }
 }
 
-impl<I, P> EvaluateContext for OperationContext<I, P>
-where
-    I: Apply<P>,
-    P: Operation,
-{
-    type Operand = <I as Apply<P>>::Output;
+impl<I: Apply<P>, P: Operation> EvaluateContext for OperationContext<I, P> {
+    type Operand = I::Output;
 
     fn evaluate<'a>(
         &'a self,
@@ -213,22 +215,14 @@ where
     }
 }
 
-impl<I, P> Estimated for OperationContext<I, P>
-where
-    I: Apply<P>,
-    P: Operation,
-{
+impl<I: Apply<P>, P: Operation> Estimated for OperationContext<I, P> {
     fn estimate(&self, stats: &Stats) -> Estimate {
-        <I as Apply<P>>::estimate(&self.operation, self.input.context().estimate(stats), stats)
+        I::estimate(&self.operation, self.input.context().estimate(stats), stats)
     }
 }
 
-impl<I, P> OptimizePlan for OperationContext<I, P>
-where
-    I: Apply<P>,
-    P: Operation,
-{
-    type Output = <I as Apply<P>>::Output;
+impl<I: Apply<P>, P: Operation> OptimizePlan for OperationContext<I, P> {
+    type Output = I::Output;
 
     fn optimize(&self, original: &Self::Output, session: &Session) -> Transformed<Self::Output> {
         let input = session.optimize(&self.input);

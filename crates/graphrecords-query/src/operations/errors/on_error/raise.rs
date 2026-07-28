@@ -6,7 +6,7 @@ use crate::{
     operands::OperandHandle,
     operations::{
         Apply, ArgumentSource, BareStream, ErrorPolicy, ErrorPolicyIn, ErrorPolicyOf,
-        ErrorPolicyWithCause, Kernel, KeyedStream, Operation, OperationContext, Prepare,
+        ErrorPolicyWithCause, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
         Preserving, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
@@ -20,18 +20,24 @@ use std::{
 };
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Raise")]
 pub struct Raise;
 
 #[derive(Clone, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 pub struct RaiseWhen<C> {
     #[argument]
     condition: C,
 }
 
+impl<C> Labeled for RaiseWhen<C> {
+    const LABEL: &'static str = "RaiseWhen";
+}
+
 impl<C: Explain> Explain for RaiseWhen<C> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        formatter.write_str("RaiseWhen")?;
+        formatter.write_str(Self::LABEL)?;
         formatter.labeled_child("condition", &self.condition);
 
         Ok(())
@@ -46,6 +52,7 @@ impl Raise {
 }
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 pub struct RaiseErrorsOf<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
 }
@@ -75,6 +82,7 @@ impl<D: Diagnostic> Explain for RaiseErrorsOf<D> {
 }
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 pub struct RaiseErrorsIn<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
 }
@@ -104,105 +112,9 @@ impl<G: ErrorGroup> Explain for RaiseErrorsIn<G> {
 }
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 pub struct RaiseErrorsWithCause<E: Error + 'static> {
     marker: PhantomData<fn() -> E>,
-}
-
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
-pub struct RaiseWhenErrorsOf<D: Diagnostic, C> {
-    #[argument]
-    condition: C,
-    marker: PhantomData<fn() -> D>,
-}
-
-impl<D: Diagnostic, C> RaiseWhenErrorsOf<D, C> {
-    const fn new(condition: C) -> Self {
-        Self {
-            condition,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<D: Diagnostic, C: Clone> Clone for RaiseWhenErrorsOf<D, C> {
-    fn clone(&self) -> Self {
-        Self::new(self.condition.clone())
-    }
-}
-
-impl<D: Diagnostic, C: Explain> Explain for RaiseWhenErrorsOf<D, C> {
-    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "RaiseWhenErrorsOf kind={}", D::name())?;
-        formatter.labeled_child("condition", &self.condition);
-
-        Ok(())
-    }
-}
-
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
-pub struct RaiseWhenErrorsIn<G: ErrorGroup, C> {
-    #[argument]
-    condition: C,
-    marker: PhantomData<fn() -> G>,
-}
-
-impl<G: ErrorGroup, C> RaiseWhenErrorsIn<G, C> {
-    const fn new(condition: C) -> Self {
-        Self {
-            condition,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<G: ErrorGroup, C: Clone> Clone for RaiseWhenErrorsIn<G, C> {
-    fn clone(&self) -> Self {
-        Self::new(self.condition.clone())
-    }
-}
-
-impl<G: ErrorGroup, C: Explain> Explain for RaiseWhenErrorsIn<G, C> {
-    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "RaiseWhenErrorsIn group={}", G::name())?;
-        formatter.labeled_child("condition", &self.condition);
-
-        Ok(())
-    }
-}
-
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
-pub struct RaiseWhenErrorsWithCause<E: Error + 'static, C> {
-    #[argument]
-    condition: C,
-    marker: PhantomData<fn() -> E>,
-}
-
-impl<E: Error + 'static, C> RaiseWhenErrorsWithCause<E, C> {
-    const fn new(condition: C) -> Self {
-        Self {
-            condition,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<E: Error + 'static, C: Clone> Clone for RaiseWhenErrorsWithCause<E, C> {
-    fn clone(&self) -> Self {
-        Self::new(self.condition.clone())
-    }
-}
-
-impl<E: Error + 'static, C: Explain> Explain for RaiseWhenErrorsWithCause<E, C> {
-    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(
-            formatter,
-            "RaiseWhenErrorsWithCause cause={}",
-            type_name::<E>()
-        )?;
-        formatter.labeled_child("condition", &self.condition);
-
-        Ok(())
-    }
 }
 
 impl<E: Error + 'static> RaiseErrorsWithCause<E> {
@@ -226,6 +138,114 @@ impl<E: Error + 'static> Clone for RaiseErrorsWithCause<E> {
 impl<E: Error + 'static> Explain for RaiseErrorsWithCause<E> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         write!(formatter, "RaiseErrorsWithCause cause={}", type_name::<E>())
+    }
+}
+
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
+pub struct RaiseWhenErrorsOf<D: Diagnostic, C> {
+    #[argument]
+    condition: C,
+    marker: PhantomData<fn() -> D>,
+}
+
+impl<D: Diagnostic, C> Labeled for RaiseWhenErrorsOf<D, C> {
+    const LABEL: &'static str = "RaiseWhenErrorsOf";
+}
+
+impl<D: Diagnostic, C> RaiseWhenErrorsOf<D, C> {
+    const fn new(condition: C) -> Self {
+        Self {
+            condition,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<D: Diagnostic, C: Clone> Clone for RaiseWhenErrorsOf<D, C> {
+    fn clone(&self) -> Self {
+        Self::new(self.condition.clone())
+    }
+}
+
+impl<D: Diagnostic, C: Explain> Explain for RaiseWhenErrorsOf<D, C> {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{} kind={}", Self::LABEL, D::name())?;
+        formatter.labeled_child("condition", &self.condition);
+
+        Ok(())
+    }
+}
+
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
+pub struct RaiseWhenErrorsIn<G: ErrorGroup, C> {
+    #[argument]
+    condition: C,
+    marker: PhantomData<fn() -> G>,
+}
+
+impl<G: ErrorGroup, C> Labeled for RaiseWhenErrorsIn<G, C> {
+    const LABEL: &'static str = "RaiseWhenErrorsIn";
+}
+
+impl<G: ErrorGroup, C> RaiseWhenErrorsIn<G, C> {
+    const fn new(condition: C) -> Self {
+        Self {
+            condition,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<G: ErrorGroup, C: Clone> Clone for RaiseWhenErrorsIn<G, C> {
+    fn clone(&self) -> Self {
+        Self::new(self.condition.clone())
+    }
+}
+
+impl<G: ErrorGroup, C: Explain> Explain for RaiseWhenErrorsIn<G, C> {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{} group={}", Self::LABEL, G::name())?;
+        formatter.labeled_child("condition", &self.condition);
+
+        Ok(())
+    }
+}
+
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
+pub struct RaiseWhenErrorsWithCause<E: Error + 'static, C> {
+    #[argument]
+    condition: C,
+    marker: PhantomData<fn() -> E>,
+}
+
+impl<E: Error + 'static, C> Labeled for RaiseWhenErrorsWithCause<E, C> {
+    const LABEL: &'static str = "RaiseWhenErrorsWithCause";
+}
+
+impl<E: Error + 'static, C> RaiseWhenErrorsWithCause<E, C> {
+    const fn new(condition: C) -> Self {
+        Self {
+            condition,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<E: Error + 'static, C: Clone> Clone for RaiseWhenErrorsWithCause<E, C> {
+    fn clone(&self) -> Self {
+        Self::new(self.condition.clone())
+    }
+}
+
+impl<E: Error + 'static, C: Explain> Explain for RaiseWhenErrorsWithCause<E, C> {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{} cause={}", Self::LABEL, type_name::<E>())?;
+        formatter.labeled_child("condition", &self.condition);
+
+        Ok(())
     }
 }
 
@@ -254,7 +274,7 @@ where
     ) -> QueryResult<Self::Prepared<'a>> {
         let condition = self.condition.prepare(graphrecord, cache)?;
 
-        Ok(C::resolve(&condition, &(), Raise::LABEL))
+        Ok(C::resolve(&condition, &(), Self::LABEL))
     }
 }
 
@@ -294,8 +314,9 @@ impl<E: Error + 'static> Prepare for RaiseErrorsWithCause<E> {
     }
 }
 
-impl<D: Diagnostic, C> Prepare for RaiseWhenErrorsOf<D, C>
+impl<D, C> Prepare for RaiseWhenErrorsOf<D, C>
 where
+    D: Diagnostic,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Prepared<'a> = QueryResult<bool>;
@@ -307,12 +328,13 @@ where
     ) -> QueryResult<Self::Prepared<'a>> {
         let condition = self.condition.prepare(graphrecord, cache)?;
 
-        Ok(C::resolve(&condition, &(), Raise::LABEL))
+        Ok(C::resolve(&condition, &(), Self::LABEL))
     }
 }
 
-impl<G: ErrorGroup, C> Prepare for RaiseWhenErrorsIn<G, C>
+impl<G, C> Prepare for RaiseWhenErrorsIn<G, C>
 where
+    G: ErrorGroup,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Prepared<'a> = QueryResult<bool>;
@@ -324,12 +346,13 @@ where
     ) -> QueryResult<Self::Prepared<'a>> {
         let condition = self.condition.prepare(graphrecord, cache)?;
 
-        Ok(C::resolve(&condition, &(), Raise::LABEL))
+        Ok(C::resolve(&condition, &(), Self::LABEL))
     }
 }
 
-impl<E: Error + 'static, C> Prepare for RaiseWhenErrorsWithCause<E, C>
+impl<E, C> Prepare for RaiseWhenErrorsWithCause<E, C>
 where
+    E: Error + 'static,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Prepared<'a> = QueryResult<bool>;
@@ -341,11 +364,11 @@ where
     ) -> QueryResult<Self::Prepared<'a>> {
         let condition = self.condition.prepare(graphrecord, cache)?;
 
-        Ok(C::resolve(&condition, &(), Raise::LABEL))
+        Ok(C::resolve(&condition, &(), Self::LABEL))
     }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple<O>> for Raise {
+impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>> for Raise {
     type Output = OperandHandle<Indexed<I, V>, Multiple<O>>;
 
     fn execute<'a>(
@@ -367,7 +390,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple
     }
 }
 
-impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for Raise {
+impl<V: ValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for Raise {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
 
     fn execute<'a>(
@@ -385,7 +408,7 @@ impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for Raise {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Single> for Raise {
+impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Single> for Raise {
     type Output = OperandHandle<Indexed<I, V>, Single>;
 
     fn execute<'a>(
@@ -404,7 +427,7 @@ impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Single> for Raise {
     }
 }
 
-impl<V: ValueType> Kernel<Bare<V>, Single> for Raise {
+impl<V: ValueType> LaneKernel<Bare<V>, Single> for Raise {
     type Output = OperandHandle<Bare<V>, Single>;
 
     fn execute<'a>(
@@ -423,7 +446,7 @@ impl<V: ValueType> Kernel<Bare<V>, Single> for Raise {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Definite> for Raise {
+impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Definite> for Raise {
     type Output = OperandHandle<Indexed<I, V>, Definite>;
 
     fn execute<'a>(
@@ -441,7 +464,7 @@ impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Definite> for Raise {
     }
 }
 
-impl<V: ValueType> Kernel<Bare<V>, Definite> for Raise {
+impl<V: ValueType> LaneKernel<Bare<V>, Definite> for Raise {
     type Output = OperandHandle<Bare<V>, Definite>;
 
     fn execute<'a>(
@@ -457,9 +480,11 @@ impl<V: ValueType> Kernel<Bare<V>, Definite> for Raise {
     }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState, C> Kernel<Indexed<I, V>, Multiple<O>>
-    for RaiseWhen<C>
+impl<I, V, O, C> LaneKernel<Indexed<I, V>, Multiple<O>> for RaiseWhen<C>
 where
+    I: IndexDomain,
+    V: ValueType,
+    O: OrderState,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<O>>;
@@ -470,7 +495,7 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <Raise as Kernel<Indexed<I, V>, Multiple<O>>>::execute(graphrecord, values, ())
+            <Raise as LaneKernel<Indexed<I, V>, Multiple<O>>>::execute(graphrecord, values, ())
         } else {
             Ok(values)
         }
@@ -481,8 +506,10 @@ where
     }
 }
 
-impl<V: ValueType, O: OrderState, C> Kernel<Bare<V>, Multiple<O>> for RaiseWhen<C>
+impl<V, O, C> LaneKernel<Bare<V>, Multiple<O>> for RaiseWhen<C>
 where
+    V: ValueType,
+    O: OrderState,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
@@ -493,7 +520,7 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <Raise as Kernel<Bare<V>, Multiple<O>>>::execute(graphrecord, values, ())
+            <Raise as LaneKernel<Bare<V>, Multiple<O>>>::execute(graphrecord, values, ())
         } else {
             Ok(values)
         }
@@ -504,8 +531,10 @@ where
     }
 }
 
-impl<I: IndexDomain, V: ValueType, C> Kernel<Indexed<I, V>, Single> for RaiseWhen<C>
+impl<I, V, C> LaneKernel<Indexed<I, V>, Single> for RaiseWhen<C>
 where
+    I: IndexDomain,
+    V: ValueType,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Indexed<I, V>, Single>;
@@ -516,7 +545,7 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <Raise as Kernel<Indexed<I, V>, Single>>::execute(graphrecord, value, ())
+            <Raise as LaneKernel<Indexed<I, V>, Single>>::execute(graphrecord, value, ())
         } else {
             Ok(value)
         }
@@ -527,8 +556,9 @@ where
     }
 }
 
-impl<V: ValueType, C> Kernel<Bare<V>, Single> for RaiseWhen<C>
+impl<V, C> LaneKernel<Bare<V>, Single> for RaiseWhen<C>
 where
+    V: ValueType,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Bare<V>, Single>;
@@ -539,7 +569,7 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <Raise as Kernel<Bare<V>, Single>>::execute(graphrecord, value, ())
+            <Raise as LaneKernel<Bare<V>, Single>>::execute(graphrecord, value, ())
         } else {
             Ok(value)
         }
@@ -550,8 +580,10 @@ where
     }
 }
 
-impl<I: IndexDomain, V: ValueType, C> Kernel<Indexed<I, V>, Definite> for RaiseWhen<C>
+impl<I, V, C> LaneKernel<Indexed<I, V>, Definite> for RaiseWhen<C>
 where
+    I: IndexDomain,
+    V: ValueType,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Indexed<I, V>, Definite>;
@@ -562,7 +594,7 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <Raise as Kernel<Indexed<I, V>, Definite>>::execute(graphrecord, value, ())
+            <Raise as LaneKernel<Indexed<I, V>, Definite>>::execute(graphrecord, value, ())
         } else {
             Ok(value)
         }
@@ -573,8 +605,9 @@ where
     }
 }
 
-impl<V: ValueType, C> Kernel<Bare<V>, Definite> for RaiseWhen<C>
+impl<V, C> LaneKernel<Bare<V>, Definite> for RaiseWhen<C>
 where
+    V: ValueType,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Bare<V>, Definite>;
@@ -585,7 +618,7 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <Raise as Kernel<Bare<V>, Definite>>::execute(graphrecord, value, ())
+            <Raise as LaneKernel<Bare<V>, Definite>>::execute(graphrecord, value, ())
         } else {
             Ok(value)
         }
@@ -596,8 +629,8 @@ where
     }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState, D: Diagnostic> Kernel<Indexed<I, V>, Multiple<O>>
-    for RaiseErrorsOf<D>
+impl<I: IndexDomain, V: ValueType, O: OrderState, D: Diagnostic>
+    LaneKernel<Indexed<I, V>, Multiple<O>> for RaiseErrorsOf<D>
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<O>>;
 
@@ -606,18 +639,24 @@ impl<I: IndexDomain, V: ValueType, O: OrderState, D: Diagnostic> Kernel<Indexed<
         values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let values = values
+        let values: Vec<_> = values
             .map(|element| match element {
-                (_index, Err(failure)) if Self::matches(&failure) => Err(failure),
+                (_, Err(failure)) if Self::matches(&failure) => Err(failure),
                 element => Ok(element),
             })
-            .collect::<QueryResult<Vec<_>>>()?;
+            .collect::<QueryResult<_>>()?;
 
         Ok(Box::new(values.into_iter()))
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, O: OrderState, D: Diagnostic> Kernel<Bare<V>, Multiple<O>> for RaiseErrorsOf<D> {
+impl<V: ValueType, O: OrderState, D: Diagnostic> LaneKernel<Bare<V>, Multiple<O>>
+    for RaiseErrorsOf<D>
+{
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
 
     fn execute<'a>(
@@ -625,18 +664,22 @@ impl<V: ValueType, O: OrderState, D: Diagnostic> Kernel<Bare<V>, Multiple<O>> fo
         values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let values = values
+        let values: Vec<_> = values
             .map(|result| match result {
                 Err(failure) if Self::matches(&failure) => Err(failure),
                 result => Ok(result),
             })
-            .collect::<QueryResult<Vec<_>>>()?;
+            .collect::<QueryResult<_>>()?;
 
         Ok(Box::new(values.into_iter()))
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I: IndexDomain, V: ValueType, D: Diagnostic> Kernel<Indexed<I, V>, Single>
+impl<I: IndexDomain, V: ValueType, D: Diagnostic> LaneKernel<Indexed<I, V>, Single>
     for RaiseErrorsOf<D>
 {
     type Output = OperandHandle<Indexed<I, V>, Single>;
@@ -647,13 +690,17 @@ impl<I: IndexDomain, V: ValueType, D: Diagnostic> Kernel<Indexed<I, V>, Single>
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         match value {
-            Some((_index, Err(failure))) if Self::matches(&failure) => Err(failure),
+            Some((_, Err(failure))) if Self::matches(&failure) => Err(failure),
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, D: Diagnostic> Kernel<Bare<V>, Single> for RaiseErrorsOf<D> {
+impl<V: ValueType, D: Diagnostic> LaneKernel<Bare<V>, Single> for RaiseErrorsOf<D> {
     type Output = OperandHandle<Bare<V>, Single>;
 
     fn execute<'a>(
@@ -666,9 +713,13 @@ impl<V: ValueType, D: Diagnostic> Kernel<Bare<V>, Single> for RaiseErrorsOf<D> {
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I: IndexDomain, V: ValueType, D: Diagnostic> Kernel<Indexed<I, V>, Definite>
+impl<I: IndexDomain, V: ValueType, D: Diagnostic> LaneKernel<Indexed<I, V>, Definite>
     for RaiseErrorsOf<D>
 {
     type Output = OperandHandle<Indexed<I, V>, Definite>;
@@ -679,13 +730,17 @@ impl<I: IndexDomain, V: ValueType, D: Diagnostic> Kernel<Indexed<I, V>, Definite
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         match value {
-            (_index, Err(failure)) if Self::matches(&failure) => Err(failure),
+            (_, Err(failure)) if Self::matches(&failure) => Err(failure),
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, D: Diagnostic> Kernel<Bare<V>, Definite> for RaiseErrorsOf<D> {
+impl<V: ValueType, D: Diagnostic> LaneKernel<Bare<V>, Definite> for RaiseErrorsOf<D> {
     type Output = OperandHandle<Bare<V>, Definite>;
 
     fn execute<'a>(
@@ -698,10 +753,14 @@ impl<V: ValueType, D: Diagnostic> Kernel<Bare<V>, Definite> for RaiseErrorsOf<D>
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState, G: ErrorGroup> Kernel<Indexed<I, V>, Multiple<O>>
-    for RaiseErrorsIn<G>
+impl<I: IndexDomain, V: ValueType, O: OrderState, G: ErrorGroup>
+    LaneKernel<Indexed<I, V>, Multiple<O>> for RaiseErrorsIn<G>
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<O>>;
 
@@ -710,18 +769,24 @@ impl<I: IndexDomain, V: ValueType, O: OrderState, G: ErrorGroup> Kernel<Indexed<
         values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let values = values
+        let values: Vec<_> = values
             .map(|element| match element {
-                (_index, Err(failure)) if Self::matches(&failure) => Err(failure),
+                (_, Err(failure)) if Self::matches(&failure) => Err(failure),
                 element => Ok(element),
             })
-            .collect::<QueryResult<Vec<_>>>()?;
+            .collect::<QueryResult<_>>()?;
 
         Ok(Box::new(values.into_iter()))
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, O: OrderState, G: ErrorGroup> Kernel<Bare<V>, Multiple<O>> for RaiseErrorsIn<G> {
+impl<V: ValueType, O: OrderState, G: ErrorGroup> LaneKernel<Bare<V>, Multiple<O>>
+    for RaiseErrorsIn<G>
+{
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
 
     fn execute<'a>(
@@ -729,18 +794,22 @@ impl<V: ValueType, O: OrderState, G: ErrorGroup> Kernel<Bare<V>, Multiple<O>> fo
         values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let values = values
+        let values: Vec<_> = values
             .map(|result| match result {
                 Err(failure) if Self::matches(&failure) => Err(failure),
                 result => Ok(result),
             })
-            .collect::<QueryResult<Vec<_>>>()?;
+            .collect::<QueryResult<_>>()?;
 
         Ok(Box::new(values.into_iter()))
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I: IndexDomain, V: ValueType, G: ErrorGroup> Kernel<Indexed<I, V>, Single>
+impl<I: IndexDomain, V: ValueType, G: ErrorGroup> LaneKernel<Indexed<I, V>, Single>
     for RaiseErrorsIn<G>
 {
     type Output = OperandHandle<Indexed<I, V>, Single>;
@@ -751,13 +820,17 @@ impl<I: IndexDomain, V: ValueType, G: ErrorGroup> Kernel<Indexed<I, V>, Single>
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         match value {
-            Some((_index, Err(failure))) if Self::matches(&failure) => Err(failure),
+            Some((_, Err(failure))) if Self::matches(&failure) => Err(failure),
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, G: ErrorGroup> Kernel<Bare<V>, Single> for RaiseErrorsIn<G> {
+impl<V: ValueType, G: ErrorGroup> LaneKernel<Bare<V>, Single> for RaiseErrorsIn<G> {
     type Output = OperandHandle<Bare<V>, Single>;
 
     fn execute<'a>(
@@ -770,9 +843,13 @@ impl<V: ValueType, G: ErrorGroup> Kernel<Bare<V>, Single> for RaiseErrorsIn<G> {
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I: IndexDomain, V: ValueType, G: ErrorGroup> Kernel<Indexed<I, V>, Definite>
+impl<I: IndexDomain, V: ValueType, G: ErrorGroup> LaneKernel<Indexed<I, V>, Definite>
     for RaiseErrorsIn<G>
 {
     type Output = OperandHandle<Indexed<I, V>, Definite>;
@@ -783,13 +860,17 @@ impl<I: IndexDomain, V: ValueType, G: ErrorGroup> Kernel<Indexed<I, V>, Definite
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         match value {
-            (_index, Err(failure)) if Self::matches(&failure) => Err(failure),
+            (_, Err(failure)) if Self::matches(&failure) => Err(failure),
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, G: ErrorGroup> Kernel<Bare<V>, Definite> for RaiseErrorsIn<G> {
+impl<V: ValueType, G: ErrorGroup> LaneKernel<Bare<V>, Definite> for RaiseErrorsIn<G> {
     type Output = OperandHandle<Bare<V>, Definite>;
 
     fn execute<'a>(
@@ -801,11 +882,15 @@ impl<V: ValueType, G: ErrorGroup> Kernel<Bare<V>, Definite> for RaiseErrorsIn<G>
             Err(failure) if Self::matches(&failure) => Err(failure),
             value => Ok(value),
         }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 
 impl<I: IndexDomain, V: ValueType, O: OrderState, E: Error + 'static>
-    Kernel<Indexed<I, V>, Multiple<O>> for RaiseErrorsWithCause<E>
+    LaneKernel<Indexed<I, V>, Multiple<O>> for RaiseErrorsWithCause<E>
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<O>>;
 
@@ -814,18 +899,22 @@ impl<I: IndexDomain, V: ValueType, O: OrderState, E: Error + 'static>
         values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let values = values
+        let values: Vec<_> = values
             .map(|element| match element {
-                (_index, Err(failure)) if Self::matches(&failure) => Err(failure),
+                (_, Err(failure)) if Self::matches(&failure) => Err(failure),
                 element => Ok(element),
             })
-            .collect::<QueryResult<Vec<_>>>()?;
+            .collect::<QueryResult<_>>()?;
 
         Ok(Box::new(values.into_iter()))
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, O: OrderState, E: Error + 'static> Kernel<Bare<V>, Multiple<O>>
+impl<V: ValueType, O: OrderState, E: Error + 'static> LaneKernel<Bare<V>, Multiple<O>>
     for RaiseErrorsWithCause<E>
 {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
@@ -835,18 +924,22 @@ impl<V: ValueType, O: OrderState, E: Error + 'static> Kernel<Bare<V>, Multiple<O
         values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let values = values
+        let values: Vec<_> = values
             .map(|result| match result {
                 Err(failure) if Self::matches(&failure) => Err(failure),
                 result => Ok(result),
             })
-            .collect::<QueryResult<Vec<_>>>()?;
+            .collect::<QueryResult<_>>()?;
 
         Ok(Box::new(values.into_iter()))
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I: IndexDomain, V: ValueType, E: Error + 'static> Kernel<Indexed<I, V>, Single>
+impl<I: IndexDomain, V: ValueType, E: Error + 'static> LaneKernel<Indexed<I, V>, Single>
     for RaiseErrorsWithCause<E>
 {
     type Output = OperandHandle<Indexed<I, V>, Single>;
@@ -857,13 +950,17 @@ impl<I: IndexDomain, V: ValueType, E: Error + 'static> Kernel<Indexed<I, V>, Sin
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         match value {
-            Some((_index, Err(failure))) if Self::matches(&failure) => Err(failure),
+            Some((_, Err(failure))) if Self::matches(&failure) => Err(failure),
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, E: Error + 'static> Kernel<Bare<V>, Single> for RaiseErrorsWithCause<E> {
+impl<V: ValueType, E: Error + 'static> LaneKernel<Bare<V>, Single> for RaiseErrorsWithCause<E> {
     type Output = OperandHandle<Bare<V>, Single>;
 
     fn execute<'a>(
@@ -876,9 +973,13 @@ impl<V: ValueType, E: Error + 'static> Kernel<Bare<V>, Single> for RaiseErrorsWi
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I: IndexDomain, V: ValueType, E: Error + 'static> Kernel<Indexed<I, V>, Definite>
+impl<I: IndexDomain, V: ValueType, E: Error + 'static> LaneKernel<Indexed<I, V>, Definite>
     for RaiseErrorsWithCause<E>
 {
     type Output = OperandHandle<Indexed<I, V>, Definite>;
@@ -889,13 +990,17 @@ impl<I: IndexDomain, V: ValueType, E: Error + 'static> Kernel<Indexed<I, V>, Def
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         match value {
-            (_index, Err(failure)) if Self::matches(&failure) => Err(failure),
+            (_, Err(failure)) if Self::matches(&failure) => Err(failure),
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, E: Error + 'static> Kernel<Bare<V>, Definite> for RaiseErrorsWithCause<E> {
+impl<V: ValueType, E: Error + 'static> LaneKernel<Bare<V>, Definite> for RaiseErrorsWithCause<E> {
     type Output = OperandHandle<Bare<V>, Definite>;
 
     fn execute<'a>(
@@ -908,11 +1013,18 @@ impl<V: ValueType, E: Error + 'static> Kernel<Bare<V>, Definite> for RaiseErrors
             value => Ok(value),
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState, D: Diagnostic, C>
-    Kernel<Indexed<I, V>, Multiple<O>> for RaiseWhenErrorsOf<D, C>
+impl<I, V, O, D, C> LaneKernel<Indexed<I, V>, Multiple<O>> for RaiseWhenErrorsOf<D, C>
 where
+    I: IndexDomain,
+    V: ValueType,
+    O: OrderState,
+    D: Diagnostic,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<O>>;
@@ -923,7 +1035,7 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <RaiseErrorsOf<D> as Kernel<Indexed<I, V>, Multiple<O>>>::execute(
+            <RaiseErrorsOf<D> as LaneKernel<Indexed<I, V>, Multiple<O>>>::execute(
                 graphrecord,
                 values,
                 (),
@@ -932,11 +1044,17 @@ where
             Ok(values)
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, O: OrderState, D: Diagnostic, C> Kernel<Bare<V>, Multiple<O>>
-    for RaiseWhenErrorsOf<D, C>
+impl<V, O, D, C> LaneKernel<Bare<V>, Multiple<O>> for RaiseWhenErrorsOf<D, C>
 where
+    V: ValueType,
+    O: OrderState,
+    D: Diagnostic,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
@@ -947,16 +1065,22 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <RaiseErrorsOf<D> as Kernel<Bare<V>, Multiple<O>>>::execute(graphrecord, values, ())
+            <RaiseErrorsOf<D> as LaneKernel<Bare<V>, Multiple<O>>>::execute(graphrecord, values, ())
         } else {
             Ok(values)
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I: IndexDomain, V: ValueType, D: Diagnostic, C> Kernel<Indexed<I, V>, Single>
-    for RaiseWhenErrorsOf<D, C>
+impl<I, V, D, C> LaneKernel<Indexed<I, V>, Single> for RaiseWhenErrorsOf<D, C>
 where
+    I: IndexDomain,
+    V: ValueType,
+    D: Diagnostic,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Indexed<I, V>, Single>;
@@ -967,15 +1091,21 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <RaiseErrorsOf<D> as Kernel<Indexed<I, V>, Single>>::execute(graphrecord, value, ())
+            <RaiseErrorsOf<D> as LaneKernel<Indexed<I, V>, Single>>::execute(graphrecord, value, ())
         } else {
             Ok(value)
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<V: ValueType, D: Diagnostic, C> Kernel<Bare<V>, Single> for RaiseWhenErrorsOf<D, C>
+impl<V, D, C> LaneKernel<Bare<V>, Single> for RaiseWhenErrorsOf<D, C>
 where
+    V: ValueType,
+    D: Diagnostic,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Bare<V>, Single>;
@@ -986,16 +1116,22 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <RaiseErrorsOf<D> as Kernel<Bare<V>, Single>>::execute(graphrecord, value, ())
+            <RaiseErrorsOf<D> as LaneKernel<Bare<V>, Single>>::execute(graphrecord, value, ())
         } else {
             Ok(value)
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I: IndexDomain, V: ValueType, D: Diagnostic, C> Kernel<Indexed<I, V>, Definite>
-    for RaiseWhenErrorsOf<D, C>
+impl<I, V, D, C> LaneKernel<Indexed<I, V>, Definite> for RaiseWhenErrorsOf<D, C>
 where
+    I: IndexDomain,
+    V: ValueType,
+    D: Diagnostic,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Indexed<I, V>, Definite>;
@@ -1006,216 +1142,7 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <RaiseErrorsOf<D> as Kernel<Indexed<I, V>, Definite>>::execute(graphrecord, value, ())
-        } else {
-            Ok(value)
-        }
-    }
-}
-
-impl<V: ValueType, D: Diagnostic, C> Kernel<Bare<V>, Definite> for RaiseWhenErrorsOf<D, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Bare<V>, Definite>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        value: BareStream<'a, V, Definite>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsOf<D> as Kernel<Bare<V>, Definite>>::execute(graphrecord, value, ())
-        } else {
-            Ok(value)
-        }
-    }
-}
-
-impl<I: IndexDomain, V: ValueType, O: OrderState, G: ErrorGroup, C>
-    Kernel<Indexed<I, V>, Multiple<O>> for RaiseWhenErrorsIn<G, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Indexed<I, V>, Multiple<O>>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, V, Multiple<O>>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsIn<G> as Kernel<Indexed<I, V>, Multiple<O>>>::execute(
-                graphrecord,
-                values,
-                (),
-            )
-        } else {
-            Ok(values)
-        }
-    }
-}
-
-impl<V: ValueType, O: OrderState, G: ErrorGroup, C> Kernel<Bare<V>, Multiple<O>>
-    for RaiseWhenErrorsIn<G, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Bare<V>, Multiple<O>>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        values: BareStream<'a, V, Multiple<O>>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsIn<G> as Kernel<Bare<V>, Multiple<O>>>::execute(graphrecord, values, ())
-        } else {
-            Ok(values)
-        }
-    }
-}
-
-impl<I: IndexDomain, V: ValueType, G: ErrorGroup, C> Kernel<Indexed<I, V>, Single>
-    for RaiseWhenErrorsIn<G, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Indexed<I, V>, Single>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        value: KeyedStream<'a, I, V, Single>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsIn<G> as Kernel<Indexed<I, V>, Single>>::execute(graphrecord, value, ())
-        } else {
-            Ok(value)
-        }
-    }
-}
-
-impl<V: ValueType, G: ErrorGroup, C> Kernel<Bare<V>, Single> for RaiseWhenErrorsIn<G, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Bare<V>, Single>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        value: BareStream<'a, V, Single>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsIn<G> as Kernel<Bare<V>, Single>>::execute(graphrecord, value, ())
-        } else {
-            Ok(value)
-        }
-    }
-}
-
-impl<I: IndexDomain, V: ValueType, G: ErrorGroup, C> Kernel<Indexed<I, V>, Definite>
-    for RaiseWhenErrorsIn<G, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Indexed<I, V>, Definite>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        value: KeyedStream<'a, I, V, Definite>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsIn<G> as Kernel<Indexed<I, V>, Definite>>::execute(graphrecord, value, ())
-        } else {
-            Ok(value)
-        }
-    }
-}
-
-impl<V: ValueType, G: ErrorGroup, C> Kernel<Bare<V>, Definite> for RaiseWhenErrorsIn<G, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Bare<V>, Definite>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        value: BareStream<'a, V, Definite>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsIn<G> as Kernel<Bare<V>, Definite>>::execute(graphrecord, value, ())
-        } else {
-            Ok(value)
-        }
-    }
-}
-
-impl<I: IndexDomain, V: ValueType, O: OrderState, E: Error + 'static, C>
-    Kernel<Indexed<I, V>, Multiple<O>> for RaiseWhenErrorsWithCause<E, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Indexed<I, V>, Multiple<O>>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, V, Multiple<O>>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsWithCause<E> as Kernel<Indexed<I, V>, Multiple<O>>>::execute(
-                graphrecord,
-                values,
-                (),
-            )
-        } else {
-            Ok(values)
-        }
-    }
-}
-
-impl<V: ValueType, O: OrderState, E: Error + 'static, C> Kernel<Bare<V>, Multiple<O>>
-    for RaiseWhenErrorsWithCause<E, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Bare<V>, Multiple<O>>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        values: BareStream<'a, V, Multiple<O>>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsWithCause<E> as Kernel<Bare<V>, Multiple<O>>>::execute(
-                graphrecord,
-                values,
-                (),
-            )
-        } else {
-            Ok(values)
-        }
-    }
-}
-
-impl<I: IndexDomain, V: ValueType, E: Error + 'static, C> Kernel<Indexed<I, V>, Single>
-    for RaiseWhenErrorsWithCause<E, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Indexed<I, V>, Single>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        value: KeyedStream<'a, I, V, Single>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsWithCause<E> as Kernel<Indexed<I, V>, Single>>::execute(
+            <RaiseErrorsOf<D> as LaneKernel<Indexed<I, V>, Definite>>::execute(
                 graphrecord,
                 value,
                 (),
@@ -1224,54 +1151,16 @@ where
             Ok(value)
         }
     }
-}
 
-impl<V: ValueType, E: Error + 'static, C> Kernel<Bare<V>, Single> for RaiseWhenErrorsWithCause<E, C>
-where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Bare<V>, Single>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        value: BareStream<'a, V, Single>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsWithCause<E> as Kernel<Bare<V>, Single>>::execute(graphrecord, value, ())
-        } else {
-            Ok(value)
-        }
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
     }
 }
 
-impl<I: IndexDomain, V: ValueType, E: Error + 'static, C> Kernel<Indexed<I, V>, Definite>
-    for RaiseWhenErrorsWithCause<E, C>
+impl<V, D, C> LaneKernel<Bare<V>, Definite> for RaiseWhenErrorsOf<D, C>
 where
-    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
-{
-    type Output = OperandHandle<Indexed<I, V>, Definite>;
-
-    fn execute<'a>(
-        graphrecord: &'a GraphRecord,
-        value: KeyedStream<'a, I, V, Definite>,
-        condition: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        if condition? {
-            <RaiseErrorsWithCause<E> as Kernel<Indexed<I, V>, Definite>>::execute(
-                graphrecord,
-                value,
-                (),
-            )
-        } else {
-            Ok(value)
-        }
-    }
-}
-
-impl<V: ValueType, E: Error + 'static, C> Kernel<Bare<V>, Definite>
-    for RaiseWhenErrorsWithCause<E, C>
-where
+    V: ValueType,
+    D: Diagnostic,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Bare<V>, Definite>;
@@ -1282,18 +1171,361 @@ where
         condition: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         if condition? {
-            <RaiseErrorsWithCause<E> as Kernel<Bare<V>, Definite>>::execute(graphrecord, value, ())
+            <RaiseErrorsOf<D> as LaneKernel<Bare<V>, Definite>>::execute(graphrecord, value, ())
         } else {
             Ok(value)
         }
     }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
 }
 
-impl<I> ErrorPolicy<I> for Raise
+impl<I, V, O, G, C> LaneKernel<Indexed<I, V>, Multiple<O>> for RaiseWhenErrorsIn<G, C>
 where
-    I: Apply<Self>,
+    I: IndexDomain,
+    V: ValueType,
+    O: OrderState,
+    G: ErrorGroup,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
-    type Output = <I as Apply<Self>>::Output;
+    type Output = OperandHandle<Indexed<I, V>, Multiple<O>>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, I, V, Multiple<O>>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsIn<G> as LaneKernel<Indexed<I, V>, Multiple<O>>>::execute(
+                graphrecord,
+                values,
+                (),
+            )
+        } else {
+            Ok(values)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<V, O, G, C> LaneKernel<Bare<V>, Multiple<O>> for RaiseWhenErrorsIn<G, C>
+where
+    V: ValueType,
+    O: OrderState,
+    G: ErrorGroup,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Bare<V>, Multiple<O>>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        values: BareStream<'a, V, Multiple<O>>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsIn<G> as LaneKernel<Bare<V>, Multiple<O>>>::execute(graphrecord, values, ())
+        } else {
+            Ok(values)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<I, V, G, C> LaneKernel<Indexed<I, V>, Single> for RaiseWhenErrorsIn<G, C>
+where
+    I: IndexDomain,
+    V: ValueType,
+    G: ErrorGroup,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Indexed<I, V>, Single>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, I, V, Single>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsIn<G> as LaneKernel<Indexed<I, V>, Single>>::execute(graphrecord, value, ())
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<V, G, C> LaneKernel<Bare<V>, Single> for RaiseWhenErrorsIn<G, C>
+where
+    V: ValueType,
+    G: ErrorGroup,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Bare<V>, Single>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: BareStream<'a, V, Single>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsIn<G> as LaneKernel<Bare<V>, Single>>::execute(graphrecord, value, ())
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<I, V, G, C> LaneKernel<Indexed<I, V>, Definite> for RaiseWhenErrorsIn<G, C>
+where
+    I: IndexDomain,
+    V: ValueType,
+    G: ErrorGroup,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Indexed<I, V>, Definite>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, I, V, Definite>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsIn<G> as LaneKernel<Indexed<I, V>, Definite>>::execute(
+                graphrecord,
+                value,
+                (),
+            )
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<V, G, C> LaneKernel<Bare<V>, Definite> for RaiseWhenErrorsIn<G, C>
+where
+    V: ValueType,
+    G: ErrorGroup,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Bare<V>, Definite>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: BareStream<'a, V, Definite>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsIn<G> as LaneKernel<Bare<V>, Definite>>::execute(graphrecord, value, ())
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<I, V, O, E, C> LaneKernel<Indexed<I, V>, Multiple<O>> for RaiseWhenErrorsWithCause<E, C>
+where
+    I: IndexDomain,
+    V: ValueType,
+    O: OrderState,
+    E: Error + 'static,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Indexed<I, V>, Multiple<O>>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, I, V, Multiple<O>>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsWithCause<E> as LaneKernel<Indexed<I, V>, Multiple<O>>>::execute(
+                graphrecord,
+                values,
+                (),
+            )
+        } else {
+            Ok(values)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<V, O, E, C> LaneKernel<Bare<V>, Multiple<O>> for RaiseWhenErrorsWithCause<E, C>
+where
+    V: ValueType,
+    O: OrderState,
+    E: Error + 'static,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Bare<V>, Multiple<O>>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        values: BareStream<'a, V, Multiple<O>>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsWithCause<E> as LaneKernel<Bare<V>, Multiple<O>>>::execute(
+                graphrecord,
+                values,
+                (),
+            )
+        } else {
+            Ok(values)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<I, V, E, C> LaneKernel<Indexed<I, V>, Single> for RaiseWhenErrorsWithCause<E, C>
+where
+    I: IndexDomain,
+    V: ValueType,
+    E: Error + 'static,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Indexed<I, V>, Single>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, I, V, Single>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsWithCause<E> as LaneKernel<Indexed<I, V>, Single>>::execute(
+                graphrecord,
+                value,
+                (),
+            )
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<V, E, C> LaneKernel<Bare<V>, Single> for RaiseWhenErrorsWithCause<E, C>
+where
+    V: ValueType,
+    E: Error + 'static,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Bare<V>, Single>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: BareStream<'a, V, Single>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsWithCause<E> as LaneKernel<Bare<V>, Single>>::execute(
+                graphrecord,
+                value,
+                (),
+            )
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<I, V, E, C> LaneKernel<Indexed<I, V>, Definite> for RaiseWhenErrorsWithCause<E, C>
+where
+    I: IndexDomain,
+    V: ValueType,
+    E: Error + 'static,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Indexed<I, V>, Definite>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, I, V, Definite>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsWithCause<E> as LaneKernel<Indexed<I, V>, Definite>>::execute(
+                graphrecord,
+                value,
+                (),
+            )
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<V, E, C> LaneKernel<Bare<V>, Definite> for RaiseWhenErrorsWithCause<E, C>
+where
+    V: ValueType,
+    E: Error + 'static,
+    for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
+{
+    type Output = OperandHandle<Bare<V>, Definite>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: BareStream<'a, V, Definite>,
+        condition: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        if condition? {
+            <RaiseErrorsWithCause<E> as LaneKernel<Bare<V>, Definite>>::execute(
+                graphrecord,
+                value,
+                (),
+            )
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input
+    }
+}
+
+impl<I: Apply<Self>> ErrorPolicy<I> for Raise {
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, Self))
@@ -1306,43 +1538,31 @@ where
     Self: Operation,
     I: Apply<Self>,
 {
-    type Output = <I as Apply<Self>>::Output;
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, self.clone()))
     }
 }
 
-impl<I, D> ErrorPolicyOf<I, D> for Raise
-where
-    I: Apply<RaiseErrorsOf<D>>,
-    D: Diagnostic,
-{
-    type Output = <I as Apply<RaiseErrorsOf<D>>>::Output;
+impl<I: Apply<RaiseErrorsOf<D>>, D: Diagnostic> ErrorPolicyOf<I, D> for Raise {
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, RaiseErrorsOf::new()))
     }
 }
 
-impl<I, G> ErrorPolicyIn<I, G> for Raise
-where
-    I: Apply<RaiseErrorsIn<G>>,
-    G: ErrorGroup,
-{
-    type Output = <I as Apply<RaiseErrorsIn<G>>>::Output;
+impl<I: Apply<RaiseErrorsIn<G>>, G: ErrorGroup> ErrorPolicyIn<I, G> for Raise {
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, RaiseErrorsIn::new()))
     }
 }
 
-impl<I, E> ErrorPolicyWithCause<I, E> for Raise
-where
-    I: Apply<RaiseErrorsWithCause<E>>,
-    E: Error + 'static,
-{
-    type Output = <I as Apply<RaiseErrorsWithCause<E>>>::Output;
+impl<I: Apply<RaiseErrorsWithCause<E>>, E: Error + 'static> ErrorPolicyWithCause<I, E> for Raise {
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, RaiseErrorsWithCause::new()))
@@ -1356,7 +1576,7 @@ where
     RaiseWhenErrorsOf<D, C>: Operation,
     I: Apply<RaiseWhenErrorsOf<D, C>>,
 {
-    type Output = <I as Apply<RaiseWhenErrorsOf<D, C>>>::Output;
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(
@@ -1373,7 +1593,7 @@ where
     RaiseWhenErrorsIn<G, C>: Operation,
     I: Apply<RaiseWhenErrorsIn<G, C>>,
 {
-    type Output = <I as Apply<RaiseWhenErrorsIn<G, C>>>::Output;
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(
@@ -1390,7 +1610,7 @@ where
     RaiseWhenErrorsWithCause<E, C>: Operation,
     I: Apply<RaiseWhenErrorsWithCause<E, C>>,
 {
-    type Output = <I as Apply<RaiseWhenErrorsWithCause<E, C>>>::Output;
+    type Output = I::Output;
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(

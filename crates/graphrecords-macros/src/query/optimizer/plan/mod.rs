@@ -17,7 +17,6 @@ use syn::{
 pub struct Hints {
     pub commutes_with_filter: TokenStream,
     pub allows_limit_pushdown: TokenStream,
-    pub distinct: TokenStream,
     pub volatile: TokenStream,
     pub empty: TokenStream,
 }
@@ -27,7 +26,6 @@ impl Default for Hints {
         Self {
             commutes_with_filter: quote!(false),
             allows_limit_pushdown: quote!(false),
-            distinct: quote!(false),
             volatile: quote!(false),
             empty: quote!(Never),
         }
@@ -44,9 +42,6 @@ impl Hints {
                 Ok(())
             } else if hint.path.is_ident("allows_limit_pushdown") {
                 hints.allows_limit_pushdown = quote!(true);
-                Ok(())
-            } else if hint.path.is_ident("distinct") {
-                hints.distinct = quote!(true);
                 Ok(())
             } else if hint.path.is_ident("volatile") {
                 hints.volatile = quote!(true);

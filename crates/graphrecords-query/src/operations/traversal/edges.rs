@@ -3,7 +3,7 @@ use crate::{
     Multiple, Operand, OrderState, QueryResult, Single, Unit, Unordered,
     execution::EvaluationCache,
     operands::EdgesOperand,
-    operations::{Apply, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{Apply, KeyedStream, LaneKernel, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::Edges,
 };
@@ -18,7 +18,7 @@ fn edges_for_node<'a>(
     node: &'a NodeIndex,
     direction: EdgeDirection,
 ) -> QueryResult<BoxedIterator<'a, &'a EdgeIndex>> {
-    let raise = |error| Failure::new_at(EdgesOperation::LABEL, error, &node);
+    let raise = |error| Failure::new_at::<NodeIndex, _>(EdgesOperation::LABEL, error, &node);
 
     Ok(match direction {
         EdgeDirection::Outgoing => Box::new(graphrecord.outgoing_edges(node).map_err(raise)?),
@@ -33,8 +33,8 @@ fn edges_for_node<'a>(
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Edges")]
-#[plan(optimizer_hints(distinct))]
 pub struct EdgesOperation {
     direction: EdgeDirection,
 }
@@ -51,7 +51,7 @@ impl Prepare for EdgesOperation {
     }
 }
 
-impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for EdgesOperation {
+impl<O: OrderState> LaneKernel<Indexed<NodeIndex, Unit>, Multiple<O>> for EdgesOperation {
     type Output = EdgesOperand<Unordered>;
 
     fn execute<'a>(
@@ -72,7 +72,7 @@ impl<O: OrderState> Kernel<Indexed<NodeIndex, Unit>, Multiple<O>> for EdgesOpera
     }
 }
 
-impl Kernel<Indexed<NodeIndex, Unit>, Single> for EdgesOperation {
+impl LaneKernel<Indexed<NodeIndex, Unit>, Single> for EdgesOperation {
     type Output = EdgesOperand<Unordered>;
 
     fn execute<'a>(
@@ -91,7 +91,7 @@ impl Kernel<Indexed<NodeIndex, Unit>, Single> for EdgesOperation {
     }
 }
 
-impl Kernel<Indexed<NodeIndex, Unit>, Definite> for EdgesOperation {
+impl LaneKernel<Indexed<NodeIndex, Unit>, Definite> for EdgesOperation {
     type Output = EdgesOperand<Unordered>;
 
     fn execute<'a>(
@@ -108,11 +108,8 @@ impl Kernel<Indexed<NodeIndex, Unit>, Definite> for EdgesOperation {
     }
 }
 
-impl<O> Edges for O
-where
-    O: Apply<EdgesOperation>,
-{
-    type ReturnOperand = <O as Apply<EdgesOperation>>::Output;
+impl<O: Apply<EdgesOperation>> Edges for O {
+    type ReturnOperand = O::Output;
 
     fn edges(&self, direction: EdgeDirection) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

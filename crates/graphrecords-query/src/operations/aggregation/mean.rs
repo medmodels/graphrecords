@@ -3,7 +3,9 @@ use crate::{
     OrderState, QueryResult, Scalar,
     execution::EvaluationCache,
     operands::BareValueOperand,
-    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Mean,
 };
@@ -11,6 +13,7 @@ use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 use std::ops::{Add, Div};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Mean")]
 pub struct MeanOperation;
 
@@ -26,7 +29,7 @@ impl Prepare for MeanOperation {
     }
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for MeanOperation {
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Scalar>, Multiple<O>> for MeanOperation {
     type Output = BareValueOperand;
 
     fn execute<'a>(
@@ -37,12 +40,12 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
         let mean = values
             .try_fold(
                 (None, 0_i64),
-                |(sum, count): (Option<GraphRecordValue>, i64), (index, value)| {
+                |(sum, count): (Option<GraphRecordValue>, _), (index, value)| {
                     let value = value?;
                     let sum = match sum {
                         Some(sum) => sum
                             .add(value)
-                            .map_err(|error| Failure::new_at(Self::LABEL, error, &index))?,
+                            .map_err(|error| Failure::new_at::<I, _>(Self::LABEL, error, &index))?,
                         None => value,
                     };
 
@@ -60,12 +63,12 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
         Ok(mean.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for MeanOperation {
+impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for MeanOperation {
     type Output = BareValueOperand;
 
     fn execute<'a>(
@@ -76,7 +79,7 @@ impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for MeanOperation {
         let mean = values
             .try_fold(
                 (None, 0_i64),
-                |(sum, count): (Option<GraphRecordValue>, i64), value| {
+                |(sum, count): (Option<GraphRecordValue>, _), value| {
                     let value = value?;
                     let sum = match sum {
                         Some(sum) => sum
@@ -99,16 +102,13 @@ impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for MeanOperation {
         Ok(mean.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O> Mean for O
-where
-    O: Apply<MeanOperation>,
-{
-    type ReturnOperand = <O as Apply<MeanOperation>>::Output;
+impl<O: Apply<MeanOperation>> Mean for O {
+    type ReturnOperand = O::Output;
 
     fn mean(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), MeanOperation))

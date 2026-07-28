@@ -1,47 +1,67 @@
 use crate::{
-    Cache, EvaluateContext, EvaluateOperand, Explain, Operand, QueryResult,
-    execution::{Cacheable, EvaluationCache},
+    Cache, EvaluateContext, EvaluateOperand, Explain, Failure, Labeled, QueryResult,
+    execution::{CacheSlot, CacheableOperand, EvaluationCache, EvaluationCacheGraphRecordMismatch},
     optimizer::{
         Estimate, Estimated, MatchInputs, OptimizePlan, OptimizerHints, PlanNode, Session, Stats,
         Transformed,
     },
 };
 use graphrecords_core::GraphRecord;
-use std::{collections::hash_map::DefaultHasher, hash::Hasher};
+use std::{
+    any::Any,
+    hash::{Hash, Hasher},
+};
 
-#[derive(PlanNode, MatchInputs, OptimizerHints, Explain)]
+#[derive(MatchInputs, OptimizerHints, Explain)]
 #[explain(label = "Cache")]
-pub struct CacheContext<O: Operand> {
+pub struct CacheContext<O: CacheableOperand> {
     #[input]
     input: O,
+    slot: CacheSlot,
 }
 
-impl<O: Operand> CacheContext<O> {
+impl<O: CacheableOperand> CacheContext<O> {
     #[must_use]
-    pub const fn new(input: O) -> Self {
-        Self { input }
+    pub fn new(input: O) -> Self {
+        Self {
+            input,
+            slot: CacheSlot::new(),
+        }
     }
 }
 
-impl<O: Operand> Cache for O
-where
-    for<'a> <O as EvaluateOperand>::ReturnValue<'a>: Cacheable<'a>,
-{
+impl<O: CacheableOperand> Cache for O {
     fn cache(&self) -> Self {
         Self::new(CacheContext::new(self.clone()))
     }
 }
 
-impl<O: Operand> Estimated for CacheContext<O> {
+impl<O: CacheableOperand> PlanNode for CacheContext<O> {
+    fn inputs(&self) -> Vec<&dyn PlanNode> {
+        vec![self.input.as_plan_node()]
+    }
+
+    fn dyn_eq(&self, other: &dyn PlanNode) -> bool {
+        let Some(other) = other.downcast::<Self>() else {
+            return false;
+        };
+
+        self.input.as_plan_node().dyn_eq(other.input.as_plan_node())
+    }
+
+    fn dyn_hash(&self, mut state: &mut dyn Hasher) {
+        Any::type_id(self).hash(&mut state);
+        self.input.as_plan_node().dyn_hash(state);
+    }
+}
+
+impl<O: CacheableOperand> Estimated for CacheContext<O> {
     fn estimate(&self, stats: &Stats) -> Estimate {
         self.input.context().estimate(stats)
     }
 }
 
-impl<O: Operand> OptimizePlan for CacheContext<O>
-where
-    for<'a> <O as EvaluateOperand>::ReturnValue<'a>: Cacheable<'a>,
-{
+impl<O: CacheableOperand> OptimizePlan for CacheContext<O> {
     type Output = O;
 
     fn optimize(&self, original: &Self::Output, session: &Session) -> Transformed<Self::Output> {
@@ -52,16 +72,16 @@ where
         }
 
         Transformed {
-            value: O::new(Self { input: input.value }),
+            value: O::new(Self {
+                input: input.value,
+                slot: self.slot.clone(),
+            }),
             changed: true,
         }
     }
 }
 
-impl<O: Operand> EvaluateContext for CacheContext<O>
-where
-    for<'a> <O as EvaluateOperand>::ReturnValue<'a>: Cacheable<'a>,
-{
+impl<O: CacheableOperand> EvaluateContext for CacheContext<O> {
     type Operand = O;
 
     fn evaluate<'a>(
@@ -69,10 +89,13 @@ where
         graphrecord: &'a GraphRecord,
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<<O as EvaluateOperand>::ReturnValue<'a>> {
-        let mut hasher = DefaultHasher::new();
-        self.dyn_hash(&mut hasher);
-        let key = hasher.finish();
+        if !cache.is_bound_to(graphrecord) {
+            return Err(Failure::new(
+                Self::LABEL,
+                EvaluationCacheGraphRecordMismatch,
+            ));
+        }
 
-        cache.materialize(key, || self.input.evaluate(graphrecord, cache))
+        cache.materialize::<O>(&self.slot, || self.input.evaluate(graphrecord, cache))
     }
 }

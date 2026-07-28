@@ -2,10 +2,12 @@ use super::{EnsureSortable, IncomparableIndices};
 use crate::{
     AttributeName, Bare, EvaluateOperand, Explain, Failure, FailureKindValue, IncomparableValues,
     IncomparableValuesAt, IndexDomain, IndexValue, Indexed, Labeled, Mask, Multiple, Operand,
-    OrderState, Ordered, QueryResult, Scalar, ToOwnedValue, ValueType,
+    OrderState, Ordered, QueryResult, Scalar, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
-    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Sort,
 };
@@ -16,6 +18,7 @@ use std::{
 };
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Sort")]
 pub struct SortOperation;
 
@@ -40,14 +43,14 @@ where
     O: OrderState,
     for<'b> I::Index<'b>: EnsureSortable,
     for<'b> V::Value<'b>: EnsureSortable,
-    for<'b> <V::Value<'b> as ToOwnedValue>::Owned: Debug + Display + Send + Sync,
+    V::Owned: Debug + Display + Send + Sync,
 {
     let mut collected: Vec<_> = values
         .map(|(index, result)| result.map(|value| (index, value)))
         .collect::<QueryResult<_>>()?;
 
     if let Some((first_position, second_position)) =
-        EnsureSortable::find_incomparable(collected.iter().map(|(_index, value)| value))
+        EnsureSortable::find_incomparable(collected.iter().map(|(_, value)| value))
     {
         let (first_index, first) = &collected[first_position];
         let (second_index, second) = &collected[second_position];
@@ -55,10 +58,10 @@ where
         return Err(Failure::new(
             SortOperation::LABEL,
             IncomparableValuesAt {
-                first: first.to_owned_value(),
-                second: second.to_owned_value(),
-                first_element: first_index.to_owned_value(),
-                second_element: second_index.to_owned_value(),
+                first: V::into_owned(first.clone()),
+                second: V::into_owned(second.clone()),
+                first_element: I::to_owned(first_index),
+                second_element: I::to_owned(second_index),
             },
         ));
     }
@@ -72,7 +75,7 @@ where
         .chunk_by_mut(|(_, left), (_, right)| left.partial_cmp(right) == Some(Ordering::Equal))
     {
         if let Some((first_position, second_position)) =
-            EnsureSortable::find_incomparable(run.iter().map(|(index, _value)| index))
+            EnsureSortable::find_incomparable(run.iter().map(|(index, _)| index))
         {
             let (first_index, value) = &run[first_position];
             let (second_index, _) = &run[second_position];
@@ -80,9 +83,9 @@ where
             return Err(Failure::new(
                 SortOperation::LABEL,
                 IncomparableIndices {
-                    value: value.to_owned_value(),
-                    first: first_index.to_owned_value(),
-                    second: second_index.to_owned_value(),
+                    value: V::into_owned(value.clone()),
+                    first: I::to_owned(first_index),
+                    second: I::to_owned(second_index),
                 },
             ));
         }
@@ -108,7 +111,7 @@ where
     V: ValueType,
     O: OrderState,
     for<'b> V::Value<'b>: EnsureSortable,
-    for<'b> <V::Value<'b> as ToOwnedValue>::Owned: Debug + Display + Send + Sync,
+    V::Owned: Debug + Display + Send + Sync,
 {
     let mut collected: Vec<_> = values.collect::<QueryResult<_>>()?;
 
@@ -118,8 +121,8 @@ where
         return Err(Failure::new(
             SortOperation::LABEL,
             IncomparableValues {
-                first: collected[first_position].to_owned_value(),
-                second: collected[second_position].to_owned_value(),
+                first: V::into_owned(collected[first_position].clone()),
+                second: V::into_owned(collected[second_position].clone()),
             },
         ));
     }
@@ -132,7 +135,7 @@ where
     Ok(Box::new(collected.into_iter().map(Ok)))
 }
 
-impl<I, O> Kernel<Indexed<I, Scalar>, Multiple<O>> for SortOperation
+impl<I, O> LaneKernel<Indexed<I, Scalar>, Multiple<O>> for SortOperation
 where
     I: IndexDomain,
     O: OrderState,
@@ -153,7 +156,7 @@ where
     }
 }
 
-impl<I, O> Kernel<Indexed<I, Mask>, Multiple<O>> for SortOperation
+impl<I, O> LaneKernel<Indexed<I, Mask>, Multiple<O>> for SortOperation
 where
     I: IndexDomain,
     O: OrderState,
@@ -174,7 +177,7 @@ where
     }
 }
 
-impl<I, O> Kernel<Indexed<I, AttributeName>, Multiple<O>> for SortOperation
+impl<I, O> LaneKernel<Indexed<I, AttributeName>, Multiple<O>> for SortOperation
 where
     I: IndexDomain,
     O: OrderState,
@@ -195,7 +198,7 @@ where
     }
 }
 
-impl<I, O> Kernel<Indexed<I, FailureKindValue>, Multiple<O>> for SortOperation
+impl<I, O> LaneKernel<Indexed<I, FailureKindValue>, Multiple<O>> for SortOperation
 where
     I: IndexDomain,
     O: OrderState,
@@ -216,7 +219,7 @@ where
     }
 }
 
-impl<K, I, O> Kernel<Indexed<K, IndexValue<I>>, Multiple<O>> for SortOperation
+impl<K, I, O> LaneKernel<Indexed<K, IndexValue<I>>, Multiple<O>> for SortOperation
 where
     K: IndexDomain,
     I: IndexDomain,
@@ -239,7 +242,7 @@ where
     }
 }
 
-impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for SortOperation {
+impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for SortOperation {
     type Output = OperandHandle<Bare<Scalar>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -255,7 +258,7 @@ impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for SortOperation {
     }
 }
 
-impl<O: OrderState> Kernel<Bare<Mask>, Multiple<O>> for SortOperation {
+impl<O: OrderState> LaneKernel<Bare<Mask>, Multiple<O>> for SortOperation {
     type Output = OperandHandle<Bare<Mask>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -271,7 +274,7 @@ impl<O: OrderState> Kernel<Bare<Mask>, Multiple<O>> for SortOperation {
     }
 }
 
-impl<O: OrderState> Kernel<Bare<AttributeName>, Multiple<O>> for SortOperation {
+impl<O: OrderState> LaneKernel<Bare<AttributeName>, Multiple<O>> for SortOperation {
     type Output = OperandHandle<Bare<AttributeName>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -287,7 +290,7 @@ impl<O: OrderState> Kernel<Bare<AttributeName>, Multiple<O>> for SortOperation {
     }
 }
 
-impl<O: OrderState> Kernel<Bare<FailureKindValue>, Multiple<O>> for SortOperation {
+impl<O: OrderState> LaneKernel<Bare<FailureKindValue>, Multiple<O>> for SortOperation {
     type Output = OperandHandle<Bare<FailureKindValue>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -303,7 +306,7 @@ impl<O: OrderState> Kernel<Bare<FailureKindValue>, Multiple<O>> for SortOperatio
     }
 }
 
-impl<I, O> Kernel<Bare<IndexValue<I>>, Multiple<O>> for SortOperation
+impl<I, O> LaneKernel<Bare<IndexValue<I>>, Multiple<O>> for SortOperation
 where
     I: IndexDomain,
     O: OrderState,
@@ -324,11 +327,8 @@ where
     }
 }
 
-impl<O> Sort for O
-where
-    O: Apply<SortOperation>,
-{
-    type ReturnOperand = <O as Apply<SortOperation>>::Output;
+impl<O: Apply<SortOperation>> Sort for O {
+    type ReturnOperand = O::Output;
 
     fn sort(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), SortOperation))

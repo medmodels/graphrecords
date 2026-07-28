@@ -1,10 +1,10 @@
 use crate::{
     AttributeName, Bare, Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled, Mask,
-    Operand, Positional, QueryResult, Scalar, ToOwnedValue,
+    Operand, Positional, QueryResult, Scalar, ValueType,
     execution::EvaluationCache,
     operations::{
-        Alignment, Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation,
-        OperationContext, Pipeline, Prepare, Retention, Unaligned,
+        Apply, ArgumentSource, BarePipeline, ElementKernel, ElementPipeline, IndexedValuePipeline,
+        Keyed, Operation, OperationContext, Pipeline, Prepare, Retention, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Subtract,
@@ -16,9 +16,8 @@ use graphrecords_core::{
 };
 use std::ops::Sub;
 
-type IndexedSubtractElement<'a, I, V> = (<Keyed<I> as Alignment>::Address<'a>, QueryResult<V>);
-
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "Subtract")]
 pub struct SubtractOperation<A> {
     #[argument]
@@ -42,48 +41,47 @@ impl<A: Prepare> Prepare for SubtractOperation<A> {
 
 fn subtract_indexed<'a, I, A, V>(
     prepared: A::Prepared<'a>,
-    subtract: fn(V, V) -> GraphRecordResult<V>,
-) -> Pipeline<'a, IndexedSubtractElement<'a, I, V>, IndexedSubtractElement<'a, I, V>, A::Retention>
+    subtract: fn(V::Value<'a>, V::Value<'a>) -> GraphRecordResult<V::Value<'a>>,
+) -> IndexedValuePipeline<'a, I, V, V, A::Retention>
 where
     I: IndexDomain,
-    A: ArgumentSource<Keyed<I>, Value<'a> = V>,
+    A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
     A::Prepared<'a>: 'a,
-    V: Clone + ToOwnedValue + 'a,
+    V: ValueType,
 {
     let label = SubtractOperation::<A>::LABEL;
 
-    Pipeline::element_wise(move |(index, item)| {
+    Pipeline::keyed(move |index, item| {
         let value = match item {
             Ok(value) => value,
             Err(original) => {
-                return <A::Retention as Retention>::keep((index, Err(original)));
+                return <A::Retention as Retention>::keep(Err(original));
             }
         };
 
         let step = A::resolve(&prepared, &index, label);
 
         <A::Retention as Retention>::map_step(step, |resolved| {
-            let result = resolved.and_then(|argument| {
-                subtract(value, argument).map_err(|error| Failure::new_at(label, error, &index))
-            });
-
-            (index, result)
+            resolved.and_then(|argument| {
+                subtract(value, argument)
+                    .map_err(|error| Failure::new_at::<I, _>(label, error, &index))
+            })
         })
     })
 }
 
 fn subtract_bare<'a, A, V>(
     prepared: A::Prepared<'a>,
-    subtract: fn(V, V) -> GraphRecordResult<V>,
-) -> Pipeline<'a, QueryResult<V>, QueryResult<V>, A::Retention>
+    subtract: fn(V::Value<'a>, V::Value<'a>) -> GraphRecordResult<V::Value<'a>>,
+) -> BarePipeline<'a, V, V, A::Retention>
 where
-    A: ArgumentSource<Unaligned, Value<'a> = V>,
+    A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
     A::Prepared<'a>: 'a,
-    V: Clone + ToOwnedValue + 'a,
+    V: ValueType,
 {
     let label = SubtractOperation::<A>::LABEL;
 
-    Pipeline::element_wise(move |item| {
+    Pipeline::new(move |item| {
         let value = match item {
             Ok(value) => value,
             Err(original) => {
@@ -106,17 +104,14 @@ where
     I: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<I, Scalar>;
-    type Retention = <A as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Scalar>, Self>> {
-        Ok(subtract_indexed::<I, A, GraphRecordValue>(
-            prepared,
-            Sub::sub,
-        ))
+        Ok(subtract_indexed::<_, A, Scalar>(prepared, Sub::sub))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -131,14 +126,14 @@ impl<A> ElementKernel<Bare<Scalar>> for SubtractOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordValue>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<Scalar>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<Scalar>, Self>> {
-        Ok(subtract_bare::<A, GraphRecordValue>(prepared, Sub::sub))
+        Ok(subtract_bare::<A, Scalar>(prepared, Sub::sub))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -154,14 +149,14 @@ where
     I: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<I, Mask>;
-    type Retention = <A as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
-        Ok(subtract_indexed::<I, A, bool>(
+        Ok(subtract_indexed::<_, A, Mask>(
             prepared,
             |value, argument| Ok(value && !argument),
         ))
@@ -179,14 +174,14 @@ impl<A> ElementKernel<Bare<Mask>> for SubtractOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = bool>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<Mask>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<Mask>, Self>> {
-        Ok(subtract_bare::<A, bool>(prepared, |value, argument| {
+        Ok(subtract_bare::<A, Mask>(prepared, |value, argument| {
             Ok(value && !argument)
         }))
     }
@@ -204,17 +199,14 @@ where
     I: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordAttribute>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<I, AttributeName>;
-    type Retention = <A as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, AttributeName>, Self>> {
-        Ok(subtract_indexed::<I, A, GraphRecordAttribute>(
-            prepared,
-            Sub::sub,
-        ))
+        Ok(subtract_indexed::<_, A, AttributeName>(prepared, Sub::sub))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -229,14 +221,14 @@ impl<A> ElementKernel<Bare<AttributeName>> for SubtractOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordAttribute>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<AttributeName>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<AttributeName>, Self>> {
-        Ok(subtract_bare::<A, GraphRecordAttribute>(prepared, Sub::sub))
+        Ok(subtract_bare::<A, AttributeName>(prepared, Sub::sub))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -252,14 +244,14 @@ where
     K: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<K>, Value<'a> = usize>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<K, IndexValue<Positional>>;
-    type Retention = <A as ArgumentSource<Keyed<K>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<Positional>>, Self>> {
-        Ok(subtract_indexed::<K, A, usize>(
+        Ok(subtract_indexed::<_, A, IndexValue<Positional>>(
             prepared,
             |value, argument| Ok(value - argument),
         ))
@@ -277,16 +269,17 @@ impl<A> ElementKernel<Bare<IndexValue<Positional>>> for SubtractOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = usize>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<IndexValue<Positional>>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<Positional>>, Self>> {
-        Ok(subtract_bare::<A, usize>(prepared, |value, argument| {
-            Ok(value - argument)
-        }))
+        Ok(subtract_bare::<A, IndexValue<Positional>>(
+            prepared,
+            |value, argument| Ok(value - argument),
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -302,14 +295,14 @@ where
     K: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<K>, Value<'a> = GraphRecordAttribute>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<K, IndexValue<NodeIndex>>;
-    type Retention = <A as ArgumentSource<Keyed<K>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<NodeIndex>>, Self>> {
-        Ok(subtract_indexed::<K, A, GraphRecordAttribute>(
+        Ok(subtract_indexed::<_, A, IndexValue<NodeIndex>>(
             prepared,
             Sub::sub,
         ))
@@ -327,14 +320,17 @@ impl<A> ElementKernel<Bare<IndexValue<NodeIndex>>> for SubtractOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordAttribute>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<IndexValue<NodeIndex>>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<NodeIndex>>, Self>> {
-        Ok(subtract_bare::<A, GraphRecordAttribute>(prepared, Sub::sub))
+        Ok(subtract_bare::<A, IndexValue<NodeIndex>>(
+            prepared,
+            Sub::sub,
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -350,14 +346,14 @@ where
     K: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<K>, Value<'a> = EdgeIndex>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<K, IndexValue<EdgeIndex>>;
-    type Retention = <A as ArgumentSource<Keyed<K>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<EdgeIndex>>, Self>> {
-        Ok(subtract_indexed::<K, A, EdgeIndex>(
+        Ok(subtract_indexed::<_, A, IndexValue<EdgeIndex>>(
             prepared,
             |value, argument| Ok(value - argument),
         ))
@@ -375,14 +371,14 @@ impl<A> ElementKernel<Bare<IndexValue<EdgeIndex>>> for SubtractOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = EdgeIndex>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<IndexValue<EdgeIndex>>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<EdgeIndex>>, Self>> {
-        Ok(subtract_bare::<A, EdgeIndex>(
+        Ok(subtract_bare::<A, IndexValue<EdgeIndex>>(
             prepared,
             |value, argument| Ok(value - argument),
         ))
@@ -401,14 +397,14 @@ where
     K: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<K>, Value<'a> = GraphRecordValue>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<K, IndexValue<GraphRecordValue>>;
-    type Retention = <A as ArgumentSource<Keyed<K>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<GraphRecordValue>>, Self>> {
-        Ok(subtract_indexed::<K, A, GraphRecordValue>(
+        Ok(subtract_indexed::<_, A, IndexValue<GraphRecordValue>>(
             prepared,
             Sub::sub,
         ))
@@ -426,14 +422,17 @@ impl<A> ElementKernel<Bare<IndexValue<GraphRecordValue>>> for SubtractOperation<
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordValue>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<IndexValue<GraphRecordValue>>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<GraphRecordValue>>, Self>> {
-        Ok(subtract_bare::<A, GraphRecordValue>(prepared, Sub::sub))
+        Ok(subtract_bare::<A, IndexValue<GraphRecordValue>>(
+            prepared,
+            Sub::sub,
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -449,14 +448,14 @@ where
     K: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<K>, Value<'a> = bool>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<K, IndexValue<bool>>;
-    type Retention = <A as ArgumentSource<Keyed<K>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<bool>>, Self>> {
-        Ok(subtract_indexed::<K, A, bool>(
+        Ok(subtract_indexed::<_, A, IndexValue<bool>>(
             prepared,
             |value, argument| Ok(value && !argument),
         ))
@@ -474,16 +473,17 @@ impl<A> ElementKernel<Bare<IndexValue<bool>>> for SubtractOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = bool>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<IndexValue<bool>>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<bool>>, Self>> {
-        Ok(subtract_bare::<A, bool>(prepared, |value, argument| {
-            Ok(value && !argument)
-        }))
+        Ok(subtract_bare::<A, IndexValue<bool>>(
+            prepared,
+            |value, argument| Ok(value && !argument),
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -499,7 +499,7 @@ where
     SubtractOperation<A>: Operation,
     O: Apply<SubtractOperation<A>>,
 {
-    type ReturnOperand = <O as Apply<SubtractOperation<A>>>::Output;
+    type ReturnOperand = O::Output;
 
     fn subtract(&self, argument: A) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

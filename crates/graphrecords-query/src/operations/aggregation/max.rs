@@ -1,12 +1,12 @@
 use crate::{
     AttributeName, Bare, EvaluateOperand, Explain, Failure, FailureKindValue, IncomparableValues,
     IncomparableValuesAt, IndexDomain, IndexValue, Indexed, Labeled, Mask, Multiple, Operand,
-    OrderState, QueryResult, Scalar, Single, ToOwnedValue, ValueType,
+    OrderState, QueryResult, Scalar, Single, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
-        Apply, BareStream, IncomparableIndices, Kernel, KeyedStream, Operation, OperationContext,
-        Prepare,
+        Apply, BareStream, IncomparableIndices, KeyedStream, LaneKernel, Operation,
+        OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Max,
@@ -18,6 +18,7 @@ use std::{
 };
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Max")]
 pub struct MaxOperation;
 
@@ -42,50 +43,47 @@ where
     O: OrderState,
     for<'b> I::Index<'b>: PartialOrd,
     for<'b> V::Value<'b>: PartialOrd,
-    for<'b> <V::Value<'b> as ToOwnedValue>::Owned: Debug + Display + Send + Sync,
+    V::Owned: Debug + Display + Send + Sync,
 {
-    let maximum = values.try_fold(
-        None,
-        |maximum: Option<(I::Index<'a>, V::Value<'a>)>, (index, value)| {
-            let value = value.map_err(|failure| (index.clone(), failure))?;
+    let maximum = values.try_fold(None, |maximum, (index, value)| {
+        let value = value.map_err(|failure| (index.clone(), failure))?;
 
-            let Some((maximum_index, maximum_value)) = maximum else {
-                return Ok(Some((index, value)));
-            };
+        let Some((maximum_index, maximum_value)) = maximum else {
+            return Ok(Some((index, value)));
+        };
 
-            match value.partial_cmp(&maximum_value) {
-                Some(Ordering::Greater) => return Ok(Some((index, value))),
-                Some(Ordering::Less) => return Ok(Some((maximum_index, maximum_value))),
-                Some(Ordering::Equal) => {}
-                None => {
-                    let cause = IncomparableValuesAt {
-                        first: value.to_owned_value(),
-                        second: maximum_value.to_owned_value(),
-                        first_element: index.to_owned_value(),
-                        second_element: maximum_index.to_owned_value(),
-                    };
-                    let failure = Failure::new_at(MaxOperation::LABEL, cause, &index);
+        match value.partial_cmp(&maximum_value) {
+            Some(Ordering::Greater) => return Ok(Some((index, value))),
+            Some(Ordering::Less) => return Ok(Some((maximum_index, maximum_value))),
+            Some(Ordering::Equal) => {}
+            None => {
+                let cause = IncomparableValuesAt {
+                    first: V::into_owned(value.clone()),
+                    second: V::into_owned(maximum_value.clone()),
+                    first_element: I::to_owned(&index),
+                    second_element: I::to_owned(&maximum_index),
+                };
+                let failure = Failure::new_at::<I, _>(MaxOperation::LABEL, cause, &index);
 
-                    return Err((index, failure));
-                }
+                return Err((index, failure));
             }
+        }
 
-            match index.partial_cmp(&maximum_index) {
-                Some(Ordering::Greater) => Ok(Some((index, value))),
-                Some(Ordering::Less | Ordering::Equal) => Ok(Some((maximum_index, maximum_value))),
-                None => {
-                    let cause = IncomparableIndices {
-                        value: value.to_owned_value(),
-                        first: index.to_owned_value(),
-                        second: maximum_index.to_owned_value(),
-                    };
-                    let failure = Failure::new_at(MaxOperation::LABEL, cause, &index);
+        match index.partial_cmp(&maximum_index) {
+            Some(Ordering::Greater) => Ok(Some((index, value))),
+            Some(Ordering::Less | Ordering::Equal) => Ok(Some((maximum_index, maximum_value))),
+            None => {
+                let cause = IncomparableIndices {
+                    value: V::into_owned(value.clone()),
+                    first: I::to_owned(&index),
+                    second: I::to_owned(&maximum_index),
+                };
+                let failure = Failure::new_at::<I, _>(MaxOperation::LABEL, cause, &index);
 
-                    Err((index, failure))
-                }
+                Err((index, failure))
             }
-        },
-    );
+        }
+    });
 
     match maximum {
         Ok(maximum) => maximum.map(|(index, value)| (index, Ok(value))),
@@ -100,9 +98,9 @@ where
     V: ValueType,
     O: OrderState,
     for<'b> V::Value<'b>: PartialOrd,
-    for<'b> <V::Value<'b> as ToOwnedValue>::Owned: Debug + Display + Send + Sync,
+    V::Owned: Debug + Display + Send + Sync,
 {
-    let maximum = values.try_fold(None, |maximum: Option<V::Value<'a>>, value| {
+    let maximum = values.try_fold(None, |maximum, value| {
         let value = value?;
 
         let Some(maximum) = maximum else {
@@ -115,8 +113,8 @@ where
             None => Err(Failure::new(
                 MaxOperation::LABEL,
                 IncomparableValues {
-                    first: value.to_owned_value(),
-                    second: maximum.to_owned_value(),
+                    first: V::into_owned(value.clone()),
+                    second: V::into_owned(maximum.clone()),
                 },
             )),
         }
@@ -125,7 +123,7 @@ where
     maximum.transpose()
 }
 
-impl<I, O> Kernel<Indexed<I, Scalar>, Multiple<O>> for MaxOperation
+impl<I, O> LaneKernel<Indexed<I, Scalar>, Multiple<O>> for MaxOperation
 where
     I: IndexDomain,
     O: OrderState,
@@ -141,12 +139,12 @@ where
         Ok(maximum_indexed::<I, Scalar, O>(values))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I, O> Kernel<Indexed<I, Mask>, Multiple<O>> for MaxOperation
+impl<I, O> LaneKernel<Indexed<I, Mask>, Multiple<O>> for MaxOperation
 where
     I: IndexDomain,
     O: OrderState,
@@ -162,12 +160,12 @@ where
         Ok(maximum_indexed::<I, Mask, O>(values))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I, O> Kernel<Indexed<I, AttributeName>, Multiple<O>> for MaxOperation
+impl<I, O> LaneKernel<Indexed<I, AttributeName>, Multiple<O>> for MaxOperation
 where
     I: IndexDomain,
     O: OrderState,
@@ -183,12 +181,12 @@ where
         Ok(maximum_indexed::<I, AttributeName, O>(values))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I, O> Kernel<Indexed<I, FailureKindValue>, Multiple<O>> for MaxOperation
+impl<I, O> LaneKernel<Indexed<I, FailureKindValue>, Multiple<O>> for MaxOperation
 where
     I: IndexDomain,
     O: OrderState,
@@ -204,12 +202,12 @@ where
         Ok(maximum_indexed::<I, FailureKindValue, O>(values))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<K, I, O> Kernel<Indexed<K, IndexValue<I>>, Multiple<O>> for MaxOperation
+impl<K, I, O> LaneKernel<Indexed<K, IndexValue<I>>, Multiple<O>> for MaxOperation
 where
     K: IndexDomain,
     I: IndexDomain,
@@ -227,12 +225,12 @@ where
         Ok(maximum_indexed::<K, IndexValue<I>, O>(values))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for MaxOperation {
+impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for MaxOperation {
     type Output = OperandHandle<Bare<Scalar>, Single>;
 
     fn execute<'a>(
@@ -243,12 +241,12 @@ impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for MaxOperation {
         Ok(maximum_bare::<Scalar, O>(values))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<Mask>, Multiple<O>> for MaxOperation {
+impl<O: OrderState> LaneKernel<Bare<Mask>, Multiple<O>> for MaxOperation {
     type Output = OperandHandle<Bare<Mask>, Single>;
 
     fn execute<'a>(
@@ -259,12 +257,12 @@ impl<O: OrderState> Kernel<Bare<Mask>, Multiple<O>> for MaxOperation {
         Ok(maximum_bare::<Mask, O>(values))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<AttributeName>, Multiple<O>> for MaxOperation {
+impl<O: OrderState> LaneKernel<Bare<AttributeName>, Multiple<O>> for MaxOperation {
     type Output = OperandHandle<Bare<AttributeName>, Single>;
 
     fn execute<'a>(
@@ -275,12 +273,12 @@ impl<O: OrderState> Kernel<Bare<AttributeName>, Multiple<O>> for MaxOperation {
         Ok(maximum_bare::<AttributeName, O>(values))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<FailureKindValue>, Multiple<O>> for MaxOperation {
+impl<O: OrderState> LaneKernel<Bare<FailureKindValue>, Multiple<O>> for MaxOperation {
     type Output = OperandHandle<Bare<FailureKindValue>, Single>;
 
     fn execute<'a>(
@@ -291,12 +289,12 @@ impl<O: OrderState> Kernel<Bare<FailureKindValue>, Multiple<O>> for MaxOperation
         Ok(maximum_bare::<FailureKindValue, O>(values))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<I, O> Kernel<Bare<IndexValue<I>>, Multiple<O>> for MaxOperation
+impl<I, O> LaneKernel<Bare<IndexValue<I>>, Multiple<O>> for MaxOperation
 where
     I: IndexDomain,
     O: OrderState,
@@ -312,16 +310,13 @@ where
         Ok(maximum_bare::<IndexValue<I>, O>(values))
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O> Max for O
-where
-    O: Apply<MaxOperation>,
-{
-    type ReturnOperand = <O as Apply<MaxOperation>>::Output;
+impl<O: Apply<MaxOperation>> Max for O {
+    type ReturnOperand = O::Output;
 
     fn max(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), MaxOperation))

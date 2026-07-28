@@ -1,10 +1,10 @@
 use crate::{
     AttributeName, Bare, Diagnostic, Explain, Failure, IndexDomain, IndexValue, Indexed, Labeled,
-    Operand, Positional, QueryResult, Scalar, ToOwnedValue,
+    Operand, Positional, QueryResult, Scalar, ValueType,
     execution::EvaluationCache,
     operations::{
-        Alignment, Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation,
-        OperationContext, Pipeline, Prepare, Retention, Unaligned,
+        Apply, ArgumentSource, BarePipeline, ElementKernel, ElementPipeline, IndexedValuePipeline,
+        Keyed, Operation, OperationContext, Pipeline, Prepare, Retention, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Modulo,
@@ -18,8 +18,6 @@ use std::{
     error::Error,
     fmt::{self, Display, Formatter},
 };
-
-type IndexedModuloElement<'a, I, V> = (<Keyed<I> as Alignment>::Address<'a>, QueryResult<V>);
 
 #[derive(Debug)]
 pub struct ModuloByZero;
@@ -39,6 +37,7 @@ impl Diagnostic for ModuloByZero {
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "Modulo")]
 pub struct ModuloOperation<A> {
     #[argument]
@@ -86,54 +85,53 @@ const fn is_attribute_modulo_by_zero(
 
 fn modulo_indexed<'a, I, A, V>(
     prepared: A::Prepared<'a>,
-    is_modulo_by_zero: fn(&V, &V) -> bool,
-    modulo: fn(V, V) -> GraphRecordResult<V>,
-) -> Pipeline<'a, IndexedModuloElement<'a, I, V>, IndexedModuloElement<'a, I, V>, A::Retention>
+    is_modulo_by_zero: fn(&V::Value<'a>, &V::Value<'a>) -> bool,
+    modulo: fn(V::Value<'a>, V::Value<'a>) -> GraphRecordResult<V::Value<'a>>,
+) -> IndexedValuePipeline<'a, I, V, V, A::Retention>
 where
     I: IndexDomain,
-    A: ArgumentSource<Keyed<I>, Value<'a> = V>,
+    A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
     A::Prepared<'a>: 'a,
-    V: Clone + ToOwnedValue + 'a,
+    V: ValueType,
 {
     let label = ModuloOperation::<A>::LABEL;
 
-    Pipeline::element_wise(move |(index, item)| {
+    Pipeline::keyed(move |index, item| {
         let value = match item {
             Ok(value) => value,
             Err(original) => {
-                return <A::Retention as Retention>::keep((index, Err(original)));
+                return <A::Retention as Retention>::keep(Err(original));
             }
         };
 
         let step = A::resolve(&prepared, &index, label);
 
         <A::Retention as Retention>::map_step(step, |resolved| {
-            let result = resolved.and_then(|modulus| {
+            resolved.and_then(|modulus| {
                 if is_modulo_by_zero(&value, &modulus) {
-                    return Err(Failure::new_at(label, ModuloByZero, &index));
+                    return Err(Failure::new_at::<I, _>(label, ModuloByZero, &index));
                 }
 
-                modulo(value, modulus).map_err(|error| Failure::new_at(label, error, &index))
-            });
-
-            (index, result)
+                modulo(value, modulus)
+                    .map_err(|error| Failure::new_at::<I, _>(label, error, &index))
+            })
         })
     })
 }
 
 fn modulo_bare<'a, A, V>(
     prepared: A::Prepared<'a>,
-    is_modulo_by_zero: fn(&V, &V) -> bool,
-    modulo: fn(V, V) -> GraphRecordResult<V>,
-) -> Pipeline<'a, QueryResult<V>, QueryResult<V>, A::Retention>
+    is_modulo_by_zero: fn(&V::Value<'a>, &V::Value<'a>) -> bool,
+    modulo: fn(V::Value<'a>, V::Value<'a>) -> GraphRecordResult<V::Value<'a>>,
+) -> BarePipeline<'a, V, V, A::Retention>
 where
-    A: ArgumentSource<Unaligned, Value<'a> = V>,
+    A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
     A::Prepared<'a>: 'a,
-    V: Clone + ToOwnedValue + 'a,
+    V: ValueType,
 {
     let label = ModuloOperation::<A>::LABEL;
 
-    Pipeline::element_wise(move |item| {
+    Pipeline::new(move |item| {
         let value = match item {
             Ok(value) => value,
             Err(original) => {
@@ -160,14 +158,14 @@ where
     I: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<I, Scalar>;
-    type Retention = <A as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Scalar>, Self>> {
-        Ok(modulo_indexed::<I, A, GraphRecordValue>(
+        Ok(modulo_indexed::<_, A, Scalar>(
             prepared,
             is_graphrecord_value_modulo_by_zero,
             Mod::r#mod,
@@ -186,14 +184,14 @@ impl<A> ElementKernel<Bare<Scalar>> for ModuloOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordValue>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<Scalar>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<Scalar>, Self>> {
-        Ok(modulo_bare::<A, GraphRecordValue>(
+        Ok(modulo_bare::<A, Scalar>(
             prepared,
             is_graphrecord_value_modulo_by_zero,
             Mod::r#mod,
@@ -213,14 +211,14 @@ where
     I: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordAttribute>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<I, AttributeName>;
-    type Retention = <A as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, AttributeName>, Self>> {
-        Ok(modulo_indexed::<I, A, GraphRecordAttribute>(
+        Ok(modulo_indexed::<_, A, AttributeName>(
             prepared,
             is_attribute_modulo_by_zero,
             Mod::r#mod,
@@ -239,14 +237,14 @@ impl<A> ElementKernel<Bare<AttributeName>> for ModuloOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordAttribute>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<AttributeName>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<AttributeName>, Self>> {
-        Ok(modulo_bare::<A, GraphRecordAttribute>(
+        Ok(modulo_bare::<A, AttributeName>(
             prepared,
             is_attribute_modulo_by_zero,
             Mod::r#mod,
@@ -266,14 +264,14 @@ where
     K: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<K>, Value<'a> = usize>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<K, IndexValue<Positional>>;
-    type Retention = <A as ArgumentSource<Keyed<K>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<Positional>>, Self>> {
-        Ok(modulo_indexed::<K, A, usize>(
+        Ok(modulo_indexed::<_, A, IndexValue<Positional>>(
             prepared,
             |_, modulus| *modulus == 0,
             |value, modulus| Ok(value % modulus),
@@ -292,14 +290,14 @@ impl<A> ElementKernel<Bare<IndexValue<Positional>>> for ModuloOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = usize>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<IndexValue<Positional>>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<Positional>>, Self>> {
-        Ok(modulo_bare::<A, usize>(
+        Ok(modulo_bare::<A, IndexValue<Positional>>(
             prepared,
             |_, modulus| *modulus == 0,
             |value, modulus| Ok(value % modulus),
@@ -319,14 +317,14 @@ where
     K: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<K>, Value<'a> = GraphRecordAttribute>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<K, IndexValue<NodeIndex>>;
-    type Retention = <A as ArgumentSource<Keyed<K>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<NodeIndex>>, Self>> {
-        Ok(modulo_indexed::<K, A, GraphRecordAttribute>(
+        Ok(modulo_indexed::<_, A, IndexValue<NodeIndex>>(
             prepared,
             is_attribute_modulo_by_zero,
             Mod::r#mod,
@@ -345,14 +343,14 @@ impl<A> ElementKernel<Bare<IndexValue<NodeIndex>>> for ModuloOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordAttribute>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<IndexValue<NodeIndex>>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<NodeIndex>>, Self>> {
-        Ok(modulo_bare::<A, GraphRecordAttribute>(
+        Ok(modulo_bare::<A, IndexValue<NodeIndex>>(
             prepared,
             is_attribute_modulo_by_zero,
             Mod::r#mod,
@@ -372,14 +370,14 @@ where
     K: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<K>, Value<'a> = EdgeIndex>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<K, IndexValue<EdgeIndex>>;
-    type Retention = <A as ArgumentSource<Keyed<K>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<EdgeIndex>>, Self>> {
-        Ok(modulo_indexed::<K, A, EdgeIndex>(
+        Ok(modulo_indexed::<_, A, IndexValue<EdgeIndex>>(
             prepared,
             |_, modulus| *modulus == 0,
             Mod::r#mod,
@@ -398,14 +396,14 @@ impl<A> ElementKernel<Bare<IndexValue<EdgeIndex>>> for ModuloOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = EdgeIndex>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<IndexValue<EdgeIndex>>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<EdgeIndex>>, Self>> {
-        Ok(modulo_bare::<A, EdgeIndex>(
+        Ok(modulo_bare::<A, IndexValue<EdgeIndex>>(
             prepared,
             |_, modulus| *modulus == 0,
             Mod::r#mod,
@@ -425,14 +423,14 @@ where
     K: IndexDomain,
     for<'a> A: ArgumentSource<Keyed<K>, Value<'a> = GraphRecordValue>,
 {
+    type Emission = A::Retention;
     type OutShape = Indexed<K, IndexValue<GraphRecordValue>>;
-    type Retention = <A as ArgumentSource<Keyed<K>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<GraphRecordValue>>, Self>> {
-        Ok(modulo_indexed::<K, A, GraphRecordValue>(
+        Ok(modulo_indexed::<_, A, IndexValue<GraphRecordValue>>(
             prepared,
             is_graphrecord_value_modulo_by_zero,
             Mod::r#mod,
@@ -451,14 +449,14 @@ impl<A> ElementKernel<Bare<IndexValue<GraphRecordValue>>> for ModuloOperation<A>
 where
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordValue>,
 {
+    type Emission = A::Retention;
     type OutShape = Bare<IndexValue<GraphRecordValue>>;
-    type Retention = <A as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<GraphRecordValue>>, Self>> {
-        Ok(modulo_bare::<A, GraphRecordValue>(
+        Ok(modulo_bare::<A, IndexValue<GraphRecordValue>>(
             prepared,
             is_graphrecord_value_modulo_by_zero,
             Mod::r#mod,
@@ -478,7 +476,7 @@ where
     ModuloOperation<A>: Operation,
     O: Apply<ModuloOperation<A>>,
 {
-    type ReturnOperand = <O as Apply<ModuloOperation<A>>>::Output;
+    type ReturnOperand = O::Output;
 
     fn modulo(&self, argument: A) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

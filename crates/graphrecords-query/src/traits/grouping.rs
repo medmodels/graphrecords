@@ -1,7 +1,7 @@
-use crate::{Operand, operations::KeyOperand};
+use crate::{IndexDomain, Operand};
 
-pub trait GroupBy<K: KeyOperand>: Operand {
-    type ReturnOperand: Operand;
+pub trait GroupBy<K>: Operand {
+    type ReturnOperand;
 
     fn group_by(&self, key: K) -> Self::ReturnOperand;
 }
@@ -12,10 +12,16 @@ pub trait Having<P> {
     fn having(&self, predicate: P) -> Self::ReturnOperand;
 }
 
-pub trait Broadcast<K: KeyOperand> {
+pub trait Broadcast {
     type ReturnOperand;
 
-    fn broadcast(&self, key: K) -> Self::ReturnOperand;
+    fn broadcast(&self) -> Self::ReturnOperand;
+}
+
+pub trait BroadcastVia<I: IndexDomain, A> {
+    type ReturnOperand;
+
+    fn broadcast_via(&self, via: A) -> Self::ReturnOperand;
 }
 
 pub trait Keys {

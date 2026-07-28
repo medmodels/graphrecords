@@ -3,13 +3,16 @@ use crate::{
     Single, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
-    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::First,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "First")]
 pub struct FirstOperation;
 
@@ -25,11 +28,7 @@ impl Prepare for FirstOperation {
     }
 }
 
-impl<I, V> Kernel<Indexed<I, V>, Multiple<Ordered>> for FirstOperation
-where
-    I: IndexDomain,
-    V: ValueType,
-{
+impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>> for FirstOperation {
     type Output = OperandHandle<Indexed<I, V>, Single>;
 
     fn execute<'a>(
@@ -40,15 +39,12 @@ where
         Ok(values.next())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<V> Kernel<Bare<V>, Multiple<Ordered>> for FirstOperation
-where
-    V: ValueType,
-{
+impl<V: ValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for FirstOperation {
     type Output = OperandHandle<Bare<V>, Single>;
 
     fn execute<'a>(
@@ -59,16 +55,13 @@ where
         Ok(values.next())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O> First for O
-where
-    O: Apply<FirstOperation>,
-{
-    type ReturnOperand = <O as Apply<FirstOperation>>::Output;
+impl<O: Apply<FirstOperation>> First for O {
+    type ReturnOperand = O::Output;
 
     fn first(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), FirstOperation))

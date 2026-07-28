@@ -11,6 +11,7 @@ use crate::{
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "Filter")]
 #[plan(optimizer_hints(empty = if_all))]
 pub struct FilterOperation<M> {
@@ -39,8 +40,8 @@ where
     V: ValueType,
     for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
+    type Emission = Dropping;
     type OutShape = Indexed<I, V>;
-    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -48,22 +49,20 @@ where
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::default().filter_map(
-            move |(index, item): (I::Index<'a>, QueryResult<V::Value<'a>>)| {
-                let value = match item {
-                    Ok(value) => value,
-                    Err(failure) => return Some((index, Err(failure))),
-                };
+        Ok(Pipeline::keyed(move |index, item| {
+            let value = match item {
+                Ok(value) => value,
+                Err(failure) => return Some(Err(failure)),
+            };
 
-                let step = M::resolve(&prepared, &index, label);
+            let step = M::resolve(&prepared, &index, label);
 
-                match <M::Retention as Retention>::collapse(step) {
-                    Some(Ok(true)) => Some((index, Ok(value))),
-                    Some(Ok(false)) | None => None,
-                    Some(Err(failure)) => Some((index, Err(failure))),
-                }
-            },
-        ))
+            match <M::Retention as Retention>::collapse(step) {
+                Some(Ok(true)) => Some(Ok(value)),
+                Some(Ok(false)) | None => None,
+                Some(Err(failure)) => Some(Err(failure)),
+            }
+        }))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -79,8 +78,8 @@ where
     V: ValueType,
     for<'a> M: ArgumentSource<Unaligned, Value<'a> = bool>,
 {
+    type Emission = Dropping;
     type OutShape = Bare<V>;
-    type Retention = Dropping;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -88,22 +87,20 @@ where
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(
-            Pipeline::default().filter_map(move |item: QueryResult<V::Value<'a>>| {
-                let value = match item {
-                    Ok(value) => value,
-                    Err(failure) => return Some(Err(failure)),
-                };
+        Ok(Pipeline::new(move |item| {
+            let value = match item {
+                Ok(value) => value,
+                Err(failure) => return Some(Err(failure)),
+            };
 
-                let step = M::resolve(&prepared, &(), label);
+            let step = M::resolve(&prepared, &(), label);
 
-                match <M::Retention as Retention>::collapse(step) {
-                    Some(Ok(true)) => Some(Ok(value)),
-                    Some(Ok(false)) | None => None,
-                    Some(Err(failure)) => Some(Err(failure)),
-                }
-            }),
-        )
+            match <M::Retention as Retention>::collapse(step) {
+                Some(Ok(true)) => Some(Ok(value)),
+                Some(Ok(false)) | None => None,
+                Some(Err(failure)) => Some(Err(failure)),
+            }
+        }))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -119,7 +116,7 @@ where
     O: Apply<FilterOperation<M>>,
     FilterOperation<M>: Operation,
 {
-    type ReturnOperand = <O as Apply<FilterOperation<M>>>::Output;
+    type ReturnOperand = O::Output;
 
     fn filter(&self, mask: M) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

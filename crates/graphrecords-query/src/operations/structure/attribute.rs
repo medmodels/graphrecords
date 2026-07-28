@@ -1,6 +1,6 @@
 use crate::{
     Diagnostic, EntityDomain, EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled,
-    Operand, OwnedIndex, QueryResult, Scalar, ToOwnedValue, Unit,
+    Operand, OwnedIndex, QueryResult, Scalar, Unit,
     execution::EvaluationCache,
     operations::{
         Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
@@ -58,6 +58,7 @@ impl EntityAttributes for EdgeIndex {
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "Attribute")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct AttributeOperation {
@@ -135,43 +136,41 @@ impl Prepare for AttributeOperation {
 }
 
 impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation {
+    type Emission = Preserving;
     type OutShape = Indexed<I, Scalar>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
-        attribute: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
-        Ok(Pipeline::default().map(
-            move |(index, membership): (I::Index<'a>, QueryResult<()>)| {
-                if let Err(failure) = membership {
-                    return (index, Err(failure));
+        Ok(Pipeline::keyed(move |index, membership| {
+            if let Err(failure) = membership {
+                return Err(failure);
+            }
+
+            let attributes = match I::attributes(graphrecord, &index) {
+                Ok(attributes) => attributes,
+                Err(error) => {
+                    let failure = Failure::new_at::<I, _>(Self::LABEL, error, &index);
+
+                    return Err(failure);
                 }
+            };
 
-                let attributes = match I::attributes(graphrecord, &index) {
-                    Ok(attributes) => attributes,
-                    Err(error) => {
-                        let failure = Failure::new_at(Self::LABEL, error, &index);
+            if let Some(value) = attributes.get(prepared) {
+                return Ok(value.clone());
+            }
 
-                        return (index, Err(failure));
-                    }
-                };
+            let failure = Failure::new_at::<I, _>(
+                Self::LABEL,
+                MissingAttribute {
+                    attribute: prepared.clone(),
+                },
+                &index,
+            );
 
-                if let Some(value) = attributes.get(attribute) {
-                    return (index, Ok(value.clone()));
-                }
-
-                let failure = Failure::new_at(
-                    Self::LABEL,
-                    MissingAttribute {
-                        attribute: attribute.clone(),
-                    },
-                    &index,
-                );
-
-                (index, Err(failure))
-            },
-        ))
+            Err(failure)
+        }))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -191,36 +190,32 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation
 impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
     for AttributeOperation
 {
+    type Emission = Preserving;
     type OutShape = Indexed<I, Scalar>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
-        attribute: Self::Prepared<'a>,
+        prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
-        Ok(Pipeline::default().map(
-            move |(key, reference): (I::Index<'a>, QueryResult<<E as IndexDomain>::Index<'a>>)| {
-                let value = reference.and_then(|entity| {
-                    let attributes = E::attributes(graphrecord, &entity)
-                        .map_err(|error| Failure::new_at(Self::LABEL, error, &key))?;
+        Ok(Pipeline::keyed(move |key, reference: QueryResult<_>| {
+            reference.and_then(|entity| {
+                let attributes = E::attributes(graphrecord, &entity)
+                    .map_err(|error| Failure::new_at::<I, _>(Self::LABEL, error, &key))?;
 
-                    if let Some(value) = attributes.get(attribute) {
-                        return Ok(value.clone());
-                    }
+                if let Some(value) = attributes.get(prepared) {
+                    return Ok(value.clone());
+                }
 
-                    Err(Failure::new_at(
-                        Self::LABEL,
-                        MissingTraversedAttribute {
-                            attribute: attribute.clone(),
-                            entity: entity.to_owned_value(),
-                        },
-                        &key,
-                    ))
-                });
-
-                (key, value)
-            },
-        ))
+                Err(Failure::new_at::<I, _>(
+                    Self::LABEL,
+                    MissingTraversedAttribute {
+                        attribute: prepared.clone(),
+                        entity: E::to_owned(&entity),
+                    },
+                    &key,
+                ))
+            })
+        }))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -240,11 +235,8 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
     }
 }
 
-impl<O> Attribute for O
-where
-    O: Apply<AttributeOperation>,
-{
-    type ReturnOperand = <O as Apply<AttributeOperation>>::Output;
+impl<O: Apply<AttributeOperation>> Attribute for O {
+    type ReturnOperand = O::Output;
 
     fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

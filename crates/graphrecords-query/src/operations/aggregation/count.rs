@@ -3,13 +3,16 @@ use crate::{
     QueryResult, Single, ValueType,
     execution::EvaluationCache,
     operands::DefiniteBareValueOperand,
-    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Count,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Count")]
 pub struct CountOperation;
 
@@ -25,7 +28,7 @@ impl Prepare for CountOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple<O>>
+impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
     for CountOperation
 {
     type Output = DefiniteBareValueOperand;
@@ -35,7 +38,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple
         mut values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let count = values.try_fold(0_i64, |count, (_index, item)| item.map(|_| count + 1));
+        let count = values.try_fold(0_i64, |count, (_, item)| item.map(|_| count + 1));
 
         Ok(count.map(GraphRecordValue::Int))
     }
@@ -45,7 +48,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple
     }
 }
 
-impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for CountOperation {
+impl<V: ValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -63,7 +66,7 @@ impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for CountOperatio
     }
 }
 
-impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Single> for CountOperation {
+impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Single> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -72,7 +75,7 @@ impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Single> for CountOperat
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let count = match value {
-            Some((_index, item)) => item.map(|_| 1_i64),
+            Some((_, item)) => item.map(|_| 1_i64),
             None => Ok(0_i64),
         };
 
@@ -84,7 +87,7 @@ impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Single> for CountOperat
     }
 }
 
-impl<V: ValueType> Kernel<Bare<V>, Single> for CountOperation {
+impl<V: ValueType> LaneKernel<Bare<V>, Single> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -105,7 +108,7 @@ impl<V: ValueType> Kernel<Bare<V>, Single> for CountOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Definite> for CountOperation {
+impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Definite> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -121,7 +124,7 @@ impl<I: IndexDomain, V: ValueType> Kernel<Indexed<I, V>, Definite> for CountOper
     }
 }
 
-impl<V: ValueType> Kernel<Bare<V>, Definite> for CountOperation {
+impl<V: ValueType> LaneKernel<Bare<V>, Definite> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -137,11 +140,8 @@ impl<V: ValueType> Kernel<Bare<V>, Definite> for CountOperation {
     }
 }
 
-impl<O> Count for O
-where
-    O: Apply<CountOperation>,
-{
-    type ReturnOperand = <O as Apply<CountOperation>>::Output;
+impl<O: Apply<CountOperation>> Count for O {
+    type ReturnOperand = O::Output;
 
     fn count(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), CountOperation))

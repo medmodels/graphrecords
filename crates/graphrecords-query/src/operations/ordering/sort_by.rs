@@ -1,12 +1,12 @@
 use super::{EnsureSortable, IncomparableIndices};
 use crate::{
     EvaluateOperand, Explain, Failure, IncomparableValuesAt, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, OrderState, Ordered, QueryResult, ToOwnedValue, ValueType,
+    Multiple, Operand, OrderState, Ordered, QueryResult, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
-        Apply, ArgumentSource, Kernel, Keyed, KeyedStream, Operation, OperationContext, Prepare,
-        Retention,
+        Apply, ArgumentSource, Keyed, KeyedStream, LaneKernel, Operation, OperationContext,
+        Prepare, Retention,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::SortBy,
@@ -18,6 +18,7 @@ use std::{
 };
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "SortBy")]
 pub struct SortByOperation<A> {
     #[argument]
@@ -41,7 +42,7 @@ impl<A: Prepare> Prepare for SortByOperation<A> {
     }
 }
 
-impl<I, V, A, O> Kernel<Indexed<I, V>, Multiple<O>> for SortByOperation<A>
+impl<I, V, A, O> LaneKernel<Indexed<I, V>, Multiple<O>> for SortByOperation<A>
 where
     I: IndexDomain,
     V: ValueType,
@@ -49,7 +50,7 @@ where
     O: OrderState,
     for<'a> I::Index<'a>: EnsureSortable,
     for<'a> A::Value<'a>: EnsureSortable,
-    for<'a> <A::Value<'a> as ToOwnedValue>::Owned: Debug + Display + Send + Sync,
+    A::OwnedValue: Debug + Display + Send + Sync,
 {
     type Output = SortedBy<I, V>;
 
@@ -70,7 +71,7 @@ where
             .collect::<QueryResult<_>>()?;
 
         if let Some((first_position, second_position)) =
-            EnsureSortable::find_incomparable(collected.iter().map(|(_index, _subject, key)| key))
+            EnsureSortable::find_incomparable(collected.iter().map(|(_, _, key)| key))
         {
             let (first_index, _, first) = &collected[first_position];
             let (second_index, _, second) = &collected[second_position];
@@ -78,10 +79,10 @@ where
             return Err(Failure::new(
                 label,
                 IncomparableValuesAt {
-                    first: first.to_owned_value(),
-                    second: second.to_owned_value(),
-                    first_element: first_index.to_owned_value(),
-                    second_element: second_index.to_owned_value(),
+                    first: A::to_owned_value(first),
+                    second: A::to_owned_value(second),
+                    first_element: I::to_owned(first_index),
+                    second_element: I::to_owned(second_index),
                 },
             ));
         }
@@ -95,7 +96,7 @@ where
             left.partial_cmp(right) == Some(Ordering::Equal)
         }) {
             if let Some((first_position, second_position)) =
-                EnsureSortable::find_incomparable(run.iter().map(|(index, _subject, _key)| index))
+                EnsureSortable::find_incomparable(run.iter().map(|(index, _, _)| index))
             {
                 let (first_index, _, key) = &run[first_position];
                 let (second_index, _, _) = &run[second_position];
@@ -103,9 +104,9 @@ where
                 return Err(Failure::new(
                     label,
                     IncomparableIndices {
-                        value: key.to_owned_value(),
-                        first: first_index.to_owned_value(),
-                        second: second_index.to_owned_value(),
+                        value: A::to_owned_value(key),
+                        first: I::to_owned(first_index),
+                        second: I::to_owned(second_index),
                     },
                 ));
             }
@@ -120,7 +121,7 @@ where
         Ok(Box::new(
             collected
                 .into_iter()
-                .map(|(index, subject, _key)| (index, subject)),
+                .map(|(index, subject, _)| (index, subject)),
         ))
     }
 
@@ -134,7 +135,7 @@ where
     SortByOperation<A>: Operation,
     O: Apply<SortByOperation<A>>,
 {
-    type ReturnOperand = <O as Apply<SortByOperation<A>>>::Output;
+    type ReturnOperand = O::Output;
 
     fn sort_by(&self, key: A) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), SortByOperation { key }))

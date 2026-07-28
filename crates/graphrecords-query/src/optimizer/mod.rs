@@ -7,9 +7,7 @@ mod plan;
 mod rule;
 mod stats;
 
-pub use builtins::{
-    BuiltinPhase, EliminateDoubleNegation, SortBelowGroup, SortByBelowGroup, register_builtins,
-};
+pub use builtins::{BuiltinPhase, EliminateDoubleNegation, register_builtins};
 pub use engine::{
     Direction, Misconfiguration, Optimizer, OptimizerBuilder, OptimizerError, PhaseHandle,
     RuleHandle, Session,

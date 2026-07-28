@@ -3,13 +3,16 @@ use crate::{
     Single, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
-    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Last,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Last")]
 pub struct LastOperation;
 
@@ -25,11 +28,7 @@ impl Prepare for LastOperation {
     }
 }
 
-impl<I, V> Kernel<Indexed<I, V>, Multiple<Ordered>> for LastOperation
-where
-    I: IndexDomain,
-    V: ValueType,
-{
+impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>> for LastOperation {
     type Output = OperandHandle<Indexed<I, V>, Single>;
 
     fn execute<'a>(
@@ -40,15 +39,12 @@ where
         Ok(values.last())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<V> Kernel<Bare<V>, Multiple<Ordered>> for LastOperation
-where
-    V: ValueType,
-{
+impl<V: ValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for LastOperation {
     type Output = OperandHandle<Bare<V>, Single>;
 
     fn execute<'a>(
@@ -59,16 +55,13 @@ where
         Ok(values.last())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O> Last for O
-where
-    O: Apply<LastOperation>,
-{
-    type ReturnOperand = <O as Apply<LastOperation>>::Output;
+impl<O: Apply<LastOperation>> Last for O {
+    type ReturnOperand = O::Output;
 
     fn last(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), LastOperation))

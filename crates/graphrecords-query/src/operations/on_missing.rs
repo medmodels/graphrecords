@@ -1,12 +1,12 @@
 use crate::{
-    Bare, Definite, Explain, IndexDomain, Indexed, Multiple, OrderState, QueryResult, Single,
+    Arity, Bare, Explain, IndexDomain, Indexed, Multiple, OrderState, QueryResult, Single,
     ValueType,
     execution::EvaluationCache,
     explain::ExplainFormatter,
-    operands::{GroupOperand, OperandHandle},
+    operands::OperandHandle,
     operations::{
-        Absent, Alignment, ArgumentSource, Drop, Dropping, KeyOperand, Keyed, Lookup, Prepare,
-        Replace, Retention,
+        Alignment, ArgumentSource, Drop, Dropping, ElementEmission, IndexedElementSource, Keyed,
+        Lookup, Prepare, Replace, Retention,
     },
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, PlanNode, Stats},
     traits::MaybeAbsent,
@@ -33,8 +33,7 @@ pub trait MissingPolicy<A: Alignment, S: ArgumentSource<A>>:
         prepared: &Self::Prepared<'a>,
         address: &A::Address<'a>,
         label: &'static str,
-        absent: Absent,
-    ) -> <Self::Retention as Retention>::Step<QueryResult<S::Value<'a>>>
+    ) -> <Self::Retention as ElementEmission>::Step<QueryResult<S::Value<'a>>>
     where
         S: 'a;
 }
@@ -55,8 +54,7 @@ impl<A: Alignment, S: ArgumentSource<A>> MissingPolicy<A, S> for Drop {
         _prepared: &Self::Prepared<'a>,
         _address: &A::Address<'a>,
         _label: &'static str,
-        _absent: Absent,
-    ) -> <Self::Retention as Retention>::Step<QueryResult<S::Value<'a>>>
+    ) -> <Self::Retention as ElementEmission>::Step<QueryResult<S::Value<'a>>>
     where
         S: 'a,
     {
@@ -71,7 +69,7 @@ where
     for<'a> S: ArgumentSource<A, Value<'a> = R::Value<'a>>,
 {
     type Prepared<'a> = R::Prepared<'a>;
-    type Retention = <R as ArgumentSource<A>>::Retention;
+    type Retention = R::Retention;
 
     fn prepare<'a>(
         &'a self,
@@ -85,8 +83,7 @@ where
         prepared: &Self::Prepared<'a>,
         address: &A::Address<'a>,
         label: &'static str,
-        _absent: Absent,
-    ) -> <Self::Retention as Retention>::Step<QueryResult<S::Value<'a>>>
+    ) -> <Self::Retention as ElementEmission>::Step<QueryResult<S::Value<'a>>>
     where
         S: 'a,
     {
@@ -103,32 +100,6 @@ impl<A: Alignment, I: IndexDomain, V: ValueType> MaybeAbsent<A>
 {
 }
 impl<A: Alignment, V: ValueType> MaybeAbsent<A> for OperandHandle<Bare<V>, Single> {}
-impl<I, V, K> MaybeAbsent<Keyed<K::Key>> for GroupOperand<OperandHandle<Indexed<I, V>, Single>, K>
-where
-    I: IndexDomain,
-    V: ValueType,
-    K: KeyOperand,
-{
-}
-impl<V, K> MaybeAbsent<Keyed<K::Key>> for GroupOperand<OperandHandle<Bare<V>, Single>, K>
-where
-    V: ValueType,
-    K: KeyOperand,
-{
-}
-impl<I, V, K> MaybeAbsent<Keyed<K::Key>> for GroupOperand<OperandHandle<Indexed<I, V>, Definite>, K>
-where
-    I: IndexDomain,
-    V: ValueType,
-    K: KeyOperand,
-{
-}
-impl<V, K> MaybeAbsent<Keyed<K::Key>> for GroupOperand<OperandHandle<Bare<V>, Definite>, K>
-where
-    V: ValueType,
-    K: KeyOperand,
-{
-}
 
 pub struct WithMissing<A: Alignment, S: MaybeAbsent<A>, P> {
     inner: S,
@@ -186,10 +157,7 @@ impl<A: Alignment, S: MaybeAbsent<A>, P: PlanInputs> PlanInputs for WithMissing<
     }
 }
 
-impl<A: Alignment, S: MaybeAbsent<A> + Clone, P> Prepare for WithMissing<A, S, P>
-where
-    P: MissingPolicy<A, S>,
-{
+impl<A: Alignment, S: MaybeAbsent<A>, P: MissingPolicy<A, S>> Prepare for WithMissing<A, S, P> {
     type Prepared<'a>
         = (S::Prepared<'a>, P::Prepared<'a>)
     where
@@ -213,12 +181,16 @@ impl<A: Alignment, S: MaybeAbsent<A>, P> Estimated for WithMissing<A, S, P> {
     }
 }
 
-impl<A: Alignment, S: MaybeAbsent<A> + Clone, P> ArgumentSource<A> for WithMissing<A, S, P>
-where
-    P: MissingPolicy<A, S>,
+impl<A: Alignment, S: MaybeAbsent<A>, P: MissingPolicy<A, S>> ArgumentSource<A>
+    for WithMissing<A, S, P>
 {
+    type OwnedValue = S::OwnedValue;
     type Retention = P::Retention;
     type Value<'a> = S::Value<'a>;
+
+    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
+        S::to_owned_value(value)
+    }
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
@@ -234,13 +206,36 @@ where
         prepared: &Self::Prepared<'a>,
         address: &A::Address<'a>,
         label: &'static str,
-    ) -> <Self::Retention as Retention>::Step<QueryResult<Self::Value<'a>>>
+    ) -> <Self::Retention as ElementEmission>::Step<QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
         match S::lookup(&prepared.0, address) {
             Lookup::Present(wrapped) => <P::Retention as Retention>::keep(wrapped.clone()),
-            Lookup::Absent(absent) => P::resolve_absent(&prepared.1, address, label, absent),
+            Lookup::Absent(_) => P::resolve_absent(&prepared.1, address, label),
         }
+    }
+}
+
+impl<A, S, P, I> IndexedElementSource<I> for WithMissing<A, S, P>
+where
+    A: Alignment,
+    S: MaybeAbsent<A> + IndexedElementSource<I>,
+    P: MissingPolicy<A, S>,
+    I: IndexDomain,
+{
+    type Arity = S::Arity;
+    type Value<'a>
+        = <S as IndexedElementSource<I>>::Value<'a>
+    where
+        Self: 'a;
+
+    fn elements<'a>(
+        prepared: Self::Prepared<'a>,
+    ) -> <Self::Arity as Arity>::Container<'a, (I::Index<'a>, QueryResult<Self::Value<'a>>)>
+    where
+        Self: 'a,
+    {
+        S::elements(prepared.0)
     }
 }

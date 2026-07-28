@@ -37,11 +37,11 @@ impl Relation for EdgeSource {
         graphrecord: &'a GraphRecord,
         from: <Self::From as IndexDomain>::Index<'a>,
     ) -> QueryResult<<Self::To as IndexDomain>::Index<'a>> {
-        let (source, _target) = graphrecord
+        let endpoints = graphrecord
             .edge_endpoints(from)
-            .map_err(|error| Failure::new_at(Self::LABEL, error, &from))?;
+            .map_err(|error| Failure::new_at::<EdgeIndex, _>(Self::LABEL, error, &from))?;
 
-        Ok(source)
+        Ok(endpoints.0)
     }
 
     fn codomain_count(stats: &Stats) -> Option<usize> {
@@ -49,11 +49,8 @@ impl Relation for EdgeSource {
     }
 }
 
-impl<O> ViaSourceNode for O
-where
-    O: Apply<RelationOperation<EdgeSource>>,
-{
-    type ReturnOperand = <O as Apply<RelationOperation<EdgeSource>>>::Output;
+impl<O: Apply<RelationOperation<EdgeSource>>> ViaSourceNode for O {
+    type ReturnOperand = O::Output;
 
     fn via_source_node(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(
@@ -63,11 +60,8 @@ where
     }
 }
 
-impl<O> SourceNode for O
-where
-    O: Apply<SelectRelationOperation<EdgeSource>>,
-{
-    type ReturnOperand = <O as Apply<SelectRelationOperation<EdgeSource>>>::Output;
+impl<O: Apply<SelectRelationOperation<EdgeSource>>> SourceNode for O {
+    type ReturnOperand = O::Output;
 
     fn source_node(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(

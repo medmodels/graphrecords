@@ -12,6 +12,7 @@ use graphrecords_core::GraphRecord;
 use std::ops::Not as BitNot;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "Not")]
 pub struct NotOperation;
 
@@ -28,18 +29,16 @@ impl Prepare for NotOperation {
 }
 
 impl<I: IndexDomain> ElementKernel<Indexed<I, Mask>> for NotOperation {
+    type Emission = Preserving;
     type OutShape = Indexed<I, Mask>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
-        Ok(
-            Pipeline::default().map(|(index, value): (I::Index<'a>, QueryResult<bool>)| {
-                (index, value.map(|value| !value))
-            }),
-        )
+        Ok(Pipeline::unkeyed(|value: QueryResult<bool>| {
+            value.map(|value| !value)
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -51,14 +50,16 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, Mask>> for NotOperation {
 }
 
 impl ElementKernel<Bare<Mask>> for NotOperation {
+    type Emission = Preserving;
     type OutShape = Bare<Mask>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<Mask>, Self>> {
-        Ok(Pipeline::default().map(|value: QueryResult<bool>| value.map(|value| !value)))
+        Ok(Pipeline::new(|value: QueryResult<bool>| {
+            value.map(|value| !value)
+        }))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -69,19 +70,18 @@ impl ElementKernel<Bare<Mask>> for NotOperation {
     }
 }
 
-impl<O> Not for O
-where
-    O: Apply<NotOperation>,
-{
-    type ReturnOperand = <O as Apply<NotOperation>>::Output;
+impl<O: Apply<NotOperation>> Not for O {
+    type ReturnOperand = O::Output;
 
     fn not(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), NotOperation))
     }
 }
 
-impl<S: ElementShape, C: Arity> BitNot for OperandHandle<S, C>
+impl<S, C> BitNot for OperandHandle<S, C>
 where
+    S: ElementShape,
+    C: Arity,
     Self: Not,
 {
     type Output = <Self as Not>::ReturnOperand;

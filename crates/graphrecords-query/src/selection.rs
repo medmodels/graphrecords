@@ -1,8 +1,11 @@
 use crate::{
-    Arity, EvaluateOperand, Explanation, NodesOperand, Operand, QueryResult, ReturnShape,
-    Unordered,
+    Arity, EvaluateOperand, Explanation, IndexDomain, NodesOperand, Operand, QueryResult,
+    ReturnShape, Unordered,
     execution::EvaluationCache,
-    operands::{AllEdges, AllNodes, EdgesOperand, OperandHandle},
+    operands::{
+        AllEdges, AllNodes, EdgesOperand, GroupOperand, OperandHandle, Partition, ReturnPartition,
+    },
+    operations::GroupKey,
     optimizer::{OptimizationReport, Optimizer, Stats},
 };
 use graphrecords_core::GraphRecord;
@@ -76,14 +79,14 @@ impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
     where
         Q: FnOnce(&NodesOperand<Unordered>) -> R,
     {
-        let operand = NodesOperand::<Unordered>::new(AllNodes);
+        let operand = NodesOperand::new(AllNodes);
         let unoptimized_return_operand = query(&operand);
         let (optimized_return_operand, report) =
             optimize(unoptimized_return_operand.clone(), optimizer, graphrecord);
 
         Self {
             graphrecord,
-            cache: EvaluationCache::new(),
+            cache: EvaluationCache::new(graphrecord),
             unoptimized_return_operand,
             optimized_return_operand,
             report,
@@ -101,14 +104,14 @@ impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
     where
         Q: FnOnce(&EdgesOperand<Unordered>) -> R,
     {
-        let operand = EdgesOperand::<Unordered>::new(AllEdges);
+        let operand = EdgesOperand::new(AllEdges);
         let unoptimized_return_operand = query(&operand);
         let (optimized_return_operand, report) =
             optimize(unoptimized_return_operand.clone(), optimizer, graphrecord);
 
         Self {
             graphrecord,
-            cache: EvaluationCache::new(),
+            cache: EvaluationCache::new(graphrecord),
             unoptimized_return_operand,
             optimized_return_operand,
             report,
@@ -185,21 +188,77 @@ pub trait ReturnOperand<'a>: Clone {
     fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result;
 }
 
-impl<'a, S, C> ReturnOperand<'a> for OperandHandle<S, C>
-where
-    S: ReturnShape,
-    C: Arity,
-{
-    type ReturnValue = C::Container<'a, S::ReturnElement<'a>>;
+pub trait IntoReturn: Operand {
+    type Return<'a>: 'a
+    where
+        Self: 'a;
+
+    fn into_return<'a>(values: Self::ReturnValue<'a>) -> Self::Return<'a>
+    where
+        Self: 'a;
+}
+
+impl<S: ReturnShape, C: Arity> IntoReturn for OperandHandle<S, C> {
+    type Return<'a>
+        = C::Container<'a, S::ReturnElement<'a>>
+    where
+        Self: 'a;
+
+    fn into_return<'a>(values: Self::ReturnValue<'a>) -> Self::Return<'a>
+    where
+        Self: 'a,
+    {
+        C::map_elements(values, S::into_return_element)
+    }
+}
+
+impl<M: IndexDomain, K: GroupKey, O: IntoReturn> IntoReturn for GroupOperand<M, K, O> {
+    type Return<'a>
+        = ReturnPartition<'a, M, K, O::Return<'a>>
+    where
+        Self: 'a;
+
+    fn into_return<'a>(values: Partition<'a, M, K, O>) -> Self::Return<'a>
+    where
+        Self: 'a,
+    {
+        values.into_return_partition(|payload| payload.map(O::into_return))
+    }
+}
+
+impl<'a, S: ReturnShape, C: Arity> ReturnOperand<'a> for OperandHandle<S, C> {
+    type ReturnValue = <Self as IntoReturn>::Return<'a>;
 
     fn evaluate(
         &'a self,
         graphrecord: &'a GraphRecord,
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::ReturnValue> {
-        let elements = EvaluateOperand::evaluate(self, graphrecord, cache)?;
+        let values = EvaluateOperand::evaluate(self, graphrecord, cache)?;
 
-        Ok(C::map_elements(elements, S::into_return_element))
+        Ok(Self::into_return(values))
+    }
+
+    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
+        optimizer.run_reported(stats, &self)
+    }
+
+    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", Explanation::new(self))
+    }
+}
+
+impl<'a, M: IndexDomain, K: GroupKey, O: IntoReturn> ReturnOperand<'a> for GroupOperand<M, K, O> {
+    type ReturnValue = <Self as IntoReturn>::Return<'a>;
+
+    fn evaluate(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::ReturnValue> {
+        let values = EvaluateOperand::evaluate(self, graphrecord, cache)?;
+
+        Ok(Self::into_return(values))
     }
 
     fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {

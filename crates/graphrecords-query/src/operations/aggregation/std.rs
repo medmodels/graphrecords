@@ -3,7 +3,9 @@ use crate::{
     Operand, OrderState, QueryResult, Scalar,
     execution::EvaluationCache,
     operands::BareValueOperand,
-    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Std,
 };
@@ -41,6 +43,7 @@ impl Diagnostic for InvalidStandardDeviationValue {
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Std")]
 pub struct StdOperation;
 
@@ -69,7 +72,7 @@ fn update_state(
     (count, mean, squared_deviation)
 }
 
-impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for StdOperation {
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Scalar>, Multiple<O>> for StdOperation {
     type Output = BareValueOperand;
 
     fn execute<'a>(
@@ -83,7 +86,7 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
                     GraphRecordValue::Int(value) => value as f64,
                     GraphRecordValue::Float(value) => value,
                     value => {
-                        return Err(Failure::new_at(
+                        return Err(Failure::new_at::<I, _>(
                             Self::LABEL,
                             InvalidStandardDeviationValue { value },
                             &index,
@@ -93,7 +96,7 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
 
                 Ok(update_state(state, value))
             })
-            .map(|(count, _mean, squared_deviation)| {
+            .map(|(count, _, squared_deviation)| {
                 (count != 0)
                     .then(|| GraphRecordValue::Float((squared_deviation / count as f64).sqrt()))
             });
@@ -101,12 +104,12 @@ impl<I: IndexDomain, O: OrderState> Kernel<Indexed<I, Scalar>, Multiple<O>> for 
         Ok(standard_deviation.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for StdOperation {
+impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for StdOperation {
     type Output = BareValueOperand;
 
     fn execute<'a>(
@@ -129,7 +132,7 @@ impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for StdOperation {
 
                 Ok(update_state(state, value))
             })
-            .map(|(count, _mean, squared_deviation)| {
+            .map(|(count, _, squared_deviation)| {
                 (count != 0)
                     .then(|| GraphRecordValue::Float((squared_deviation / count as f64).sqrt()))
             });
@@ -137,16 +140,13 @@ impl<O: OrderState> Kernel<Bare<Scalar>, Multiple<O>> for StdOperation {
         Ok(standard_deviation.transpose())
     }
 
-    fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.zero_or_one()
     }
 }
 
-impl<O> Std for O
-where
-    O: Apply<StdOperation>,
-{
-    type ReturnOperand = <O as Apply<StdOperation>>::Output;
+impl<O: Apply<StdOperation>> Std for O {
+    type ReturnOperand = O::Output;
 
     fn std(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), StdOperation))

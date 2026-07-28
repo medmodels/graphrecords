@@ -24,10 +24,6 @@ pub trait OptimizerHints {
         false
     }
 
-    fn is_distinct(&self) -> bool {
-        false
-    }
-
     fn is_volatile(&self) -> bool {
         false
     }
@@ -46,6 +42,10 @@ pub trait PlanNode: Any + OptimizerHints {
         Vec::new()
     }
 
+    fn contains_volatile(&self) -> bool {
+        self.is_volatile() || self.inputs().into_iter().any(PlanNode::contains_volatile)
+    }
+
     #[allow(unused_variables)]
     fn dyn_eq(&self, other: &dyn PlanNode) -> bool {
         false
@@ -58,7 +58,7 @@ pub trait PlanNode: Any + OptimizerHints {
 
 impl dyn PlanNode {
     pub fn downcast<T: PlanNode>(&self) -> Option<&T> {
-        (self as &dyn Any).downcast_ref::<T>()
+        (self as &dyn Any).downcast_ref()
     }
 }
 

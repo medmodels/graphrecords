@@ -1,8 +1,8 @@
 use crate::{
-    Diagnostic, Explain, Failure, IndexDomain, Position, QueryResult, ToOwnedValue,
+    Arity, Diagnostic, ElementShape, Explain, Failure, IndexDomain, Position, QueryResult,
     execution::EvaluationCache,
     explain::ExplainFormatter,
-    operations::{Preserving, Retention},
+    operations::{ElementEmission, Preserving, Retention},
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::{
@@ -15,6 +15,56 @@ use std::{
     hash::{Hash, Hasher},
     marker::PhantomData,
 };
+
+pub trait Prepare: 'static {
+    type Prepared<'a>: Clone + 'a
+    where
+        Self: 'a;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>>;
+}
+
+pub trait Alignment: 'static {
+    type Address<'a>;
+
+    fn raise_at(
+        operation: &'static str,
+        cause: impl Diagnostic,
+        address: &Self::Address<'_>,
+    ) -> Box<Failure>;
+}
+
+pub struct Keyed<I: IndexDomain>(PhantomData<I>);
+
+impl<I: IndexDomain> Alignment for Keyed<I> {
+    type Address<'a> = I::Index<'a>;
+
+    fn raise_at(
+        operation: &'static str,
+        cause: impl Diagnostic,
+        address: &Self::Address<'_>,
+    ) -> Box<Failure> {
+        Failure::new_at::<I, _>(operation, cause, address)
+    }
+}
+
+pub struct Unaligned;
+
+impl Alignment for Unaligned {
+    type Address<'a> = ();
+
+    fn raise_at(
+        operation: &'static str,
+        cause: impl Diagnostic,
+        _address: &Self::Address<'_>,
+    ) -> Box<Failure> {
+        Failure::new(operation, cause)
+    }
+}
 
 pub enum Lookup<'a, W> {
     Present(&'a W),
@@ -68,64 +118,18 @@ impl Diagnostic for ArgumentAbsent {
     }
 }
 
-pub trait Prepare: 'static {
-    type Prepared<'a>: Clone + 'a
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>>;
-}
-
-pub trait Alignment: 'static {
-    type Address<'a>;
-
-    fn raise_at(
-        operation: &'static str,
-        cause: impl Diagnostic,
-        address: &Self::Address<'_>,
-    ) -> Box<Failure>;
-}
-
-pub struct Keyed<I: IndexDomain>(PhantomData<I>);
-
-impl<I: IndexDomain> Alignment for Keyed<I> {
-    type Address<'a> = I::Index<'a>;
-
-    fn raise_at(
-        operation: &'static str,
-        cause: impl Diagnostic,
-        address: &Self::Address<'_>,
-    ) -> Box<Failure> {
-        Failure::new_at(operation, cause, address)
-    }
-}
-
-pub struct Unaligned;
-
-impl Alignment for Unaligned {
-    type Address<'a> = ();
-
-    fn raise_at(
-        operation: &'static str,
-        cause: impl Diagnostic,
-        _address: &Self::Address<'_>,
-    ) -> Box<Failure> {
-        Failure::new(operation, cause)
-    }
-}
-
 pub trait ArgumentSource<A: Alignment>:
     Prepare + Explain + PlanIdentity + PlanInputs + Estimated
 {
-    type Value<'a>: Clone + ToOwnedValue
+    type Value<'a>: Clone
     where
         Self: 'a;
 
+    type OwnedValue: 'static;
+
     type Retention: Retention;
+
+    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
@@ -138,7 +142,7 @@ pub trait ArgumentSource<A: Alignment>:
         prepared: &Self::Prepared<'a>,
         address: &A::Address<'a>,
         label: &'static str,
-    ) -> <Self::Retention as Retention>::Step<QueryResult<Self::Value<'a>>>
+    ) -> <Self::Retention as ElementEmission>::Step<QueryResult<Self::Value<'a>>>
     where
         Self: 'a,
     {
@@ -151,31 +155,67 @@ pub trait ArgumentSource<A: Alignment>:
     }
 }
 
+pub type IndexedElementContainer<'a, I, V, C> =
+    <C as Arity>::Container<'a, (<I as IndexDomain>::Index<'a>, QueryResult<V>)>;
+
+pub trait IndexedElementSource<I: IndexDomain>: Prepare {
+    type Value<'a>: Clone
+    where
+        Self: 'a;
+
+    type Arity: Arity;
+
+    fn elements<'a>(
+        prepared: Self::Prepared<'a>,
+    ) -> IndexedElementContainer<'a, I, Self::Value<'a>, Self::Arity>
+    where
+        Self: 'a;
+}
+
+pub trait PreparedArity<S: ElementShape>: Arity {
+    type Prepared<'a>: Clone + 'a
+    where
+        S: 'a;
+
+    fn prepare<'a>(
+        container: Self::Container<'a, S::Element<'a>>,
+    ) -> QueryResult<Self::Prepared<'a>>
+    where
+        S: 'a;
+}
+
+pub trait AlignableArity<S: ElementShape, A: Alignment>: PreparedArity<S> {
+    type Value<'a>: Clone
+    where
+        S: 'a;
+
+    type OwnedValue: 'static;
+
+    type Retention: Retention;
+
+    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue;
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        S: 'a;
+}
+
+pub trait EnumerableArity<S: ElementShape, I: IndexDomain>: PreparedArity<S> {
+    type Value<'a>: Clone
+    where
+        S: 'a;
+
+    fn elements<'a>(
+        prepared: Self::Prepared<'a>,
+    ) -> IndexedElementContainer<'a, I, Self::Value<'a>, Self>
+    where
+        S: 'a;
+}
+
 impl Explain for GraphRecordValue {
-    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "{self}")
-    }
-}
-
-impl Explain for bool {
-    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "{self}")
-    }
-}
-
-impl Explain for GraphRecordAttribute {
-    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "{self}")
-    }
-}
-
-impl Explain for EdgeIndex {
-    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "{self}")
-    }
-}
-
-impl Explain for Position {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         write!(formatter, "{self}")
     }
@@ -192,50 +232,6 @@ impl PlanIdentity for GraphRecordValue {
 }
 
 impl PlanInputs for GraphRecordValue {}
-impl PlanInputs for bool {}
-impl PlanInputs for GraphRecordAttribute {}
-impl PlanInputs for EdgeIndex {}
-impl PlanInputs for Position {}
-
-impl PlanIdentity for bool {
-    fn identity_eq(&self, other: &Self) -> bool {
-        self == other
-    }
-
-    fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
-    }
-}
-
-impl PlanIdentity for GraphRecordAttribute {
-    fn identity_eq(&self, other: &Self) -> bool {
-        self == other
-    }
-
-    fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
-    }
-}
-
-impl PlanIdentity for EdgeIndex {
-    fn identity_eq(&self, other: &Self) -> bool {
-        self == other
-    }
-
-    fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
-    }
-}
-
-impl PlanIdentity for Position {
-    fn identity_eq(&self, other: &Self) -> bool {
-        self == other
-    }
-
-    fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
-    }
-}
 
 impl Prepare for GraphRecordValue {
     type Prepared<'a> = QueryResult<Self>;
@@ -249,6 +245,50 @@ impl Prepare for GraphRecordValue {
     }
 }
 
+impl Estimated for GraphRecordValue {
+    fn estimate(&self, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<A: Alignment> ArgumentSource<A> for GraphRecordValue {
+    type OwnedValue = Self;
+    type Retention = Preserving;
+    type Value<'a> = Self;
+
+    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
+        value.clone()
+    }
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
+    }
+}
+
+impl Explain for bool {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{self}")
+    }
+}
+
+impl PlanIdentity for bool {
+    fn identity_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn identity_hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(self, state);
+    }
+}
+
+impl PlanInputs for bool {}
+
 impl Prepare for bool {
     type Prepared<'a> = QueryResult<Self>;
 
@@ -260,6 +300,53 @@ impl Prepare for bool {
         Ok(Ok(*self))
     }
 }
+
+impl Estimated for bool {
+    fn estimate(&self, _stats: &Stats) -> Estimate {
+        Estimate {
+            selectivity: Some(if *self { 1.0 } else { 0.0 }),
+            ..Estimate::singleton()
+        }
+    }
+}
+
+impl<A: Alignment> ArgumentSource<A> for bool {
+    type OwnedValue = Self;
+    type Retention = Preserving;
+    type Value<'a> = Self;
+
+    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
+        *value
+    }
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
+    }
+}
+
+impl Explain for GraphRecordAttribute {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{self}")
+    }
+}
+
+impl PlanIdentity for GraphRecordAttribute {
+    fn identity_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn identity_hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(self, state);
+    }
+}
+
+impl PlanInputs for GraphRecordAttribute {}
 
 impl Prepare for GraphRecordAttribute {
     type Prepared<'a> = QueryResult<Self>;
@@ -273,6 +360,50 @@ impl Prepare for GraphRecordAttribute {
     }
 }
 
+impl Estimated for GraphRecordAttribute {
+    fn estimate(&self, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<A: Alignment> ArgumentSource<A> for GraphRecordAttribute {
+    type OwnedValue = Self;
+    type Retention = Preserving;
+    type Value<'a> = Self;
+
+    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
+        value.clone()
+    }
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
+    }
+}
+
+impl Explain for EdgeIndex {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{self}")
+    }
+}
+
+impl PlanIdentity for EdgeIndex {
+    fn identity_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn identity_hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(self, state);
+    }
+}
+
+impl PlanInputs for EdgeIndex {}
+
 impl Prepare for EdgeIndex {
     type Prepared<'a> = QueryResult<Self>;
 
@@ -284,6 +415,50 @@ impl Prepare for EdgeIndex {
         Ok(Ok(*self))
     }
 }
+
+impl Estimated for EdgeIndex {
+    fn estimate(&self, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl<A: Alignment> ArgumentSource<A> for EdgeIndex {
+    type OwnedValue = Self;
+    type Retention = Preserving;
+    type Value<'a> = Self;
+
+    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
+        *value
+    }
+
+    fn lookup<'a, 'prepared>(
+        prepared: &'prepared Self::Prepared<'a>,
+        _address: &A::Address<'a>,
+    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(prepared)
+    }
+}
+
+impl Explain for Position {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{self}")
+    }
+}
+
+impl PlanIdentity for Position {
+    fn identity_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn identity_hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(self, state);
+    }
+}
+
+impl PlanInputs for Position {}
 
 impl Prepare for Position {
     type Prepared<'a> = QueryResult<Self>;
@@ -297,105 +472,20 @@ impl Prepare for Position {
     }
 }
 
-impl Estimated for GraphRecordValue {
-    fn estimate(&self, _stats: &Stats) -> Estimate {
-        Estimate {
-            distinct: Some(1),
-            ..Estimate::UNKNOWN
-        }
-    }
-}
-
-impl Estimated for bool {
-    fn estimate(&self, _stats: &Stats) -> Estimate {
-        Estimate {
-            selectivity: Some(if *self { 1.0 } else { 0.0 }),
-            ..Estimate::singleton()
-        }
-    }
-}
-
-impl Estimated for GraphRecordAttribute {
-    fn estimate(&self, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
-    }
-}
-
-impl Estimated for EdgeIndex {
-    fn estimate(&self, _stats: &Stats) -> Estimate {
-        Estimate::singleton()
-    }
-}
-
 impl Estimated for Position {
     fn estimate(&self, _stats: &Stats) -> Estimate {
         Estimate::singleton()
     }
 }
 
-impl<A: Alignment> ArgumentSource<A> for GraphRecordValue {
-    type Retention = Preserving;
-    type Value<'a> = Self;
-
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
-    where
-        Self: 'a,
-    {
-        Lookup::Present(prepared)
-    }
-}
-
-impl<A: Alignment> ArgumentSource<A> for bool {
-    type Retention = Preserving;
-    type Value<'a> = Self;
-
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
-    where
-        Self: 'a,
-    {
-        Lookup::Present(prepared)
-    }
-}
-
-impl<A: Alignment> ArgumentSource<A> for GraphRecordAttribute {
-    type Retention = Preserving;
-    type Value<'a> = Self;
-
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
-    where
-        Self: 'a,
-    {
-        Lookup::Present(prepared)
-    }
-}
-
-impl<A: Alignment> ArgumentSource<A> for EdgeIndex {
-    type Retention = Preserving;
-    type Value<'a> = Self;
-
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
-    where
-        Self: 'a,
-    {
-        Lookup::Present(prepared)
-    }
-}
-
 impl<A: Alignment> ArgumentSource<A> for Position {
+    type OwnedValue = Self;
     type Retention = Preserving;
     type Value<'a> = Self;
+
+    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
+        *value
+    }
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,

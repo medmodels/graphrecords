@@ -216,12 +216,12 @@ impl OptimizerBuilder {
         }
     }
 
-    pub fn add_rule<O, R>(&mut self, phase: impl PhaseLabel, rule: R) -> RuleHandle<'_>
-    where
-        O: Operand + 'static,
-        R: Rule<O>,
-    {
-        let erased: ErasedRule<O> =
+    pub fn add_rule<O: Operand + 'static, R: Rule<O>>(
+        &mut self,
+        phase: impl PhaseLabel,
+        rule: R,
+    ) -> RuleHandle<'_> {
+        let erased: ErasedRule<_> =
             Box::new(move |operand, session| rule.apply(operand, session.stats()));
 
         self.rules.push(PendingRule {
@@ -263,7 +263,7 @@ impl OptimizerBuilder {
         let (excluded, exclusion_findings) = resolve_exclusions(self.exclusions, &phases);
         let (compiled_phases, cycle_findings) = compile_phases(phases, order, &excluded);
 
-        let misconfigurations: Vec<Misconfiguration> = duplicates
+        let misconfigurations: Vec<_> = duplicates
             .into_iter()
             .chain(unknown_phases)
             .chain(ordering_findings)
@@ -513,7 +513,7 @@ fn resolve_exclusions(
             continue;
         }
 
-        let matches: Vec<&RuleEntry> = phases
+        let matches: Vec<_> = phases
             .iter()
             .flat_map(|phase| &phase.rules)
             .filter(|entry| entry.identity == exclusion.identity)
@@ -537,19 +537,18 @@ fn compile_phases(
     excluded: &GrHashSet<TypeId>,
 ) -> (Vec<CompiledPhase>, Vec<Misconfiguration>) {
     let execution_order = order.unwrap_or_else(|| (0..phases.len()).collect());
-    let mut slots: Vec<Option<Phase>> = phases.into_iter().map(Some).collect();
+    let mut slots: Vec<_> = phases.into_iter().map(Some).collect();
 
-    let (compiled_phases, findings): (Vec<CompiledPhase>, Vec<Vec<Misconfiguration>>) =
-        execution_order
-            .into_iter()
-            .map(|index| {
-                let phase = slots[index]
-                    .take()
-                    .expect("Each phase must appear exactly once in the execution order");
+    let (compiled_phases, findings): (Vec<_>, Vec<_>) = execution_order
+        .into_iter()
+        .map(|index| {
+            let phase = slots[index]
+                .take()
+                .expect("Each phase must appear exactly once in the execution order");
 
-                compile_phase(phase, excluded)
-            })
-            .unzip();
+            compile_phase(phase, excluded)
+        })
+        .unzip();
 
     (compiled_phases, findings.into_iter().flatten().collect())
 }
@@ -567,8 +566,7 @@ fn compile_phase(
         ..
     } = phase;
 
-    let mut by_direction: GrHashMap<Direction, GrHashMap<TypeId, Vec<RuleEntry>>> =
-        GrHashMap::default();
+    let mut by_direction: GrHashMap<_, GrHashMap<TypeId, Vec<_>>> = GrHashMap::default();
 
     for entry in rules {
         if entry.excludable && excluded.contains(&entry.identity) {
@@ -627,7 +625,7 @@ fn order_bucket(
     phase_id: &PhaseId,
     entries: Vec<RuleEntry>,
 ) -> Result<Vec<CompiledRule>, Misconfiguration> {
-    let references: Vec<&RuleEntry> = entries.iter().collect();
+    let references: Vec<_> = entries.iter().collect();
 
     let order = match rule_order(&references) {
         Ok(order) => order,
@@ -639,7 +637,7 @@ fn order_bucket(
         }
     };
 
-    let mut slots: Vec<Option<RuleEntry>> = entries.into_iter().map(Some).collect();
+    let mut slots: Vec<_> = entries.into_iter().map(Some).collect();
 
     Ok(order
         .into_iter()
@@ -735,13 +733,12 @@ impl Optimizer {
 
         match phase.policy {
             FixpointPolicy::Once => {
-                let (current, _changed) =
-                    apply_passes(&phase.passes, enabled.as_deref(), current, stats);
+                let current = apply_passes(&phase.passes, enabled.as_deref(), current, stats).0;
                 (current, StopReason::CompletedOnce)
             }
             FixpointPolicy::Fixpoint { max_iterations } => {
                 let mut current = current;
-                let mut seen: GrHashMap<u64, Vec<O>> = GrHashMap::default();
+                let mut seen: GrHashMap<_, Vec<O>> = GrHashMap::default();
 
                 seen.entry(signature(&current))
                     .or_default()
@@ -953,14 +950,14 @@ fn rule_order(entries: &[&RuleEntry]) -> Result<Vec<usize>, Vec<usize>> {
 
 fn toposort(count: usize, edges: &[(usize, usize)]) -> Result<Vec<usize>, Vec<usize>> {
     let mut indegree = vec![0usize; count];
-    let mut adjacency: Vec<Vec<usize>> = vec![Vec::new(); count];
+    let mut adjacency = vec![Vec::new(); count];
 
     for &(before, after) in edges {
         adjacency[before].push(after);
         indegree[after] += 1;
     }
 
-    let mut ready: Vec<usize> = (0..count).filter(|&index| indegree[index] == 0).collect();
+    let mut ready: Vec<_> = (0..count).filter(|&index| indegree[index] == 0).collect();
     let mut order = Vec::with_capacity(count);
 
     while !ready.is_empty() {

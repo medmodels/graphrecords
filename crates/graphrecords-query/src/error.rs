@@ -1,4 +1,4 @@
-use crate::{OwnedIndex, ToOwnedValue};
+use crate::{IndexDomain, OwnedIndex};
 use graphrecords_core::errors::GraphRecordError;
 use std::{
     any::{Any, TypeId},
@@ -111,14 +111,14 @@ impl Failure {
         })
     }
 
-    pub fn new_at<D: Diagnostic>(
+    pub fn new_at<I: IndexDomain, D: Diagnostic>(
         operation: &'static str,
         cause: D,
-        element: &impl ToOwnedValue<Owned: OwnedIndex>,
+        index: &I::Index<'_>,
     ) -> Box<Self> {
         Box::new(Self {
             operation,
-            element: Some(Arc::new(element.to_owned_value())),
+            element: Some(Arc::new(I::to_owned(index))),
             kind: FailureKind::of::<D>(),
             cause: Arc::new(cause),
         })
@@ -138,7 +138,7 @@ impl Failure {
     pub fn downcast_element<T: OwnedIndex>(&self) -> Option<&T> {
         let element: &dyn Any = self.element.as_deref()?;
 
-        element.downcast_ref::<T>()
+        element.downcast_ref()
     }
 
     #[must_use]
@@ -166,7 +166,7 @@ impl Failure {
         let mut current: &(dyn Error + 'static) = self.cause.as_ref();
 
         loop {
-            if let Some(cause) = current.downcast_ref::<T>() {
+            if let Some(cause) = current.downcast_ref() {
                 return Some(cause);
             }
 
@@ -223,6 +223,53 @@ impl<E: Error + Send + Sync + 'static> Error for External<E> {
 impl<E: Error + Send + Sync + 'static> Diagnostic for External<E> {
     fn name() -> &'static str {
         "External"
+    }
+}
+
+pub struct DuplicateIndex<I: IndexDomain> {
+    index: I::Owned,
+}
+
+impl<I: IndexDomain> DuplicateIndex<I> {
+    #[must_use]
+    pub const fn new(index: I::Owned) -> Self {
+        Self { index }
+    }
+
+    #[must_use]
+    pub const fn index(&self) -> &I::Owned {
+        &self.index
+    }
+}
+
+impl<I: IndexDomain> Debug for DuplicateIndex<I> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DuplicateIndex")
+            .field("index", &self.index)
+            .finish()
+    }
+}
+
+impl<I: IndexDomain> Display for DuplicateIndex<I> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "index `{}` occurs more than once in one indexed operand",
+            self.index
+        )
+    }
+}
+
+impl<I: IndexDomain> Error for DuplicateIndex<I> {}
+
+impl<I: IndexDomain> Diagnostic for DuplicateIndex<I> {
+    fn name() -> &'static str {
+        "DuplicateIndex"
+    }
+
+    fn help(&self) -> Option<String> {
+        Some("construct each index at most once in one indexed operand".to_string())
     }
 }
 

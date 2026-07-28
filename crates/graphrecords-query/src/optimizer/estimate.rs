@@ -32,6 +32,16 @@ impl Estimate {
     }
 
     #[must_use]
+    pub fn zero_or_one(self) -> Self {
+        Self {
+            elements: self.elements.map(|elements| elements.min(1)),
+            distinct: None,
+            selectivity: None,
+            per_group: None,
+        }
+    }
+
+    #[must_use]
     pub fn scaled(self, selectivity: f64) -> Self {
         let elements = self
             .elements

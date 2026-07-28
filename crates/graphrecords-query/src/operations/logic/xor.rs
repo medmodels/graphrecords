@@ -14,6 +14,7 @@ use graphrecords_core::GraphRecord;
 use std::ops::BitXor;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "Xor")]
 pub struct XorOperation<M> {
     #[argument]
@@ -37,14 +38,14 @@ where
     I: IndexDomain,
     for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
 {
+    type Emission = M::Retention;
     type OutShape = Indexed<I, Mask>;
-    type Retention = <M as ArgumentSource<Keyed<I>>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
-        Ok(combine_masks_indexed::<I, M>(
+        Ok(combine_masks_indexed::<_, M>(
             prepared,
             Self::LABEL,
             |left, right| left ^ right,
@@ -68,8 +69,8 @@ impl<M> ElementKernel<Bare<Mask>> for XorOperation<M>
 where
     for<'a> M: ArgumentSource<Unaligned, Value<'a> = bool>,
 {
+    type Emission = M::Retention;
     type OutShape = Bare<Mask>;
-    type Retention = <M as ArgumentSource<Unaligned>>::Retention;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -100,15 +101,17 @@ where
     XorOperation<M>: Operation,
     O: Apply<XorOperation<M>>,
 {
-    type ReturnOperand = <O as Apply<XorOperation<M>>>::Output;
+    type ReturnOperand = O::Output;
 
     fn xor(&self, other: M) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), XorOperation { other }))
     }
 }
 
-impl<S: ElementShape, C: Arity, M> BitXor<M> for OperandHandle<S, C>
+impl<S, C, M> BitXor<M> for OperandHandle<S, C>
 where
+    S: ElementShape,
+    C: Arity,
     Self: Xor<M>,
 {
     type Output = <Self as Xor<M>>::ReturnOperand;

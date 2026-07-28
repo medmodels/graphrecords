@@ -15,3 +15,15 @@ pub trait Resolve {
 
     fn resolve(&self) -> Self::ReturnOperand;
 }
+
+pub trait ParentIndex {
+    type ReturnOperand;
+
+    fn parent_index(&self) -> Self::ReturnOperand;
+}
+
+pub trait ChildIndex {
+    type ReturnOperand;
+
+    fn child_index(&self) -> Self::ReturnOperand;
+}

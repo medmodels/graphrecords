@@ -86,7 +86,7 @@ impl<P, G> GuardedPattern<P, G> {
 
         PatternRule {
             pattern: self.pattern,
-            rewrite: move |bindings: P::Bindings, stats: &Stats| {
+            rewrite: move |bindings, stats: &Stats| {
                 if guard(stats) {
                     rewrite(bindings, stats)
                 } else {
@@ -102,11 +102,8 @@ struct OrPattern<P, Q> {
     right: Q,
 }
 
-impl<O, P, Q> Pattern<O> for OrPattern<P, Q>
-where
-    O: Operand,
-    P: Pattern<O>,
-    Q: Pattern<O, Bindings = P::Bindings>,
+impl<O: Operand, P: Pattern<O>, Q: Pattern<O, Bindings = P::Bindings>> Pattern<O>
+    for OrPattern<P, Q>
 {
     type Bindings = P::Bindings;
 
@@ -126,11 +123,7 @@ pub const fn not<P>(inner: P) -> NotPattern<P> {
     NotPattern { inner }
 }
 
-impl<O, P> Pattern<O> for NotPattern<P>
-where
-    O: Operand,
-    P: Pattern<O>,
-{
+impl<O: Operand, P: Pattern<O>> Pattern<O> for NotPattern<P> {
     type Bindings = ();
 
     fn try_match(&self, operand: &O) -> Option<Self::Bindings> {
@@ -189,7 +182,7 @@ where
     type Bindings = B;
 
     fn try_match(&self, operand: &C::Output) -> Option<Self::Bindings> {
-        let context = operand.downcast::<C>()?;
+        let context = operand.as_plan_node().downcast::<C>()?;
 
         self.patterns.match_against(MatchInputs::inputs(context))
     }
@@ -223,7 +216,7 @@ where
     F: Fn(&C, B, &Stats) -> Option<C::Output> + Send + Sync + 'static,
 {
     fn apply(&self, operand: C::Output, stats: &Stats) -> Transformed<C::Output> {
-        let Some(context) = operand.downcast::<C>() else {
+        let Some(context) = operand.as_plan_node().downcast::<C>() else {
             return Transformed::unchanged(operand);
         };
 

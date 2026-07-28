@@ -38,7 +38,7 @@ impl<'a> Stats<'a> {
             .entry(TypeId::of::<S>())
             .or_insert_with(|| Box::new(GrHashMap::<S::Key, S::Value>::default()))
             .downcast_mut::<GrHashMap<S::Key, S::Value>>()
-            .expect("statistic cache type always matches its TypeId key");
+            .expect("Statistic cache type must match its TypeId key");
 
         map.entry(key.clone())
             .or_insert_with(|| S::compute(self.graphrecord, key))

@@ -14,7 +14,7 @@ pub type EdgeOperand = ElementOperand<EdgeIndex>;
 pub type DefiniteEdgeOperand = DefiniteElementOperand<EdgeIndex>;
 
 #[derive(PlanNode, MatchInputs, OptimizePlan, OptimizerHints, Explain)]
-#[plan(operand = EdgesOperand<Unordered>, optimizer_hints(distinct))]
+#[plan(operand = EdgesOperand<Unordered>)]
 pub struct AllEdges;
 
 impl Estimated for AllEdges {

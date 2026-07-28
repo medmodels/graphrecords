@@ -15,7 +15,6 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
     let Hints {
         commutes_with_filter,
         allows_limit_pushdown,
-        distinct,
         volatile,
         empty,
     } = hints;
@@ -31,10 +30,6 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
 
             fn allows_limit_pushdown(&self) -> bool {
                 #allows_limit_pushdown
-            }
-
-            fn is_distinct(&self) -> bool {
-                #distinct
             }
 
             fn is_volatile(&self) -> bool {

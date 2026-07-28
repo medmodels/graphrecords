@@ -4,7 +4,7 @@ use crate::{
     execution::EvaluationCache,
     operands::{DefiniteElementOperand, ElementOperand, ElementsOperand},
     operations::{
-        ElementKernel, ElementPipeline, Kernel, KeyedStream, Operation, Pipeline, Prepare,
+        ElementKernel, ElementPipeline, KeyedStream, LaneKernel, Operation, Pipeline, Prepare,
         Preserving,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
@@ -45,6 +45,7 @@ pub trait Relation: Prepare + Clone + Explain + PlanIdentity + PlanInputs {
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
 #[explain(label = "Relation")]
 pub struct RelationOperation<R> {
     #[argument]
@@ -74,8 +75,8 @@ impl<R: Relation> Prepare for RelationOperation<R> {
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Select Relation")]
-#[plan(optimizer_hints(distinct))]
 pub struct SelectRelationOperation<R> {
     #[argument]
     relation: R,
@@ -104,21 +105,16 @@ impl<R: Relation> Prepare for SelectRelationOperation<R> {
 }
 
 impl<R: Relation> ElementKernel<Indexed<R::From, Unit>> for RelationOperation<R> {
+    type Emission = Preserving;
     type OutShape = Indexed<R::From, EntityReference<R::To>>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<R::From, Unit>, Self>> {
-        Ok(Pipeline::default().map(
-            move |(index, membership): (<R::From as IndexDomain>::Index<'a>, QueryResult<()>)| {
-                let reference =
-                    membership.and_then(|()| R::resolve(&prepared, graphrecord, index.clone()));
-
-                (index, reference)
-            },
-        ))
+        Ok(Pipeline::keyed(move |index, membership: QueryResult<_>| {
+            membership.and_then(|()| R::resolve(&prepared, graphrecord, index))
+        }))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -126,7 +122,7 @@ impl<R: Relation> ElementKernel<Indexed<R::From, Unit>> for RelationOperation<R>
     }
 }
 
-impl<R: Relation, O: OrderState> Kernel<Indexed<R::From, Unit>, Multiple<O>>
+impl<R: Relation, O: OrderState> LaneKernel<Indexed<R::From, Unit>, Multiple<O>>
     for SelectRelationOperation<R>
 {
     type Output = ElementsOperand<R::To, Unordered>;
@@ -157,7 +153,7 @@ impl<R: Relation, O: OrderState> Kernel<Indexed<R::From, Unit>, Multiple<O>>
     }
 }
 
-impl<R: Relation> Kernel<Indexed<R::From, Unit>, Single> for SelectRelationOperation<R> {
+impl<R: Relation> LaneKernel<Indexed<R::From, Unit>, Single> for SelectRelationOperation<R> {
     type Output = ElementOperand<R::To>;
 
     fn execute<'a>(
@@ -185,7 +181,7 @@ impl<R: Relation> Kernel<Indexed<R::From, Unit>, Single> for SelectRelationOpera
     }
 }
 
-impl<R: Relation> Kernel<Indexed<R::From, Unit>, Definite> for SelectRelationOperation<R> {
+impl<R: Relation> LaneKernel<Indexed<R::From, Unit>, Definite> for SelectRelationOperation<R> {
     type Output = DefiniteElementOperand<R::To>;
 
     fn execute<'a>(
@@ -209,24 +205,16 @@ impl<R: Relation> Kernel<Indexed<R::From, Unit>, Definite> for SelectRelationOpe
 impl<R: Relation, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<R::From>>>
     for RelationOperation<R>
 {
+    type Emission = Preserving;
     type OutShape = Indexed<I, EntityReference<R::To>>;
-    type Retention = Preserving;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<R::From>>, Self>> {
-        Ok(Pipeline::default().map(
-            move |(address, reference): (
-                I::Index<'a>,
-                QueryResult<<R::From as IndexDomain>::Index<'a>>,
-            )| {
-                let resolved =
-                    reference.and_then(|entity| R::resolve(&prepared, graphrecord, entity));
-
-                (address, resolved)
-            },
-        ))
+        Ok(Pipeline::unkeyed(move |reference: QueryResult<_>| {
+            reference.and_then(|entity| R::resolve(&prepared, graphrecord, entity))
+        }))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {

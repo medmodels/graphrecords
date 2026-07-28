@@ -7,5 +7,6 @@ mod in_group;
 pub use attribute::{
     AttributeOperation, EntityAttributes, MissingAttribute, MissingTraversedAttribute,
 };
+pub use attributes::AttributesOperation;
 pub use filter::FilterOperation;
 pub use in_group::{InGroupOperation, IndicesInGroup};

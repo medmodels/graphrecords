@@ -3,13 +3,16 @@ use crate::{
     QueryResult, Unordered, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
-    operations::{Apply, BareStream, Kernel, KeyedStream, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+    },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Unorder,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Lane)]
 #[explain(label = "Unorder")]
 pub struct UnorderOperation;
 
@@ -25,7 +28,7 @@ impl Prepare for UnorderOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple<O>>
+impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
     for UnorderOperation
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
@@ -43,7 +46,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> Kernel<Indexed<I, V>, Multiple
     }
 }
 
-impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for UnorderOperation {
+impl<V: ValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for UnorderOperation {
     type Output = OperandHandle<Bare<V>, Multiple<Unordered>>;
 
     fn execute<'a>(
@@ -59,11 +62,8 @@ impl<V: ValueType, O: OrderState> Kernel<Bare<V>, Multiple<O>> for UnorderOperat
     }
 }
 
-impl<O> Unorder for O
-where
-    O: Apply<UnorderOperation>,
-{
-    type ReturnOperand = <O as Apply<UnorderOperation>>::Output;
+impl<O: Apply<UnorderOperation>> Unorder for O {
+    type ReturnOperand = O::Output;
 
     fn unorder(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), UnorderOperation))
