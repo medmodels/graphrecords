@@ -1,20 +1,17 @@
 use crate::{
-    AttributeName, Bare, Explain, FailureKind, FailureKindValue, IndexDomain, IndexValue, Indexed,
-    Mask, Operand, QueryResult, Scalar,
+    Bare, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult, ValueType,
     execution::EvaluationCache,
     operations::{
         Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
-        Preserving, SetSource,
+        Preserving, SetSource, ValueEquality,
     },
     optimizer::{
         Estimate, Estimated, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
     },
     traits::IsIn,
 };
-use graphrecords_core::{
-    GraphRecord,
-    graphrecord::{GraphRecordAttribute, GraphRecordValue},
-};
+use graphrecords_core::GraphRecord;
+use std::hash::Hash;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -57,10 +54,12 @@ fn membership_estimate<A: Estimated>(
     }
 }
 
-impl<I, A> ElementKernel<Indexed<I, Scalar>> for IsInOperation<A>
+impl<I, V, A> ElementKernel<Indexed<I, V>> for IsInOperation<A>
 where
     I: IndexDomain,
-    for<'a> A: SetSource<Value<'a> = GraphRecordValue>,
+    for<'a> V: ValueEquality + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    for<'a> A: SetSource<Value<'a> = <V as ValueType>::Owned>,
+    V::Owned: Eq + Hash,
 {
     type Emission = Preserving;
     type OutShape = Indexed<I, Mask>;
@@ -68,7 +67,7 @@ where
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Scalar>, Self>> {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let set = A::set(prepared)?;
 
         Ok(Pipeline::unkeyed(move |outcome: QueryResult<_>| {
@@ -81,9 +80,11 @@ where
     }
 }
 
-impl<A> ElementKernel<Bare<Scalar>> for IsInOperation<A>
+impl<V, A> ElementKernel<Bare<V>> for IsInOperation<A>
 where
-    for<'a> A: SetSource<Value<'a> = GraphRecordValue>,
+    for<'a> V: ValueEquality + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    for<'a> A: SetSource<Value<'a> = <V as ValueType>::Owned>,
+    V::Owned: Eq + Hash,
 {
     type Emission = Preserving;
     type OutShape = Bare<Mask>;
@@ -91,197 +92,7 @@ where
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<Scalar>, Self>> {
-        let set = A::set(prepared)?;
-
-        Ok(Pipeline::new(move |outcome: QueryResult<_>| {
-            outcome.map(|value| set.contains(&value))
-        }))
-    }
-
-    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        membership_estimate(self, input, stats)
-    }
-}
-
-impl<I, A> ElementKernel<Indexed<I, Mask>> for IsInOperation<A>
-where
-    I: IndexDomain,
-    for<'a> A: SetSource<Value<'a> = bool>,
-{
-    type Emission = Preserving;
-    type OutShape = Indexed<I, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
-        let set = A::set(prepared)?;
-
-        Ok(Pipeline::unkeyed(move |outcome: QueryResult<_>| {
-            outcome.map(|value| set.contains(&value))
-        }))
-    }
-
-    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        membership_estimate(self, input, stats)
-    }
-}
-
-impl<A> ElementKernel<Bare<Mask>> for IsInOperation<A>
-where
-    for<'a> A: SetSource<Value<'a> = bool>,
-{
-    type Emission = Preserving;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<Mask>, Self>> {
-        let set = A::set(prepared)?;
-
-        Ok(Pipeline::new(move |outcome: QueryResult<_>| {
-            outcome.map(|value| set.contains(&value))
-        }))
-    }
-
-    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        membership_estimate(self, input, stats)
-    }
-}
-
-impl<I, A> ElementKernel<Indexed<I, AttributeName>> for IsInOperation<A>
-where
-    I: IndexDomain,
-    for<'a> A: SetSource<Value<'a> = GraphRecordAttribute>,
-{
-    type Emission = Preserving;
-    type OutShape = Indexed<I, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, AttributeName>, Self>> {
-        let set = A::set(prepared)?;
-
-        Ok(Pipeline::unkeyed(move |outcome: QueryResult<_>| {
-            outcome.map(|value| set.contains(&value))
-        }))
-    }
-
-    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        membership_estimate(self, input, stats)
-    }
-}
-
-impl<A> ElementKernel<Bare<AttributeName>> for IsInOperation<A>
-where
-    for<'a> A: SetSource<Value<'a> = GraphRecordAttribute>,
-{
-    type Emission = Preserving;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<AttributeName>, Self>> {
-        let set = A::set(prepared)?;
-
-        Ok(Pipeline::new(move |outcome: QueryResult<_>| {
-            outcome.map(|value| set.contains(&value))
-        }))
-    }
-
-    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        membership_estimate(self, input, stats)
-    }
-}
-
-impl<K, I, A> ElementKernel<Indexed<K, IndexValue<I>>> for IsInOperation<A>
-where
-    K: IndexDomain,
-    I: IndexDomain,
-    for<'a> A: SetSource<Value<'a> = I::Owned>,
-{
-    type Emission = Preserving;
-    type OutShape = Indexed<K, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<I>>, Self>> {
-        let set = A::set(prepared)?;
-
-        Ok(Pipeline::unkeyed(move |outcome: QueryResult<_>| {
-            outcome.map(|value| set.contains(&value))
-        }))
-    }
-
-    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        membership_estimate(self, input, stats)
-    }
-}
-
-impl<I, A> ElementKernel<Bare<IndexValue<I>>> for IsInOperation<A>
-where
-    I: IndexDomain,
-    for<'a> A: SetSource<Value<'a> = I::Owned>,
-{
-    type Emission = Preserving;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<I>>, Self>> {
-        let set = A::set(prepared)?;
-
-        Ok(Pipeline::new(move |outcome: QueryResult<_>| {
-            outcome.map(|value| set.contains(&value))
-        }))
-    }
-
-    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        membership_estimate(self, input, stats)
-    }
-}
-
-impl<I, A> ElementKernel<Indexed<I, FailureKindValue>> for IsInOperation<A>
-where
-    I: IndexDomain,
-    for<'a> A: SetSource<Value<'a> = FailureKind>,
-{
-    type Emission = Preserving;
-    type OutShape = Indexed<I, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, FailureKindValue>, Self>> {
-        let set = A::set(prepared)?;
-
-        Ok(Pipeline::unkeyed(move |outcome: QueryResult<_>| {
-            outcome.map(|value| set.contains(&value))
-        }))
-    }
-
-    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        membership_estimate(self, input, stats)
-    }
-}
-
-impl<A> ElementKernel<Bare<FailureKindValue>> for IsInOperation<A>
-where
-    for<'a> A: SetSource<Value<'a> = FailureKind>,
-{
-    type Emission = Preserving;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<FailureKindValue>, Self>> {
+    ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let set = A::set(prepared)?;
 
         Ok(Pipeline::new(move |outcome: QueryResult<_>| {

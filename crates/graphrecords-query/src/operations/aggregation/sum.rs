@@ -1,8 +1,8 @@
 use crate::{
     AttributeName, Bare, EvaluateOperand, Explain, Failure, IndexDomain, IndexValue, Indexed,
-    Labeled, Mask, Multiple, Operand, OrderState, Positional, QueryResult, Scalar,
+    Labeled, Multiple, Operand, OrderState, Positional, QueryResult, Scalar,
     execution::EvaluationCache,
-    operands::{BareAttributeOperand, BareBoolOperand, BareIndexOperand, BareValueOperand},
+    operands::{BareAttributeOperand, BareIndexOperand, BareValueOperand},
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
@@ -78,50 +78,6 @@ impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for SumOperation {
                     .map_err(|error| Failure::new(Self::LABEL, error)),
                 None => Ok(Some(value)),
             }
-        });
-
-        Ok(sum.transpose())
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input.zero_or_one()
-    }
-}
-
-impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Mask>, Multiple<O>> for SumOperation {
-    type Output = BareBoolOperand;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        mut values: KeyedStream<'a, I, Mask, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum, (_, value)| {
-            let value = value?;
-
-            Ok(Some(sum.map_or(value, |sum| sum || value)))
-        });
-
-        Ok(sum.transpose())
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input.zero_or_one()
-    }
-}
-
-impl<O: OrderState> LaneKernel<Bare<Mask>, Multiple<O>> for SumOperation {
-    type Output = BareBoolOperand;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        mut values: BareStream<'a, Mask, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum, value| {
-            let value = value?;
-
-            Ok(Some(sum.map_or(value, |sum| sum || value)))
         });
 
         Ok(sum.transpose())
@@ -400,52 +356,6 @@ impl<O: OrderState> LaneKernel<Bare<IndexValue<GraphRecordValue>>, Multiple<O>> 
                     .map_err(|error| Failure::new(Self::LABEL, error)),
                 None => Ok(Some(value)),
             }
-        });
-
-        Ok(sum.transpose())
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input.zero_or_one()
-    }
-}
-
-impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, IndexValue<bool>>, Multiple<O>>
-    for SumOperation
-{
-    type Output = BareIndexOperand<bool>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        mut values: KeyedStream<'a, I, IndexValue<bool>, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum, (_, value)| {
-            let value = value?;
-
-            Ok(Some(sum.map_or(value, |sum| sum || value)))
-        });
-
-        Ok(sum.transpose())
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input.zero_or_one()
-    }
-}
-
-impl<O: OrderState> LaneKernel<Bare<IndexValue<bool>>, Multiple<O>> for SumOperation {
-    type Output = BareIndexOperand<bool>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        mut values: BareStream<'a, IndexValue<bool>, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let sum = values.try_fold(None, |sum, value| {
-            let value = value?;
-
-            Ok(Some(sum.map_or(value, |sum| sum || value)))
         });
 
         Ok(sum.transpose())

@@ -6,7 +6,8 @@ mod less_than_or_equal_to;
 mod not_equal_to;
 
 use crate::{
-    Failure, IncomparableValues, IndexDomain, Mask, ValueType,
+    AttributeName, Failure, FailureKindValue, IncomparableValues, IndexDomain, IndexValue, Mask,
+    Scalar, ValueType,
     operations::{
         ArgumentSource, BarePipeline, IndexedValuePipeline, Keyed, Pipeline, Retention, Unaligned,
     },
@@ -22,16 +23,76 @@ use std::{
     fmt::{Debug, Display},
 };
 
+pub trait ValueEquality: ValueType {
+    fn equal(value: &Self::Owned, argument: &Self::Owned) -> bool;
+}
+
+pub trait ValueOrdering: ValueEquality {
+    fn ordering(value: &Self::Owned, argument: &Self::Owned) -> Option<Ordering>;
+}
+
+impl ValueEquality for Scalar {
+    fn equal(value: &Self::Owned, argument: &Self::Owned) -> bool {
+        value == argument
+    }
+}
+
+impl ValueOrdering for Scalar {
+    fn ordering(value: &Self::Owned, argument: &Self::Owned) -> Option<Ordering> {
+        value.partial_cmp(argument)
+    }
+}
+
+impl ValueEquality for AttributeName {
+    fn equal(value: &Self::Owned, argument: &Self::Owned) -> bool {
+        value == argument
+    }
+}
+
+impl ValueOrdering for AttributeName {
+    fn ordering(value: &Self::Owned, argument: &Self::Owned) -> Option<Ordering> {
+        value.partial_cmp(argument)
+    }
+}
+
+impl<I: IndexDomain> ValueEquality for IndexValue<I> {
+    fn equal(value: &Self::Owned, argument: &Self::Owned) -> bool {
+        value == argument
+    }
+}
+
+impl<I> ValueOrdering for IndexValue<I>
+where
+    I: IndexDomain,
+    I::Owned: PartialOrd,
+{
+    fn ordering(value: &Self::Owned, argument: &Self::Owned) -> Option<Ordering> {
+        value.partial_cmp(argument)
+    }
+}
+
+impl ValueEquality for FailureKindValue {
+    fn equal(value: &Self::Owned, argument: &Self::Owned) -> bool {
+        value == argument
+    }
+}
+
+impl ValueOrdering for FailureKindValue {
+    fn ordering(value: &Self::Owned, argument: &Self::Owned) -> Option<Ordering> {
+        Some(value.cmp(argument))
+    }
+}
+
 fn equality_indexed<'a, I, A, V>(
     prepared: A::Prepared<'a>,
     label: &'static str,
-    equality: fn(&V::Value<'a>, &V::Value<'a>) -> bool,
+    equality: fn(&V::Owned, &V::Owned) -> bool,
 ) -> IndexedValuePipeline<'a, I, V, Mask, A::Retention>
 where
     I: IndexDomain,
-    A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
     A::Prepared<'a>: 'a,
-    V: ValueType,
+    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
 {
     Pipeline::keyed(move |index, item| {
         let value = match item {
@@ -52,12 +113,12 @@ where
 fn equality_bare<'a, A, V>(
     prepared: A::Prepared<'a>,
     label: &'static str,
-    equality: fn(&V::Value<'a>, &V::Value<'a>) -> bool,
+    equality: fn(&V::Owned, &V::Owned) -> bool,
 ) -> BarePipeline<'a, V, Mask, A::Retention>
 where
-    A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
     A::Prepared<'a>: 'a,
-    V: ValueType,
+    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
 {
     Pipeline::new(move |item| {
         let value = match item {
@@ -78,14 +139,14 @@ where
 fn ordering_indexed<'a, I, A, V>(
     prepared: A::Prepared<'a>,
     label: &'static str,
-    ordering: fn(&V::Value<'a>, &V::Value<'a>) -> Option<Ordering>,
+    ordering: fn(&V::Owned, &V::Owned) -> Option<Ordering>,
     predicate: fn(Ordering) -> bool,
 ) -> IndexedValuePipeline<'a, I, V, Mask, A::Retention>
 where
     I: IndexDomain,
-    A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
     A::Prepared<'a>: 'a,
-    V: ValueType,
+    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
     V::Owned: Debug + Display + Send + Sync,
 {
     Pipeline::keyed(move |index, item| {
@@ -104,8 +165,8 @@ where
                 None => Err(Failure::new_at::<I, _>(
                     label,
                     IncomparableValues {
-                        first: V::into_owned(value),
-                        second: V::into_owned(argument),
+                        first: value,
+                        second: argument,
                     },
                     &index,
                 )),
@@ -117,13 +178,13 @@ where
 fn ordering_bare<'a, A, V>(
     prepared: A::Prepared<'a>,
     label: &'static str,
-    ordering: fn(&V::Value<'a>, &V::Value<'a>) -> Option<Ordering>,
+    ordering: fn(&V::Owned, &V::Owned) -> Option<Ordering>,
     predicate: fn(Ordering) -> bool,
 ) -> BarePipeline<'a, V, Mask, A::Retention>
 where
-    A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
     A::Prepared<'a>: 'a,
-    V: ValueType,
+    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
     V::Owned: Debug + Display + Send + Sync,
 {
     Pipeline::new(move |item| {
@@ -142,8 +203,8 @@ where
                 None => Err(Failure::new(
                     label,
                     IncomparableValues {
-                        first: V::into_owned(value),
-                        second: V::into_owned(argument),
+                        first: value,
+                        second: argument,
                     },
                 )),
             })

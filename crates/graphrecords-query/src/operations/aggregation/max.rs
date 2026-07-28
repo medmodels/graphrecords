@@ -1,7 +1,7 @@
 use crate::{
     AttributeName, Bare, EvaluateOperand, Explain, Failure, FailureKindValue, IncomparableValues,
-    IncomparableValuesAt, IndexDomain, IndexValue, Indexed, Labeled, Mask, Multiple, Operand,
-    OrderState, QueryResult, Scalar, Single, ValueType,
+    IncomparableValuesAt, IndexDomain, IndexValue, Indexed, Labeled, Multiple, Operand, OrderState,
+    QueryResult, Scalar, Single, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -144,27 +144,6 @@ where
     }
 }
 
-impl<I, O> LaneKernel<Indexed<I, Mask>, Multiple<O>> for MaxOperation
-where
-    I: IndexDomain,
-    O: OrderState,
-    for<'a> I::Index<'a>: PartialOrd,
-{
-    type Output = OperandHandle<Indexed<I, Mask>, Single>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Mask, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(maximum_indexed::<I, Mask, O>(values))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input.zero_or_one()
-    }
-}
-
 impl<I, O> LaneKernel<Indexed<I, AttributeName>, Multiple<O>> for MaxOperation
 where
     I: IndexDomain,
@@ -239,22 +218,6 @@ impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for MaxOperation {
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(maximum_bare::<Scalar, O>(values))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input.zero_or_one()
-    }
-}
-
-impl<O: OrderState> LaneKernel<Bare<Mask>, Multiple<O>> for MaxOperation {
-    type Output = OperandHandle<Bare<Mask>, Single>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, Mask, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(maximum_bare::<Mask, O>(values))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {

@@ -46,7 +46,7 @@ pub use arithmetic::{
 pub use cache::CacheContext;
 pub use comparison::{
     EqualToOperation, GreaterThanOperation, GreaterThanOrEqualToOperation, LessThanOperation,
-    LessThanOrEqualToOperation, NotEqualToOperation,
+    LessThanOrEqualToOperation, NotEqualToOperation, ValueEquality, ValueOrdering,
 };
 pub use conversion::{
     DiscardOperation, EnumerateOperation, ExpandToOperation, ExpandToSource, ParentResolution,

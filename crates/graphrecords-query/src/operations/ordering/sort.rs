@@ -1,12 +1,12 @@
 use super::{EnsureSortable, IncomparableIndices};
 use crate::{
-    AttributeName, Bare, EvaluateOperand, Explain, Failure, FailureKindValue, IncomparableValues,
-    IncomparableValuesAt, IndexDomain, IndexValue, Indexed, Labeled, Mask, Multiple, Operand,
-    OrderState, Ordered, QueryResult, Scalar, ValueType,
+    Bare, EvaluateOperand, Explain, Failure, IncomparableValues, IncomparableValuesAt, IndexDomain,
+    Indexed, Labeled, Multiple, Operand, OrderState, Ordered, QueryResult, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+        ValueOrdering,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Sort,
@@ -135,20 +135,23 @@ where
     Ok(Box::new(collected.into_iter().map(Ok)))
 }
 
-impl<I, O> LaneKernel<Indexed<I, Scalar>, Multiple<O>> for SortOperation
+impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for SortOperation
 where
     I: IndexDomain,
+    V: ValueOrdering,
     O: OrderState,
     for<'a> I::Index<'a>: EnsureSortable,
+    for<'a> V::Value<'a>: EnsureSortable,
+    V::Owned: Debug + Display + Send + Sync,
 {
-    type Output = OperandHandle<Indexed<I, Scalar>, Multiple<Ordered>>;
+    type Output = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Scalar, Multiple<O>>,
+        values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        sort_indexed::<I, Scalar, O>(values)
+        sort_indexed::<I, V, O>(values)
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -156,170 +159,21 @@ where
     }
 }
 
-impl<I, O> LaneKernel<Indexed<I, Mask>, Multiple<O>> for SortOperation
+impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for SortOperation
 where
-    I: IndexDomain,
+    V: ValueOrdering,
     O: OrderState,
-    for<'a> I::Index<'a>: EnsureSortable,
+    for<'a> V::Value<'a>: EnsureSortable,
+    V::Owned: Debug + Display + Send + Sync,
 {
-    type Output = OperandHandle<Indexed<I, Mask>, Multiple<Ordered>>;
+    type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, Mask, Multiple<O>>,
+        values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        sort_indexed::<I, Mask, O>(values)
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input
-    }
-}
-
-impl<I, O> LaneKernel<Indexed<I, AttributeName>, Multiple<O>> for SortOperation
-where
-    I: IndexDomain,
-    O: OrderState,
-    for<'a> I::Index<'a>: EnsureSortable,
-{
-    type Output = OperandHandle<Indexed<I, AttributeName>, Multiple<Ordered>>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, AttributeName, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        sort_indexed::<I, AttributeName, O>(values)
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input
-    }
-}
-
-impl<I, O> LaneKernel<Indexed<I, FailureKindValue>, Multiple<O>> for SortOperation
-where
-    I: IndexDomain,
-    O: OrderState,
-    for<'a> I::Index<'a>: EnsureSortable,
-{
-    type Output = OperandHandle<Indexed<I, FailureKindValue>, Multiple<Ordered>>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, FailureKindValue, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        sort_indexed::<I, FailureKindValue, O>(values)
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input
-    }
-}
-
-impl<K, I, O> LaneKernel<Indexed<K, IndexValue<I>>, Multiple<O>> for SortOperation
-where
-    K: IndexDomain,
-    I: IndexDomain,
-    O: OrderState,
-    for<'a> K::Index<'a>: EnsureSortable,
-    I::Owned: EnsureSortable,
-{
-    type Output = OperandHandle<Indexed<K, IndexValue<I>>, Multiple<Ordered>>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, K, IndexValue<I>, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        sort_indexed::<K, IndexValue<I>, O>(values)
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input
-    }
-}
-
-impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for SortOperation {
-    type Output = OperandHandle<Bare<Scalar>, Multiple<Ordered>>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, Scalar, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        sort_bare::<Scalar, O>(values)
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input
-    }
-}
-
-impl<O: OrderState> LaneKernel<Bare<Mask>, Multiple<O>> for SortOperation {
-    type Output = OperandHandle<Bare<Mask>, Multiple<Ordered>>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, Mask, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        sort_bare::<Mask, O>(values)
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input
-    }
-}
-
-impl<O: OrderState> LaneKernel<Bare<AttributeName>, Multiple<O>> for SortOperation {
-    type Output = OperandHandle<Bare<AttributeName>, Multiple<Ordered>>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, AttributeName, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        sort_bare::<AttributeName, O>(values)
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input
-    }
-}
-
-impl<O: OrderState> LaneKernel<Bare<FailureKindValue>, Multiple<O>> for SortOperation {
-    type Output = OperandHandle<Bare<FailureKindValue>, Multiple<Ordered>>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, FailureKindValue, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        sort_bare::<FailureKindValue, O>(values)
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input
-    }
-}
-
-impl<I, O> LaneKernel<Bare<IndexValue<I>>, Multiple<O>> for SortOperation
-where
-    I: IndexDomain,
-    O: OrderState,
-    I::Owned: EnsureSortable,
-{
-    type Output = OperandHandle<Bare<IndexValue<I>>, Multiple<Ordered>>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, IndexValue<I>, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        sort_bare::<IndexValue<I>, O>(values)
+        sort_bare::<V, O>(values)
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {

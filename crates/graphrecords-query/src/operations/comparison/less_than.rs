@@ -1,7 +1,6 @@
-use super::{ordering_bare, ordering_indexed};
+use super::{ValueOrdering, ordering_bare, ordering_indexed};
 use crate::{
-    AttributeName, Bare, Explain, FailureKind, FailureKindValue, IndexDomain, IndexValue, Indexed,
-    Labeled, Mask, Operand, QueryResult, Scalar,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, ValueType,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
@@ -10,11 +9,11 @@ use crate::{
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::LessThan,
 };
-use graphrecords_core::{
-    GraphRecord,
-    graphrecord::{GraphRecordAttribute, GraphRecordValue},
+use graphrecords_core::GraphRecord;
+use std::{
+    cmp::Ordering,
+    fmt::{Debug, Display},
 };
-use std::cmp::Ordering;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -40,10 +39,12 @@ impl<A: Prepare> Prepare for LessThanOperation<A> {
     }
 }
 
-impl<I, A> ElementKernel<Indexed<I, Scalar>> for LessThanOperation<A>
+impl<I, V, A> ElementKernel<Indexed<I, V>> for LessThanOperation<A>
 where
     I: IndexDomain,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordValue>,
+    for<'a> V: ValueOrdering + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V::Owned: Debug + Display + Send + Sync,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, Mask>;
@@ -51,11 +52,11 @@ where
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Scalar>, Self>> {
-        Ok(ordering_indexed::<_, A, Scalar>(
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
+        Ok(ordering_indexed::<_, A, V>(
             prepared,
             Self::LABEL,
-            GraphRecordValue::partial_cmp,
+            V::ordering,
             Ordering::is_lt,
         ))
     }
@@ -69,9 +70,11 @@ where
     }
 }
 
-impl<A> ElementKernel<Bare<Scalar>> for LessThanOperation<A>
+impl<V, A> ElementKernel<Bare<V>> for LessThanOperation<A>
 where
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordValue>,
+    for<'a> V: ValueOrdering + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V::Owned: Debug + Display + Send + Sync,
+    for<'a> A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
 {
     type Emission = A::Retention;
     type OutShape = Bare<Mask>;
@@ -79,253 +82,11 @@ where
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<Scalar>, Self>> {
-        Ok(ordering_bare::<A, Scalar>(
+    ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
+        Ok(ordering_bare::<A, V>(
             prepared,
             Self::LABEL,
-            GraphRecordValue::partial_cmp,
-            Ordering::is_lt,
-        ))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate {
-            distinct: None,
-            selectivity: None,
-            ..input
-        }
-    }
-}
-
-impl<I, A> ElementKernel<Indexed<I, Mask>> for LessThanOperation<A>
-where
-    I: IndexDomain,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = bool>,
-{
-    type Emission = A::Retention;
-    type OutShape = Indexed<I, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
-        Ok(ordering_indexed::<_, A, Mask>(
-            prepared,
-            Self::LABEL,
-            |first, second| Some(first.cmp(second)),
-            Ordering::is_lt,
-        ))
-    }
-
-    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        let selectivity = input
-            .selectivity
-            .zip(self.argument.estimate(stats).selectivity)
-            .map(|(subject, argument)| (1.0 - subject) * argument);
-
-        Estimate {
-            distinct: None,
-            selectivity,
-            ..input
-        }
-    }
-}
-
-impl<A> ElementKernel<Bare<Mask>> for LessThanOperation<A>
-where
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = bool>,
-{
-    type Emission = A::Retention;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<Mask>, Self>> {
-        Ok(ordering_bare::<A, Mask>(
-            prepared,
-            Self::LABEL,
-            |first, second| Some(first.cmp(second)),
-            Ordering::is_lt,
-        ))
-    }
-
-    fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        let selectivity = input
-            .selectivity
-            .zip(self.argument.estimate(stats).selectivity)
-            .map(|(subject, argument)| (1.0 - subject) * argument);
-
-        Estimate {
-            distinct: None,
-            selectivity,
-            ..input
-        }
-    }
-}
-
-impl<I, A> ElementKernel<Indexed<I, AttributeName>> for LessThanOperation<A>
-where
-    I: IndexDomain,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = GraphRecordAttribute>,
-{
-    type Emission = A::Retention;
-    type OutShape = Indexed<I, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, AttributeName>, Self>> {
-        Ok(ordering_indexed::<_, A, AttributeName>(
-            prepared,
-            Self::LABEL,
-            GraphRecordAttribute::partial_cmp,
-            Ordering::is_lt,
-        ))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate {
-            distinct: None,
-            selectivity: None,
-            ..input
-        }
-    }
-}
-
-impl<A> ElementKernel<Bare<AttributeName>> for LessThanOperation<A>
-where
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = GraphRecordAttribute>,
-{
-    type Emission = A::Retention;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<AttributeName>, Self>> {
-        Ok(ordering_bare::<A, AttributeName>(
-            prepared,
-            Self::LABEL,
-            GraphRecordAttribute::partial_cmp,
-            Ordering::is_lt,
-        ))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate {
-            distinct: None,
-            selectivity: None,
-            ..input
-        }
-    }
-}
-
-impl<K, I, A> ElementKernel<Indexed<K, IndexValue<I>>> for LessThanOperation<A>
-where
-    K: IndexDomain,
-    I: IndexDomain,
-    I::Owned: PartialOrd,
-    for<'a> A: ArgumentSource<Keyed<K>, Value<'a> = I::Owned>,
-{
-    type Emission = A::Retention;
-    type OutShape = Indexed<K, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<K, IndexValue<I>>, Self>> {
-        Ok(ordering_indexed::<_, A, IndexValue<I>>(
-            prepared,
-            Self::LABEL,
-            PartialOrd::partial_cmp,
-            Ordering::is_lt,
-        ))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate {
-            distinct: None,
-            selectivity: None,
-            ..input
-        }
-    }
-}
-
-impl<I, A> ElementKernel<Bare<IndexValue<I>>> for LessThanOperation<A>
-where
-    I: IndexDomain,
-    I::Owned: PartialOrd,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = I::Owned>,
-{
-    type Emission = A::Retention;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<I>>, Self>> {
-        Ok(ordering_bare::<A, IndexValue<I>>(
-            prepared,
-            Self::LABEL,
-            PartialOrd::partial_cmp,
-            Ordering::is_lt,
-        ))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate {
-            distinct: None,
-            selectivity: None,
-            ..input
-        }
-    }
-}
-
-impl<I, A> ElementKernel<Indexed<I, FailureKindValue>> for LessThanOperation<A>
-where
-    I: IndexDomain,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = FailureKind>,
-{
-    type Emission = A::Retention;
-    type OutShape = Indexed<I, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, FailureKindValue>, Self>> {
-        Ok(ordering_indexed::<_, A, FailureKindValue>(
-            prepared,
-            Self::LABEL,
-            PartialOrd::partial_cmp,
-            Ordering::is_lt,
-        ))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        Estimate {
-            distinct: None,
-            selectivity: None,
-            ..input
-        }
-    }
-}
-
-impl<A> ElementKernel<Bare<FailureKindValue>> for LessThanOperation<A>
-where
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = FailureKind>,
-{
-    type Emission = A::Retention;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<FailureKindValue>, Self>> {
-        Ok(ordering_bare::<A, FailureKindValue>(
-            prepared,
-            Self::LABEL,
-            PartialOrd::partial_cmp,
+            V::ordering,
             Ordering::is_lt,
         ))
     }

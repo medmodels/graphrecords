@@ -218,7 +218,6 @@ impl Add for GraphRecordValue {
             (Self::Int(value), Self::Float(rhs)) => Ok(Self::Float(value as f64 + rhs)),
             (Self::Float(value), Self::Int(rhs)) => Ok(Self::Float(value + rhs as f64)),
             (Self::Float(value), Self::Float(rhs)) => Ok(Self::Float(value + rhs)),
-            (Self::Bool(value), Self::Bool(rhs)) => Ok(Self::Bool(value || rhs)),
             (Self::DateTime(value), Self::DateTime(rhs)) => Ok(DateTime::from_timestamp(
                 value.and_utc().timestamp() + rhs.and_utc().timestamp(),
                 0,
@@ -247,7 +246,6 @@ impl Sub for GraphRecordValue {
             (Self::Int(value), Self::Float(rhs)) => Ok(Self::Float(value as f64 - rhs)),
             (Self::Float(value), Self::Int(rhs)) => Ok(Self::Float(value - rhs as f64)),
             (Self::Float(value), Self::Float(rhs)) => Ok(Self::Float(value - rhs)),
-            (Self::Bool(value), Self::Bool(rhs)) => Ok(Self::Bool(value && !rhs)),
             (Self::DateTime(value), Self::DateTime(rhs)) => {
                 let duration = value - rhs;
 
@@ -1033,21 +1031,21 @@ mod test {
             (GraphRecordValue::Bool(false) + GraphRecordValue::Float(0_f64))
                 .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            (GraphRecordValue::Bool(false) + GraphRecordValue::Bool(false)).unwrap()
+        assert!(
+            (GraphRecordValue::Bool(false) + GraphRecordValue::Bool(false))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
-        assert_eq!(
-            GraphRecordValue::Bool(true),
-            (GraphRecordValue::Bool(false) + GraphRecordValue::Bool(true)).unwrap()
+        assert!(
+            (GraphRecordValue::Bool(false) + GraphRecordValue::Bool(true))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
-        assert_eq!(
-            GraphRecordValue::Bool(true),
-            (GraphRecordValue::Bool(true) + GraphRecordValue::Bool(false)).unwrap()
+        assert!(
+            (GraphRecordValue::Bool(true) + GraphRecordValue::Bool(false))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
-        assert_eq!(
-            GraphRecordValue::Bool(true),
-            (GraphRecordValue::Bool(true) + GraphRecordValue::Bool(true)).unwrap()
+        assert!(
+            (GraphRecordValue::Bool(true) + GraphRecordValue::Bool(true))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) + GraphRecordValue::DateTime(NaiveDateTime::MIN))
@@ -1214,21 +1212,21 @@ mod test {
             (GraphRecordValue::Bool(false) - GraphRecordValue::Float(0_f64))
                 .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            (GraphRecordValue::Bool(false) - GraphRecordValue::Bool(false)).unwrap()
+        assert!(
+            (GraphRecordValue::Bool(false) - GraphRecordValue::Bool(false))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            (GraphRecordValue::Bool(false) - GraphRecordValue::Bool(true)).unwrap()
+        assert!(
+            (GraphRecordValue::Bool(false) - GraphRecordValue::Bool(true))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
-        assert_eq!(
-            GraphRecordValue::Bool(true),
-            (GraphRecordValue::Bool(true) - GraphRecordValue::Bool(false)).unwrap()
+        assert!(
+            (GraphRecordValue::Bool(true) - GraphRecordValue::Bool(false))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            (GraphRecordValue::Bool(true) - GraphRecordValue::Bool(true)).unwrap()
+        assert!(
+            (GraphRecordValue::Bool(true) - GraphRecordValue::Bool(true))
+                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
         );
         assert!(
             (GraphRecordValue::Bool(false) - GraphRecordValue::DateTime(NaiveDateTime::MIN))
