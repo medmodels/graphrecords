@@ -1,12 +1,13 @@
-use super::{MissingGroupAggregate, UnresolvedGroupKeyFailures};
+use super::{MissingGroupAggregate, reject_key_failures};
 use crate::{
     Arity, Bare, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
     Operand, QueryResult, Single, ValueType,
     execution::EvaluationCache,
+    index::GroupKey,
     operands::{OperandHandle, Partition},
     operations::{
-        Apply, ArgumentSource, GroupKernel, GroupKey, IndexedElementContainer,
-        IndexedElementSource, KeyOperand, Keyed, Operation, OperationContext, Prepare,
+        Apply, ArgumentSource, GroupKernel, IndexedElementContainer, IndexedElementSource,
+        KeyOperand, Keyed, Operation, OperationContext, Prepare,
     },
     optimizer::{
         Estimate, Estimated, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
@@ -39,25 +40,6 @@ impl<I: IndexDomain, A: Prepare> Prepare for BroadcastViaOperation<I, A> {
     ) -> QueryResult<Self::Prepared<'a>> {
         self.via.prepare(graphrecord, cache)
     }
-}
-
-fn reject_key_failures<M: IndexDomain>(
-    key_failures: Vec<(M::Index<'_>, Box<Failure>)>,
-    label: &'static str,
-) -> QueryResult<()> {
-    if key_failures.is_empty() {
-        return Ok(());
-    }
-
-    Err(Failure::new(
-        label,
-        UnresolvedGroupKeyFailures::new(
-            key_failures
-                .into_iter()
-                .map(|key_failure| *key_failure.1)
-                .collect(),
-        ),
-    ))
 }
 
 fn broadcast_via<'a, I, K, V, A>(

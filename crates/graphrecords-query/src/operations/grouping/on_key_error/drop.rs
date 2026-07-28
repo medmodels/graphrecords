@@ -3,8 +3,9 @@ use crate::{
     Diagnostic, ErrorGroup, EvaluateOperand, Explain, IndexDomain, Operand, QueryResult,
     execution::EvaluationCache,
     explain::ExplainFormatter,
+    index::GroupKey,
     operands::{GroupOperand, KeyFailureChange, Partition},
-    operations::{Apply, Drop, GroupKernel, GroupKey, Operation, OperationContext, Prepare},
+    operations::{Apply, Drop, GroupKernel, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
@@ -18,10 +19,12 @@ use std::{
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
 #[explain(label = "DropKeyErrors")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct DropKeyErrors;
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct DropKeyErrorsOf<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
 }
@@ -48,6 +51,7 @@ impl<D: Diagnostic> Explain for DropKeyErrorsOf<D> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct DropKeyErrorsIn<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
 }
@@ -74,6 +78,7 @@ impl<G: ErrorGroup> Explain for DropKeyErrorsIn<G> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct DropKeyErrorsWithCause<E: Error + 'static> {
     marker: PhantomData<fn() -> E>,
 }

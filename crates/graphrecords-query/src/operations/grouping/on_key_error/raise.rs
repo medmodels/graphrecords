@@ -3,8 +3,9 @@ use crate::{
     Diagnostic, ErrorGroup, EvaluateOperand, Explain, IndexDomain, Operand, QueryResult,
     execution::EvaluationCache,
     explain::ExplainFormatter,
+    index::GroupKey,
     operands::{GroupOperand, KeyFailureChange, Partition},
-    operations::{Apply, GroupKernel, GroupKey, Operation, OperationContext, Prepare, Raise},
+    operations::{Apply, GroupKernel, Operation, OperationContext, Prepare, Raise},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
@@ -18,10 +19,12 @@ use std::{
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
 #[explain(label = "RaiseKeyErrors")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseKeyErrors;
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseKeyErrorsOf<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
 }
@@ -48,6 +51,7 @@ impl<D: Diagnostic> Explain for RaiseKeyErrorsOf<D> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseKeyErrorsIn<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
 }
@@ -74,6 +78,7 @@ impl<G: ErrorGroup> Explain for RaiseKeyErrorsIn<G> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseKeyErrorsWithCause<E: Error + 'static> {
     marker: PhantomData<fn() -> E>,
 }

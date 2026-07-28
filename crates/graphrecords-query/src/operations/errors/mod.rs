@@ -8,6 +8,8 @@ pub use inspection::{
     InErrorGroupOperation, IsErrorKindOperation,
 };
 pub use on_error::{
-    Drop, ErrorPolicy, ErrorPolicyIn, ErrorPolicyOf, ErrorPolicyWithCause, Raise, RaiseWhen,
-    Replace,
+    Drop, DropErrorsIn, DropErrorsOf, DropErrorsWithCause, ErrorPolicy, ErrorPolicyIn,
+    ErrorPolicyOf, ErrorPolicyWithCause, Raise, RaiseErrorsIn, RaiseErrorsOf, RaiseErrorsWithCause,
+    RaiseWhen, RaiseWhenErrorsIn, RaiseWhenErrorsOf, RaiseWhenErrorsWithCause, Replace,
+    ReplaceErrorsIn, ReplaceErrorsOf, ReplaceErrorsWithCause,
 };

@@ -1,15 +1,15 @@
 use crate::{
-    AttributeName, Bare, EvaluateOperand, Explain, Failure, FailureKindValue, IncomparableValues,
+    AttributeName, Bare, EvaluateOperand, Explain, Failure, IncomparableValues,
     IncomparableValuesAt, IndexDomain, IndexValue, Indexed, Labeled, Multiple, Operand, OrderState,
     QueryResult, Scalar, Single, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
-        Apply, BareStream, IncomparableIndices, KeyedStream, LaneKernel, Operation,
-        OperationContext, Prepare,
+        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Max,
+    value::IncomparableIndices,
 };
 use graphrecords_core::GraphRecord;
 use std::{
@@ -165,27 +165,6 @@ where
     }
 }
 
-impl<I, O> LaneKernel<Indexed<I, FailureKindValue>, Multiple<O>> for MaxOperation
-where
-    I: IndexDomain,
-    O: OrderState,
-    for<'a> I::Index<'a>: PartialOrd,
-{
-    type Output = OperandHandle<Indexed<I, FailureKindValue>, Single>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: KeyedStream<'a, I, FailureKindValue, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(maximum_indexed::<I, FailureKindValue, O>(values))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input.zero_or_one()
-    }
-}
-
 impl<K, I, O> LaneKernel<Indexed<K, IndexValue<I>>, Multiple<O>> for MaxOperation
 where
     K: IndexDomain,
@@ -234,22 +213,6 @@ impl<O: OrderState> LaneKernel<Bare<AttributeName>, Multiple<O>> for MaxOperatio
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         Ok(maximum_bare::<AttributeName, O>(values))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input.zero_or_one()
-    }
-}
-
-impl<O: OrderState> LaneKernel<Bare<FailureKindValue>, Multiple<O>> for MaxOperation {
-    type Output = OperandHandle<Bare<FailureKindValue>, Single>;
-
-    fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        values: BareStream<'a, FailureKindValue, Multiple<O>>,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(maximum_bare::<FailureKindValue, O>(values))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {

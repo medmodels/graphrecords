@@ -1,12 +1,13 @@
 use crate::{
     Bare, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     ValueType,
+    element::{Pipeline, Retention},
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, ErrorPolicy, ErrorPolicyIn,
-        ErrorPolicyOf, ErrorPolicyWithCause, Keyed, Operation, OperationContext, Pipeline, Prepare,
-        Retention, Unaligned,
+        ErrorPolicyOf, ErrorPolicyWithCause, Keyed, Operation, OperationContext, Prepare,
+        Unaligned,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
 };
@@ -20,6 +21,7 @@ use std::{
 
 #[derive(Clone, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct Replace<A>(#[argument] pub A);
 
 impl<A> Labeled for Replace<A> {
@@ -28,6 +30,7 @@ impl<A> Labeled for Replace<A> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct ReplaceErrorsOf<D: Diagnostic, R> {
     #[argument]
     replacement: R,
@@ -64,6 +67,7 @@ impl<D: Diagnostic, R: Explain> Explain for ReplaceErrorsOf<D, R> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct ReplaceErrorsIn<G: ErrorGroup, R> {
     #[argument]
     replacement: R,
@@ -100,6 +104,7 @@ impl<G: ErrorGroup, R: Explain> Explain for ReplaceErrorsIn<G, R> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct ReplaceErrorsWithCause<C: Error + 'static, R> {
     #[argument]
     replacement: R,

@@ -14,7 +14,6 @@ mod membership;
 mod numeric;
 mod on_missing;
 mod ordering;
-mod retention;
 mod string_operations;
 mod structure;
 mod traversal;
@@ -35,66 +34,67 @@ pub use aggregation::{
 };
 pub use argument::{
     Absent, AlignableArity, Alignment, ArgumentAbsent, ArgumentSource, EnumerableArity,
-    IndexedElementContainer, IndexedElementSource, Keyed, Lookup, Prepare, PreparedArity, SetArity,
-    SetSource, Unaligned,
+    IndexedElementContainer, IndexedElementSource, Keyed, Lookup, Prepare, PreparedArity,
+    PreparedIndexedMultiple, SetArity, SetSource, Unaligned,
 };
 pub use arithmetic::{
-    AddOperation, DivideOperation, DivisionByZero, ModuloByZero, ModuloOperation,
-    MultiplyOperation, PowerOperation, SubtractOperation, ValueAdd, ValueDivide, ValueModulo,
-    ValueMultiply, ValuePower, ValueSubtract,
+    AddOperation, DivideOperation, ModuloOperation, MultiplyOperation, PowerOperation,
+    SubtractOperation,
 };
 pub use cache::CacheContext;
 pub use comparison::{
     EqualToOperation, GreaterThanOperation, GreaterThanOrEqualToOperation, LessThanOperation,
-    LessThanOrEqualToOperation, NotEqualToOperation, ValueEquality, ValueOrdering,
+    LessThanOrEqualToOperation, NotEqualToOperation,
 };
 pub use conversion::{
     DiscardOperation, EnumerateOperation, ExpandToOperation, ExpandToSource, ParentResolution,
 };
 pub use errors::{
-    AbsenceErrors, Drop, ErrorKindNameOperation, ErrorKindOperation, ErrorPolicy, ErrorPolicyIn,
-    ErrorPolicyOf, ErrorPolicyWithCause, ErrorsOperation, HasErrorCauseOperation,
-    InErrorGroupOperation, IsErrorKindOperation, Raise, RaiseWhen, Replace,
+    AbsenceErrors, Drop, DropErrorsIn, DropErrorsOf, DropErrorsWithCause, ErrorKindNameOperation,
+    ErrorKindOperation, ErrorPolicy, ErrorPolicyIn, ErrorPolicyOf, ErrorPolicyWithCause,
+    ErrorsOperation, HasErrorCauseOperation, InErrorGroupOperation, IsErrorKindOperation, Raise,
+    RaiseErrorsIn, RaiseErrorsOf, RaiseErrorsWithCause, RaiseWhen, RaiseWhenErrorsIn,
+    RaiseWhenErrorsOf, RaiseWhenErrorsWithCause, Replace, ReplaceErrorsIn, ReplaceErrorsOf,
+    ReplaceErrorsWithCause,
 };
 use graphrecords_core::GraphRecord;
 pub use graphrecords_macros::Operation;
 pub use grouping::{
     BroadcastOperation, BroadcastViaOperation, BucketErrorPolicy, BucketErrorPolicyIn,
     BucketErrorPolicyOf, BucketErrorPolicyWithCause, BucketErrorsOperation, BucketFailureArity,
-    GroupByOperation, GroupKey, GroupingValue, HavingOperation, KeyErrorPolicy, KeyErrorPolicyIn,
-    KeyErrorPolicyOf, KeyErrorPolicyWithCause, KeyErrorsOperation, KeyOperand, KeysOperation,
-    MissingGroupAggregate, UngroupKeyedOperation, UngroupOperation, UnresolvedBucketFailures,
-    UnresolvedGroupKeyFailures,
+    DropBucketErrors, DropBucketErrorsIn, DropBucketErrorsOf, DropBucketErrorsWithCause,
+    DropKeyErrors, DropKeyErrorsIn, DropKeyErrorsOf, DropKeyErrorsWithCause, GroupByOperation,
+    HavingOperation, KeyErrorPolicy, KeyErrorPolicyIn, KeyErrorPolicyOf, KeyErrorPolicyWithCause,
+    KeyErrorsOperation, KeyOperand, KeysOperation, MissingGroupAggregate, RaiseBucketErrors,
+    RaiseBucketErrorsIn, RaiseBucketErrorsOf, RaiseBucketErrorsWithCause, RaiseKeyErrors,
+    RaiseKeyErrorsIn, RaiseKeyErrorsOf, RaiseKeyErrorsWithCause, UngroupKeyedOperation,
+    UngroupOperation, UnresolvedBucketFailures, UnresolvedGroupKeyFailures,
 };
 pub use indexing::{
     ChildIndexOperation, IndexOperation, ParentIndexOperation, ResolveOperation, SelectOperation,
 };
 pub use kernel::{
-    BarePipeline, BareStream, ElementKernel, ElementPipeline, ElementTransition, GroupKernel,
-    IndexedExpansionPipeline, IndexedToBarePipeline, IndexedValuePipeline, KeyedStream, LaneKernel,
-    Pipeline,
+    BareStream, ElementKernel, ElementPipeline, GroupKernel, KeyedStream, LaneKernel,
 };
 pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
 pub use membership::IsInOperation;
-pub use on_missing::{MissingPolicy, WithMissing};
+pub use on_missing::{MaybeAbsent, MissingPolicy, WithMissing};
 pub use ordering::{
-    EnsureSortable, FirstOperation, IncomparableIndices, LastOperation, ReverseOperation,
-    SortByOperation, SortOperation, TakeOperation, UnorderOperation, incomparable_pair,
-    incomparable_with_first,
+    FirstOperation, LastOperation, ReverseOperation, SortByOperation, SortOperation, TakeOperation,
+    UnorderOperation,
 };
-pub use retention::{Dropping, ElementEmission, Expanding, Preserving, Retention};
 use std::{
     any::Any,
     fmt,
     hash::{Hash, Hasher},
 };
 pub use structure::{
-    AttributeOperation, AttributesOperation, EntityAttributes, FilterOperation, InGroupOperation,
-    IndicesInGroup, MissingAttribute, MissingTraversedAttribute,
+    AttributeOperation, AttributesOperation, FilterOperation, InGroupOperation, MissingAttribute,
+    MissingTraversedAttribute,
 };
 pub use traversal::{
-    EdgeSource, EdgeTarget, EdgesOperation, NeighborsOperation, NodesOperation, Relation,
-    RelationOperation, SelectRelationOperation,
+    EdgeDirection, EdgeSource, EdgeTarget, EdgesOperation, NeighborsOperation, NodesOperation,
+    Relation, RelationOperation, SelectRelationOperation,
 };
 
 pub trait OperationScope: Sealed + 'static {}

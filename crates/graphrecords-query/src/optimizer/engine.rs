@@ -982,6 +982,26 @@ fn toposort(count: usize, edges: &[(usize, usize)]) -> Result<Vec<usize>, Vec<us
     if order.len() == count {
         Ok(order)
     } else {
-        Err((0..count).filter(|index| !order.contains(index)).collect())
+        Err((0..count)
+            .filter(|&index| !order.contains(&index) && cycles_back(index, &adjacency))
+            .collect())
     }
+}
+
+fn cycles_back(start: usize, adjacency: &[Vec<usize>]) -> bool {
+    let mut visited = vec![false; adjacency.len()];
+    let mut stack = adjacency[start].clone();
+
+    while let Some(node) = stack.pop() {
+        if node == start {
+            return true;
+        }
+
+        if !visited[node] {
+            visited[node] = true;
+            stack.extend(adjacency[node].iter().copied());
+        }
+    }
+
+    false
 }

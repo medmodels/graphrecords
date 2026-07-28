@@ -6,10 +6,10 @@ use crate::{
     QueryResult,
     execution::EvaluationCache,
     explain::ExplainFormatter,
+    index::GroupKey,
     operands::{GroupOperand, OperandHandle, Partition},
     operations::{
-        Apply, BucketFailureArity, GroupKernel, GroupKey, Operation, OperationContext, Prepare,
-        Raise,
+        Apply, BucketFailureArity, GroupKernel, Operation, OperationContext, Prepare, Raise,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
@@ -24,10 +24,12 @@ use std::{
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
 #[explain(label = "RaiseBucketErrors")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseBucketErrors;
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseBucketErrorsOf<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
 }
@@ -54,6 +56,7 @@ impl<D: Diagnostic> Explain for RaiseBucketErrorsOf<D> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseBucketErrorsIn<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
 }
@@ -80,6 +83,7 @@ impl<G: ErrorGroup> Explain for RaiseBucketErrorsIn<G> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseBucketErrorsWithCause<E: Error + 'static> {
     marker: PhantomData<fn() -> E>,
 }

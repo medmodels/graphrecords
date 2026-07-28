@@ -1,4 +1,5 @@
-use super::{ValueEquality, equality_bare, equality_indexed};
+use super::{equality_bare, equality_indexed};
+use crate::value::ValueEquality;
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, ValueType,
     execution::EvaluationCache,

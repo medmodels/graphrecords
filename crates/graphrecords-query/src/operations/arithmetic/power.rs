@@ -1,4 +1,5 @@
-use super::{ValuePower, arithmetic_bare, arithmetic_indexed};
+use super::{arithmetic_bare, arithmetic_indexed};
+use crate::value::ValuePower;
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
     execution::EvaluationCache,

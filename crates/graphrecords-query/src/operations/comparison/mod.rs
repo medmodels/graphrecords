@@ -6,11 +6,9 @@ mod less_than_or_equal_to;
 mod not_equal_to;
 
 use crate::{
-    AttributeName, Failure, FailureKindValue, IncomparableValues, IndexDomain, IndexValue, Mask,
-    Scalar, ValueType,
-    operations::{
-        ArgumentSource, BarePipeline, IndexedValuePipeline, Keyed, Pipeline, Retention, Unaligned,
-    },
+    Failure, IncomparableValues, IndexDomain, Mask, ValueType,
+    element::{BarePipeline, IndexedValuePipeline, Pipeline, Retention},
+    operations::{ArgumentSource, Keyed, Unaligned},
 };
 pub use equal_to::EqualToOperation;
 pub use greater_than::GreaterThanOperation;
@@ -22,66 +20,6 @@ use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
 };
-
-pub trait ValueEquality: ValueType {
-    fn equal(value: &Self::Owned, argument: &Self::Owned) -> bool;
-}
-
-pub trait ValueOrdering: ValueEquality {
-    fn ordering(value: &Self::Owned, argument: &Self::Owned) -> Option<Ordering>;
-}
-
-impl ValueEquality for Scalar {
-    fn equal(value: &Self::Owned, argument: &Self::Owned) -> bool {
-        value == argument
-    }
-}
-
-impl ValueOrdering for Scalar {
-    fn ordering(value: &Self::Owned, argument: &Self::Owned) -> Option<Ordering> {
-        value.partial_cmp(argument)
-    }
-}
-
-impl ValueEquality for AttributeName {
-    fn equal(value: &Self::Owned, argument: &Self::Owned) -> bool {
-        value == argument
-    }
-}
-
-impl ValueOrdering for AttributeName {
-    fn ordering(value: &Self::Owned, argument: &Self::Owned) -> Option<Ordering> {
-        value.partial_cmp(argument)
-    }
-}
-
-impl<I: IndexDomain> ValueEquality for IndexValue<I> {
-    fn equal(value: &Self::Owned, argument: &Self::Owned) -> bool {
-        value == argument
-    }
-}
-
-impl<I> ValueOrdering for IndexValue<I>
-where
-    I: IndexDomain,
-    I::Owned: PartialOrd,
-{
-    fn ordering(value: &Self::Owned, argument: &Self::Owned) -> Option<Ordering> {
-        value.partial_cmp(argument)
-    }
-}
-
-impl ValueEquality for FailureKindValue {
-    fn equal(value: &Self::Owned, argument: &Self::Owned) -> bool {
-        value == argument
-    }
-}
-
-impl ValueOrdering for FailureKindValue {
-    fn ordering(value: &Self::Owned, argument: &Self::Owned) -> Option<Ordering> {
-        Some(value.cmp(argument))
-    }
-}
 
 fn equality_indexed<'a, I, A, V>(
     prepared: A::Prepared<'a>,

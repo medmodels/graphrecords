@@ -16,13 +16,17 @@ use std::ops::BitOr;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Or")]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct OrOperation<M> {
     #[argument]
     other: M,
 }
 
 impl<M: Prepare> Prepare for OrOperation<M> {
-    type Prepared<'a> = M::Prepared<'a>;
+    type Prepared<'a>
+        = M::Prepared<'a>
+    where
+        Self: 'a;
 
     fn prepare<'a>(
         &'a self,

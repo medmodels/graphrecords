@@ -3,8 +3,9 @@ use crate::{
     Bare, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple,
     Operand, QueryResult, Single, Unordered, ValueType,
     execution::EvaluationCache,
+    index::GroupKey,
     operands::{OperandHandle, Partition},
-    operations::{Apply, GroupKernel, GroupKey, Operation, OperationContext, Prepare},
+    operations::{Apply, GroupKernel, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Broadcast,
 };

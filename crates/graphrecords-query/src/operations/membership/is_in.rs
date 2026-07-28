@@ -1,14 +1,15 @@
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult, ValueType,
+    element::{Pipeline, Preserving},
     execution::EvaluationCache,
     operations::{
-        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
-        Preserving, SetSource, ValueEquality,
+        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare, SetSource,
     },
     optimizer::{
         Estimate, Estimated, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
     },
     traits::IsIn,
+    value::ValueEquality,
 };
 use graphrecords_core::GraphRecord;
 use std::hash::Hash;

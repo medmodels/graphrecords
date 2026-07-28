@@ -1,248 +1,46 @@
-mod context;
+pub mod element;
 pub mod error;
 pub mod execution;
 pub mod explain;
+pub mod index;
 pub mod operands;
 pub mod operations;
 pub mod optimizer;
 pub mod prelude;
 pub mod selection;
 mod traits;
+pub mod value;
 
-use crate::{
-    optimizer::Optimizer,
-    selection::{ReturnOperand, Selection},
+pub use element::{
+    Arity, Bare, BoxedIterator, Definite, ElementShape, Indexed, Multiple, OrderState, Ordered,
+    Return, ReturnShape, Single, Unordered,
 };
-pub use context::{EvaluateContext, OperandContext};
 pub use error::{
     Diagnostic, DuplicateIndex, ErrorGroup, External, Failure, FailureKind, IncomparableValues,
     IncomparableValuesAt, QueryResult,
 };
 pub use explain::{Explain, Explanation, Labeled};
-use graphrecords_core::{
-    GraphRecord,
-    errors::GraphRecordResult,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
+pub use index::{
+    DuplicateExpandedChildIndex, EntityDomain, ExpandedChild, ExpandedIndex, ExpandedIndexOwned,
+    ExpandedIndexReference, IndexDomain, NoChildIndex, OwnedIndex, Position, Positional,
 };
 pub use operands::{
-    Arity, AttributeName, Bare, BucketOwned, CheckedIndexedLaneBuilder, Definite,
-    DefiniteEdgeOperand, DefiniteNodeOperand, DefiniteReferenceOperand,
-    DuplicateExpandedChildIndex, EdgeOperand, EdgesOperand, ElementShape, EntityReference,
-    EvaluateOperand, ExpandedChild, ExpandedIndex, ExpandedIndexOwned, ExpandedIndexReference,
-    FailureKindValue, FailureValue, GroupOperand, IndexValue, Indexed, KeyFailureOwned, Mask,
-    Multiple, NoChildIndex, NodeOperand, NodesOperand, Operand, OrderState, Ordered,
+    BucketOwned, CheckedIndexedLaneBuilder, DefiniteEdgeOperand, DefiniteNodeOperand,
+    DefiniteReferenceOperand, EdgeOperand, EdgesOperand, EvaluateContext, EvaluateOperand,
+    GroupOperand, KeyFailureOwned, NodeOperand, NodesOperand, Operand, OperandContext,
     PartitionBucketParts, PartitionKeyFailureParts, PartitionOwned, PartitionOwnedParts,
-    PartitionParts, PreparedIndexedMultiple, ReferenceOperand, ReferencesOperand, Return,
-    ReturnShape, ReturnValueType, Scalar, Single, Unit, Unordered, ValueType,
+    PartitionParts, ReferenceOperand, ReferencesOperand,
 };
-use std::{
-    any::Any,
-    fmt::{Debug, Display},
-    hash::Hash,
-};
+pub use operations::{EdgeDirection, MaybeAbsent, PreparedIndexedMultiple};
+pub use selection::{QueryEdges, QueryNodes};
 pub use traits::*;
-
-pub type BoxedIterator<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
-
-pub type Position = usize;
-
-pub trait OwnedIndex: Any + Debug + Display + Send + Sync {}
-
-impl<T: Any + Debug + Display + Send + Sync> OwnedIndex for T {}
-
-pub trait IndexDomain: 'static + Clone {
-    type Owned: 'static + Clone + Eq + Hash + OwnedIndex;
-
-    type Index<'a>: Clone + Eq + Hash
-    where
-        Self: 'a;
-
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned;
-
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_>;
-}
-
-pub trait EntityDomain: IndexDomain {
-    fn resolve_index<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Owned,
-    ) -> GraphRecordResult<Self::Index<'a>>;
-}
-
-#[derive(Clone, Debug)]
-pub struct Positional;
-
-impl IndexDomain for Positional {
-    type Index<'a> = Position;
-    type Owned = Position;
-
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        *index
-    }
-
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
-        *owned
-    }
-}
-
-impl IndexDomain for EdgeIndex {
-    type Index<'a> = &'a Self;
-    type Owned = Self;
-
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        **index
-    }
-
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
-        owned
-    }
-}
-
-impl IndexDomain for NodeIndex {
-    type Index<'a> = &'a Self;
-    type Owned = Self;
-
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        (*index).clone()
-    }
-
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
-        owned
-    }
-}
-
-impl IndexDomain for FailureKind {
-    type Index<'a> = Self;
-    type Owned = Self;
-
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        *index
-    }
-
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
-        *owned
-    }
-}
-
-impl IndexDomain for GraphRecordValue {
-    type Index<'a> = Self;
-    type Owned = Self;
-
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        index.clone()
-    }
-
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
-        owned.clone()
-    }
-}
-
-impl IndexDomain for AttributeName {
-    type Index<'a> = GraphRecordAttribute;
-    type Owned = GraphRecordAttribute;
-
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        index.clone()
-    }
-
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
-        owned.clone()
-    }
-}
-
-impl IndexDomain for bool {
-    type Index<'a> = Self;
-    type Owned = Self;
-
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        *index
-    }
-
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
-        *owned
-    }
-}
-
-impl EntityDomain for NodeIndex {
-    fn resolve_index<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Owned,
-    ) -> GraphRecordResult<Self::Index<'a>> {
-        graphrecord.resolve_node_index(index)
-    }
-}
-
-impl EntityDomain for EdgeIndex {
-    fn resolve_index<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Owned,
-    ) -> GraphRecordResult<Self::Index<'a>> {
-        graphrecord.resolve_edge_index(index)
-    }
-}
+pub use value::{
+    AttributeName, EntityReference, FailureKindValue, FailureValue, IndexValue, Mask,
+    ReturnValueType, Scalar, Unit, ValueType,
+};
 
 mod sealed {
     pub trait Sealed {}
-}
-
-pub trait QueryNodes {
-    fn query_nodes<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&NodesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>;
-
-    fn query_nodes_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&NodesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>;
-}
-
-impl QueryNodes for GraphRecord {
-    fn query_nodes<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&NodesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>,
-    {
-        Selection::new_node(self, query)
-    }
-
-    fn query_nodes_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&NodesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>,
-    {
-        Selection::new_node_with(self, optimizer, query)
-    }
-}
-
-pub trait QueryEdges {
-    fn query_edges<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>;
-
-    fn query_edges_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>;
-}
-
-impl QueryEdges for GraphRecord {
-    fn query_edges<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>,
-    {
-        Selection::new_edge(self, query)
-    }
-
-    fn query_edges_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>,
-    {
-        Selection::new_edge_with(self, optimizer, query)
-    }
 }
 
 #[cfg(test)]
@@ -290,8 +88,11 @@ mod tests {
             nodes.attribute("amet".into())
         });
 
-        println!("{}", selection.explain());
+        let elements: Vec<_> = selection.evaluate().unwrap().collect();
 
-        println!("{:?}", selection.evaluate().unwrap().collect::<Vec<_>>());
+        assert_eq!(elements.len(), 1);
+        let (index, value) = &elements[0];
+        assert_eq!(format!("{index}"), "\"1\"");
+        assert_eq!(format!("{}", value.as_ref().unwrap()), "\"consectetur\"");
     }
 }

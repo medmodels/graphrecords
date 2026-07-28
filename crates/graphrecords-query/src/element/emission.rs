@@ -1,4 +1,8 @@
-use crate::{Arity, OrderState, Ordered, Unordered, optimizer::Estimate, sealed::Sealed};
+use crate::{
+    element::{Arity, OrderState, Ordered, Unordered},
+    optimizer::Estimate,
+    sealed::Sealed,
+};
 use std::marker::PhantomData;
 
 pub trait ElementEmission: Sealed + 'static {

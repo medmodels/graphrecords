@@ -1,70 +1,18 @@
 use crate::{
-    Diagnostic, EntityDomain, EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled,
-    Operand, OwnedIndex, QueryResult, Scalar, Unit,
+    Diagnostic, EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled, Operand,
+    OwnedIndex, QueryResult, Scalar, Unit,
+    element::{Pipeline, Preserving},
     execution::EvaluationCache,
-    operations::{
-        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
-        Preserving,
-    },
-    optimizer::{
-        EdgeAttributeCardinality, Estimate, NodeAttributeCardinality, OperationInputs,
-        OptimizerHints, PlanIdentity, PlanInputs, Stats,
-    },
+    index::EntityAttributes,
+    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Attribute,
 };
-use graphrecords_core::{
-    GraphRecord,
-    errors::GraphRecordError,
-    graphrecord::{AttributeMap, EdgeIndex, GraphRecordAttribute, NodeIndex},
-};
+use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
 use std::{
     error::Error,
     fmt::{self, Debug, Display, Formatter},
 };
-
-pub trait EntityAttributes: EntityDomain {
-    fn attributes<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Index<'a>,
-    ) -> Result<&'a AttributeMap, GraphRecordError>;
-
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize;
-}
-
-impl EntityAttributes for NodeIndex {
-    fn attributes<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Index<'a>,
-    ) -> Result<&'a AttributeMap, GraphRecordError> {
-        graphrecord.node_attributes(index)
-    }
-
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize {
-        stats.get::<NodeAttributeCardinality>(attribute)
-    }
-}
-
-impl EntityAttributes for EdgeIndex {
-    fn attributes<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Index<'a>,
-    ) -> Result<&'a AttributeMap, GraphRecordError> {
-        graphrecord.edge_attributes(index)
-    }
-
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize {
-        stats.get::<EdgeAttributeCardinality>(attribute)
-    }
-}
-
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
-#[operation(scope = Element)]
-#[explain(label = "Attribute")]
-#[plan(optimizer_hints(empty = if_any))]
-pub struct AttributeOperation {
-    #[explain(label)]
-    pub attribute: GraphRecordAttribute,
-}
 
 #[derive(Debug)]
 pub struct MissingAttribute {
@@ -121,6 +69,15 @@ impl<T: OwnedIndex> Diagnostic for MissingTraversedAttribute<T> {
                 .to_string(),
         )
     }
+}
+
+#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
+#[explain(label = "Attribute")]
+#[plan(optimizer_hints(empty = if_any))]
+pub struct AttributeOperation {
+    #[explain(label)]
+    attribute: GraphRecordAttribute,
 }
 
 impl Prepare for AttributeOperation {

@@ -1,11 +1,10 @@
 use crate::{
     EvaluateOperand, Explain, IndexDomain, Labeled, Operand, QueryResult,
+    element::Retention,
     execution::EvaluationCache,
+    index::GroupKey,
     operands::{BucketChange, GroupOperand, Partition},
-    operations::{
-        Apply, ArgumentSource, GroupKernel, GroupKey, Keyed, Operation, OperationContext, Prepare,
-        Retention,
-    },
+    operations::{Apply, ArgumentSource, GroupKernel, Keyed, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Having,
 };
@@ -54,7 +53,7 @@ where
                 return None;
             }
 
-            let key = match K::resolve_key(graphrecord, bucket.key()) {
+            let key = match K::resolve_key(Self::LABEL, graphrecord, bucket.key()) {
                 Ok(key) => key,
                 Err(failure) => {
                     return Some(BucketChange::ReplacePayload(Err(failure)));

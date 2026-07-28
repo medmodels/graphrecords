@@ -1,8 +1,10 @@
 use crate::{
     Arity, BoxedIterator, Definite, Diagnostic, DuplicateIndex, ElementShape, EvaluateOperand,
-    Failure, IndexDomain, Indexed, Multiple, Operand, OperandContext, QueryResult, Single,
+    Failure, IndexDomain, Indexed, Multiple, Operand, OperandContext, OrderState, QueryResult,
+    Single, ValueType,
     execution::{CacheableOperand, EvaluationCache},
-    operations::GroupKey,
+    index::GroupKey,
+    operands::OperandHandle,
     optimizer::{Estimate, Estimated, PlanNode, Stats},
 };
 use graphrecords_core::GraphRecord;
@@ -368,7 +370,7 @@ pub trait PartitionShape<M: IndexDomain>: ElementShape {
     fn member<'a>(element: &Self::Element<'a>) -> M::Index<'a>;
 }
 
-impl<M: IndexDomain, V: crate::ValueType> PartitionShape<M> for Indexed<M, V> {
+impl<M: IndexDomain, V: ValueType> PartitionShape<M> for Indexed<M, V> {
     fn member<'a>(element: &Self::Element<'a>) -> M::Index<'a> {
         element.0.clone()
     }
@@ -483,7 +485,7 @@ impl<S: ElementShape> PartitionArity<S> for Single {
     }
 }
 
-impl<S: ElementShape, O: crate::OrderState> PartitionArity<S> for Multiple<O> {
+impl<S: ElementShape, O: OrderState> PartitionArity<S> for Multiple<O> {
     fn into_elements<'a>(
         container: Self::Container<'a, S::Element<'a>>,
     ) -> BoxedIterator<'a, S::Element<'a>>
@@ -538,7 +540,7 @@ where
     pub fn build(
         self,
         mut classify: impl FnMut(&S::Element<'a>) -> PartitionClassification<K>,
-    ) -> QueryResult<Partition<'a, M, K, crate::operands::OperandHandle<S, C>>> {
+    ) -> QueryResult<Partition<'a, M, K, OperandHandle<S, C>>> {
         let mut seen_members = GrHashSet::default();
         let mut key_positions: GrHashMap<_, _> = GrHashMap::default();
         let mut buckets = Vec::new();

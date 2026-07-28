@@ -1,4 +1,5 @@
-use super::{ValueDivide, arithmetic_bare, arithmetic_indexed};
+use super::{arithmetic_bare, arithmetic_indexed};
+use crate::value::ValueDivide;
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
     execution::EvaluationCache,

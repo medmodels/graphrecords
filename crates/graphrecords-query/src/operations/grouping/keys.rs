@@ -1,10 +1,11 @@
-use super::UnresolvedGroupKeyFailures;
+use super::reject_key_failures;
 use crate::{
-    Arity, ElementShape, EvaluateOperand, Explain, Failure, IndexDomain, Labeled, Operand,
-    QueryResult, Unordered,
+    Arity, ElementShape, EvaluateOperand, Explain, IndexDomain, Labeled, Operand, QueryResult,
+    Unordered,
     execution::EvaluationCache,
+    index::GroupKey,
     operands::{ElementsOperand, OperandHandle, Partition},
-    operations::{Apply, GroupKernel, GroupKey, Operation, OperationContext, Prepare},
+    operations::{Apply, GroupKernel, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Keys,
 };
@@ -39,22 +40,12 @@ impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: Arity> GroupKernel<M, K, O
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let (buckets, key_failures) = partition.into_parts();
 
-        if !key_failures.is_empty() {
-            return Err(Failure::new(
-                Self::LABEL,
-                UnresolvedGroupKeyFailures::new(
-                    key_failures
-                        .into_iter()
-                        .map(|key_failure| *key_failure.1)
-                        .collect(),
-                ),
-            ));
-        }
+        reject_key_failures::<M>(key_failures, Self::LABEL)?;
 
         let elements: Vec<_> = buckets
             .into_iter()
             .map(|(key, _, payload)| {
-                let index = K::resolve_key(graphrecord, &key)?;
+                let index = K::resolve_key(Self::LABEL, graphrecord, &key)?;
 
                 Ok((index, payload.map(|_| ())))
             })

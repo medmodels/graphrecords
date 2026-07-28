@@ -1,15 +1,16 @@
 use crate::{
-    Arity, AttributeName, Bare, ExpandedIndex, ExpandedIndexReference, Explain, IndexDomain,
-    IndexValue, Indexed, Labeled, Mask, Operand, Position, Positional, QueryResult, Scalar,
-    ValueType,
+    Arity, AttributeName, Bare, ExpandedIndex, ExpandedIndexReference, Explain, FailureKind,
+    IndexDomain, IndexValue, Indexed, Labeled, Mask, Operand, Position, Positional, QueryResult,
+    Scalar, ValueType,
+    element::{ElementEmission, Pipeline, Retention},
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
-        Apply, ArgumentSource, ElementEmission, ElementKernel, ElementPipeline, Keyed,
-        MissingPolicy, Operation, OperationContext, Pipeline, Prepare, Retention, WithMissing,
+        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, MaybeAbsent, MissingPolicy,
+        Operation, OperationContext, Prepare, WithMissing,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
-    traits::{ExpandTo, MaybeAbsent},
+    traits::ExpandTo,
 };
 use graphrecords_core::{
     GraphRecord,
@@ -94,6 +95,21 @@ impl<P: IndexDomain> ExpandToSource<P> for Position {
 }
 
 impl<P: IndexDomain> ExpandToSource<P> for EdgeIndex {
+    type ParentValue = IndexValue<Self>;
+
+    fn resolve_parent<'a>(
+        prepared: &Self::Prepared<'a>,
+        parent: &P::Index<'a>,
+        label: &'static str,
+    ) -> ParentResolution<'a, P, Self>
+    where
+        Self: 'a,
+    {
+        <Self as ArgumentSource<Keyed<P>>>::resolve(prepared, parent, label)
+    }
+}
+
+impl<P: IndexDomain> ExpandToSource<P> for FailureKind {
     type ParentValue = IndexValue<Self>;
 
     fn resolve_parent<'a>(

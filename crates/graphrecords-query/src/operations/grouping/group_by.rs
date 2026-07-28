@@ -1,11 +1,12 @@
 use crate::{
     EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    element::Retention,
     execution::EvaluationCache,
     operands::{
         GroupOperand, OperandHandle, PartitionArity, PartitionBuilder, PartitionClassification,
     },
     operations::{
-        Apply, KeyOperand, KeyedStream, LaneKernel, Operation, OperationContext, Prepare, Retention,
+        Apply, KeyOperand, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::GroupBy,

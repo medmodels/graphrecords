@@ -1,10 +1,11 @@
-use super::{UnresolvedBucketFailures, UnresolvedGroupKeyFailures};
+use super::{UnresolvedBucketFailures, reject_key_failures};
 use crate::{
     Bare, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
     QueryResult, Unordered, ValueType,
     execution::EvaluationCache,
+    index::GroupKey,
     operands::{CheckedIndexedLaneBuilder, OperandHandle, Partition, PartitionArity},
-    operations::{Apply, GroupKernel, GroupKey, Operation, OperationContext, Prepare},
+    operations::{Apply, GroupKernel, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Ungroup,
 };
@@ -61,17 +62,7 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType, C: PartitionArit
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let (buckets, key_failures) = partition.into_parts();
 
-        if !key_failures.is_empty() {
-            return Err(Failure::new(
-                Self::LABEL,
-                UnresolvedGroupKeyFailures::new(
-                    key_failures
-                        .into_iter()
-                        .map(|key_failure| *key_failure.1)
-                        .collect(),
-                ),
-            ));
-        }
+        reject_key_failures::<M>(key_failures, Self::LABEL)?;
 
         let mut output = CheckedIndexedLaneBuilder::<I, V>::new();
         let mut bucket_failures = Vec::new();
@@ -114,17 +105,7 @@ impl<M: IndexDomain, K: GroupKey, V: ValueType, C: PartitionArity<Bare<V>>>
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let (buckets, key_failures) = partition.into_parts();
 
-        if !key_failures.is_empty() {
-            return Err(Failure::new(
-                Self::LABEL,
-                UnresolvedGroupKeyFailures::new(
-                    key_failures
-                        .into_iter()
-                        .map(|key_failure| *key_failure.1)
-                        .collect(),
-                ),
-            ));
-        }
+        reject_key_failures::<M>(key_failures, Self::LABEL)?;
 
         let mut payloads = Vec::with_capacity(buckets.len());
         let mut bucket_failures = Vec::new();

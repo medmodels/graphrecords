@@ -1,11 +1,9 @@
 use crate::{
     AttributeName, Bare, EntityDomain, EntityReference, Explain, FailureKindValue, FailureValue,
     IndexDomain, IndexValue, Indexed, Mask, Operand, QueryResult, Scalar, Unit,
+    element::{Pipeline, Preserving},
     execution::EvaluationCache,
-    operations::{
-        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
-        Preserving,
-    },
+    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Index,
 };

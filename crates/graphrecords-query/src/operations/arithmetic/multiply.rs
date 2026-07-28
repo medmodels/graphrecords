@@ -1,4 +1,5 @@
-use super::{ValueMultiply, arithmetic_bare, arithmetic_indexed};
+use super::{arithmetic_bare, arithmetic_indexed};
+use crate::value::ValueMultiply;
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
     execution::EvaluationCache,

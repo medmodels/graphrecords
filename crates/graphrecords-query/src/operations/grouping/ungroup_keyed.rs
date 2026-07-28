@@ -1,12 +1,11 @@
-use super::UnresolvedGroupKeyFailures;
+use super::reject_key_failures;
 use crate::{
     Bare, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple,
     Operand, QueryResult, Single, Unordered, ValueType,
     execution::EvaluationCache,
+    index::GroupKey,
     operands::{OperandHandle, Partition},
-    operations::{
-        Apply, GroupKernel, GroupKey, MissingGroupAggregate, Operation, OperationContext, Prepare,
-    },
+    operations::{Apply, GroupKernel, MissingGroupAggregate, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::UngroupKeyed,
 };
@@ -53,22 +52,12 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let (buckets, key_failures) = partition.into_parts();
 
-        if !key_failures.is_empty() {
-            return Err(Failure::new(
-                Self::LABEL,
-                UnresolvedGroupKeyFailures::new(
-                    key_failures
-                        .into_iter()
-                        .map(|key_failure| *key_failure.1)
-                        .collect(),
-                ),
-            ));
-        }
+        reject_key_failures::<M>(key_failures, Self::LABEL)?;
 
         let elements: Vec<_> = buckets
             .into_iter()
             .map(|(key, _, payload)| {
-                let index = K::resolve_key(graphrecord, &key)?;
+                let index = K::resolve_key(Self::LABEL, graphrecord, &key)?;
                 let outcome = match payload {
                     Ok(Some((_, outcome))) => outcome,
                     Ok(None) => Err(Failure::new_at::<K, _>(
@@ -103,22 +92,12 @@ impl<M: IndexDomain, K: GroupKey, V: ValueType> GroupKernel<M, K, OperandHandle<
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let (buckets, key_failures) = partition.into_parts();
 
-        if !key_failures.is_empty() {
-            return Err(Failure::new(
-                Self::LABEL,
-                UnresolvedGroupKeyFailures::new(
-                    key_failures
-                        .into_iter()
-                        .map(|key_failure| *key_failure.1)
-                        .collect(),
-                ),
-            ));
-        }
+        reject_key_failures::<M>(key_failures, Self::LABEL)?;
 
         let elements: Vec<_> = buckets
             .into_iter()
             .map(|(key, _, payload)| {
-                let index = K::resolve_key(graphrecord, &key)?;
+                let index = K::resolve_key(Self::LABEL, graphrecord, &key)?;
                 let outcome = match payload {
                     Ok(Some(outcome)) => outcome,
                     Ok(None) => Err(Failure::new_at::<K, _>(
@@ -153,22 +132,12 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let (buckets, key_failures) = partition.into_parts();
 
-        if !key_failures.is_empty() {
-            return Err(Failure::new(
-                Self::LABEL,
-                UnresolvedGroupKeyFailures::new(
-                    key_failures
-                        .into_iter()
-                        .map(|key_failure| *key_failure.1)
-                        .collect(),
-                ),
-            ));
-        }
+        reject_key_failures::<M>(key_failures, Self::LABEL)?;
 
         let elements: Vec<_> = buckets
             .into_iter()
             .map(|(key, _, payload)| {
-                let index = K::resolve_key(graphrecord, &key)?;
+                let index = K::resolve_key(Self::LABEL, graphrecord, &key)?;
                 let outcome = match payload {
                     Ok((_, outcome)) => outcome,
                     Err(failure) => Err(failure),
@@ -198,22 +167,12 @@ impl<M: IndexDomain, K: GroupKey, V: ValueType> GroupKernel<M, K, OperandHandle<
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let (buckets, key_failures) = partition.into_parts();
 
-        if !key_failures.is_empty() {
-            return Err(Failure::new(
-                Self::LABEL,
-                UnresolvedGroupKeyFailures::new(
-                    key_failures
-                        .into_iter()
-                        .map(|key_failure| *key_failure.1)
-                        .collect(),
-                ),
-            ));
-        }
+        reject_key_failures::<M>(key_failures, Self::LABEL)?;
 
         let elements: Vec<_> = buckets
             .into_iter()
             .map(|(key, _, payload)| {
-                let index = K::resolve_key(graphrecord, &key)?;
+                let index = K::resolve_key(Self::LABEL, graphrecord, &key)?;
                 let outcome = match payload {
                     Ok(outcome) => outcome,
                     Err(failure) => Err(failure),

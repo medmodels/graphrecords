@@ -1,12 +1,10 @@
 use crate::{
     Definite, EntityDomain, EntityReference, EvaluateOperand, Explain, IndexDomain, Indexed,
     Multiple, OrderState, QueryResult, Single, Unit, Unordered,
+    element::{Pipeline, Preserving},
     execution::EvaluationCache,
     operands::{DefiniteElementOperand, ElementOperand, ElementsOperand},
-    operations::{
-        ElementKernel, ElementPipeline, KeyedStream, LaneKernel, Operation, Pipeline, Prepare,
-        Preserving,
-    },
+    operations::{ElementKernel, ElementPipeline, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
@@ -76,7 +74,7 @@ impl<R: Relation> Prepare for RelationOperation<R> {
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
-#[explain(label = "Select Relation")]
+#[explain(label = "SelectRelation")]
 pub struct SelectRelationOperation<R> {
     #[argument]
     relation: R,

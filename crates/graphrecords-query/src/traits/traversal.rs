@@ -1,9 +1,4 @@
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum EdgeDirection {
-    Incoming,
-    Outgoing,
-    Both,
-}
+use crate::operations::EdgeDirection;
 
 pub trait Edges {
     type ReturnOperand;

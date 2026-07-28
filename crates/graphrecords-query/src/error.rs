@@ -2,7 +2,6 @@ use crate::{IndexDomain, OwnedIndex};
 use graphrecords_core::errors::GraphRecordError;
 use std::{
     any::{Any, TypeId},
-    cmp::Ordering,
     error::Error,
     fmt::{self, Debug, Display, Formatter},
     hash::{Hash, Hasher},
@@ -64,24 +63,6 @@ impl Eq for FailureKind {}
 impl Hash for FailureKind {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.identifier.hash(state);
-    }
-}
-
-impl PartialOrd for FailureKind {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for FailureKind {
-    fn cmp(&self, other: &Self) -> Ordering {
-        if self.identifier == other.identifier {
-            return Ordering::Equal;
-        }
-
-        self.name
-            .cmp(other.name)
-            .then_with(|| self.identifier.cmp(&other.identifier))
     }
 }
 

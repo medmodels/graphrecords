@@ -1,4 +1,4 @@
-use super::{EnsureSortable, IncomparableIndices};
+use crate::value::{EnsureSortable, IncomparableIndices};
 use crate::{
     Bare, EvaluateOperand, Explain, Failure, IncomparableValues, IncomparableValuesAt, IndexDomain,
     Indexed, Labeled, Multiple, Operand, OrderState, Ordered, QueryResult, ValueType,
@@ -6,10 +6,10 @@ use crate::{
     operands::OperandHandle,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-        ValueOrdering,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Sort,
+    value::ValueOrdering,
 };
 use graphrecords_core::GraphRecord;
 use std::{

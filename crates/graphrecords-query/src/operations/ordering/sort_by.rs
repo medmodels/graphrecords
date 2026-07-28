@@ -1,12 +1,12 @@
-use super::{EnsureSortable, IncomparableIndices};
+use crate::value::{EnsureSortable, IncomparableIndices};
 use crate::{
     EvaluateOperand, Explain, Failure, IncomparableValuesAt, IndexDomain, Indexed, Labeled,
     Multiple, Operand, OrderState, Ordered, QueryResult, ValueType,
+    element::Retention,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
-        Apply, ArgumentSource, Keyed, KeyedStream, LaneKernel, Operation, OperationContext,
-        Prepare, Retention,
+        Apply, ArgumentSource, Keyed, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::SortBy,

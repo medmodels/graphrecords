@@ -1,18 +1,27 @@
 use crate::{
     Arity, Bare, Explain, IndexDomain, Indexed, Multiple, OrderState, QueryResult, Single,
     ValueType,
+    element::{Dropping, ElementEmission, Retention},
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operands::OperandHandle,
     operations::{
-        Alignment, ArgumentSource, Drop, Dropping, ElementEmission, IndexedElementSource, Keyed,
-        Lookup, Prepare, Replace, Retention,
+        Alignment, ArgumentSource, Drop, IndexedElementSource, Keyed, Lookup, Prepare, Replace,
     },
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, PlanNode, Stats},
-    traits::MaybeAbsent,
 };
 use graphrecords_core::GraphRecord;
 use std::{fmt, hash::Hasher, marker::PhantomData};
+
+pub trait MaybeAbsent<A: Alignment>: ArgumentSource<A> {
+    fn on_missing<P>(self, policy: P) -> WithMissing<A, Self, P>
+    where
+        Self: Sized,
+        P: MissingPolicy<A, Self>,
+    {
+        WithMissing::new(self, policy)
+    }
+}
 
 pub trait MissingPolicy<A: Alignment, S: ArgumentSource<A>>:
     Clone + 'static + Explain + PlanIdentity + PlanInputs

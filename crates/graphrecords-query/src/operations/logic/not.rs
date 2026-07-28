@@ -1,11 +1,9 @@
 use crate::{
     Arity, Bare, ElementShape, Explain, IndexDomain, Indexed, Mask, Not, Operand, QueryResult,
+    element::{Pipeline, Preserving},
     execution::EvaluationCache,
     operands::OperandHandle,
-    operations::{
-        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
-        Preserving,
-    },
+    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::GraphRecord;
@@ -14,6 +12,7 @@ use std::ops::Not as BitNot;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Not")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct NotOperation;
 
 impl Prepare for NotOperation {

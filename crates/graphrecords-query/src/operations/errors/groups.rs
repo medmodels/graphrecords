@@ -1,10 +1,10 @@
 use crate::{
-    ErrorGroup, FailureKind,
+    Diagnostic, ErrorGroup, FailureKind,
     operations::{
         ArgumentAbsent, MissingAttribute, MissingGroupAggregate, MissingTraversedAttribute,
     },
 };
-use graphrecords_core::graphrecord::{EdgeIndex, NodeIndex};
+use graphrecords_core::graphrecord::NodeIndex;
 
 pub struct AbsenceErrors;
 
@@ -16,8 +16,7 @@ impl ErrorGroup for AbsenceErrors {
     fn contains(kind: &FailureKind) -> bool {
         kind.is::<ArgumentAbsent>()
             || kind.is::<MissingAttribute>()
-            || kind.is::<MissingTraversedAttribute<NodeIndex>>()
-            || kind.is::<MissingTraversedAttribute<EdgeIndex>>()
+            || kind.name() == MissingTraversedAttribute::<NodeIndex>::name()
             || kind.is::<MissingGroupAggregate>()
     }
 }

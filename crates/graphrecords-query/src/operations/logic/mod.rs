@@ -7,9 +7,8 @@ mod xor;
 
 use crate::{
     IndexDomain, Mask,
-    operations::{
-        ArgumentSource, BarePipeline, IndexedValuePipeline, Keyed, Pipeline, Retention, Unaligned,
-    },
+    element::{BarePipeline, IndexedValuePipeline, Pipeline, Retention},
+    operations::{ArgumentSource, Keyed, Unaligned},
 };
 pub use and::AndOperation;
 pub use not::NotOperation;

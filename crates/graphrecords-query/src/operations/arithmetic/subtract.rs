@@ -1,4 +1,5 @@
-use super::{ValueSubtract, arithmetic_bare, arithmetic_indexed};
+use super::{arithmetic_bare, arithmetic_indexed};
+use crate::value::ValueSubtract;
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
     execution::EvaluationCache,

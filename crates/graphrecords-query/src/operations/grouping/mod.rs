@@ -10,29 +10,30 @@ mod ungroup;
 mod ungroup_keyed;
 
 use crate::{
-    Arity, AttributeName, Bare, Definite, Diagnostic, ElementShape, EntityDomain, EntityReference,
-    ExpandedIndex, ExpandedIndexReference, Failure, FailureKind, FailureKindValue, IndexDomain,
-    IndexValue, Indexed, Mask, Multiple, OrderState, Position, Positional, QueryResult, Scalar,
-    Single, ValueType,
+    Arity, AttributeName, Bare, Definite, Diagnostic, ElementShape, Failure, FailureKind,
+    IndexDomain, Indexed, Multiple, OrderState, Position, Positional, QueryResult, Single,
+    ValueType,
+    index::GroupKey,
     operands::OperandHandle,
-    operations::{ArgumentSource, Keyed, MissingPolicy, WithMissing},
-    traits::MaybeAbsent,
+    operations::{ArgumentSource, Keyed, MaybeAbsent, MissingPolicy, WithMissing},
+    value::GroupingValue,
 };
 pub use broadcast::BroadcastOperation;
 pub use broadcast_via::BroadcastViaOperation;
-use graphrecords_core::{
-    GraphRecord,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
-};
+use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue};
 pub use group_by::GroupByOperation;
 pub use having::HavingOperation;
 pub use inspection::{BucketErrorsOperation, KeyErrorsOperation};
 pub use keys::KeysOperation;
 pub use on_bucket_error::{
     BucketErrorPolicy, BucketErrorPolicyIn, BucketErrorPolicyOf, BucketErrorPolicyWithCause,
+    DropBucketErrors, DropBucketErrorsIn, DropBucketErrorsOf, DropBucketErrorsWithCause,
+    RaiseBucketErrors, RaiseBucketErrorsIn, RaiseBucketErrorsOf, RaiseBucketErrorsWithCause,
 };
 pub use on_key_error::{
-    KeyErrorPolicy, KeyErrorPolicyIn, KeyErrorPolicyOf, KeyErrorPolicyWithCause,
+    DropKeyErrors, DropKeyErrorsIn, DropKeyErrorsOf, DropKeyErrorsWithCause, KeyErrorPolicy,
+    KeyErrorPolicyIn, KeyErrorPolicyOf, KeyErrorPolicyWithCause, RaiseKeyErrors, RaiseKeyErrorsIn,
+    RaiseKeyErrorsOf, RaiseKeyErrorsWithCause,
 };
 use std::{
     error::Error,
@@ -41,137 +42,23 @@ use std::{
 pub use ungroup::UngroupOperation;
 pub use ungroup_keyed::UngroupKeyedOperation;
 
-pub trait GroupKey: IndexDomain {
-    fn resolve_key<'a>(
-        graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>>;
-}
+fn reject_key_failures<M: IndexDomain>(
+    key_failures: Vec<(M::Index<'_>, Box<Failure>)>,
+    label: &'static str,
+) -> QueryResult<()> {
+    if key_failures.is_empty() {
+        return Ok(());
+    }
 
-impl GroupKey for GraphRecordValue {
-    fn resolve_key<'a>(
-        _graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
-        Ok(key.clone())
-    }
-}
-impl GroupKey for bool {
-    fn resolve_key<'a>(
-        _graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
-        Ok(*key)
-    }
-}
-impl GroupKey for AttributeName {
-    fn resolve_key<'a>(
-        _graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
-        Ok(key.clone())
-    }
-}
-impl GroupKey for FailureKind {
-    fn resolve_key<'a>(
-        _graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
-        Ok(*key)
-    }
-}
-impl GroupKey for Positional {
-    fn resolve_key<'a>(
-        _graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
-        Ok(*key)
-    }
-}
-impl GroupKey for NodeIndex {
-    fn resolve_key<'a>(
-        graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
-        Self::resolve_index(graphrecord, key).map_err(|error| {
-            Failure::new_at::<Self, _>("group key resolution", error, &Self::from_owned(key))
-        })
-    }
-}
-impl GroupKey for EdgeIndex {
-    fn resolve_key<'a>(
-        graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
-        Self::resolve_index(graphrecord, key).map_err(|error| {
-            Failure::new_at::<Self, _>("group key resolution", error, &Self::from_owned(key))
-        })
-    }
-}
-impl<P: GroupKey, C: GroupKey> GroupKey for ExpandedIndex<P, C> {
-    fn resolve_key<'a>(
-        graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
-        let parent = P::resolve_key(graphrecord, key.parent_index())?;
-
-        match key.child_index() {
-            None => Ok(ExpandedIndexReference::source(parent)),
-            Some(child) => Ok(ExpandedIndexReference::child(
-                parent,
-                C::resolve_key(graphrecord, child)?,
-            )),
-        }
-    }
-}
-
-pub trait GroupingValue: ValueType {
-    type Key: GroupKey;
-
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned;
-}
-
-impl GroupingValue for Scalar {
-    type Key = GraphRecordValue;
-
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
-        value.clone()
-    }
-}
-impl GroupingValue for Mask {
-    type Key = bool;
-
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
-        *value
-    }
-}
-impl GroupingValue for AttributeName {
-    type Key = Self;
-
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
-        value.clone()
-    }
-}
-impl GroupingValue for FailureKindValue {
-    type Key = FailureKind;
-
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
-        *value
-    }
-}
-impl<I: GroupKey> GroupingValue for IndexValue<I> {
-    type Key = I;
-
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
-        value.clone()
-    }
-}
-impl<E: EntityDomain + GroupKey> GroupingValue for EntityReference<E> {
-    type Key = E;
-
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
-        E::to_owned(value)
-    }
+    Err(Failure::new(
+        label,
+        UnresolvedGroupKeyFailures::new(
+            key_failures
+                .into_iter()
+                .map(|key_failure| *key_failure.1)
+                .collect(),
+        ),
+    ))
 }
 
 #[diagnostic::on_unimplemented(
@@ -213,6 +100,13 @@ impl<I: IndexDomain> KeyOperand<I> for Position {
     }
 }
 impl<I: IndexDomain> KeyOperand<I> for EdgeIndex {
+    type Key = Self;
+
+    fn to_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
+        *value
+    }
+}
+impl<I: IndexDomain> KeyOperand<I> for FailureKind {
     type Key = Self;
 
     fn to_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {

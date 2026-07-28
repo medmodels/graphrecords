@@ -1,63 +1,13 @@
 use crate::{
-    EntityDomain, EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand,
-    QueryResult, Unit,
+    EntityReference, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, Unit,
+    element::{Pipeline, Preserving},
     execution::EvaluationCache,
-    operations::{
-        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
-        Preserving,
-    },
-    optimizer::{
-        EdgeGroupSize, Estimate, NodeGroupSize, OperationInputs, OptimizerHints, PlanIdentity,
-        PlanInputs, Stats,
-    },
+    index::IndicesInGroup,
+    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::InGroup,
 };
-use graphrecords_core::{
-    GraphRecord,
-    graphrecord::{EdgeIndex, Group, NodeIndex},
-};
-use graphrecords_utils::aliases::GrHashSet;
-
-pub trait IndicesInGroup: EntityDomain {
-    fn indices_in_group<'a>(
-        graphrecord: &'a GraphRecord,
-        group: &Group,
-    ) -> QueryResult<GrHashSet<Self::Index<'a>>>;
-
-    fn group_size(stats: &Stats, group: &Group) -> usize;
-}
-
-impl IndicesInGroup for NodeIndex {
-    fn indices_in_group<'a>(
-        graphrecord: &'a GraphRecord,
-        group: &Group,
-    ) -> QueryResult<GrHashSet<Self::Index<'a>>> {
-        Ok(graphrecord
-            .nodes_in_group(group)
-            .map_err(|error| Failure::new(InGroupOperation::LABEL, error))?
-            .collect())
-    }
-
-    fn group_size(stats: &Stats, group: &Group) -> usize {
-        stats.get::<NodeGroupSize>(group)
-    }
-}
-
-impl IndicesInGroup for EdgeIndex {
-    fn indices_in_group<'a>(
-        graphrecord: &'a GraphRecord,
-        group: &Group,
-    ) -> QueryResult<GrHashSet<Self::Index<'a>>> {
-        Ok(graphrecord
-            .edges_in_group(group)
-            .map_err(|error| Failure::new(InGroupOperation::LABEL, error))?
-            .collect())
-    }
-
-    fn group_size(stats: &Stats, group: &Group) -> usize {
-        stats.get::<EdgeGroupSize>(group)
-    }
-}
+use graphrecords_core::{GraphRecord, graphrecord::Group};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -88,7 +38,7 @@ impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
-        let members = I::indices_in_group(graphrecord, prepared)?;
+        let members = I::indices_in_group(Self::LABEL, graphrecord, prepared)?;
 
         Ok(Pipeline::keyed(move |index, membership: QueryResult<_>| {
             membership.map(|()| members.contains(&index))
@@ -118,7 +68,7 @@ impl<E: IndicesInGroup, I: IndexDomain> ElementKernel<Indexed<I, EntityReference
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
-        let members = E::indices_in_group(graphrecord, prepared)?;
+        let members = E::indices_in_group(Self::LABEL, graphrecord, prepared)?;
 
         Ok(Pipeline::unkeyed(move |reference: QueryResult<_>| {
             reference.map(|entity| members.contains(&entity))

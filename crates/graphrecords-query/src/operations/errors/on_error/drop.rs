@@ -1,10 +1,11 @@
 use crate::{
     Bare, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Operand, QueryResult, ValueType,
+    element::{Dropping, Pipeline},
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operations::{
-        Apply, Dropping, ElementKernel, ElementPipeline, ErrorPolicy, ErrorPolicyIn, ErrorPolicyOf,
-        ErrorPolicyWithCause, Operation, OperationContext, Pipeline, Prepare,
+        Apply, ElementKernel, ElementPipeline, ErrorPolicy, ErrorPolicyIn, ErrorPolicyOf,
+        ErrorPolicyWithCause, Operation, OperationContext, Prepare,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
 };
@@ -19,10 +20,12 @@ use std::{
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Drop")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct Drop;
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct DropErrorsOf<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
 }
@@ -49,6 +52,7 @@ impl<D: Diagnostic> Explain for DropErrorsOf<D> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct DropErrorsIn<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
 }
@@ -75,6 +79,7 @@ impl<G: ErrorGroup> Explain for DropErrorsIn<G> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct DropErrorsWithCause<C: Error + 'static> {
     marker: PhantomData<fn() -> C>,
 }

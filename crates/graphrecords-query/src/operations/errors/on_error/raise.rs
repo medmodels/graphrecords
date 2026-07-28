@@ -1,13 +1,14 @@
 use crate::{
     Bare, Definite, Diagnostic, ErrorGroup, EvaluateOperand, Explain, Failure, IndexDomain,
     Indexed, Labeled, Multiple, Operand, OrderState, QueryResult, Single, ValueType,
+    element::Preserving,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operands::OperandHandle,
     operations::{
         Apply, ArgumentSource, BareStream, ErrorPolicy, ErrorPolicyIn, ErrorPolicyOf,
         ErrorPolicyWithCause, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-        Preserving, Unaligned,
+        Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
 };
@@ -22,10 +23,12 @@ use std::{
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
 #[explain(label = "Raise")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct Raise;
 
 #[derive(Clone, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct RaiseWhen<C> {
     #[argument]
     condition: C,
@@ -53,6 +56,7 @@ impl Raise {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseErrorsOf<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
 }
@@ -83,6 +87,7 @@ impl<D: Diagnostic> Explain for RaiseErrorsOf<D> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseErrorsIn<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
 }
@@ -113,6 +118,7 @@ impl<G: ErrorGroup> Explain for RaiseErrorsIn<G> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseErrorsWithCause<E: Error + 'static> {
     marker: PhantomData<fn() -> E>,
 }
@@ -143,6 +149,7 @@ impl<E: Error + 'static> Explain for RaiseErrorsWithCause<E> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct RaiseWhenErrorsOf<D: Diagnostic, C> {
     #[argument]
     condition: C,
@@ -179,6 +186,7 @@ impl<D: Diagnostic, C: Explain> Explain for RaiseWhenErrorsOf<D, C> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct RaiseWhenErrorsIn<G: ErrorGroup, C> {
     #[argument]
     condition: C,
@@ -215,6 +223,7 @@ impl<G: ErrorGroup, C: Explain> Explain for RaiseWhenErrorsIn<G, C> {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct RaiseWhenErrorsWithCause<E: Error + 'static, C> {
     #[argument]
     condition: C,

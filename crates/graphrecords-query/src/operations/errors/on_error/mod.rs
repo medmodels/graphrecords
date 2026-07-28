@@ -6,9 +6,12 @@ use crate::{
     Diagnostic, ErrorGroup, Operand,
     traits::{OnError, OnErrorIn, OnErrorOf, OnErrorWithCause},
 };
-pub use drop::Drop;
-pub use raise::{Raise, RaiseWhen};
-pub use replace::Replace;
+pub use drop::{Drop, DropErrorsIn, DropErrorsOf, DropErrorsWithCause};
+pub use raise::{
+    Raise, RaiseErrorsIn, RaiseErrorsOf, RaiseErrorsWithCause, RaiseWhen, RaiseWhenErrorsIn,
+    RaiseWhenErrorsOf, RaiseWhenErrorsWithCause,
+};
+pub use replace::{Replace, ReplaceErrorsIn, ReplaceErrorsOf, ReplaceErrorsWithCause};
 use std::error::Error;
 
 pub trait ErrorPolicy<I: Operand>: Clone + 'static {

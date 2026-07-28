@@ -1,10 +1,8 @@
 use crate::{
     Explain, IndexDomain, Indexed, Operand, QueryResult, Unit, ValueType,
+    element::{Pipeline, Preserving},
     execution::EvaluationCache,
-    operations::{
-        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Pipeline, Prepare,
-        Preserving,
-    },
+    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::Discard,
 };

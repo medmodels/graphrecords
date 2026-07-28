@@ -1,4 +1,5 @@
-use super::{ValueOrdering, ordering_bare, ordering_indexed};
+use super::{ordering_bare, ordering_indexed};
+use crate::value::ValueOrdering;
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, ValueType,
     execution::EvaluationCache,

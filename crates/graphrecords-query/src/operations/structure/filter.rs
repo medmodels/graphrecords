@@ -1,9 +1,10 @@
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    element::{Dropping, Pipeline, Retention},
     execution::EvaluationCache,
     operations::{
-        Apply, ArgumentSource, Dropping, ElementKernel, ElementPipeline, Keyed, Operation,
-        OperationContext, Pipeline, Prepare, Retention, Unaligned,
+        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
+        Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Filter,

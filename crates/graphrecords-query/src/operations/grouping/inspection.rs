@@ -1,10 +1,10 @@
 use crate::{
-    Arity, ElementShape, EvaluateOperand, Explain, IndexDomain, Operand, QueryResult, Unordered,
+    Arity, ElementShape, EvaluateOperand, Explain, IndexDomain, Labeled, Operand, QueryResult,
+    Unordered,
     execution::EvaluationCache,
+    index::GroupKey,
     operands::{FailuresOperand, OperandHandle, Partition},
-    operations::{
-        Apply, BucketFailureArity, GroupKernel, GroupKey, Operation, OperationContext, Prepare,
-    },
+    operations::{Apply, BucketFailureArity, GroupKernel, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::{BucketErrors, KeyErrors},
 };
@@ -13,27 +13,10 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
 #[explain(label = "BucketErrors")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct BucketErrorsOperation;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
-#[operation(scope = Group)]
-#[explain(label = "KeyErrors")]
-#[plan(optimizer_hints(empty = if_any))]
-pub struct KeyErrorsOperation;
-
 impl Prepare for BucketErrorsOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl Prepare for KeyErrorsOperation {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -59,7 +42,7 @@ impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: BucketFailureArity<S>>
             .buckets()
             .filter_map(|bucket| {
                 C::bucket_failure(bucket.payload()).map(|failure| {
-                    let index = K::resolve_key(graphrecord, bucket.key())?;
+                    let index = K::resolve_key(Self::LABEL, graphrecord, bucket.key())?;
 
                     Ok((index, Ok(failure.clone())))
                 })
@@ -67,6 +50,32 @@ impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: BucketFailureArity<S>>
             .collect::<QueryResult<_>>()?;
 
         Ok(Box::new(elements.into_iter()))
+    }
+}
+
+impl<O: Apply<BucketErrorsOperation>> BucketErrors for O {
+    type ReturnOperand = O::Output;
+
+    fn bucket_errors(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), BucketErrorsOperation))
+    }
+}
+
+#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Group)]
+#[explain(label = "KeyErrors")]
+#[plan(optimizer_hints(empty = if_any))]
+pub struct KeyErrorsOperation;
+
+impl Prepare for KeyErrorsOperation {
+    type Prepared<'a> = ();
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(())
     }
 }
 
@@ -87,14 +96,6 @@ impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: Arity> GroupKernel<M, K, O
                 .into_iter()
                 .map(|(member, failure)| (member, Ok(*failure))),
         ))
-    }
-}
-
-impl<O: Apply<BucketErrorsOperation>> BucketErrors for O {
-    type ReturnOperand = O::Output;
-
-    fn bucket_errors(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), BucketErrorsOperation))
     }
 }
 

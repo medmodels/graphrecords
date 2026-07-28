@@ -1,6 +1,13 @@
 mod drop;
 mod raise;
 
+pub use drop::{
+    DropBucketErrors, DropBucketErrorsIn, DropBucketErrorsOf, DropBucketErrorsWithCause,
+};
+pub use raise::{
+    RaiseBucketErrors, RaiseBucketErrorsIn, RaiseBucketErrorsOf, RaiseBucketErrorsWithCause,
+};
+
 use crate::{
     Diagnostic, ErrorGroup, Operand,
     traits::{OnBucketError, OnBucketErrorIn, OnBucketErrorOf, OnBucketErrorWithCause},
