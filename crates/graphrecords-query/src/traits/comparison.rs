@@ -1,47 +1,35 @@
-pub trait GreaterThan {
-    type ComparisonOperand;
+pub trait GreaterThan<A> {
     type ReturnOperand;
 
-    fn greater_than<V: Into<Self::ComparisonOperand>>(&mut self, value: V) -> Self::ReturnOperand;
+    fn greater_than(&self, argument: A) -> Self::ReturnOperand;
 }
 
-pub trait GreaterThanOrEqualTo {
-    type ComparisonOperand;
+pub trait GreaterThanOrEqualTo<A> {
     type ReturnOperand;
 
-    fn greater_than_or_equal_to<V: Into<Self::ComparisonOperand>>(
-        &mut self,
-        value: V,
-    ) -> Self::ReturnOperand;
+    fn greater_than_or_equal_to(&self, argument: A) -> Self::ReturnOperand;
 }
 
-pub trait LessThan {
-    type ComparisonOperand;
+pub trait LessThan<A> {
     type ReturnOperand;
 
-    fn less_than<V: Into<Self::ComparisonOperand>>(&mut self, value: V) -> Self::ReturnOperand;
+    fn less_than(&self, argument: A) -> Self::ReturnOperand;
 }
 
-pub trait LessThanOrEqualTo {
-    type ComparisonOperand;
+pub trait LessThanOrEqualTo<A> {
     type ReturnOperand;
 
-    fn less_than_or_equal_to<V: Into<Self::ComparisonOperand>>(
-        &mut self,
-        value: V,
-    ) -> Self::ReturnOperand;
+    fn less_than_or_equal_to(&self, argument: A) -> Self::ReturnOperand;
 }
 
-pub trait EqualTo {
-    type ComparisonOperand;
+pub trait EqualTo<A> {
     type ReturnOperand;
 
-    fn equal_to<V: Into<Self::ComparisonOperand>>(&mut self, value: V) -> Self::ReturnOperand;
+    fn equal_to(&self, argument: A) -> Self::ReturnOperand;
 }
 
-pub trait NotEqualTo {
-    type ComparisonOperand;
+pub trait NotEqualTo<A> {
     type ReturnOperand;
 
-    fn not_equal_to<V: Into<Self::ComparisonOperand>>(&mut self, value: V) -> Self::ReturnOperand;
+    fn not_equal_to(&self, argument: A) -> Self::ReturnOperand;
 }

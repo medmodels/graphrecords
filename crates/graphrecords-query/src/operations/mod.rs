@@ -35,13 +35,17 @@ pub use aggregation::{
 };
 pub use argument::{
     Absent, AlignableArity, Alignment, ArgumentAbsent, ArgumentSource, EnumerableArity,
-    IndexedElementContainer, IndexedElementSource, Keyed, Lookup, Prepare, PreparedArity,
-    Unaligned,
+    IndexedElementContainer, IndexedElementSource, Keyed, Lookup, Prepare, PreparedArity, SetArity,
+    SetSource, Unaligned,
 };
 pub use arithmetic::{
     DivideOperation, DivisionByZero, ModuloByZero, ModuloOperation, SubtractOperation,
 };
 pub use cache::CacheContext;
+pub use comparison::{
+    EqualToOperation, GreaterThanOperation, GreaterThanOrEqualToOperation, LessThanOperation,
+    LessThanOrEqualToOperation, NotEqualToOperation,
+};
 pub use conversion::{
     DiscardOperation, EnumerateOperation, ExpandToOperation, ExpandToSource, ParentResolution,
 };
@@ -69,6 +73,7 @@ pub use kernel::{
     Pipeline,
 };
 pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
+pub use membership::IsInOperation;
 pub use on_missing::{MissingPolicy, WithMissing};
 pub use ordering::{
     EnsureSortable, FirstOperation, IncomparableIndices, LastOperation, ReverseOperation,

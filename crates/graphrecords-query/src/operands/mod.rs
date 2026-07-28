@@ -17,7 +17,7 @@ use crate::{
     explain::Explanation,
     operations::{
         Absent, AlignableArity, Alignment, ArgumentSource, EnumerableArity, IndexedElementSource,
-        Keyed, Lookup, Prepare, PreparedArity, Preserving,
+        Keyed, Lookup, Prepare, PreparedArity, Preserving, SetArity, SetSource,
     },
     optimizer::{Estimate, Estimated, PlanNode, Stats},
     sealed::Sealed,
@@ -64,7 +64,7 @@ pub use references::{
     DefiniteReferenceIndexOperand, DefiniteReferenceOperand, ReferenceIndexOperand,
     ReferenceIndicesOperand, ReferenceOperand, ReferencesOperand,
 };
-use std::{marker::PhantomData, sync::Arc};
+use std::{hash::Hash, marker::PhantomData, sync::Arc};
 pub use values::{
     BareValueOperand, BareValuesOperand, DefiniteBareValueOperand, DefiniteValueOperand,
     ValueOperand, ValuesOperand,
@@ -572,6 +572,20 @@ impl<S: ElementShape, C: EnumerableArity<S, I>, I: IndexDomain> IndexedElementSo
     }
 }
 
+impl<S: ElementShape, C: SetArity<S>> SetSource for OperandHandle<S, C> {
+    type Value<'a>
+        = C::Value<'a>
+    where
+        Self: 'a;
+
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        C::set(prepared)
+    }
+}
+
 impl<I: IndexDomain, V: ValueType, O: OrderState> PreparedArity<Indexed<I, V>> for Multiple<O> {
     type Prepared<'a>
         = Arc<PreparedIndexedMultiple<'a, I, V>>
@@ -655,6 +669,30 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> EnumerableArity<Indexed<I, V>,
     }
 }
 
+impl<I, V, O> SetArity<Indexed<I, V>> for Multiple<O>
+where
+    I: IndexDomain,
+    V: ValueType,
+    O: OrderState,
+    for<'a> V::Value<'a>: Eq + Hash,
+{
+    type Value<'a>
+        = V::Value<'a>
+    where
+        Indexed<I, V>: 'a;
+
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    where
+        Indexed<I, V>: 'a,
+    {
+        prepared
+            .elements
+            .iter()
+            .map(|element| element.1.clone())
+            .collect()
+    }
+}
+
 impl<I: IndexDomain, V: ValueType> PreparedArity<Indexed<I, V>> for Single {
     type Prepared<'a>
         = Option<(I::Index<'a>, QueryResult<V::Value<'a>>)>
@@ -713,6 +751,28 @@ impl<I: IndexDomain, V: ValueType> EnumerableArity<Indexed<I, V>, I> for Single 
     }
 }
 
+impl<I, V> SetArity<Indexed<I, V>> for Single
+where
+    I: IndexDomain,
+    V: ValueType,
+    for<'a> V::Value<'a>: Eq + Hash,
+{
+    type Value<'a>
+        = V::Value<'a>
+    where
+        Indexed<I, V>: 'a;
+
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    where
+        Indexed<I, V>: 'a,
+    {
+        match prepared {
+            Some(element) => Ok(std::iter::once(element.1?).collect()),
+            None => Ok(GrHashSet::default()),
+        }
+    }
+}
+
 impl<I: IndexDomain, V: ValueType> PreparedArity<Indexed<I, V>> for Definite {
     type Prepared<'a>
         = (I::Index<'a>, QueryResult<V::Value<'a>>)
@@ -768,6 +828,60 @@ impl<I: IndexDomain, V: ValueType> EnumerableArity<Indexed<I, V>, I> for Definit
     }
 }
 
+impl<I, V> SetArity<Indexed<I, V>> for Definite
+where
+    I: IndexDomain,
+    V: ValueType,
+    for<'a> V::Value<'a>: Eq + Hash,
+{
+    type Value<'a>
+        = V::Value<'a>
+    where
+        Indexed<I, V>: 'a;
+
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    where
+        Indexed<I, V>: 'a,
+    {
+        Ok(std::iter::once(prepared.1?).collect())
+    }
+}
+
+impl<V: ValueType, O: OrderState> PreparedArity<Bare<V>> for Multiple<O> {
+    type Prepared<'a>
+        = Arc<Vec<QueryResult<V::Value<'a>>>>
+    where
+        Bare<V>: 'a;
+
+    fn prepare<'a>(
+        container: Self::Container<'a, <Bare<V> as ElementShape>::Element<'a>>,
+    ) -> QueryResult<Self::Prepared<'a>>
+    where
+        Bare<V>: 'a,
+    {
+        Ok(Arc::new(container.collect()))
+    }
+}
+
+impl<V, O> SetArity<Bare<V>> for Multiple<O>
+where
+    V: ValueType,
+    O: OrderState,
+    for<'a> V::Value<'a>: Eq + Hash,
+{
+    type Value<'a>
+        = V::Value<'a>
+    where
+        Bare<V>: 'a;
+
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    where
+        Bare<V>: 'a,
+    {
+        prepared.iter().cloned().collect()
+    }
+}
+
 impl<V: ValueType> PreparedArity<Bare<V>> for Single {
     type Prepared<'a>
         = Option<QueryResult<V::Value<'a>>>
@@ -810,6 +924,27 @@ impl<A: Alignment, V: ValueType> AlignableArity<Bare<V>, A> for Single {
     }
 }
 
+impl<V> SetArity<Bare<V>> for Single
+where
+    V: ValueType,
+    for<'a> V::Value<'a>: Eq + Hash,
+{
+    type Value<'a>
+        = V::Value<'a>
+    where
+        Bare<V>: 'a;
+
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    where
+        Bare<V>: 'a,
+    {
+        match prepared {
+            Some(outcome) => Ok(std::iter::once(outcome?).collect()),
+            None => Ok(GrHashSet::default()),
+        }
+    }
+}
+
 impl<V: ValueType> PreparedArity<Bare<V>> for Definite {
     type Prepared<'a>
         = QueryResult<V::Value<'a>>
@@ -846,5 +981,23 @@ impl<A: Alignment, V: ValueType> AlignableArity<Bare<V>, A> for Definite {
         Bare<V>: 'a,
     {
         Lookup::Present(prepared)
+    }
+}
+
+impl<V> SetArity<Bare<V>> for Definite
+where
+    V: ValueType,
+    for<'a> V::Value<'a>: Eq + Hash,
+{
+    type Value<'a>
+        = V::Value<'a>
+    where
+        Bare<V>: 'a;
+
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    where
+        Bare<V>: 'a,
+    {
+        Ok(std::iter::once(prepared?).collect())
     }
 }
