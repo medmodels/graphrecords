@@ -1,1 +1,109 @@
+use super::{string_argument_map_bare, string_argument_map_indexed};
+use crate::{
+    Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    execution::EvaluationCache,
+    operations::{
+        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
+        Prepare, Unaligned,
+    },
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    traits::Contains,
+    value::StringValue,
+};
+use graphrecords_core::GraphRecord;
 
+#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
+#[explain(label = "Contains")]
+#[plan(optimizer_hints(empty = if_all))]
+pub struct ContainsOperation<A> {
+    #[argument]
+    argument: A,
+}
+
+impl<A: Prepare> Prepare for ContainsOperation<A> {
+    type Prepared<'a>
+        = A::Prepared<'a>
+    where
+        Self: 'a;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        self.argument.prepare(graphrecord, cache)
+    }
+}
+
+impl<I, V, A> ElementKernel<Indexed<I, V>> for ContainsOperation<A>
+where
+    I: IndexDomain,
+    V: StringValue,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+{
+    type Emission = A::Retention;
+    type OutShape = Indexed<I, Mask>;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
+        Ok(string_argument_map_indexed::<_, V, Mask, A>(
+            prepared,
+            Self::LABEL,
+            |_, value, argument| Ok(value.contains(&argument)),
+        ))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            distinct: None,
+            selectivity: None,
+            ..input
+        }
+    }
+}
+
+impl<V, A> ElementKernel<Bare<V>> for ContainsOperation<A>
+where
+    V: StringValue,
+    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+{
+    type Emission = A::Retention;
+    type OutShape = Bare<Mask>;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
+        Ok(string_argument_map_bare::<V, Mask, A>(
+            prepared,
+            Self::LABEL,
+            |_, value, argument| Ok(value.contains(&argument)),
+        ))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            distinct: None,
+            selectivity: None,
+            ..input
+        }
+    }
+}
+
+impl<O, A> Contains<A> for O
+where
+    ContainsOperation<A>: Operation,
+    O: Apply<ContainsOperation<A>>,
+{
+    type ReturnOperand = O::Output;
+
+    fn contains(&self, argument: A) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(
+            self.clone(),
+            ContainsOperation { argument },
+        ))
+    }
+}

@@ -1,27 +1,42 @@
-use super::{equality_bare, equality_indexed};
+use super::{string_argument_map_bare, string_argument_map_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, ValueType,
+    Bare, Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::EqualTo,
-    value::ValueEquality,
+    traits::Matches,
+    value::{InvalidRegexPattern, StringValue},
 };
 use graphrecords_core::GraphRecord;
+use regex::Regex;
+
+fn regex_matches(label: &'static str, value: &str, pattern: &str) -> QueryResult<bool> {
+    let expression = Regex::new(pattern).map_err(|error| {
+        Failure::new(
+            label,
+            InvalidRegexPattern {
+                pattern: pattern.to_string(),
+                error,
+            },
+        )
+    })?;
+
+    Ok(expression.is_match(value))
+}
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
-#[explain(label = "EqualTo")]
+#[explain(label = "Matches")]
 #[plan(optimizer_hints(empty = if_all))]
-pub struct EqualToOperation<A> {
+pub struct MatchesOperation<A> {
     #[argument]
-    argument: A,
+    pattern: A,
 }
 
-impl<A: Prepare> Prepare for EqualToOperation<A> {
+impl<A: Prepare> Prepare for MatchesOperation<A> {
     type Prepared<'a>
         = A::Prepared<'a>
     where
@@ -32,15 +47,15 @@ impl<A: Prepare> Prepare for EqualToOperation<A> {
         graphrecord: &'a GraphRecord,
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::Prepared<'a>> {
-        self.argument.prepare(graphrecord, cache)
+        self.pattern.prepare(graphrecord, cache)
     }
 }
 
-impl<I, V, A> ElementKernel<Indexed<I, V>> for EqualToOperation<A>
+impl<I, V, A> ElementKernel<Indexed<I, V>> for MatchesOperation<A>
 where
     I: IndexDomain,
-    for<'a> V: ValueEquality + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
+    V: StringValue,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, Mask>;
@@ -49,24 +64,26 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(equality_indexed::<_, A, V>(prepared, Self::LABEL, V::equal))
+        Ok(string_argument_map_indexed::<_, V, Mask, A>(
+            prepared,
+            Self::LABEL,
+            |label, value, pattern| regex_matches(label, &value, &pattern),
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        let selectivity = input.distinct.map(|distinct| 1.0 / distinct.max(1) as f64);
-
         Estimate {
             distinct: None,
-            selectivity,
+            selectivity: None,
             ..input
         }
     }
 }
 
-impl<V, A> ElementKernel<Bare<V>> for EqualToOperation<A>
+impl<V, A> ElementKernel<Bare<V>> for MatchesOperation<A>
 where
-    for<'a> V: ValueEquality + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
+    V: StringValue,
+    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;
     type OutShape = Bare<Mask>;
@@ -75,31 +92,33 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(equality_bare::<A, V>(prepared, Self::LABEL, V::equal))
+        Ok(string_argument_map_bare::<V, Mask, A>(
+            prepared,
+            Self::LABEL,
+            |label, value, pattern| regex_matches(label, &value, &pattern),
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        let selectivity = input.distinct.map(|distinct| 1.0 / distinct.max(1) as f64);
-
         Estimate {
             distinct: None,
-            selectivity,
+            selectivity: None,
             ..input
         }
     }
 }
 
-impl<O, A> EqualTo<A> for O
+impl<O, A> Matches<A> for O
 where
-    EqualToOperation<A>: Operation,
-    O: Apply<EqualToOperation<A>>,
+    MatchesOperation<A>: Operation,
+    O: Apply<MatchesOperation<A>>,
 {
     type ReturnOperand = O::Output;
 
-    fn equal_to(&self, argument: A) -> Self::ReturnOperand {
+    fn matches(&self, pattern: A) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(
             self.clone(),
-            EqualToOperation { argument },
+            MatchesOperation { pattern },
         ))
     }
 }

@@ -10,10 +10,10 @@ pub trait Last {
     fn last(&self) -> Self::ReturnOperand;
 }
 
-pub trait Reverse {
+pub trait ReverseOrder {
     type ReturnOperand;
 
-    fn reverse(&self) -> Self::ReturnOperand;
+    fn reverse_order(&self) -> Self::ReturnOperand;
 }
 
 pub trait Sort {

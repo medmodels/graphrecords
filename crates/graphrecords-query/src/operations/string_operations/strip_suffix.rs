@@ -1,27 +1,27 @@
-use super::{arithmetic_bare, arithmetic_indexed};
+use super::{string_argument_map_bare, string_argument_map_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::Subtract,
-    value::ValueSubtract,
+    traits::StripSuffix,
+    value::StringValue,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
-#[explain(label = "Subtract")]
+#[explain(label = "StripSuffix")]
 #[plan(optimizer_hints(empty = if_all))]
-pub struct SubtractOperation<A> {
+pub struct StripSuffixOperation<A> {
     #[argument]
-    argument: A,
+    suffix: A,
 }
 
-impl<A: Prepare> Prepare for SubtractOperation<A> {
+impl<A: Prepare> Prepare for StripSuffixOperation<A> {
     type Prepared<'a>
         = A::Prepared<'a>
     where
@@ -32,15 +32,15 @@ impl<A: Prepare> Prepare for SubtractOperation<A> {
         graphrecord: &'a GraphRecord,
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::Prepared<'a>> {
-        self.argument.prepare(graphrecord, cache)
+        self.suffix.prepare(graphrecord, cache)
     }
 }
 
-impl<I, V, A> ElementKernel<Indexed<I, V>> for SubtractOperation<A>
+impl<I, V, A> ElementKernel<Indexed<I, V>> for StripSuffixOperation<A>
 where
     I: IndexDomain,
-    for<'a> V: ValueSubtract + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
+    V: StringValue,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, V>;
@@ -49,10 +49,17 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(arithmetic_indexed::<_, A, V>(
+        Ok(string_argument_map_indexed::<_, V, V, A>(
             prepared,
             Self::LABEL,
-            V::subtract,
+            |_, value, suffix| {
+                let value = match value.strip_suffix(&suffix) {
+                    Some(stripped) => stripped.to_string(),
+                    None => value,
+                };
+
+                Ok(V::from_string(value))
+            },
         ))
     }
 
@@ -64,10 +71,10 @@ where
     }
 }
 
-impl<V, A> ElementKernel<Bare<V>> for SubtractOperation<A>
+impl<V, A> ElementKernel<Bare<V>> for StripSuffixOperation<A>
 where
-    for<'a> V: ValueSubtract + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
+    V: StringValue,
+    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;
     type OutShape = Bare<V>;
@@ -76,7 +83,18 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(arithmetic_bare::<A, V>(prepared, Self::LABEL, V::subtract))
+        Ok(string_argument_map_bare::<V, V, A>(
+            prepared,
+            Self::LABEL,
+            |_, value, suffix| {
+                let value = match value.strip_suffix(&suffix) {
+                    Some(stripped) => stripped.to_string(),
+                    None => value,
+                };
+
+                Ok(V::from_string(value))
+            },
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -87,17 +105,17 @@ where
     }
 }
 
-impl<O, A> Subtract<A> for O
+impl<O, A> StripSuffix<A> for O
 where
-    SubtractOperation<A>: Operation,
-    O: Apply<SubtractOperation<A>>,
+    StripSuffixOperation<A>: Operation,
+    O: Apply<StripSuffixOperation<A>>,
 {
     type ReturnOperand = O::Output;
 
-    fn subtract(&self, argument: A) -> Self::ReturnOperand {
+    fn strip_suffix(&self, suffix: A) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(
             self.clone(),
-            SubtractOperation { argument },
+            StripSuffixOperation { suffix },
         ))
     }
 }

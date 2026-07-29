@@ -84,13 +84,19 @@ pub use numeric::{
 };
 pub use on_missing::{MaybeAbsent, MissingPolicy, WithMissing};
 pub use ordering::{
-    FirstOperation, LastOperation, ReverseOperation, SortByOperation, SortOperation, TakeOperation,
-    UnorderOperation,
+    FirstOperation, LastOperation, ReverseOrderOperation, SortByOperation, SortOperation,
+    TakeOperation, UnorderOperation,
 };
 use std::{
     any::Any,
     fmt,
     hash::{Hash, Hasher},
+};
+pub use string_operations::{
+    ContainsOperation, EndsWithOperation, LengthOperation, LowercaseOperation, MatchesOperation,
+    PadEndOperation, PadStartOperation, ReplaceAllOperation, ReplaceOperation, ReverseOperation,
+    SliceOperation, SplitOperation, StartsWithOperation, StripPrefixOperation,
+    StripSuffixOperation, TrimEndOperation, TrimOperation, TrimStartOperation, UppercaseOperation,
 };
 pub use structure::{
     AttributeOperation, AttributesOperation, FilterOperation, InGroupOperation, MissingAttribute,

@@ -1,22 +1,30 @@
 use super::{string_map_bare, string_map_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult, Scalar,
     element::Preserving,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::Uppercase,
-    value::StringValue,
+    traits::Length,
+    value::{StringLengthOverflow, StringValue},
 };
-use graphrecords_core::GraphRecord;
+use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
+
+fn length_chars(label: &'static str, value: &str) -> QueryResult<GraphRecordValue> {
+    let length = value.chars().count();
+    let length =
+        i64::try_from(length).map_err(|_| Failure::new(label, StringLengthOverflow { length }))?;
+
+    Ok(GraphRecordValue::Int(length))
+}
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
-#[explain(label = "Uppercase")]
+#[explain(label = "Length")]
 #[plan(optimizer_hints(empty = if_any))]
-pub struct UppercaseOperation;
+pub struct LengthOperation;
 
-impl Prepare for UppercaseOperation {
+impl Prepare for LengthOperation {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -28,21 +36,22 @@ impl Prepare for UppercaseOperation {
     }
 }
 
-impl<I, V> ElementKernel<Indexed<I, V>> for UppercaseOperation
+impl<I, V> ElementKernel<Indexed<I, V>> for LengthOperation
 where
     I: IndexDomain,
     V: StringValue,
 {
     type Emission = Preserving;
-    type OutShape = Indexed<I, V>;
+    type OutShape = Indexed<I, Scalar>;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(string_map_indexed::<I, V, V>(Self::LABEL, |_, value| {
-            Ok(V::from_string(value.to_uppercase()))
-        }))
+        Ok(string_map_indexed::<I, V, Scalar>(
+            Self::LABEL,
+            |label, value| length_chars(label, &value),
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -53,19 +62,19 @@ where
     }
 }
 
-impl<V> ElementKernel<Bare<V>> for UppercaseOperation
+impl<V> ElementKernel<Bare<V>> for LengthOperation
 where
     V: StringValue,
 {
     type Emission = Preserving;
-    type OutShape = Bare<V>;
+    type OutShape = Bare<Scalar>;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(string_map_bare::<V, V>(Self::LABEL, |_, value| {
-            Ok(V::from_string(value.to_uppercase()))
+        Ok(string_map_bare::<V, Scalar>(Self::LABEL, |label, value| {
+            length_chars(label, &value)
         }))
     }
 
@@ -77,10 +86,10 @@ where
     }
 }
 
-impl<O: Apply<UppercaseOperation>> Uppercase for O {
+impl<O: Apply<LengthOperation>> Length for O {
     type ReturnOperand = O::Output;
 
-    fn uppercase(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), UppercaseOperation))
+    fn length(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), LengthOperation))
     }
 }

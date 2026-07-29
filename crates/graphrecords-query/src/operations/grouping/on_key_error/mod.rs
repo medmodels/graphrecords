@@ -1,13 +1,12 @@
 mod drop;
 mod raise;
 
-pub use drop::{DropKeyErrors, DropKeyErrorsIn, DropKeyErrorsOf, DropKeyErrorsWithCause};
-pub use raise::{RaiseKeyErrors, RaiseKeyErrorsIn, RaiseKeyErrorsOf, RaiseKeyErrorsWithCause};
-
 use crate::{
     Diagnostic, ErrorGroup, Operand,
     traits::{OnKeyError, OnKeyErrorIn, OnKeyErrorOf, OnKeyErrorWithCause},
 };
+pub use drop::{DropKeyErrors, DropKeyErrorsIn, DropKeyErrorsOf, DropKeyErrorsWithCause};
+pub use raise::{RaiseKeyErrors, RaiseKeyErrorsIn, RaiseKeyErrorsOf, RaiseKeyErrorsWithCause};
 use std::error::Error;
 
 pub trait KeyErrorPolicy<I: Operand>: Clone + 'static {

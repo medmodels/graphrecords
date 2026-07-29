@@ -1,9 +1,9 @@
-use crate::index::EntityAttributes;
 use crate::{
     AttributeName, Bare, EntityReference, ExpandedChild, ExpandedIndex, Explain, Failure,
     IndexDomain, Indexed, Labeled, Operand, QueryResult, Unit, Unordered,
     element::{Expanding, Pipeline},
     execution::EvaluationCache,
+    index::EntityAttributes,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::Attributes,

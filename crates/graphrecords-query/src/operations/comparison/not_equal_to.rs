@@ -1,5 +1,4 @@
 use super::{equality_bare, equality_indexed};
-use crate::value::ValueEquality;
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, ValueType,
     execution::EvaluationCache,
@@ -9,6 +8,7 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::NotEqualTo,
+    value::ValueEquality,
 };
 use graphrecords_core::GraphRecord;
 

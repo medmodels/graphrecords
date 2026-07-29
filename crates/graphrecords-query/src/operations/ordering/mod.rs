@@ -8,7 +8,7 @@ mod unorder;
 
 pub use first::FirstOperation;
 pub use last::LastOperation;
-pub use reverse::ReverseOperation;
+pub use reverse::ReverseOrderOperation;
 pub use sort::SortOperation;
 pub use sort_by::SortByOperation;
 pub use take::TakeOperation;

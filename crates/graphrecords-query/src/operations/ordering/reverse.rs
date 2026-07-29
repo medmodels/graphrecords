@@ -7,16 +7,16 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::Reverse,
+    traits::ReverseOrder,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
-#[explain(label = "Reverse")]
-pub struct ReverseOperation;
+#[explain(label = "ReverseOrder")]
+pub struct ReverseOrderOperation;
 
-impl Prepare for ReverseOperation {
+impl Prepare for ReverseOrderOperation {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -29,7 +29,7 @@ impl Prepare for ReverseOperation {
 }
 
 impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
-    for ReverseOperation
+    for ReverseOrderOperation
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
 
@@ -48,7 +48,7 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
     }
 }
 
-impl<V: ValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for ReverseOperation {
+impl<V: ValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for ReverseOrderOperation {
     type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -66,10 +66,10 @@ impl<V: ValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for ReverseOperation {
     }
 }
 
-impl<O: Apply<ReverseOperation>> Reverse for O {
+impl<O: Apply<ReverseOrderOperation>> ReverseOrder for O {
     type ReturnOperand = O::Output;
 
-    fn reverse(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), ReverseOperation))
+    fn reverse_order(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), ReverseOrderOperation))
     }
 }

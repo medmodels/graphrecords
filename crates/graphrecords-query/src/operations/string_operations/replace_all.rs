@@ -1,29 +1,32 @@
-use super::{arithmetic_bare, arithmetic_indexed};
+use super::{string_replace_bare, string_replace_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    element::Retention,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::Subtract,
-    value::ValueSubtract,
+    traits::ReplaceAll,
+    value::StringValue,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
-#[explain(label = "Subtract")]
+#[explain(label = "ReplaceAll")]
 #[plan(optimizer_hints(empty = if_all))]
-pub struct SubtractOperation<A> {
+pub struct ReplaceAllOperation<A, B> {
     #[argument]
-    argument: A,
+    old: A,
+    #[argument]
+    new: B,
 }
 
-impl<A: Prepare> Prepare for SubtractOperation<A> {
+impl<A: Prepare, B: Prepare> Prepare for ReplaceAllOperation<A, B> {
     type Prepared<'a>
-        = A::Prepared<'a>
+        = (A::Prepared<'a>, B::Prepared<'a>)
     where
         Self: 'a;
 
@@ -32,27 +35,31 @@ impl<A: Prepare> Prepare for SubtractOperation<A> {
         graphrecord: &'a GraphRecord,
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::Prepared<'a>> {
-        self.argument.prepare(graphrecord, cache)
+        Ok((
+            self.old.prepare(graphrecord, cache)?,
+            self.new.prepare(graphrecord, cache)?,
+        ))
     }
 }
 
-impl<I, V, A> ElementKernel<Indexed<I, V>> for SubtractOperation<A>
+impl<I, V, A, B> ElementKernel<Indexed<I, V>> for ReplaceAllOperation<A, B>
 where
     I: IndexDomain,
-    for<'a> V: ValueSubtract + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
+    V: StringValue,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    for<'a> B: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
-    type Emission = A::Retention;
+    type Emission = <A::Retention as Retention>::Then<B::Retention>;
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(arithmetic_indexed::<_, A, V>(
+        Ok(string_replace_indexed::<_, V, A, B>(
             prepared,
             Self::LABEL,
-            V::subtract,
+            |value, old, new| value.replace(old, new),
         ))
     }
 
@@ -64,19 +71,24 @@ where
     }
 }
 
-impl<V, A> ElementKernel<Bare<V>> for SubtractOperation<A>
+impl<V, A, B> ElementKernel<Bare<V>> for ReplaceAllOperation<A, B>
 where
-    for<'a> V: ValueSubtract + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
+    V: StringValue,
+    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    for<'a> B: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
-    type Emission = A::Retention;
+    type Emission = <A::Retention as Retention>::Then<B::Retention>;
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(arithmetic_bare::<A, V>(prepared, Self::LABEL, V::subtract))
+        Ok(string_replace_bare::<V, A, B>(
+            prepared,
+            Self::LABEL,
+            |value, old, new| value.replace(old, new),
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -87,17 +99,17 @@ where
     }
 }
 
-impl<O, A> Subtract<A> for O
+impl<O, A, B> ReplaceAll<A, B> for O
 where
-    SubtractOperation<A>: Operation,
-    O: Apply<SubtractOperation<A>>,
+    ReplaceAllOperation<A, B>: Operation,
+    O: Apply<ReplaceAllOperation<A, B>>,
 {
     type ReturnOperand = O::Output;
 
-    fn subtract(&self, argument: A) -> Self::ReturnOperand {
+    fn replace_all(&self, old: A, new: B) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(
             self.clone(),
-            SubtractOperation { argument },
+            ReplaceAllOperation { old, new },
         ))
     }
 }

@@ -884,6 +884,7 @@ dependencies = [
  "graphrecords-core",
  "graphrecords-macros",
  "graphrecords-utils",
+ "regex",
 ]
 
 [[package]]

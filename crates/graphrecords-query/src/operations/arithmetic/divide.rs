@@ -1,5 +1,4 @@
 use super::{arithmetic_bare, arithmetic_indexed};
-use crate::value::ValueDivide;
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
     execution::EvaluationCache,
@@ -9,6 +8,7 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Divide,
+    value::ValueDivide,
 };
 use graphrecords_core::GraphRecord;
 

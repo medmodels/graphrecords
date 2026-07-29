@@ -1,16 +1,15 @@
 mod drop;
 mod raise;
 
+use crate::{
+    Diagnostic, ErrorGroup, Operand,
+    traits::{OnBucketError, OnBucketErrorIn, OnBucketErrorOf, OnBucketErrorWithCause},
+};
 pub use drop::{
     DropBucketErrors, DropBucketErrorsIn, DropBucketErrorsOf, DropBucketErrorsWithCause,
 };
 pub use raise::{
     RaiseBucketErrors, RaiseBucketErrorsIn, RaiseBucketErrorsOf, RaiseBucketErrorsWithCause,
-};
-
-use crate::{
-    Diagnostic, ErrorGroup, Operand,
-    traits::{OnBucketError, OnBucketErrorIn, OnBucketErrorOf, OnBucketErrorWithCause},
 };
 use std::error::Error;
 

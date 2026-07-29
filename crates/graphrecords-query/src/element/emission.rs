@@ -113,7 +113,7 @@ impl ElementEmission for Expanding<Unordered> {
 }
 
 pub trait Retention: ElementEmission {
-    type Or<R: Retention>: Retention;
+    type Then<R: Retention>: Retention;
 
     fn keep<T>(value: T) -> Self::Step<T>;
 
@@ -122,10 +122,18 @@ pub trait Retention: ElementEmission {
     fn map_step<T, U>(step: Self::Step<T>, function: impl FnOnce(T) -> U) -> Self::Step<U>;
 
     fn collapse<T>(step: Self::Step<T>) -> Option<T>;
+
+    fn and_then<R, T, U, E, F>(
+        step: Self::Step<Result<T, E>>,
+        function: F,
+    ) -> <Self::Then<R> as ElementEmission>::Step<Result<U, E>>
+    where
+        R: Retention,
+        F: FnOnce(T) -> R::Step<Result<U, E>>;
 }
 
 impl Retention for Preserving {
-    type Or<R: Retention> = R;
+    type Then<R: Retention> = R;
 
     fn keep<T>(value: T) -> Self::Step<T> {
         value
@@ -142,10 +150,24 @@ impl Retention for Preserving {
     fn collapse<T>(step: Self::Step<T>) -> Option<T> {
         Some(step)
     }
+
+    fn and_then<R, T, U, E, F>(
+        step: Self::Step<Result<T, E>>,
+        function: F,
+    ) -> <Self::Then<R> as ElementEmission>::Step<Result<U, E>>
+    where
+        R: Retention,
+        F: FnOnce(T) -> R::Step<Result<U, E>>,
+    {
+        match step {
+            Ok(value) => function(value),
+            Err(error) => R::keep(Err(error)),
+        }
+    }
 }
 
 impl Retention for Dropping {
-    type Or<R: Retention> = Self;
+    type Then<R: Retention> = Self;
 
     fn keep<T>(value: T) -> Self::Step<T> {
         Some(value)
@@ -161,5 +183,20 @@ impl Retention for Dropping {
 
     fn collapse<T>(step: Self::Step<T>) -> Option<T> {
         step
+    }
+
+    fn and_then<R, T, U, E, F>(
+        step: Self::Step<Result<T, E>>,
+        function: F,
+    ) -> <Self::Then<R> as ElementEmission>::Step<Result<U, E>>
+    where
+        R: Retention,
+        F: FnOnce(T) -> R::Step<Result<U, E>>,
+    {
+        match step {
+            None => None,
+            Some(Err(error)) => Some(Err(error)),
+            Some(Ok(value)) => R::collapse(function(value)),
+        }
     }
 }

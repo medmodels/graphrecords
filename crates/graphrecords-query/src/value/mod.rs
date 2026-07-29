@@ -3,6 +3,7 @@ mod comparison;
 mod grouping;
 mod numeric;
 mod sortable;
+mod string;
 
 use crate::{EntityDomain, Failure, FailureKind, IndexDomain};
 pub use arithmetic::{
@@ -21,6 +22,10 @@ pub use sortable::{
     EnsureSortable, IncomparableIndices, incomparable_pair, incomparable_with_first,
 };
 use std::marker::PhantomData;
+pub use string::{
+    EmptySplitDelimiter, InvalidPaddingCharacter, InvalidRegexPattern, InvalidStringSlice,
+    NonStringValue, StringLengthOverflow, StringPaddingOverflow, StringValue,
+};
 
 pub trait ValueType: 'static {
     type Value<'a>: 'a + Clone

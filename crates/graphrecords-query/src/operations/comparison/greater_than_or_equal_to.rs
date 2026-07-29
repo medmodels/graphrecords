@@ -1,5 +1,4 @@
 use super::{ordering_bare, ordering_indexed};
-use crate::value::ValueOrdering;
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, ValueType,
     execution::EvaluationCache,
@@ -9,6 +8,7 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::GreaterThanOrEqualTo,
+    value::ValueOrdering,
 };
 use graphrecords_core::GraphRecord;
 use std::{

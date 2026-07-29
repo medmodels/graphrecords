@@ -5,18 +5,18 @@ use crate::{
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::Uppercase,
+    traits::Reverse,
     value::StringValue,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
-#[explain(label = "Uppercase")]
+#[explain(label = "Reverse")]
 #[plan(optimizer_hints(empty = if_any))]
-pub struct UppercaseOperation;
+pub struct ReverseOperation;
 
-impl Prepare for UppercaseOperation {
+impl Prepare for ReverseOperation {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -28,7 +28,7 @@ impl Prepare for UppercaseOperation {
     }
 }
 
-impl<I, V> ElementKernel<Indexed<I, V>> for UppercaseOperation
+impl<I, V> ElementKernel<Indexed<I, V>> for ReverseOperation
 where
     I: IndexDomain,
     V: StringValue,
@@ -41,7 +41,7 @@ where
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         Ok(string_map_indexed::<I, V, V>(Self::LABEL, |_, value| {
-            Ok(V::from_string(value.to_uppercase()))
+            Ok(V::from_string(value.chars().rev().collect()))
         }))
     }
 
@@ -53,7 +53,7 @@ where
     }
 }
 
-impl<V> ElementKernel<Bare<V>> for UppercaseOperation
+impl<V> ElementKernel<Bare<V>> for ReverseOperation
 where
     V: StringValue,
 {
@@ -65,7 +65,7 @@ where
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         Ok(string_map_bare::<V, V>(Self::LABEL, |_, value| {
-            Ok(V::from_string(value.to_uppercase()))
+            Ok(V::from_string(value.chars().rev().collect()))
         }))
     }
 
@@ -77,10 +77,10 @@ where
     }
 }
 
-impl<O: Apply<UppercaseOperation>> Uppercase for O {
+impl<O: Apply<ReverseOperation>> Reverse for O {
     type ReturnOperand = O::Output;
 
-    fn uppercase(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), UppercaseOperation))
+    fn reverse(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), ReverseOperation))
     }
 }
