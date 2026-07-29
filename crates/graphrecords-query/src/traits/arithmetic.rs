@@ -33,9 +33,3 @@ pub trait Modulo<A> {
 
     fn modulo(&self, argument: A) -> Self::ReturnOperand;
 }
-
-pub trait Absolute {
-    type ReturnOperand;
-
-    fn absolute(&mut self) -> Self::ReturnOperand;
-}

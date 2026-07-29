@@ -5,18 +5,18 @@ use crate::{
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::Ceil,
-    value::ValueCeil,
+    traits::Absolute,
+    value::ValueAbsolute,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
-#[explain(label = "Ceil")]
+#[explain(label = "Absolute")]
 #[plan(optimizer_hints(empty = if_any))]
-pub struct CeilOperation;
+pub struct AbsoluteOperation;
 
-impl Prepare for CeilOperation {
+impl Prepare for AbsoluteOperation {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -28,10 +28,10 @@ impl Prepare for CeilOperation {
     }
 }
 
-impl<I, V> ElementKernel<Indexed<I, V>> for CeilOperation
+impl<I, V> ElementKernel<Indexed<I, V>> for AbsoluteOperation
 where
     I: IndexDomain,
-    for<'a> V: ValueCeil + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    for<'a> V: ValueAbsolute + ValueType<Value<'a> = <V as ValueType>::Owned>,
 {
     type Emission = Preserving;
     type OutShape = Indexed<I, V>;
@@ -40,7 +40,7 @@ where
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(numeric_indexed::<I, V>(Self::LABEL, V::ceil))
+        Ok(numeric_indexed::<I, V>(Self::LABEL, V::absolute))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -51,9 +51,9 @@ where
     }
 }
 
-impl<V> ElementKernel<Bare<V>> for CeilOperation
+impl<V> ElementKernel<Bare<V>> for AbsoluteOperation
 where
-    for<'a> V: ValueCeil + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    for<'a> V: ValueAbsolute + ValueType<Value<'a> = <V as ValueType>::Owned>,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;
@@ -62,7 +62,7 @@ where
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(numeric_bare::<V>(Self::LABEL, V::ceil))
+        Ok(numeric_bare::<V>(Self::LABEL, V::absolute))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -73,10 +73,10 @@ where
     }
 }
 
-impl<O: Apply<CeilOperation>> Ceil for O {
+impl<O: Apply<AbsoluteOperation>> Absolute for O {
     type ReturnOperand = O::Output;
 
-    fn ceil(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), CeilOperation))
+    fn abs(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), AbsoluteOperation))
     }
 }

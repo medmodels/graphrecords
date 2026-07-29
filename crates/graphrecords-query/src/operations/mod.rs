@@ -78,6 +78,10 @@ pub use kernel::{
 };
 pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
 pub use membership::IsInOperation;
+pub use numeric::{
+    AbsoluteOperation, CeilOperation, CubeRootOperation, ExponentialOperation, FloorOperation,
+    LogarithmOperation, NegateOperation, RoundOperation, SignOperation, SquareRootOperation,
+};
 pub use on_missing::{MaybeAbsent, MissingPolicy, WithMissing};
 pub use ordering::{
     FirstOperation, LastOperation, ReverseOperation, SortByOperation, SortOperation, TakeOperation,
