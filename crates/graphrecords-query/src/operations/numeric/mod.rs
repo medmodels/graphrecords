@@ -1,5 +1,6 @@
 mod absolute;
 mod ceil;
+mod clip;
 mod cube_root;
 mod exponential;
 mod floor;
@@ -16,6 +17,7 @@ use crate::{
 };
 pub use absolute::AbsoluteOperation;
 pub use ceil::CeilOperation;
+pub use clip::ClipOperation;
 pub use cube_root::CubeRootOperation;
 pub use exponential::ExponentialOperation;
 pub use floor::FloorOperation;

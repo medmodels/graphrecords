@@ -14,9 +14,9 @@ pub use comparison::{ValueEquality, ValueOrdering};
 use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue};
 pub use grouping::GroupingValue;
 pub use numeric::{
-    NegativeSquareRoot, NonNumericValue, NonPositiveLogarithm, ValueAbsolute, ValueCeil,
-    ValueCubeRoot, ValueExponential, ValueFloor, ValueLogarithm, ValueNegate, ValueRound,
-    ValueSign, ValueSquareRoot,
+    InvalidClipBounds, NegativeSquareRoot, NonNumericValue, NonPositiveLogarithm, ValueAbsolute,
+    ValueCeil, ValueClip, ValueCubeRoot, ValueExponential, ValueFloor, ValueLogarithm, ValueNegate,
+    ValueRound, ValueSign, ValueSquareRoot,
 };
 pub use sortable::{
     EnsureSortable, IncomparableIndices, incomparable_pair, incomparable_with_first,

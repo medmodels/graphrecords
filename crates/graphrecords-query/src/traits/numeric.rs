@@ -10,6 +10,12 @@ pub trait Ceil {
     fn ceil(&self) -> Self::ReturnOperand;
 }
 
+pub trait Clip<L, U> {
+    type ReturnOperand;
+
+    fn clip(&self, lower: L, upper: U) -> Self::ReturnOperand;
+}
+
 pub trait CubeRoot {
     type ReturnOperand;
 

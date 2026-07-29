@@ -1,9 +1,13 @@
-use crate::{AttributeName, Diagnostic, Failure, IndexValue, QueryResult, Scalar, ValueType};
+use crate::{
+    AttributeName, Diagnostic, Failure, IncomparableValues, IndexValue, Positional, QueryResult,
+    Scalar, ValueType,
+};
 use graphrecords_core::graphrecord::{
-    GraphRecordAttribute, GraphRecordValue, NodeIndex,
+    EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex,
     datatypes::{Abs, Ceil, Floor, Round, Sqrt},
 };
 use std::{
+    cmp::Ordering,
     error::Error,
     fmt::{self, Debug, Display, Formatter},
 };
@@ -14,6 +18,15 @@ pub trait ValueAbsolute: ValueType {
 
 pub trait ValueCeil: ValueType {
     fn ceil(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+}
+
+pub trait ValueClip: ValueType {
+    fn clip(
+        label: &'static str,
+        value: Self::Owned,
+        lower: Self::Owned,
+        upper: Self::Owned,
+    ) -> QueryResult<Self::Owned>;
 }
 
 pub trait ValueCubeRoot: ValueType {
@@ -46,6 +59,34 @@ pub trait ValueSign: ValueType {
 
 pub trait ValueSquareRoot: ValueType {
     fn square_root(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+}
+
+#[derive(Debug)]
+pub struct InvalidClipBounds<T> {
+    pub lower: T,
+    pub upper: T,
+}
+
+impl<T: Display> Display for InvalidClipBounds<T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "lower clip bound `{}` exceeds upper clip bound `{}`",
+            self.lower, self.upper
+        )
+    }
+}
+
+impl<T: Debug + Display> Error for InvalidClipBounds<T> {}
+
+impl<T: Debug + Display + Send + Sync + 'static> Diagnostic for InvalidClipBounds<T> {
+    fn name() -> &'static str {
+        "InvalidClipBounds"
+    }
+
+    fn help(&self) -> Option<String> {
+        Some("provide a lower bound that does not exceed the upper bound".to_string())
+    }
 }
 
 #[derive(Debug)]
@@ -113,6 +154,112 @@ impl Diagnostic for NonPositiveLogarithm {
     }
 }
 
+fn clip_ordered<T>(label: &'static str, value: T, lower: T, upper: T) -> QueryResult<T>
+where
+    T: Debug + Display + PartialOrd + Send + Sync + 'static,
+{
+    match lower.partial_cmp(&upper) {
+        Some(Ordering::Greater) => {
+            return Err(Failure::new(label, InvalidClipBounds { lower, upper }));
+        }
+        None => {
+            return Err(Failure::new(
+                label,
+                IncomparableValues {
+                    first: lower,
+                    second: upper,
+                },
+            ));
+        }
+        Some(Ordering::Less | Ordering::Equal) => {}
+    }
+
+    match value.partial_cmp(&lower) {
+        Some(Ordering::Less) => return Ok(lower),
+        None => {
+            return Err(Failure::new(
+                label,
+                IncomparableValues {
+                    first: value,
+                    second: lower,
+                },
+            ));
+        }
+        Some(Ordering::Equal | Ordering::Greater) => {}
+    }
+
+    match value.partial_cmp(&upper) {
+        Some(Ordering::Greater) => Ok(upper),
+        Some(Ordering::Less | Ordering::Equal) => Ok(value),
+        None => Err(Failure::new(
+            label,
+            IncomparableValues {
+                first: value,
+                second: upper,
+            },
+        )),
+    }
+}
+
+fn clip_graphrecord_attribute(
+    label: &'static str,
+    value: GraphRecordAttribute,
+    lower: GraphRecordAttribute,
+    upper: GraphRecordAttribute,
+) -> QueryResult<GraphRecordAttribute> {
+    let value = match value {
+        GraphRecordAttribute::Int(_) => value,
+        value @ GraphRecordAttribute::String(_) => {
+            return Err(Failure::new(label, NonNumericValue { value }));
+        }
+    };
+    let lower = match lower {
+        GraphRecordAttribute::Int(_) => lower,
+        lower @ GraphRecordAttribute::String(_) => {
+            return Err(Failure::new(label, NonNumericValue { value: lower }));
+        }
+    };
+    let upper = match upper {
+        GraphRecordAttribute::Int(_) => upper,
+        upper @ GraphRecordAttribute::String(_) => {
+            return Err(Failure::new(label, NonNumericValue { value: upper }));
+        }
+    };
+
+    clip_ordered(label, value, lower, upper)
+}
+
+fn clip_graphrecord_value(
+    label: &'static str,
+    value: GraphRecordValue,
+    lower: GraphRecordValue,
+    upper: GraphRecordValue,
+) -> QueryResult<GraphRecordValue> {
+    let value = match value {
+        GraphRecordValue::Int(_)
+        | GraphRecordValue::Float(_)
+        | GraphRecordValue::DateTime(_)
+        | GraphRecordValue::Duration(_) => value,
+        value => return Err(Failure::new(label, NonNumericValue { value })),
+    };
+    let lower = match lower {
+        GraphRecordValue::Int(_)
+        | GraphRecordValue::Float(_)
+        | GraphRecordValue::DateTime(_)
+        | GraphRecordValue::Duration(_) => lower,
+        lower => return Err(Failure::new(label, NonNumericValue { value: lower })),
+    };
+    let upper = match upper {
+        GraphRecordValue::Int(_)
+        | GraphRecordValue::Float(_)
+        | GraphRecordValue::DateTime(_)
+        | GraphRecordValue::Duration(_) => upper,
+        upper => return Err(Failure::new(label, NonNumericValue { value: upper })),
+    };
+
+    clip_ordered(label, value, lower, upper)
+}
+
 impl ValueAbsolute for Scalar {
     fn absolute(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
         match value {
@@ -175,6 +322,83 @@ impl ValueCeil for IndexValue<GraphRecordValue> {
             GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.ceil()),
             value => Err(Failure::new(label, NonNumericValue { value })),
         }
+    }
+}
+
+impl ValueClip for Scalar {
+    fn clip(
+        label: &'static str,
+        value: Self::Owned,
+        lower: Self::Owned,
+        upper: Self::Owned,
+    ) -> QueryResult<Self::Owned> {
+        clip_graphrecord_value(label, value, lower, upper)
+    }
+}
+
+impl ValueClip for AttributeName {
+    fn clip(
+        label: &'static str,
+        value: Self::Owned,
+        lower: Self::Owned,
+        upper: Self::Owned,
+    ) -> QueryResult<Self::Owned> {
+        clip_graphrecord_attribute(label, value, lower, upper)
+    }
+}
+
+impl ValueClip for IndexValue<Positional> {
+    fn clip(
+        label: &'static str,
+        value: Self::Owned,
+        lower: Self::Owned,
+        upper: Self::Owned,
+    ) -> QueryResult<Self::Owned> {
+        clip_ordered(label, value, lower, upper)
+    }
+}
+
+impl ValueClip for IndexValue<NodeIndex> {
+    fn clip(
+        label: &'static str,
+        value: Self::Owned,
+        lower: Self::Owned,
+        upper: Self::Owned,
+    ) -> QueryResult<Self::Owned> {
+        clip_graphrecord_attribute(label, value, lower, upper)
+    }
+}
+
+impl ValueClip for IndexValue<AttributeName> {
+    fn clip(
+        label: &'static str,
+        value: Self::Owned,
+        lower: Self::Owned,
+        upper: Self::Owned,
+    ) -> QueryResult<Self::Owned> {
+        clip_graphrecord_attribute(label, value, lower, upper)
+    }
+}
+
+impl ValueClip for IndexValue<EdgeIndex> {
+    fn clip(
+        label: &'static str,
+        value: Self::Owned,
+        lower: Self::Owned,
+        upper: Self::Owned,
+    ) -> QueryResult<Self::Owned> {
+        clip_ordered(label, value, lower, upper)
+    }
+}
+
+impl ValueClip for IndexValue<GraphRecordValue> {
+    fn clip(
+        label: &'static str,
+        value: Self::Owned,
+        lower: Self::Owned,
+        upper: Self::Owned,
+    ) -> QueryResult<Self::Owned> {
+        clip_graphrecord_value(label, value, lower, upper)
     }
 }
 
