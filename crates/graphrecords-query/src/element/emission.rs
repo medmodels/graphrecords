@@ -45,9 +45,7 @@ impl ElementEmission for Preserving {
     fn default_estimate(input: Estimate) -> Estimate {
         Estimate {
             elements: input.elements,
-            distinct: None,
-            selectivity: None,
-            per_group: None,
+            ..Estimate::UNKNOWN
         }
     }
 }

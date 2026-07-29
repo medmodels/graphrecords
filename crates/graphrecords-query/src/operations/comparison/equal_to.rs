@@ -56,9 +56,8 @@ where
         let selectivity = input.distinct.map(|distinct| 1.0 / distinct.max(1) as f64);
 
         Estimate {
-            distinct: None,
             selectivity,
-            ..input
+            ..input.with_unknown_distinct()
         }
     }
 }
@@ -82,9 +81,8 @@ where
         let selectivity = input.distinct.map(|distinct| 1.0 / distinct.max(1) as f64);
 
         Estimate {
-            distinct: None,
             selectivity,
-            ..input
+            ..input.with_unknown_distinct()
         }
     }
 }

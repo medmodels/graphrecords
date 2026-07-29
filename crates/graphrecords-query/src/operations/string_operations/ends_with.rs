@@ -58,9 +58,8 @@ where
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
         Estimate {
-            distinct: None,
             selectivity: None,
-            ..input
+            ..input.with_unknown_distinct()
         }
     }
 }
@@ -86,9 +85,8 @@ where
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
         Estimate {
-            distinct: None,
             selectivity: None,
-            ..input
+            ..input.with_unknown_distinct()
         }
     }
 }

@@ -57,9 +57,7 @@ impl<T> Estimated for Vec<T> {
     fn estimate(&self, _stats: &Stats) -> Estimate {
         Estimate {
             elements: Some(self.len()),
-            distinct: None,
-            selectivity: None,
-            per_group: None,
+            ..Estimate::UNKNOWN
         }
     }
 }
@@ -122,9 +120,7 @@ impl<T, const N: usize> Estimated for [T; N] {
     fn estimate(&self, _stats: &Stats) -> Estimate {
         Estimate {
             elements: Some(N),
-            distinct: None,
-            selectivity: None,
-            per_group: None,
+            ..Estimate::UNKNOWN
         }
     }
 }

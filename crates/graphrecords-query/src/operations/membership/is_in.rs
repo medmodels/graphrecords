@@ -49,9 +49,8 @@ fn membership_estimate<A: Estimated>(
         .map(|(distinct, size)| (size as f64 / distinct.max(1) as f64).min(1.0));
 
     Estimate {
-        distinct: None,
         selectivity,
-        ..input
+        ..input.with_unknown_distinct()
     }
 }
 

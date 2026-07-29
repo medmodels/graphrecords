@@ -32,6 +32,14 @@ impl Estimate {
     }
 
     #[must_use]
+    pub fn with_unknown_distinct(self) -> Self {
+        Self {
+            distinct: None,
+            ..self
+        }
+    }
+
+    #[must_use]
     pub fn zero_or_one(self) -> Self {
         Self {
             elements: self.elements.map(|elements| elements.min(1)),
