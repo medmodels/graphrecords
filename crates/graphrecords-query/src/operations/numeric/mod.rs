@@ -27,16 +27,16 @@ pub use round::RoundOperation;
 pub use sign::SignOperation;
 pub use square_root::SquareRootOperation;
 
-type NumericFunction<V> =
-    fn(&'static str, <V as ValueType>::Owned) -> QueryResult<<V as ValueType>::Owned>;
+type NumericFunction<'a, V> =
+    fn(&'static str, <V as ValueType>::Value<'a>) -> QueryResult<<V as ValueType>::Value<'a>>;
 
 fn numeric_indexed<'a, I, V>(
     label: &'static str,
-    operation: NumericFunction<V>,
+    operation: NumericFunction<'a, V>,
 ) -> IndexedValuePipeline<'a, I, V, V, Preserving>
 where
     I: IndexDomain,
-    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V: ValueType,
 {
     Pipeline::keyed(move |index, item: QueryResult<_>| {
         item.and_then(|value| operation(label, value).map_err(|failure| failure.at::<I>(&index)))
@@ -45,10 +45,10 @@ where
 
 fn numeric_bare<'a, V>(
     label: &'static str,
-    operation: NumericFunction<V>,
+    operation: NumericFunction<'a, V>,
 ) -> BarePipeline<'a, V, V, Preserving>
 where
-    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V: ValueType,
 {
     Pipeline::new(move |item: QueryResult<_>| item.and_then(|value| operation(label, value)))
 }

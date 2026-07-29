@@ -1,6 +1,6 @@
 use super::{arithmetic_bare, arithmetic_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
@@ -39,8 +39,8 @@ impl<A: Prepare> Prepare for AddOperation<A> {
 impl<I, V, A> ElementKernel<Indexed<I, V>> for AddOperation<A>
 where
     I: IndexDomain,
-    for<'a> V: ValueAdd + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
+    V: ValueAdd,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, V>;
@@ -49,7 +49,7 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(arithmetic_indexed::<_, A, V>(prepared, Self::LABEL, V::add))
+        Ok(arithmetic_indexed::<_, V, A>(prepared, Self::LABEL, V::add))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -59,8 +59,8 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for AddOperation<A>
 where
-    for<'a> V: ValueAdd + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
+    V: ValueAdd,
+    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;
     type OutShape = Bare<V>;
@@ -69,7 +69,7 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(arithmetic_bare::<A, V>(prepared, Self::LABEL, V::add))
+        Ok(arithmetic_bare::<V, A>(prepared, Self::LABEL, V::add))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {

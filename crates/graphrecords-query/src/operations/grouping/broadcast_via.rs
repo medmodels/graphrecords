@@ -272,8 +272,8 @@ where
 impl<O, I, A> BroadcastVia<I, A> for O
 where
     I: IndexDomain,
-    O: Apply<BroadcastViaOperation<I, A>>,
     BroadcastViaOperation<I, A>: Operation,
+    O: Apply<BroadcastViaOperation<I, A>>,
 {
     type ReturnOperand = O::Output;
 

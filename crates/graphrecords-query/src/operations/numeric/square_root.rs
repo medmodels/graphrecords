@@ -1,6 +1,6 @@
 use super::{numeric_bare, numeric_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     element::Preserving,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
@@ -31,7 +31,7 @@ impl Prepare for SquareRootOperation {
 impl<I, V> ElementKernel<Indexed<I, V>> for SquareRootOperation
 where
     I: IndexDomain,
-    for<'a> V: ValueSquareRoot + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V: ValueSquareRoot,
 {
     type Emission = Preserving;
     type OutShape = Indexed<I, V>;
@@ -50,7 +50,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for SquareRootOperation
 where
-    for<'a> V: ValueSquareRoot + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V: ValueSquareRoot,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;

@@ -1,6 +1,6 @@
 use super::{ordering_bare, ordering_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, ValueType,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
@@ -43,9 +43,9 @@ impl<A: Prepare> Prepare for GreaterThanOrEqualToOperation<A> {
 impl<I, V, A> ElementKernel<Indexed<I, V>> for GreaterThanOrEqualToOperation<A>
 where
     I: IndexDomain,
-    for<'a> V: ValueOrdering + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V: ValueOrdering,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
     V::Owned: Debug + Display + Send + Sync,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, Mask>;
@@ -54,7 +54,7 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(ordering_indexed::<_, A, V>(
+        Ok(ordering_indexed::<_, V, A>(
             prepared,
             Self::LABEL,
             V::ordering,
@@ -72,9 +72,9 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for GreaterThanOrEqualToOperation<A>
 where
-    for<'a> V: ValueOrdering + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V: ValueOrdering,
+    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
     V::Owned: Debug + Display + Send + Sync,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
 {
     type Emission = A::Retention;
     type OutShape = Bare<Mask>;
@@ -83,7 +83,7 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(ordering_bare::<A, V>(
+        Ok(ordering_bare::<V, A>(
             prepared,
             Self::LABEL,
             V::ordering,

@@ -1,6 +1,6 @@
 use super::{numeric_bare, numeric_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     element::Preserving,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
@@ -31,7 +31,7 @@ impl Prepare for CubeRootOperation {
 impl<I, V> ElementKernel<Indexed<I, V>> for CubeRootOperation
 where
     I: IndexDomain,
-    for<'a> V: ValueCubeRoot + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V: ValueCubeRoot,
 {
     type Emission = Preserving;
     type OutShape = Indexed<I, V>;
@@ -50,7 +50,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for CubeRootOperation
 where
-    for<'a> V: ValueCubeRoot + ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V: ValueCubeRoot,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;

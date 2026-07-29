@@ -21,16 +21,16 @@ use std::{
     fmt::{Debug, Display},
 };
 
-fn equality_indexed<'a, I, A, V>(
+fn equality_indexed<'a, I, V, A>(
     prepared: A::Prepared<'a>,
     label: &'static str,
-    equality: fn(&V::Owned, &V::Owned) -> bool,
+    equality: fn(&V::Value<'a>, &V::Value<'a>) -> bool,
 ) -> IndexedValuePipeline<'a, I, V, Mask, A::Retention>
 where
     I: IndexDomain,
-    A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
+    V: ValueType,
+    A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
     A::Prepared<'a>: 'a,
-    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
 {
     Pipeline::keyed(move |index, item| {
         let value = match item {
@@ -48,15 +48,15 @@ where
     })
 }
 
-fn equality_bare<'a, A, V>(
+fn equality_bare<'a, V, A>(
     prepared: A::Prepared<'a>,
     label: &'static str,
-    equality: fn(&V::Owned, &V::Owned) -> bool,
+    equality: fn(&V::Value<'a>, &V::Value<'a>) -> bool,
 ) -> BarePipeline<'a, V, Mask, A::Retention>
 where
-    A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
+    V: ValueType,
+    A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
     A::Prepared<'a>: 'a,
-    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
 {
     Pipeline::new(move |item| {
         let value = match item {
@@ -74,18 +74,18 @@ where
     })
 }
 
-fn ordering_indexed<'a, I, A, V>(
+fn ordering_indexed<'a, I, V, A>(
     prepared: A::Prepared<'a>,
     label: &'static str,
-    ordering: fn(&V::Owned, &V::Owned) -> Option<Ordering>,
+    ordering: fn(&V::Value<'a>, &V::Value<'a>) -> Option<Ordering>,
     predicate: fn(Ordering) -> bool,
 ) -> IndexedValuePipeline<'a, I, V, Mask, A::Retention>
 where
     I: IndexDomain,
-    A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
-    A::Prepared<'a>: 'a,
-    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V: ValueType,
+    A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
     V::Owned: Debug + Display + Send + Sync,
+    A::Prepared<'a>: 'a,
 {
     Pipeline::keyed(move |index, item| {
         let value = match item {
@@ -103,8 +103,8 @@ where
                 None => Err(Failure::new_at::<I, _>(
                     label,
                     IncomparableValues {
-                        first: value,
-                        second: argument,
+                        first: V::into_owned(value),
+                        second: V::into_owned(argument),
                     },
                     &index,
                 )),
@@ -113,17 +113,17 @@ where
     })
 }
 
-fn ordering_bare<'a, A, V>(
+fn ordering_bare<'a, V, A>(
     prepared: A::Prepared<'a>,
     label: &'static str,
-    ordering: fn(&V::Owned, &V::Owned) -> Option<Ordering>,
+    ordering: fn(&V::Value<'a>, &V::Value<'a>) -> Option<Ordering>,
     predicate: fn(Ordering) -> bool,
 ) -> BarePipeline<'a, V, Mask, A::Retention>
 where
-    A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
-    A::Prepared<'a>: 'a,
-    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
+    V: ValueType,
+    A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
     V::Owned: Debug + Display + Send + Sync,
+    A::Prepared<'a>: 'a,
 {
     Pipeline::new(move |item| {
         let value = match item {
@@ -141,8 +141,8 @@ where
                 None => Err(Failure::new(
                     label,
                     IncomparableValues {
-                        first: value,
-                        second: argument,
+                        first: V::into_owned(value),
+                        second: V::into_owned(argument),
                     },
                 )),
             })

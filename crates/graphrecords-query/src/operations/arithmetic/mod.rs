@@ -17,22 +17,22 @@ pub use multiply::MultiplyOperation;
 pub use power::PowerOperation;
 pub use subtract::SubtractOperation;
 
-type ArithmeticFunction<V> = fn(
+type ArithmeticFunction<'a, V> = fn(
     &'static str,
-    <V as ValueType>::Owned,
-    <V as ValueType>::Owned,
-) -> QueryResult<<V as ValueType>::Owned>;
+    <V as ValueType>::Value<'a>,
+    <V as ValueType>::Value<'a>,
+) -> QueryResult<<V as ValueType>::Value<'a>>;
 
-fn arithmetic_indexed<'a, I, A, V>(
+fn arithmetic_indexed<'a, I, V, A>(
     prepared: A::Prepared<'a>,
     label: &'static str,
-    operation: ArithmeticFunction<V>,
+    operation: ArithmeticFunction<'a, V>,
 ) -> IndexedValuePipeline<'a, I, V, V, A::Retention>
 where
     I: IndexDomain,
-    A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
+    V: ValueType,
+    A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
     A::Prepared<'a>: 'a,
-    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
 {
     Pipeline::keyed(move |index, item| {
         let value = match item {
@@ -52,15 +52,15 @@ where
     })
 }
 
-fn arithmetic_bare<'a, A, V>(
+fn arithmetic_bare<'a, V, A>(
     prepared: A::Prepared<'a>,
     label: &'static str,
-    operation: ArithmeticFunction<V>,
+    operation: ArithmeticFunction<'a, V>,
 ) -> BarePipeline<'a, V, V, A::Retention>
 where
-    A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
+    V: ValueType,
+    A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
     A::Prepared<'a>: 'a,
-    V: ValueType<Value<'a> = <V as ValueType>::Owned>,
 {
     Pipeline::new(move |item| {
         let value = match item {

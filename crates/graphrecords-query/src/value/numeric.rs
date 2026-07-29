@@ -13,52 +13,54 @@ use std::{
 };
 
 pub trait ValueAbsolute: ValueType {
-    fn absolute(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueCeil: ValueType {
-    fn ceil(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+    fn ceil<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueClip: ValueType {
-    fn clip(
+    fn clip<'a>(
         label: &'static str,
-        value: Self::Owned,
-        lower: Self::Owned,
-        upper: Self::Owned,
-    ) -> QueryResult<Self::Owned>;
+        value: Self::Value<'a>,
+        lower: Self::Value<'a>,
+        upper: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueCubeRoot: ValueType {
-    fn cube_root(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+    fn cube_root<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueExponential: ValueType {
-    fn exponential(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+    fn exponential<'a>(label: &'static str, value: Self::Value<'a>)
+    -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueFloor: ValueType {
-    fn floor(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+    fn floor<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueLogarithm: ValueType {
-    fn logarithm(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+    fn logarithm<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueNegate: ValueType {
-    fn negate(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+    fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueRound: ValueType {
-    fn round(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+    fn round<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueSign: ValueType {
-    fn sign(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+    fn sign<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueSquareRoot: ValueType {
-    fn square_root(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned>;
+    fn square_root<'a>(label: &'static str, value: Self::Value<'a>)
+    -> QueryResult<Self::Value<'a>>;
 }
 
 #[derive(Debug)]
@@ -261,7 +263,7 @@ fn clip_graphrecord_value(
 }
 
 impl ValueAbsolute for Scalar {
-    fn absolute(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.abs()),
             GraphRecordValue::Duration(duration) => Ok(GraphRecordValue::Duration(duration.abs())),
@@ -271,7 +273,7 @@ impl ValueAbsolute for Scalar {
 }
 
 impl ValueAbsolute for AttributeName {
-    fn absolute(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordAttribute::Int(_) => Ok(value.abs()),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -280,7 +282,7 @@ impl ValueAbsolute for AttributeName {
 }
 
 impl ValueAbsolute for IndexValue<NodeIndex> {
-    fn absolute(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordAttribute::Int(_) => Ok(value.abs()),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -289,7 +291,7 @@ impl ValueAbsolute for IndexValue<NodeIndex> {
 }
 
 impl ValueAbsolute for IndexValue<AttributeName> {
-    fn absolute(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordAttribute::Int(_) => Ok(value.abs()),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -298,7 +300,7 @@ impl ValueAbsolute for IndexValue<AttributeName> {
 }
 
 impl ValueAbsolute for IndexValue<GraphRecordValue> {
-    fn absolute(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.abs()),
             GraphRecordValue::Duration(duration) => Ok(GraphRecordValue::Duration(duration.abs())),
@@ -308,7 +310,7 @@ impl ValueAbsolute for IndexValue<GraphRecordValue> {
 }
 
 impl ValueCeil for Scalar {
-    fn ceil(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn ceil<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.ceil()),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -317,7 +319,7 @@ impl ValueCeil for Scalar {
 }
 
 impl ValueCeil for IndexValue<GraphRecordValue> {
-    fn ceil(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn ceil<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.ceil()),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -326,84 +328,84 @@ impl ValueCeil for IndexValue<GraphRecordValue> {
 }
 
 impl ValueClip for Scalar {
-    fn clip(
+    fn clip<'a>(
         label: &'static str,
-        value: Self::Owned,
-        lower: Self::Owned,
-        upper: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        lower: Self::Value<'a>,
+        upper: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         clip_graphrecord_value(label, value, lower, upper)
     }
 }
 
 impl ValueClip for AttributeName {
-    fn clip(
+    fn clip<'a>(
         label: &'static str,
-        value: Self::Owned,
-        lower: Self::Owned,
-        upper: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        lower: Self::Value<'a>,
+        upper: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         clip_graphrecord_attribute(label, value, lower, upper)
     }
 }
 
 impl ValueClip for IndexValue<Positional> {
-    fn clip(
+    fn clip<'a>(
         label: &'static str,
-        value: Self::Owned,
-        lower: Self::Owned,
-        upper: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        lower: Self::Value<'a>,
+        upper: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         clip_ordered(label, value, lower, upper)
     }
 }
 
 impl ValueClip for IndexValue<NodeIndex> {
-    fn clip(
+    fn clip<'a>(
         label: &'static str,
-        value: Self::Owned,
-        lower: Self::Owned,
-        upper: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        lower: Self::Value<'a>,
+        upper: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         clip_graphrecord_attribute(label, value, lower, upper)
     }
 }
 
 impl ValueClip for IndexValue<AttributeName> {
-    fn clip(
+    fn clip<'a>(
         label: &'static str,
-        value: Self::Owned,
-        lower: Self::Owned,
-        upper: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        lower: Self::Value<'a>,
+        upper: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         clip_graphrecord_attribute(label, value, lower, upper)
     }
 }
 
 impl ValueClip for IndexValue<EdgeIndex> {
-    fn clip(
+    fn clip<'a>(
         label: &'static str,
-        value: Self::Owned,
-        lower: Self::Owned,
-        upper: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        lower: Self::Value<'a>,
+        upper: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         clip_ordered(label, value, lower, upper)
     }
 }
 
 impl ValueClip for IndexValue<GraphRecordValue> {
-    fn clip(
+    fn clip<'a>(
         label: &'static str,
-        value: Self::Owned,
-        lower: Self::Owned,
-        upper: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        lower: Self::Value<'a>,
+        upper: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         clip_graphrecord_value(label, value, lower, upper)
     }
 }
 
 impl ValueCubeRoot for Scalar {
-    fn cube_root(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn cube_root<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Float((integer as f64).cbrt())),
             GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(float.cbrt())),
@@ -413,7 +415,7 @@ impl ValueCubeRoot for Scalar {
 }
 
 impl ValueCubeRoot for IndexValue<GraphRecordValue> {
-    fn cube_root(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn cube_root<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Float((integer as f64).cbrt())),
             GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(float.cbrt())),
@@ -423,7 +425,10 @@ impl ValueCubeRoot for IndexValue<GraphRecordValue> {
 }
 
 impl ValueExponential for Scalar {
-    fn exponential(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn exponential<'a>(
+        label: &'static str,
+        value: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Float((integer as f64).exp())),
             GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(float.exp())),
@@ -433,7 +438,10 @@ impl ValueExponential for Scalar {
 }
 
 impl ValueExponential for IndexValue<GraphRecordValue> {
-    fn exponential(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn exponential<'a>(
+        label: &'static str,
+        value: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Float((integer as f64).exp())),
             GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(float.exp())),
@@ -443,7 +451,7 @@ impl ValueExponential for IndexValue<GraphRecordValue> {
 }
 
 impl ValueFloor for Scalar {
-    fn floor(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn floor<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.floor()),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -452,7 +460,7 @@ impl ValueFloor for Scalar {
 }
 
 impl ValueFloor for IndexValue<GraphRecordValue> {
-    fn floor(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn floor<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.floor()),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -461,7 +469,7 @@ impl ValueFloor for IndexValue<GraphRecordValue> {
 }
 
 impl ValueLogarithm for Scalar {
-    fn logarithm(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn logarithm<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) if integer <= 0 => {
                 Err(Failure::new(label, NonPositiveLogarithm { value }))
@@ -477,7 +485,7 @@ impl ValueLogarithm for Scalar {
 }
 
 impl ValueLogarithm for IndexValue<GraphRecordValue> {
-    fn logarithm(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn logarithm<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) if integer <= 0 => {
                 Err(Failure::new(label, NonPositiveLogarithm { value }))
@@ -493,7 +501,7 @@ impl ValueLogarithm for IndexValue<GraphRecordValue> {
 }
 
 impl ValueNegate for Scalar {
-    fn negate(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Int(-integer)),
             GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(-float)),
@@ -504,7 +512,7 @@ impl ValueNegate for Scalar {
 }
 
 impl ValueNegate for AttributeName {
-    fn negate(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordAttribute::Int(integer) => Ok(GraphRecordAttribute::Int(-integer)),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -513,7 +521,7 @@ impl ValueNegate for AttributeName {
 }
 
 impl ValueNegate for IndexValue<NodeIndex> {
-    fn negate(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordAttribute::Int(integer) => Ok(GraphRecordAttribute::Int(-integer)),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -522,7 +530,7 @@ impl ValueNegate for IndexValue<NodeIndex> {
 }
 
 impl ValueNegate for IndexValue<AttributeName> {
-    fn negate(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordAttribute::Int(integer) => Ok(GraphRecordAttribute::Int(-integer)),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -531,7 +539,7 @@ impl ValueNegate for IndexValue<AttributeName> {
 }
 
 impl ValueNegate for IndexValue<GraphRecordValue> {
-    fn negate(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Int(-integer)),
             GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(-float)),
@@ -542,7 +550,7 @@ impl ValueNegate for IndexValue<GraphRecordValue> {
 }
 
 impl ValueRound for Scalar {
-    fn round(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn round<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.round()),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -551,7 +559,7 @@ impl ValueRound for Scalar {
 }
 
 impl ValueRound for IndexValue<GraphRecordValue> {
-    fn round(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn round<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.round()),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -560,7 +568,7 @@ impl ValueRound for IndexValue<GraphRecordValue> {
 }
 
 impl ValueSign for Scalar {
-    fn sign(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn sign<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Int(integer.signum())),
             GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(if float == 0.0 {
@@ -574,7 +582,7 @@ impl ValueSign for Scalar {
 }
 
 impl ValueSign for AttributeName {
-    fn sign(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn sign<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordAttribute::Int(integer) => Ok(GraphRecordAttribute::Int(integer.signum())),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -583,7 +591,7 @@ impl ValueSign for AttributeName {
 }
 
 impl ValueSign for IndexValue<NodeIndex> {
-    fn sign(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn sign<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordAttribute::Int(integer) => Ok(GraphRecordAttribute::Int(integer.signum())),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -592,7 +600,7 @@ impl ValueSign for IndexValue<NodeIndex> {
 }
 
 impl ValueSign for IndexValue<AttributeName> {
-    fn sign(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn sign<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordAttribute::Int(integer) => Ok(GraphRecordAttribute::Int(integer.signum())),
             value => Err(Failure::new(label, NonNumericValue { value })),
@@ -601,7 +609,7 @@ impl ValueSign for IndexValue<AttributeName> {
 }
 
 impl ValueSign for IndexValue<GraphRecordValue> {
-    fn sign(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn sign<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Int(integer.signum())),
             GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(if float == 0.0 {
@@ -615,7 +623,10 @@ impl ValueSign for IndexValue<GraphRecordValue> {
 }
 
 impl ValueSquareRoot for Scalar {
-    fn square_root(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn square_root<'a>(
+        label: &'static str,
+        value: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) if integer < 0 => {
                 Err(Failure::new(label, NegativeSquareRoot { value }))
@@ -630,7 +641,10 @@ impl ValueSquareRoot for Scalar {
 }
 
 impl ValueSquareRoot for IndexValue<GraphRecordValue> {
-    fn square_root(label: &'static str, value: Self::Owned) -> QueryResult<Self::Owned> {
+    fn square_root<'a>(
+        label: &'static str,
+        value: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         match value {
             GraphRecordValue::Int(integer) if integer < 0 => {
                 Err(Failure::new(label, NegativeSquareRoot { value }))

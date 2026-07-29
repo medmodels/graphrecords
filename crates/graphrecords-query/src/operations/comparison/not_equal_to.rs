@@ -1,6 +1,6 @@
 use super::{equality_bare, equality_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, ValueType,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
@@ -39,8 +39,8 @@ impl<A: Prepare> Prepare for NotEqualToOperation<A> {
 impl<I, V, A> ElementKernel<Indexed<I, V>> for NotEqualToOperation<A>
 where
     I: IndexDomain,
-    for<'a> V: ValueEquality + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
+    V: ValueEquality,
+    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, Mask>;
@@ -49,7 +49,7 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(equality_indexed::<_, A, V>(
+        Ok(equality_indexed::<_, V, A>(
             prepared,
             Self::LABEL,
             |value, argument| !V::equal(value, argument),
@@ -70,8 +70,8 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for NotEqualToOperation<A>
 where
-    for<'a> V: ValueEquality + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
+    V: ValueEquality,
+    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;
     type OutShape = Bare<Mask>;
@@ -80,7 +80,7 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(equality_bare::<A, V>(
+        Ok(equality_bare::<V, A>(
             prepared,
             Self::LABEL,
             |value, argument| !V::equal(value, argument),

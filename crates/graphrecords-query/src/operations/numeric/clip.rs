@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     element::{Pipeline, Retention},
     execution::EvaluationCache,
     operations::{
@@ -44,9 +44,9 @@ impl<L: Prepare, U: Prepare> Prepare for ClipOperation<L, U> {
 impl<I, V, L, U> ElementKernel<Indexed<I, V>> for ClipOperation<L, U>
 where
     I: IndexDomain,
-    for<'a> V: ValueClip + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> L: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
-    for<'a> U: ArgumentSource<Keyed<I>, Value<'a> = <V as ValueType>::Owned>,
+    V: ValueClip,
+    for<'a> L: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    for<'a> U: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
     type Emission = <L::Retention as Retention>::Then<U::Retention>;
     type OutShape = Indexed<I, V>;
@@ -87,9 +87,9 @@ where
 
 impl<V, L, U> ElementKernel<Bare<V>> for ClipOperation<L, U>
 where
-    for<'a> V: ValueClip + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> L: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
-    for<'a> U: ArgumentSource<Unaligned, Value<'a> = <V as ValueType>::Owned>,
+    V: ValueClip,
+    for<'a> L: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    for<'a> U: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = <L::Retention as Retention>::Then<U::Retention>;
     type OutShape = Bare<V>;

@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult, ValueType,
+    Bare, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
     operations::{
@@ -57,9 +57,9 @@ fn membership_estimate<A: Estimated>(
 impl<I, V, A> ElementKernel<Indexed<I, V>> for IsInOperation<A>
 where
     I: IndexDomain,
-    for<'a> V: ValueEquality + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: SetSource<Value<'a> = <V as ValueType>::Owned>,
-    V::Owned: Eq + Hash,
+    V: ValueEquality,
+    for<'a> A: SetSource<Value<'a> = V::Value<'a>>,
+    for<'a> V::Value<'a>: Eq + Hash,
 {
     type Emission = Preserving;
     type OutShape = Indexed<I, Mask>;
@@ -82,9 +82,9 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for IsInOperation<A>
 where
-    for<'a> V: ValueEquality + ValueType<Value<'a> = <V as ValueType>::Owned>,
-    for<'a> A: SetSource<Value<'a> = <V as ValueType>::Owned>,
-    V::Owned: Eq + Hash,
+    V: ValueEquality,
+    for<'a> A: SetSource<Value<'a> = V::Value<'a>>,
+    for<'a> V::Value<'a>: Eq + Hash,
 {
     type Emission = Preserving;
     type OutShape = Bare<Mask>;

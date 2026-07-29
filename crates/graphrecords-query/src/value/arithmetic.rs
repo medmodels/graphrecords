@@ -11,51 +11,51 @@ use std::{
 };
 
 pub trait ValueAdd: ValueType {
-    fn add(
+    fn add<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned>;
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueDivide: ValueType {
-    fn divide(
+    fn divide<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned>;
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueModulo: ValueType {
-    fn modulo(
+    fn modulo<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned>;
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueMultiply: ValueType {
-    fn multiply(
+    fn multiply<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned>;
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValuePower: ValueType {
-    fn power(
+    fn power<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned>;
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueSubtract: ValueType {
-    fn subtract(
+    fn subtract<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned>;
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>>;
 }
 
 #[derive(Debug)]
@@ -133,81 +133,81 @@ fn is_graphrecord_value_modulo_by_zero(
 }
 
 impl ValueAdd for Scalar {
-    fn add(
+    fn add<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value + argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueAdd for AttributeName {
-    fn add(
+    fn add<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value + argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueAdd for IndexValue<Positional> {
-    fn add(
+    fn add<'a>(
         _label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         Ok(value + argument)
     }
 }
 
 impl ValueAdd for IndexValue<NodeIndex> {
-    fn add(
+    fn add<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value + argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueAdd for IndexValue<AttributeName> {
-    fn add(
+    fn add<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value + argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueAdd for IndexValue<EdgeIndex> {
-    fn add(
+    fn add<'a>(
         _label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         Ok(value + argument)
     }
 }
 
 impl ValueAdd for IndexValue<GraphRecordValue> {
-    fn add(
+    fn add<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value + argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueDivide for Scalar {
-    fn divide(
+    fn divide<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         if is_division_by_zero(&value, &argument) {
             return Err(Failure::new(label, DivisionByZero { dividend: value }));
         }
@@ -217,11 +217,11 @@ impl ValueDivide for Scalar {
 }
 
 impl ValueDivide for IndexValue<GraphRecordValue> {
-    fn divide(
+    fn divide<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         if is_division_by_zero(&value, &argument) {
             return Err(Failure::new(label, DivisionByZero { dividend: value }));
         }
@@ -231,11 +231,11 @@ impl ValueDivide for IndexValue<GraphRecordValue> {
 }
 
 impl ValueModulo for Scalar {
-    fn modulo(
+    fn modulo<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         if is_graphrecord_value_modulo_by_zero(&value, &argument) {
             return Err(Failure::new(label, ModuloByZero));
         }
@@ -247,11 +247,11 @@ impl ValueModulo for Scalar {
 }
 
 impl ValueModulo for AttributeName {
-    fn modulo(
+    fn modulo<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         if is_attribute_modulo_by_zero(&value, &argument) {
             return Err(Failure::new(label, ModuloByZero));
         }
@@ -263,11 +263,11 @@ impl ValueModulo for AttributeName {
 }
 
 impl ValueModulo for IndexValue<Positional> {
-    fn modulo(
+    fn modulo<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         if argument == 0 {
             return Err(Failure::new(label, ModuloByZero));
         }
@@ -277,11 +277,11 @@ impl ValueModulo for IndexValue<Positional> {
 }
 
 impl ValueModulo for IndexValue<NodeIndex> {
-    fn modulo(
+    fn modulo<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         if is_attribute_modulo_by_zero(&value, &argument) {
             return Err(Failure::new(label, ModuloByZero));
         }
@@ -293,11 +293,11 @@ impl ValueModulo for IndexValue<NodeIndex> {
 }
 
 impl ValueModulo for IndexValue<AttributeName> {
-    fn modulo(
+    fn modulo<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         if is_attribute_modulo_by_zero(&value, &argument) {
             return Err(Failure::new(label, ModuloByZero));
         }
@@ -309,11 +309,11 @@ impl ValueModulo for IndexValue<AttributeName> {
 }
 
 impl ValueModulo for IndexValue<EdgeIndex> {
-    fn modulo(
+    fn modulo<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         if argument == 0 {
             return Err(Failure::new(label, ModuloByZero));
         }
@@ -323,11 +323,11 @@ impl ValueModulo for IndexValue<EdgeIndex> {
 }
 
 impl ValueModulo for IndexValue<GraphRecordValue> {
-    fn modulo(
+    fn modulo<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         if is_graphrecord_value_modulo_by_zero(&value, &argument) {
             return Err(Failure::new(label, ModuloByZero));
         }
@@ -339,81 +339,81 @@ impl ValueModulo for IndexValue<GraphRecordValue> {
 }
 
 impl ValueMultiply for Scalar {
-    fn multiply(
+    fn multiply<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value * argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueMultiply for AttributeName {
-    fn multiply(
+    fn multiply<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value * argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueMultiply for IndexValue<Positional> {
-    fn multiply(
+    fn multiply<'a>(
         _label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         Ok(value * argument)
     }
 }
 
 impl ValueMultiply for IndexValue<NodeIndex> {
-    fn multiply(
+    fn multiply<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value * argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueMultiply for IndexValue<AttributeName> {
-    fn multiply(
+    fn multiply<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value * argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueMultiply for IndexValue<EdgeIndex> {
-    fn multiply(
+    fn multiply<'a>(
         _label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         Ok(value * argument)
     }
 }
 
 impl ValueMultiply for IndexValue<GraphRecordValue> {
-    fn multiply(
+    fn multiply<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value * argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValuePower for Scalar {
-    fn power(
+    fn power<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         value
             .pow(argument)
             .map_err(|error| Failure::new(label, error))
@@ -421,11 +421,11 @@ impl ValuePower for Scalar {
 }
 
 impl ValuePower for AttributeName {
-    fn power(
+    fn power<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         value
             .pow(argument)
             .map_err(|error| Failure::new(label, error))
@@ -433,21 +433,21 @@ impl ValuePower for AttributeName {
 }
 
 impl ValuePower for IndexValue<Positional> {
-    fn power(
+    fn power<'a>(
         _label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         Ok(value.pow(argument as u32))
     }
 }
 
 impl ValuePower for IndexValue<NodeIndex> {
-    fn power(
+    fn power<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         value
             .pow(argument)
             .map_err(|error| Failure::new(label, error))
@@ -455,11 +455,11 @@ impl ValuePower for IndexValue<NodeIndex> {
 }
 
 impl ValuePower for IndexValue<AttributeName> {
-    fn power(
+    fn power<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         value
             .pow(argument)
             .map_err(|error| Failure::new(label, error))
@@ -467,21 +467,21 @@ impl ValuePower for IndexValue<AttributeName> {
 }
 
 impl ValuePower for IndexValue<EdgeIndex> {
-    fn power(
+    fn power<'a>(
         _label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         Ok(value.pow(argument))
     }
 }
 
 impl ValuePower for IndexValue<GraphRecordValue> {
-    fn power(
+    fn power<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         value
             .pow(argument)
             .map_err(|error| Failure::new(label, error))
@@ -489,71 +489,71 @@ impl ValuePower for IndexValue<GraphRecordValue> {
 }
 
 impl ValueSubtract for Scalar {
-    fn subtract(
+    fn subtract<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value - argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueSubtract for AttributeName {
-    fn subtract(
+    fn subtract<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value - argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueSubtract for IndexValue<Positional> {
-    fn subtract(
+    fn subtract<'a>(
         _label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         Ok(value - argument)
     }
 }
 
 impl ValueSubtract for IndexValue<NodeIndex> {
-    fn subtract(
+    fn subtract<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value - argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueSubtract for IndexValue<AttributeName> {
-    fn subtract(
+    fn subtract<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value - argument).map_err(|error| Failure::new(label, error))
     }
 }
 
 impl ValueSubtract for IndexValue<EdgeIndex> {
-    fn subtract(
+    fn subtract<'a>(
         _label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         Ok(value - argument)
     }
 }
 
 impl ValueSubtract for IndexValue<GraphRecordValue> {
-    fn subtract(
+    fn subtract<'a>(
         label: &'static str,
-        value: Self::Owned,
-        argument: Self::Owned,
-    ) -> QueryResult<Self::Owned> {
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
+    ) -> QueryResult<Self::Value<'a>> {
         (value - argument).map_err(|error| Failure::new(label, error))
     }
 }
