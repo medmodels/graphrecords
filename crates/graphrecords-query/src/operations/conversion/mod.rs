@@ -1,8 +1,10 @@
+mod cast;
 mod discard_index;
 mod discard_value;
 mod enumerate;
 mod expand_to;
 
+pub use cast::CastOperation;
 pub use discard_index::DiscardIndexOperation;
 pub use discard_value::DiscardValueOperation;
 pub use enumerate::EnumerateOperation;

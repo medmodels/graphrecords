@@ -1,5 +1,5 @@
 pub use crate::{
-    EdgeDirection, MaybeAbsent, Operand, QueryEdges, QueryNodes,
+    EdgeDirection, MaybeAbsent, Operand, QueryEdges, QueryNodes, cast,
     operands::{
         DefiniteEdgeOperand, DefiniteNodeOperand, EdgeOperand, EdgesOperand, NodeOperand,
         NodesOperand,

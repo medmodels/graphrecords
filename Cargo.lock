@@ -912,6 +912,7 @@ dependencies = [
 name = "graphrecords-query"
 version = "0.4.1"
 dependencies = [
+ "chrono",
  "elsa",
  "graphrecords-core",
  "graphrecords-macros",

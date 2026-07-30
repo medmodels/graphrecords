@@ -1,3 +1,11 @@
+use crate::cast::CastTarget;
+
+pub trait Cast<T: CastTarget> {
+    type ReturnOperand;
+
+    fn cast(&self, target: T) -> Self::ReturnOperand;
+}
+
 pub trait DiscardIndex {
     type ReturnOperand;
 

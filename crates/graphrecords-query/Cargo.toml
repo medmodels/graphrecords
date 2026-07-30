@@ -8,6 +8,7 @@ license = { workspace = true }
 readme = "../../README.md"
 
 [dependencies]
+chrono = { workspace = true }
 graphrecords-core = { workspace = true }
 graphrecords-utils = { workspace = true }
 graphrecords-macros = { workspace = true }

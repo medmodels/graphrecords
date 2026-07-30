@@ -48,8 +48,8 @@ pub use comparison::{
     LessThanOrEqualToOperation, NotEqualToOperation,
 };
 pub use conversion::{
-    DiscardIndexOperation, DiscardValueOperation, EnumerateOperation, ExpandToOperation,
-    ExpandToSource, ParentResolution,
+    CastOperation, DiscardIndexOperation, DiscardValueOperation, EnumerateOperation,
+    ExpandToOperation, ExpandToSource, ParentResolution,
 };
 pub use errors::{
     Drop, DropErrorsIn, DropErrorsOf, DropErrorsWithCause, ErrorKindNameOperation,
