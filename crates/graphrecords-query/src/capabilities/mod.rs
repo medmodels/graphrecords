@@ -7,6 +7,7 @@ mod grouping;
 mod numeric;
 mod sortable;
 mod string;
+mod transition;
 
 pub use aggregation::{ValueMedian, ValueMode};
 pub use arithmetic::{
@@ -22,3 +23,4 @@ pub use numeric::{
 };
 pub use sortable::{EnsureSortable, incomparable_pair, incomparable_with_first};
 pub use string::StringValue;
+pub use transition::ValueTransition;

@@ -50,7 +50,7 @@ pub use comparison::{
 };
 pub use conversion::{
     CastOperation, DiscardIndexOperation, DiscardValueOperation, EnumerateOperation,
-    ExpandToOperation, ExpandToSource, ParentResolution,
+    ExpandToOperation, ExpandToSource, ParentResolution, TransitionOperation,
 };
 pub use errors::{
     Drop, DropErrorsIn, DropErrorsOf, DropErrorsWithCause, ErrorKindNameOperation,
