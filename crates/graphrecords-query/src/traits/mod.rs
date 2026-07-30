@@ -14,6 +14,7 @@ mod ordering;
 mod string_operations;
 mod structure;
 mod traversal;
+mod uniqueness;
 
 pub use aggregation::*;
 pub use arithmetic::*;
@@ -31,3 +32,4 @@ pub use ordering::*;
 pub use string_operations::*;
 pub use structure::*;
 pub use traversal::*;
+pub use uniqueness::*;

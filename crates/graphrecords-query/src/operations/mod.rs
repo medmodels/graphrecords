@@ -17,6 +17,7 @@ mod ordering;
 mod string_operations;
 mod structure;
 mod traversal;
+mod uniqueness;
 
 use crate::{
     EvaluateContext, EvaluateOperand, Explain, Operand, QueryResult,
@@ -112,6 +113,7 @@ pub use traversal::{
     EdgeDirection, EdgesOperation, EndpointOperation, NeighborsOperation, NodesOperation,
     ViaEdgesOperation, ViaNeighborsOperation, ViaNodesOperation,
 };
+pub use uniqueness::{DropDuplicatesOperation, IsDuplicatedOperation, UniqueOperation};
 
 pub trait OperationScope: Sealed + 'static {}
 

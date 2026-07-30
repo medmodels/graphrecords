@@ -42,7 +42,7 @@ fn modal_values<'a, V: ValueMode>(
             Ok(value) => value,
             Err(failure) => return vec![Err(failure)],
         };
-        let key = V::mode_key(&value);
+        let key = V::equivalence_key(&value);
 
         if let Some(count) = counts.get_mut(&key) {
             *count += 1;
@@ -59,7 +59,7 @@ fn modal_values<'a, V: ValueMode>(
     encountered
         .into_iter()
         .filter_map(|value| {
-            (counts.get(&V::mode_key(&value)) == Some(&maximum_count)).then_some(Ok(value))
+            (counts.get(&V::equivalence_key(&value)) == Some(&maximum_count)).then_some(Ok(value))
         })
         .collect()
 }

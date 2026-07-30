@@ -1,12 +1,10 @@
-use super::{ValueOrdering, incomparable_with_first};
+use super::{ValueEquivalence, ValueOrdering, incomparable_with_first};
 use crate::{
-    AttributeName, EntityDomain, EntityReference, Failure, FailureKind, FailureKindValue,
-    IndexDomain, IndexValue, Mask, QueryResult, ReturnValueType, Scalar, ValueType,
+    AttributeName, Failure, IndexDomain, IndexValue, Mask, QueryResult, Scalar,
     error::aggregation::InvalidMedianValue,
 };
 use chrono::TimeDelta;
-use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue};
-use std::hash::Hash;
+use graphrecords_core::graphrecord::GraphRecordValue;
 
 const NANOSECONDS_PER_SECOND: i128 = 1_000_000_000;
 
@@ -26,17 +24,7 @@ pub trait ValueMedian: ValueOrdering {
     ) -> QueryResult<Self::Value<'a>>;
 }
 
-pub trait ValueMode: ReturnValueType {
-    type Key: Eq + Hash;
-
-    fn mode_key(value: &Self::Value<'_>) -> Self::Key;
-}
-
-pub trait ValueUniqueCount: ValueType {
-    type Key: Eq + Hash;
-
-    fn unique_count_key(value: &Self::Value<'_>) -> Self::Key;
-}
+pub trait ValueMode: ValueEquivalence {}
 
 fn validate_graphrecord_median_value(
     label: &'static str,
@@ -133,53 +121,11 @@ impl ValueMedian for Scalar {
     }
 }
 
-impl ValueMode for Scalar {
-    type Key = GraphRecordValue;
+impl ValueMode for Scalar {}
 
-    fn mode_key(value: &Self::Value<'_>) -> Self::Key {
-        value.clone()
-    }
-}
+impl ValueMode for Mask {}
 
-impl ValueUniqueCount for Scalar {
-    type Key = GraphRecordValue;
-
-    fn unique_count_key(value: &Self::Value<'_>) -> Self::Key {
-        value.clone()
-    }
-}
-
-impl ValueMode for Mask {
-    type Key = bool;
-
-    fn mode_key(value: &Self::Value<'_>) -> Self::Key {
-        *value
-    }
-}
-
-impl ValueUniqueCount for Mask {
-    type Key = bool;
-
-    fn unique_count_key(value: &Self::Value<'_>) -> Self::Key {
-        *value
-    }
-}
-
-impl ValueMode for AttributeName {
-    type Key = GraphRecordAttribute;
-
-    fn mode_key(value: &Self::Value<'_>) -> Self::Key {
-        value.clone()
-    }
-}
-
-impl ValueUniqueCount for AttributeName {
-    type Key = GraphRecordAttribute;
-
-    fn unique_count_key(value: &Self::Value<'_>) -> Self::Key {
-        value.clone()
-    }
-}
+impl ValueMode for AttributeName {}
 
 impl ValueMedian for IndexValue<GraphRecordValue> {
     fn validate_median(label: &'static str, value: &Self::Value<'_>) -> QueryResult<()> {
@@ -204,34 +150,4 @@ impl ValueMedian for IndexValue<GraphRecordValue> {
     }
 }
 
-impl<I: IndexDomain> ValueMode for IndexValue<I> {
-    type Key = I::Owned;
-
-    fn mode_key(value: &Self::Value<'_>) -> Self::Key {
-        value.clone()
-    }
-}
-
-impl<I: IndexDomain> ValueUniqueCount for IndexValue<I> {
-    type Key = I::Owned;
-
-    fn unique_count_key(value: &Self::Value<'_>) -> Self::Key {
-        value.clone()
-    }
-}
-
-impl<E: EntityDomain> ValueUniqueCount for EntityReference<E> {
-    type Key = E::Owned;
-
-    fn unique_count_key(value: &Self::Value<'_>) -> Self::Key {
-        E::to_owned(value)
-    }
-}
-
-impl ValueUniqueCount for FailureKindValue {
-    type Key = FailureKind;
-
-    fn unique_count_key(value: &Self::Value<'_>) -> Self::Key {
-        *value
-    }
-}
+impl<I: IndexDomain> ValueMode for IndexValue<I> {}

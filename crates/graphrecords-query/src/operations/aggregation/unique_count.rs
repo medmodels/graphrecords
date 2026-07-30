@@ -1,7 +1,7 @@
 use crate::{
     Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
     QueryResult,
-    capabilities::ValueUniqueCount,
+    capabilities::ValueEquivalence,
     execution::EvaluationCache,
     operands::DefiniteBareValueOperand,
     operations::{
@@ -30,7 +30,7 @@ impl Prepare for UniqueCountOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueUniqueCount, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
+impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
     for UniqueCountOperation
 {
     type Output = DefiniteBareValueOperand;
@@ -44,7 +44,7 @@ impl<I: IndexDomain, V: ValueUniqueCount, O: OrderState> LaneKernel<Indexed<I, V
             (GrHashSet::default(), 0),
             |(mut unique, count), (_, value)| {
                 let value = value?;
-                let inserted = unique.insert(V::unique_count_key(&value));
+                let inserted = unique.insert(V::equivalence_key(&value));
 
                 Ok((unique, count + i64::from(inserted)))
             },
@@ -58,7 +58,7 @@ impl<I: IndexDomain, V: ValueUniqueCount, O: OrderState> LaneKernel<Indexed<I, V
     }
 }
 
-impl<V: ValueUniqueCount, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for UniqueCountOperation {
+impl<V: ValueEquivalence, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for UniqueCountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -68,7 +68,7 @@ impl<V: ValueUniqueCount, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for Un
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let count = values.try_fold((GrHashSet::default(), 0), |(mut unique, count), value| {
             let value = value?;
-            let inserted = unique.insert(V::unique_count_key(&value));
+            let inserted = unique.insert(V::equivalence_key(&value));
 
             Ok((unique, count + i64::from(inserted)))
         });
