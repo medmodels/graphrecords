@@ -29,9 +29,9 @@ use crate::{
     sealed::Sealed,
 };
 pub use aggregation::{
-    AllOperation, AnyOperation, CountOperation, MaximumOperation, MeanOperation, MinimumOperation,
-    ModeOperation, ProductOperation, RandomOperation, StandardDeviationOperation, SumOperation,
-    UniqueCountOperation, VarianceOperation,
+    AllOperation, AnyOperation, CountOperation, MaximumOperation, MeanOperation, MedianOperation,
+    MinimumOperation, ModeOperation, ProductOperation, RandomOperation, StandardDeviationOperation,
+    SumOperation, UniqueCountOperation, VarianceOperation,
 };
 pub use argument::{
     AlignableArity, Alignment, ArgumentSource, EnumerableArity, IndexedElementContainer,

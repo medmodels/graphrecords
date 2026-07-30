@@ -31,7 +31,7 @@ pub trait Mean {
 pub trait Median {
     type ReturnOperand;
 
-    fn median(&mut self) -> Self::ReturnOperand;
+    fn median(&self) -> Self::ReturnOperand;
 }
 
 pub trait Minimum {

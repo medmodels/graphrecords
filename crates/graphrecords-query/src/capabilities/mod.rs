@@ -7,7 +7,7 @@ mod numeric;
 mod sortable;
 mod string;
 
-pub use aggregation::{ValueMode, ValueUniqueCount};
+pub use aggregation::{ValueMedian, ValueMode, ValueUniqueCount};
 pub use arithmetic::{
     ValueAdd, ValueDivide, ValueModulo, ValueMultiply, ValuePower, ValueSubtract,
 };

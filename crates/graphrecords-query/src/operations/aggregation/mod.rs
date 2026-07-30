@@ -18,6 +18,7 @@ pub use any::AnyOperation;
 pub use count::CountOperation;
 pub use maximum::MaximumOperation;
 pub use mean::MeanOperation;
+pub use median::MedianOperation;
 pub use minimum::MinimumOperation;
 pub use mode::ModeOperation;
 pub use product::ProductOperation;

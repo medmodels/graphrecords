@@ -6,6 +6,48 @@ use std::{
 };
 
 #[derive(Debug)]
+pub struct InvalidMedianValue {
+    value: GraphRecordValue,
+}
+
+impl InvalidMedianValue {
+    #[must_use]
+    pub const fn new(value: GraphRecordValue) -> Self {
+        Self { value }
+    }
+
+    #[must_use]
+    pub const fn value(&self) -> &GraphRecordValue {
+        &self.value
+    }
+}
+
+impl Display for InvalidMedianValue {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "value `{}` cannot be included in a median calculation",
+            self.value
+        )
+    }
+}
+
+impl Error for InvalidMedianValue {}
+
+impl Diagnostic for InvalidMedianValue {
+    fn name() -> &'static str {
+        "InvalidMedianValue"
+    }
+
+    fn help(&self) -> Option<String> {
+        Some(
+            "narrow the values down first using is_int(), is_float(), is_datetime() or is_duration()"
+                .to_string(),
+        )
+    }
+}
+
+#[derive(Debug)]
 pub struct InvalidStandardDeviationValue {
     value: GraphRecordValue,
 }
