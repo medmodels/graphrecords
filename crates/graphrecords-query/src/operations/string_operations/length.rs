@@ -1,19 +1,20 @@
 use super::{string_map_bare, string_map_indexed};
 use crate::{
     Bare, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult, Scalar,
+    capabilities::StringValue,
     element::Preserving,
+    error::string::StringLengthOverflow,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Length,
-    value::{StringLengthOverflow, StringValue},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 
 fn length_chars(label: &'static str, value: &str) -> QueryResult<GraphRecordValue> {
     let length = value.chars().count();
-    let length =
-        i64::try_from(length).map_err(|_| Failure::new(label, StringLengthOverflow { length }))?;
+    let length = i64::try_from(length)
+        .map_err(|_| Failure::new(label, StringLengthOverflow::new(length)))?;
 
     Ok(GraphRecordValue::Int(length))
 }

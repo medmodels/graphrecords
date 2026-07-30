@@ -1,12 +1,12 @@
 use super::{string_map_bare, string_map_indexed};
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    capabilities::StringValue,
     element::Preserving,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::TrimStart,
-    value::StringValue,
 };
 use graphrecords_core::GraphRecord;
 

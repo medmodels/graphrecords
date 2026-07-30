@@ -1,6 +1,7 @@
 use super::{arithmetic_bare, arithmetic_indexed};
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    capabilities::ValueSubtract,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
@@ -8,7 +9,6 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Subtract,
-    value::ValueSubtract,
 };
 use graphrecords_core::GraphRecord;
 

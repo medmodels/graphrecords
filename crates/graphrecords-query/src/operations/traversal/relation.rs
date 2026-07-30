@@ -10,22 +10,6 @@ use crate::{
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashSet;
 
-fn relation_estimate<R: Relation>(input: Estimate, stats: &Stats) -> Estimate {
-    let mut distinct = match (R::codomain_count(stats), input.distinct) {
-        (Some(codomain), Some(distinct)) => Some(codomain.min(distinct)),
-        (codomain, distinct) => codomain.or(distinct),
-    };
-    if let Some(elements) = input.elements {
-        distinct = distinct.map(|distinct| distinct.min(elements));
-    }
-
-    Estimate {
-        distinct,
-        selectivity: None,
-        ..input
-    }
-}
-
 pub trait Relation: Prepare + Clone + Explain + PlanIdentity + PlanInputs {
     type From: EntityDomain;
     type To: EntityDomain;
@@ -39,6 +23,22 @@ pub trait Relation: Prepare + Clone + Explain + PlanIdentity + PlanInputs {
     #[allow(unused_variables)]
     fn codomain_count(stats: &Stats) -> Option<usize> {
         None
+    }
+}
+
+fn relation_estimate<R: Relation>(input: Estimate, stats: &Stats) -> Estimate {
+    let mut distinct = match (R::codomain_count(stats), input.distinct) {
+        (Some(codomain), Some(distinct)) => Some(codomain.min(distinct)),
+        (codomain, distinct) => codomain.or(distinct),
+    };
+    if let Some(elements) = input.elements {
+        distinct = distinct.map(|distinct| distinct.min(elements));
+    }
+
+    Estimate {
+        distinct,
+        selectivity: None,
+        ..input
     }
 }
 

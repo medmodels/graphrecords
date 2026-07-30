@@ -1,20 +1,9 @@
-use crate::{AttributeName, Diagnostic, Failure, IndexValue, QueryResult, Scalar, ValueType};
-use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue, NodeIndex};
+use crate::Diagnostic;
 use regex::Error as RegexError;
 use std::{
     error::Error,
     fmt::{self, Debug, Display, Formatter},
 };
-
-pub trait StringValue: ValueType {
-    fn into_string<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<String>
-    where
-        Self: 'a;
-
-    fn from_string<'a>(value: String) -> Self::Value<'a>
-    where
-        Self: 'a;
-}
 
 #[derive(Debug)]
 pub struct EmptySplitDelimiter;
@@ -35,7 +24,19 @@ impl Diagnostic for EmptySplitDelimiter {
 
 #[derive(Debug)]
 pub struct InvalidPaddingCharacter {
-    pub value: String,
+    value: String,
+}
+
+impl InvalidPaddingCharacter {
+    #[must_use]
+    pub const fn new(value: String) -> Self {
+        Self { value }
+    }
+
+    #[must_use]
+    pub const fn value(&self) -> &str {
+        self.value.as_str()
+    }
 }
 
 impl Display for InvalidPaddingCharacter {
@@ -58,8 +59,25 @@ impl Diagnostic for InvalidPaddingCharacter {
 
 #[derive(Debug)]
 pub struct InvalidRegexPattern {
-    pub pattern: String,
-    pub error: RegexError,
+    pattern: String,
+    error: RegexError,
+}
+
+impl InvalidRegexPattern {
+    #[must_use]
+    pub const fn new(pattern: String, error: RegexError) -> Self {
+        Self { pattern, error }
+    }
+
+    #[must_use]
+    pub const fn pattern(&self) -> &str {
+        self.pattern.as_str()
+    }
+
+    #[must_use]
+    pub const fn error(&self) -> &RegexError {
+        &self.error
+    }
 }
 
 impl Display for InvalidRegexPattern {
@@ -86,9 +104,31 @@ impl Diagnostic for InvalidRegexPattern {
 
 #[derive(Debug)]
 pub struct InvalidStringSlice {
-    pub start: usize,
-    pub end: usize,
-    pub length: usize,
+    start: usize,
+    end: usize,
+    length: usize,
+}
+
+impl InvalidStringSlice {
+    #[must_use]
+    pub const fn new(start: usize, end: usize, length: usize) -> Self {
+        Self { start, end, length }
+    }
+
+    #[must_use]
+    pub const fn start(&self) -> usize {
+        self.start
+    }
+
+    #[must_use]
+    pub const fn end(&self) -> usize {
+        self.end
+    }
+
+    #[must_use]
+    pub const fn length(&self) -> usize {
+        self.length
+    }
 }
 
 impl Display for InvalidStringSlice {
@@ -111,7 +151,19 @@ impl Diagnostic for InvalidStringSlice {
 
 #[derive(Debug)]
 pub struct NonStringValue<T> {
-    pub value: T,
+    value: T,
+}
+
+impl<T> NonStringValue<T> {
+    #[must_use]
+    pub const fn new(value: T) -> Self {
+        Self { value }
+    }
+
+    #[must_use]
+    pub const fn value(&self) -> &T {
+        &self.value
+    }
 }
 
 impl<T: Display> Display for NonStringValue<T> {
@@ -130,7 +182,19 @@ impl<T: Debug + Display + Send + Sync + 'static> Diagnostic for NonStringValue<T
 
 #[derive(Debug)]
 pub struct StringLengthOverflow {
-    pub length: usize,
+    length: usize,
+}
+
+impl StringLengthOverflow {
+    #[must_use]
+    pub const fn new(length: usize) -> Self {
+        Self { length }
+    }
+
+    #[must_use]
+    pub const fn length(&self) -> usize {
+        self.length
+    }
 }
 
 impl Display for StringLengthOverflow {
@@ -153,7 +217,19 @@ impl Diagnostic for StringLengthOverflow {
 
 #[derive(Debug)]
 pub struct StringPaddingOverflow {
-    pub width: usize,
+    width: usize,
+}
+
+impl StringPaddingOverflow {
+    #[must_use]
+    pub const fn new(width: usize) -> Self {
+        Self { width }
+    }
+
+    #[must_use]
+    pub const fn width(&self) -> usize {
+        self.width
+    }
 }
 
 impl Display for StringPaddingOverflow {
@@ -171,106 +247,5 @@ impl Error for StringPaddingOverflow {}
 impl Diagnostic for StringPaddingOverflow {
     fn name() -> &'static str {
         "StringPaddingOverflow"
-    }
-}
-
-impl StringValue for Scalar {
-    fn into_string<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<String>
-    where
-        Self: 'a,
-    {
-        match value {
-            GraphRecordValue::String(value) => Ok(value),
-            value => Err(Failure::new(label, NonStringValue { value })),
-        }
-    }
-
-    fn from_string<'a>(value: String) -> Self::Value<'a>
-    where
-        Self: 'a,
-    {
-        GraphRecordValue::String(value)
-    }
-}
-
-impl StringValue for AttributeName {
-    fn into_string<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<String>
-    where
-        Self: 'a,
-    {
-        match value {
-            GraphRecordAttribute::String(value) => Ok(value),
-            value @ GraphRecordAttribute::Int(_) => {
-                Err(Failure::new(label, NonStringValue { value }))
-            }
-        }
-    }
-
-    fn from_string<'a>(value: String) -> Self::Value<'a>
-    where
-        Self: 'a,
-    {
-        GraphRecordAttribute::String(value)
-    }
-}
-
-impl StringValue for IndexValue<NodeIndex> {
-    fn into_string<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<String>
-    where
-        Self: 'a,
-    {
-        match value {
-            GraphRecordAttribute::String(value) => Ok(value),
-            value @ GraphRecordAttribute::Int(_) => {
-                Err(Failure::new(label, NonStringValue { value }))
-            }
-        }
-    }
-
-    fn from_string<'a>(value: String) -> Self::Value<'a>
-    where
-        Self: 'a,
-    {
-        GraphRecordAttribute::String(value)
-    }
-}
-
-impl StringValue for IndexValue<AttributeName> {
-    fn into_string<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<String>
-    where
-        Self: 'a,
-    {
-        match value {
-            GraphRecordAttribute::String(value) => Ok(value),
-            value @ GraphRecordAttribute::Int(_) => {
-                Err(Failure::new(label, NonStringValue { value }))
-            }
-        }
-    }
-
-    fn from_string<'a>(value: String) -> Self::Value<'a>
-    where
-        Self: 'a,
-    {
-        GraphRecordAttribute::String(value)
-    }
-}
-
-impl StringValue for IndexValue<GraphRecordValue> {
-    fn into_string<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<String>
-    where
-        Self: 'a,
-    {
-        match value {
-            GraphRecordValue::String(value) => Ok(value),
-            value => Err(Failure::new(label, NonStringValue { value })),
-        }
-    }
-
-    fn from_string<'a>(value: String) -> Self::Value<'a>
-    where
-        Self: 'a,
-    {
-        GraphRecordValue::String(value)
     }
 }

@@ -1,3 +1,4 @@
+pub mod capabilities;
 pub mod element;
 pub mod error;
 pub mod execution;
@@ -15,14 +16,11 @@ pub use element::{
     Arity, Bare, BoxedIterator, Definite, ElementShape, Indexed, Multiple, OrderState, Ordered,
     Return, ReturnShape, Single, Unordered,
 };
-pub use error::{
-    Diagnostic, DuplicateIndex, ErrorGroup, External, Failure, FailureKind, IncomparableValues,
-    IncomparableValuesAt, QueryResult,
-};
+pub use error::{Diagnostic, ErrorGroup, External, Failure, FailureKind, QueryResult};
 pub use explain::{Explain, Explanation, Labeled};
 pub use index::{
-    DuplicateExpandedChildIndex, EntityDomain, ExpandedChild, ExpandedIndex, ExpandedIndexOwned,
-    ExpandedIndexReference, IndexDomain, NoChildIndex, OwnedIndex, Position, Positional,
+    EntityDomain, ExpandedChild, ExpandedIndex, ExpandedIndexOwned, ExpandedIndexReference,
+    IndexDomain, OwnedIndex, Position, Positional,
 };
 pub use operands::{
     BucketOwned, CheckedIndexedLaneBuilder, DefiniteEdgeOperand, DefiniteNodeOperand,
@@ -35,10 +33,8 @@ pub use operations::{EdgeDirection, MaybeAbsent, PreparedIndexedMultiple};
 pub use selection::{QueryEdges, QueryNodes};
 pub use traits::*;
 pub use value::{
-    AttributeName, EmptySplitDelimiter, EntityReference, FailureKindValue, FailureValue,
-    IndexValue, InvalidPaddingCharacter, InvalidRegexPattern, InvalidStringSlice, Mask,
-    NonStringValue, ReturnValueType, Scalar, StringLengthOverflow, StringPaddingOverflow,
-    StringValue, Unit, ValueType,
+    AttributeName, EntityReference, FailureKindValue, FailureValue, IndexValue, Mask,
+    ReturnValueType, Scalar, Unit, ValueType,
 };
 
 mod sealed {

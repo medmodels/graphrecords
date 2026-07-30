@@ -5,7 +5,7 @@ use crate::{
         Arity, Bare, ElementEmission, ElementShape, Expanding, Indexed, OrderState, Ordered,
         Retention, Unordered,
     },
-    index::DuplicateExpandedChildIndex,
+    error::index::DuplicateExpandedChildIndex,
 };
 use graphrecords_utils::aliases::GrHashSet;
 use std::marker::PhantomData;
@@ -158,11 +158,13 @@ where
     let mut fragment = Vec::with_capacity(children.len());
 
     for child in children {
-        if !seen_children.insert(C::to_owned(&child.index)) {
+        let (child_index, outcome) = child.into_parts();
+
+        if !seen_children.insert(C::to_owned(&child_index)) {
             let source_address = ExpandedIndexReference::source(parent.clone());
             let failure = Failure::new_at::<ExpandedIndex<_, _>, _>(
                 "indexed expansion",
-                DuplicateExpandedChildIndex::<C>::new(C::to_owned(&child.index)),
+                DuplicateExpandedChildIndex::<C>::new(C::to_owned(&child_index)),
                 &source_address,
             );
 
@@ -170,8 +172,8 @@ where
         }
 
         fragment.push((
-            ExpandedIndexReference::child(parent.clone(), child.index),
-            child.outcome,
+            ExpandedIndexReference::child(parent.clone(), child_index),
+            outcome,
         ));
     }
 

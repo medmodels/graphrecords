@@ -1,12 +1,12 @@
 use super::{numeric_bare, numeric_indexed};
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    capabilities::ValueCeil,
     element::Preserving,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Ceil,
-    value::ValueCeil,
 };
 use graphrecords_core::GraphRecord;
 

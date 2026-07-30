@@ -38,6 +38,10 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
         values: KeyedStream<'a, I, V, Multiple<Ordered>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        #[expect(
+            clippy::needless_collect,
+            reason = "the erased stream is not a DoubleEndedIterator"
+        )]
         let values: Vec<_> = values.collect();
 
         Ok(Box::new(values.into_iter().rev()))
@@ -56,6 +60,10 @@ impl<V: ValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for ReverseOrderOperat
         values: BareStream<'a, V, Multiple<Ordered>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        #[expect(
+            clippy::needless_collect,
+            reason = "the erased stream is not a DoubleEndedIterator"
+        )]
         let values: Vec<_> = values.collect();
 
         Ok(Box::new(values.into_iter().rev()))

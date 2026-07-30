@@ -4,10 +4,7 @@ mod key;
 
 use crate::{AttributeName, FailureKind};
 pub use entity::{EntityAttributes, IndicesInGroup};
-pub use expanded::{
-    DuplicateExpandedChildIndex, ExpandedChild, ExpandedIndex, ExpandedIndexOwned,
-    ExpandedIndexReference, NoChildIndex,
-};
+pub use expanded::{ExpandedChild, ExpandedIndex, ExpandedIndexOwned, ExpandedIndexReference};
 use graphrecords_core::{
     GraphRecord,
     errors::GraphRecordResult,

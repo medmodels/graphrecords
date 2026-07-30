@@ -1,13 +1,11 @@
 use crate::{
-    Arity, Bare, Definite, Diagnostic, ElementShape, IndexDomain, Indexed, Multiple, Operand,
-    OrderState, QueryResult, Single, ValueType, operands::OperandHandle,
+    Arity, Bare, Definite, ElementShape, IndexDomain, Indexed, Multiple, Operand, OrderState,
+    QueryResult, Single, ValueType, operands::OperandHandle,
 };
 use elsa::FrozenMap;
 use graphrecords_core::GraphRecord;
 use std::{
     any::Any,
-    error::Error,
-    fmt::{self, Display, Formatter},
     hash::{Hash, Hasher},
     ptr,
     sync::Arc,
@@ -183,22 +181,5 @@ impl<'a> EvaluationCache<'a> {
             Ok(cached) => Ok(O::from_cached(cached)),
             Err(failure) => Err(failure.clone()),
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct EvaluationCacheGraphRecordMismatch;
-
-impl Display for EvaluationCacheGraphRecordMismatch {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        formatter.write_str("the evaluation cache belongs to a different graphrecord")
-    }
-}
-
-impl Error for EvaluationCacheGraphRecordMismatch {}
-
-impl Diagnostic for EvaluationCacheGraphRecordMismatch {
-    fn name() -> &'static str {
-        "EvaluationCacheGraphRecordMismatch"
     }
 }

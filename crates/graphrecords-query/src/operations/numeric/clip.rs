@@ -1,5 +1,6 @@
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    capabilities::ValueClip,
     element::{Pipeline, Retention},
     execution::EvaluationCache,
     operations::{
@@ -8,7 +9,6 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Clip,
-    value::ValueClip,
 };
 use graphrecords_core::GraphRecord;
 

@@ -1,7 +1,8 @@
 use crate::{
-    Diagnostic, EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled, Operand,
-    OwnedIndex, QueryResult, Scalar, Unit,
+    EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult, Scalar,
+    Unit,
     element::{Pipeline, Preserving},
+    error::structure::{MissingAttribute, MissingTraversedAttribute},
     execution::EvaluationCache,
     index::EntityAttributes,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
@@ -9,67 +10,6 @@ use crate::{
     traits::Attribute,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
-use std::{
-    error::Error,
-    fmt::{self, Debug, Display, Formatter},
-};
-
-#[derive(Debug)]
-pub struct MissingAttribute {
-    pub attribute: GraphRecordAttribute,
-}
-
-impl Display for MissingAttribute {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "no attribute `{}`", self.attribute)
-    }
-}
-
-impl Error for MissingAttribute {}
-
-impl Diagnostic for MissingAttribute {
-    fn name() -> &'static str {
-        "MissingAttribute"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some(
-            "filter the elements using `has_attribute(...)` first or handle missing attributes with `on_error(...)`"
-                .to_string(),
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct MissingTraversedAttribute<T: OwnedIndex> {
-    pub attribute: GraphRecordAttribute,
-    pub entity: T,
-}
-
-impl<T: OwnedIndex> Display for MissingTraversedAttribute<T> {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "no attribute `{}` on the traversed element `{}`",
-            self.attribute, self.entity
-        )
-    }
-}
-
-impl<T: OwnedIndex> Error for MissingTraversedAttribute<T> {}
-
-impl<T: OwnedIndex> Diagnostic for MissingTraversedAttribute<T> {
-    fn name() -> &'static str {
-        "MissingTraversedAttribute"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some(
-            "filter the elements using `has_attribute(...)` first or handle missing attributes with `on_error(...)`"
-                .to_string(),
-        )
-    }
-}
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -120,9 +60,7 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation
 
             let failure = Failure::new_at::<I, _>(
                 Self::LABEL,
-                MissingAttribute {
-                    attribute: prepared.clone(),
-                },
+                MissingAttribute::new(prepared.clone()),
                 &index,
             );
 
@@ -165,10 +103,7 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
 
                 Err(Failure::new_at::<I, _>(
                     Self::LABEL,
-                    MissingTraversedAttribute {
-                        attribute: prepared.clone(),
-                        entity: E::to_owned(&entity),
-                    },
+                    MissingTraversedAttribute::new(prepared.clone(), E::to_owned(&entity)),
                     &key,
                 ))
             })

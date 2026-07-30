@@ -2,22 +2,20 @@ mod collection;
 mod constant;
 
 use crate::{
-    Arity, Bare, Definite, Diagnostic, DuplicateIndex, ElementShape, EvaluateOperand, Explain,
-    Failure, IndexDomain, Indexed, Multiple, OrderState, QueryResult, Single, ValueType,
+    Arity, Bare, Definite, Diagnostic, ElementShape, EvaluateOperand, Explain, Failure,
+    IndexDomain, Indexed, Multiple, OrderState, QueryResult, Single, ValueType,
     element::{ElementEmission, Preserving, Retention},
+    error::{
+        argument::{Absent, ArgumentAbsent},
+        index::DuplicateIndex,
+    },
     execution::EvaluationCache,
     operands::OperandHandle,
     optimizer::{Estimated, PlanIdentity, PlanInputs},
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
-use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
-    hash::Hash,
-    marker::PhantomData,
-    sync::Arc,
-};
+use std::{hash::Hash, marker::PhantomData, sync::Arc};
 
 pub trait Prepare: 'static {
     type Prepared<'a>: Clone + 'a
@@ -74,53 +72,6 @@ pub enum Lookup<'a, W> {
     Absent(Absent),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum Absent {
-    Uncovered,
-    Empty,
-}
-
-impl Display for Absent {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Uncovered => formatter.write_str("argument did not cover this index"),
-            Self::Empty => formatter.write_str("argument provided no value for this lookup"),
-        }
-    }
-}
-
-impl Error for Absent {}
-
-#[derive(Debug)]
-pub struct ArgumentAbsent {
-    pub cause: Absent,
-}
-
-impl Display for ArgumentAbsent {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}", self.cause)
-    }
-}
-
-impl Error for ArgumentAbsent {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(&self.cause)
-    }
-}
-
-impl Diagnostic for ArgumentAbsent {
-    fn name() -> &'static str {
-        "ArgumentAbsent"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some(
-            "make the argument cover the subject's elements or state a policy with `on_missing(...)`"
-                .to_string(),
-        )
-    }
-}
-
 pub trait ArgumentSource<A: Alignment>:
     Prepare + Explain + PlanIdentity + PlanInputs + Estimated
 {
@@ -152,7 +103,7 @@ pub trait ArgumentSource<A: Alignment>:
         match Self::lookup(prepared, address) {
             Lookup::Present(wrapped) => <Self::Retention as Retention>::keep(wrapped.clone()),
             Lookup::Absent(absent) => <Self::Retention as Retention>::absent(|| {
-                A::raise_at(label, ArgumentAbsent { cause: absent }, address)
+                A::raise_at(label, ArgumentAbsent::new(absent), address)
             }),
         }
     }

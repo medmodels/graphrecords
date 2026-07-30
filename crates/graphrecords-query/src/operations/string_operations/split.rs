@@ -1,7 +1,9 @@
 use crate::{
-    Bare, EmptySplitDelimiter, ExpandedChild, ExpandedIndex, Explain, Failure, IndexDomain,
-    Indexed, Labeled, Operand, Ordered, Positional, QueryResult,
+    Bare, ExpandedChild, ExpandedIndex, Explain, Failure, IndexDomain, Indexed, Labeled, Operand,
+    Ordered, Positional, QueryResult,
+    capabilities::StringValue,
     element::{Expanding, Pipeline, Retention},
+    error::string::EmptySplitDelimiter,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
@@ -9,7 +11,6 @@ use crate::{
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::Split,
-    value::StringValue,
 };
 use graphrecords_core::GraphRecord;
 

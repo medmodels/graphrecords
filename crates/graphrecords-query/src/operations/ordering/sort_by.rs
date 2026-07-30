@@ -1,7 +1,9 @@
 use crate::{
-    EvaluateOperand, Explain, Failure, IncomparableValuesAt, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, OrderState, Ordered, QueryResult, ValueType,
+    EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
+    OrderState, Ordered, QueryResult, ValueType,
+    capabilities::EnsureSortable,
     element::Retention,
+    error::{comparison::IncomparableValuesAt, ordering::IncomparableIndices},
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -9,7 +11,6 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::SortBy,
-    value::{EnsureSortable, IncomparableIndices},
 };
 use graphrecords_core::GraphRecord;
 use std::{
@@ -78,12 +79,12 @@ where
 
             return Err(Failure::new(
                 label,
-                IncomparableValuesAt {
-                    first: A::to_owned_value(first),
-                    second: A::to_owned_value(second),
-                    first_element: I::to_owned(first_index),
-                    second_element: I::to_owned(second_index),
-                },
+                IncomparableValuesAt::new(
+                    A::to_owned_value(first),
+                    A::to_owned_value(second),
+                    I::to_owned(first_index),
+                    I::to_owned(second_index),
+                ),
             ));
         }
 
@@ -99,15 +100,15 @@ where
                 EnsureSortable::find_incomparable(run.iter().map(|(index, _, _)| index))
             {
                 let (first_index, _, key) = &run[first_position];
-                let (second_index, _, _) = &run[second_position];
+                let second_index = &run[second_position].0;
 
                 return Err(Failure::new(
                     label,
-                    IncomparableIndices {
-                        value: A::to_owned_value(key),
-                        first: I::to_owned(first_index),
-                        second: I::to_owned(second_index),
-                    },
+                    IncomparableIndices::new(
+                        A::to_owned_value(key),
+                        I::to_owned(first_index),
+                        I::to_owned(second_index),
+                    ),
                 ));
             }
 

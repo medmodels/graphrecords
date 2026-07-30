@@ -6,8 +6,8 @@ pub(super) type ErasedRule<O> =
     Box<dyn for<'a> Fn(O, &Session<'a>) -> Transformed<O> + Send + Sync>;
 
 pub struct Transformed<T> {
-    pub value: T,
-    pub changed: bool,
+    value: T,
+    changed: bool,
 }
 
 impl<T> Transformed<T> {
@@ -25,6 +25,21 @@ impl<T> Transformed<T> {
             value,
             changed: false,
         }
+    }
+
+    #[must_use]
+    pub const fn value(&self) -> &T {
+        &self.value
+    }
+
+    #[must_use]
+    pub const fn is_changed(&self) -> bool {
+        self.changed
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (T, bool) {
+        (self.value, self.changed)
     }
 }
 

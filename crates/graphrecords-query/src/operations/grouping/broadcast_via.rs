@@ -1,7 +1,8 @@
-use super::{MissingGroupAggregate, reject_key_failures};
+use super::reject_key_failures;
 use crate::{
     Arity, Bare, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
     Operand, QueryResult, Single, ValueType,
+    error::grouping::MissingGroupAggregate,
     execution::EvaluationCache,
     index::GroupKey,
     operands::{OperandHandle, Partition},

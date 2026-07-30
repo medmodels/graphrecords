@@ -6,8 +6,9 @@ mod less_than_or_equal_to;
 mod not_equal_to;
 
 use crate::{
-    Failure, IncomparableValues, IndexDomain, Mask, ValueType,
+    Failure, IndexDomain, Mask, ValueType,
     element::{BarePipeline, IndexedValuePipeline, Pipeline, Retention},
+    error::comparison::IncomparableValues,
     operations::{ArgumentSource, Keyed, Unaligned},
 };
 pub use equal_to::EqualToOperation;
@@ -102,10 +103,7 @@ where
                 Some(outcome) => Ok(predicate(outcome)),
                 None => Err(Failure::new_at::<I, _>(
                     label,
-                    IncomparableValues {
-                        first: V::into_owned(value),
-                        second: V::into_owned(argument),
-                    },
+                    IncomparableValues::new(V::into_owned(value), V::into_owned(argument)),
                     &index,
                 )),
             })
@@ -140,10 +138,7 @@ where
                 Some(outcome) => Ok(predicate(outcome)),
                 None => Err(Failure::new(
                     label,
-                    IncomparableValues {
-                        first: V::into_owned(value),
-                        second: V::into_owned(argument),
-                    },
+                    IncomparableValues::new(V::into_owned(value), V::into_owned(argument)),
                 )),
             })
         })

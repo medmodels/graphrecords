@@ -1,7 +1,8 @@
 use crate::{
     Bare, ExpandedIndex, ExpandedIndexOwned, Explain, Failure, IndexDomain, IndexValue, Indexed,
-    Labeled, NoChildIndex, Operand, QueryResult,
+    Labeled, Operand, QueryResult,
     element::{Pipeline, Preserving},
+    error::index::NoChildIndex,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},

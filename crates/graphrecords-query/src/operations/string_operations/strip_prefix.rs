@@ -1,6 +1,7 @@
 use super::{string_argument_map_bare, string_argument_map_indexed};
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    capabilities::StringValue,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
@@ -8,7 +9,6 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::StripPrefix,
-    value::StringValue,
 };
 use graphrecords_core::GraphRecord;
 

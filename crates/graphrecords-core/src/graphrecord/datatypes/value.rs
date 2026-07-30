@@ -589,79 +589,136 @@ mod test {
 
     #[test]
     fn test_partial_eq() {
-        assert!(
+        assert_eq!(
+            GraphRecordValue::String("value".to_string()),
             GraphRecordValue::String("value".to_string())
-                == GraphRecordValue::String("value".to_string())
         );
-        assert!(
-            GraphRecordValue::String("value2".to_string())
-                != GraphRecordValue::String("value".to_string())
+        assert_ne!(
+            GraphRecordValue::String("value2".to_string()),
+            GraphRecordValue::String("value".to_string())
         );
 
-        assert!(GraphRecordValue::Int(0) == GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::Int(1) != GraphRecordValue::Int(0));
+        assert_eq!(GraphRecordValue::Int(0), GraphRecordValue::Int(0));
+        assert_ne!(GraphRecordValue::Int(1), GraphRecordValue::Int(0));
 
-        assert!(GraphRecordValue::Int(0) == GraphRecordValue::Float(0_f64));
-        assert!(GraphRecordValue::Int(1) != GraphRecordValue::Float(0_f64));
-        assert!(GraphRecordValue::Int(1) == GraphRecordValue::Float(1_f64));
+        assert_eq!(GraphRecordValue::Int(0), GraphRecordValue::Float(0_f64));
+        assert_ne!(GraphRecordValue::Int(1), GraphRecordValue::Float(0_f64));
+        assert_eq!(GraphRecordValue::Int(1), GraphRecordValue::Float(1_f64));
 
-        assert!(GraphRecordValue::Float(0_f64) == GraphRecordValue::Float(0_f64));
-        assert!(GraphRecordValue::Float(1_f64) != GraphRecordValue::Float(0_f64));
+        assert_eq!(
+            GraphRecordValue::Float(0_f64),
+            GraphRecordValue::Float(0_f64)
+        );
+        assert_ne!(
+            GraphRecordValue::Float(1_f64),
+            GraphRecordValue::Float(0_f64)
+        );
 
-        assert!(GraphRecordValue::Float(0_f64) == GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::Float(1_f64) != GraphRecordValue::Int(0));
+        assert_eq!(GraphRecordValue::Float(0_f64), GraphRecordValue::Int(0));
+        assert_ne!(GraphRecordValue::Float(1_f64), GraphRecordValue::Int(0));
 
-        assert!(GraphRecordValue::Float(f64::NAN) == GraphRecordValue::Float(f64::NAN));
-        assert!(GraphRecordValue::Float(-0.0) == GraphRecordValue::Float(0.0));
+        assert_eq!(
+            GraphRecordValue::Float(f64::NAN),
+            GraphRecordValue::Float(f64::NAN)
+        );
+        assert_eq!(GraphRecordValue::Float(-0.0), GraphRecordValue::Float(0.0));
 
         let large_int = (1_i64 << 53) + 1;
-        assert!(GraphRecordValue::Int(large_int) != GraphRecordValue::Float(large_int as f64));
-        assert!(GraphRecordValue::Float(large_int as f64) != GraphRecordValue::Int(large_int));
+        assert_ne!(
+            GraphRecordValue::Int(large_int),
+            GraphRecordValue::Float(large_int as f64)
+        );
+        assert_ne!(
+            GraphRecordValue::Float(large_int as f64),
+            GraphRecordValue::Int(large_int)
+        );
 
-        assert!(GraphRecordValue::Bool(false) == GraphRecordValue::Bool(false));
-        assert!(GraphRecordValue::Bool(true) != GraphRecordValue::Bool(false));
+        assert_eq!(GraphRecordValue::Bool(false), GraphRecordValue::Bool(false));
+        assert_ne!(GraphRecordValue::Bool(true), GraphRecordValue::Bool(false));
 
-        assert!(
+        assert_eq!(
+            GraphRecordValue::DateTime(NaiveDateTime::MIN),
             GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                == GraphRecordValue::DateTime(NaiveDateTime::MIN)
         );
-        assert!(
-            GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                != GraphRecordValue::DateTime(NaiveDateTime::MIN)
+        assert_ne!(
+            GraphRecordValue::DateTime(NaiveDateTime::MAX),
+            GraphRecordValue::DateTime(NaiveDateTime::MIN)
         );
 
-        assert!(GraphRecordValue::Null == GraphRecordValue::Null);
+        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null);
 
-        assert!(GraphRecordValue::String("0".to_string()) != GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::String("0".to_string()) != GraphRecordValue::Float(0_f64));
-        assert!(GraphRecordValue::String("false".to_string()) != GraphRecordValue::Bool(false));
-        assert!(
+        assert_ne!(
+            GraphRecordValue::String("0".to_string()),
+            GraphRecordValue::Int(0)
+        );
+        assert_ne!(
+            GraphRecordValue::String("0".to_string()),
+            GraphRecordValue::Float(0_f64)
+        );
+        assert_ne!(
+            GraphRecordValue::String("false".to_string()),
+            GraphRecordValue::Bool(false)
+        );
+        assert_ne!(
+            GraphRecordValue::String("false".to_string()),
+            GraphRecordValue::DateTime(NaiveDateTime::MIN)
+        );
+        assert_ne!(
+            GraphRecordValue::String("false".to_string()),
+            GraphRecordValue::Null
+        );
+
+        assert_ne!(
+            GraphRecordValue::Int(0),
+            GraphRecordValue::String("0".to_string())
+        );
+        assert_ne!(GraphRecordValue::Int(0), GraphRecordValue::Bool(false));
+        assert_ne!(
+            GraphRecordValue::Int(0),
+            GraphRecordValue::DateTime(NaiveDateTime::MIN)
+        );
+        assert_ne!(GraphRecordValue::Int(0), GraphRecordValue::Null);
+
+        assert_ne!(
+            GraphRecordValue::Float(0_f64),
+            GraphRecordValue::String("0.0".to_string())
+        );
+        assert_ne!(
+            GraphRecordValue::Float(0_f64),
+            GraphRecordValue::Bool(false)
+        );
+        assert_ne!(
+            GraphRecordValue::Float(0_f64),
+            GraphRecordValue::DateTime(NaiveDateTime::MIN)
+        );
+        assert_ne!(GraphRecordValue::Float(0_f64), GraphRecordValue::Null);
+
+        assert_ne!(
+            GraphRecordValue::Bool(false),
             GraphRecordValue::String("false".to_string())
-                != GraphRecordValue::DateTime(NaiveDateTime::MIN)
         );
-        assert!(GraphRecordValue::String("false".to_string()) != GraphRecordValue::Null);
+        assert_ne!(GraphRecordValue::Bool(false), GraphRecordValue::Int(0));
+        assert_ne!(
+            GraphRecordValue::Bool(false),
+            GraphRecordValue::Float(0_f64)
+        );
+        assert_ne!(
+            GraphRecordValue::Bool(false),
+            GraphRecordValue::DateTime(NaiveDateTime::MIN)
+        );
+        assert_ne!(GraphRecordValue::Bool(false), GraphRecordValue::Null);
 
-        assert!(GraphRecordValue::Int(0) != GraphRecordValue::String("0".to_string()));
-        assert!(GraphRecordValue::Int(0) != GraphRecordValue::Bool(false));
-        assert!(GraphRecordValue::Int(0) != GraphRecordValue::DateTime(NaiveDateTime::MIN));
-        assert!(GraphRecordValue::Int(0) != GraphRecordValue::Null);
-
-        assert!(GraphRecordValue::Float(0_f64) != GraphRecordValue::String("0.0".to_string()));
-        assert!(GraphRecordValue::Float(0_f64) != GraphRecordValue::Bool(false));
-        assert!(GraphRecordValue::Float(0_f64) != GraphRecordValue::DateTime(NaiveDateTime::MIN));
-        assert!(GraphRecordValue::Float(0_f64) != GraphRecordValue::Null);
-
-        assert!(GraphRecordValue::Bool(false) != GraphRecordValue::String("false".to_string()));
-        assert!(GraphRecordValue::Bool(false) != GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::Bool(false) != GraphRecordValue::Float(0_f64));
-        assert!(GraphRecordValue::Bool(false) != GraphRecordValue::DateTime(NaiveDateTime::MIN));
-        assert!(GraphRecordValue::Bool(false) != GraphRecordValue::Null);
-
-        assert!(GraphRecordValue::Null != GraphRecordValue::String("false".to_string()));
-        assert!(GraphRecordValue::Null != GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::Null != GraphRecordValue::Float(0_f64));
-        assert!(GraphRecordValue::Null != GraphRecordValue::Bool(false));
-        assert!(GraphRecordValue::Null != GraphRecordValue::DateTime(NaiveDateTime::MIN));
+        assert_ne!(
+            GraphRecordValue::Null,
+            GraphRecordValue::String("false".to_string())
+        );
+        assert_ne!(GraphRecordValue::Null, GraphRecordValue::Int(0));
+        assert_ne!(GraphRecordValue::Null, GraphRecordValue::Float(0_f64));
+        assert_ne!(GraphRecordValue::Null, GraphRecordValue::Bool(false));
+        assert_ne!(
+            GraphRecordValue::Null,
+            GraphRecordValue::DateTime(NaiveDateTime::MIN)
+        );
     }
 
     #[test]

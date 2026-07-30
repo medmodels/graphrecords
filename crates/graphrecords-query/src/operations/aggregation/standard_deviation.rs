@@ -1,6 +1,7 @@
 use crate::{
-    Bare, Diagnostic, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple,
-    Operand, OrderState, QueryResult, Scalar,
+    Bare, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
+    OrderState, QueryResult, Scalar,
+    error::aggregation::InvalidStandardDeviationValue,
     execution::EvaluationCache,
     operands::BareValueOperand,
     operations::{
@@ -10,37 +11,6 @@ use crate::{
     traits::Std,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
-use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
-};
-
-#[derive(Debug)]
-pub struct InvalidStandardDeviationValue {
-    pub value: GraphRecordValue,
-}
-
-impl Display for InvalidStandardDeviationValue {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "cannot calculate standard deviation of value `{}`",
-            self.value
-        )
-    }
-}
-
-impl Error for InvalidStandardDeviationValue {}
-
-impl Diagnostic for InvalidStandardDeviationValue {
-    fn name() -> &'static str {
-        "InvalidStandardDeviationValue"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some("narrow the values down first using is_int() or is_float()".to_string())
-    }
-}
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
@@ -88,7 +58,7 @@ impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Scalar>, Multiple<O>> 
                     value => {
                         return Err(Failure::new_at::<I, _>(
                             Self::LABEL,
-                            InvalidStandardDeviationValue { value },
+                            InvalidStandardDeviationValue::new(value),
                             &index,
                         ));
                     }
@@ -125,7 +95,7 @@ impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for StdOperation {
                     value => {
                         return Err(Failure::new(
                             Self::LABEL,
-                            InvalidStandardDeviationValue { value },
+                            InvalidStandardDeviationValue::new(value),
                         ));
                     }
                 };

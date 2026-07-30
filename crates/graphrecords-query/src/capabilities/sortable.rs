@@ -1,11 +1,11 @@
-use crate::{
-    Diagnostic, ExpandedIndexOwned, ExpandedIndexReference, IndexDomain, OwnedIndex, Position,
-};
+use crate::{ExpandedIndexOwned, ExpandedIndexReference, IndexDomain, Position};
 use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue};
-use std::{
-    error::Error,
-    fmt::{self, Debug, Display, Formatter},
-};
+
+pub trait EnsureSortable: PartialOrd + Sized {
+    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
+    where
+        Self: 'a;
+}
 
 pub fn incomparable_with_first<'a, V: PartialOrd + 'a>(
     mut values: impl Iterator<Item = &'a V>,
@@ -34,12 +34,6 @@ pub fn incomparable_pair<'a, V: PartialOrd + 'a>(
     }
 
     None
-}
-
-pub trait EnsureSortable: PartialOrd + Sized {
-    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
-    where
-        Self: 'a;
 }
 
 impl<T: EnsureSortable> EnsureSortable for &T {
@@ -108,39 +102,5 @@ where
         Self: 'a,
     {
         incomparable_pair(values)
-    }
-}
-
-#[derive(Debug)]
-pub struct IncomparableIndices<V, E: OwnedIndex> {
-    pub value: V,
-    pub first: E,
-    pub second: E,
-}
-
-impl<V: Display, E: OwnedIndex> Display for IncomparableIndices<V, E> {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "cannot order elements sharing value `{}`: their indices `{}` and `{}` are not comparable",
-            self.value, self.first, self.second
-        )
-    }
-}
-
-impl<V: Debug + Display, E: OwnedIndex> Error for IncomparableIndices<V, E> {}
-
-impl<V: Debug + Display + Send + Sync + 'static, E: OwnedIndex> Diagnostic
-    for IncomparableIndices<V, E>
-{
-    fn name() -> &'static str {
-        "IncomparableIndices"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some(
-            "to order them deterministically, sort by a key that distinguishes these elements"
-                .to_string(),
-        )
     }
 }

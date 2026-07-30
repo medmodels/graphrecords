@@ -12,5 +12,5 @@ mod var;
 pub use count::CountOperation;
 pub use max::MaxOperation;
 pub use mean::MeanOperation;
-pub use standard_deviation::{InvalidStandardDeviationValue, StdOperation};
+pub use standard_deviation::StdOperation;
 pub use sum::SumOperation;

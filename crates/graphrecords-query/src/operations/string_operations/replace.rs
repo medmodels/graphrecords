@@ -1,6 +1,7 @@
 use super::{string_replace_bare, string_replace_indexed};
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    capabilities::StringValue,
     element::Retention,
     execution::EvaluationCache,
     operations::{
@@ -9,7 +10,6 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Replace,
-    value::StringValue,
 };
 use graphrecords_core::GraphRecord;
 

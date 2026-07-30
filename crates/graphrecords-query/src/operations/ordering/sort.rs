@@ -1,6 +1,11 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, Failure, IncomparableValues, IncomparableValuesAt, IndexDomain,
-    Indexed, Labeled, Multiple, Operand, OrderState, Ordered, QueryResult, ValueType,
+    Bare, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
+    OrderState, Ordered, QueryResult, ValueType,
+    capabilities::{EnsureSortable, ValueOrdering},
+    error::{
+        comparison::{IncomparableValues, IncomparableValuesAt},
+        ordering::IncomparableIndices,
+    },
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -8,7 +13,6 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Sort,
-    value::{EnsureSortable, IncomparableIndices, ValueOrdering},
 };
 use graphrecords_core::GraphRecord;
 use std::{
@@ -56,12 +60,12 @@ where
 
         return Err(Failure::new(
             SortOperation::LABEL,
-            IncomparableValuesAt {
-                first: V::into_owned(first.clone()),
-                second: V::into_owned(second.clone()),
-                first_element: I::to_owned(first_index),
-                second_element: I::to_owned(second_index),
-            },
+            IncomparableValuesAt::new(
+                V::into_owned(first.clone()),
+                V::into_owned(second.clone()),
+                I::to_owned(first_index),
+                I::to_owned(second_index),
+            ),
         ));
     }
 
@@ -77,15 +81,15 @@ where
             EnsureSortable::find_incomparable(run.iter().map(|(index, _)| index))
         {
             let (first_index, value) = &run[first_position];
-            let (second_index, _) = &run[second_position];
+            let second_index = &run[second_position].0;
 
             return Err(Failure::new(
                 SortOperation::LABEL,
-                IncomparableIndices {
-                    value: V::into_owned(value.clone()),
-                    first: I::to_owned(first_index),
-                    second: I::to_owned(second_index),
-                },
+                IncomparableIndices::new(
+                    V::into_owned(value.clone()),
+                    I::to_owned(first_index),
+                    I::to_owned(second_index),
+                ),
             ));
         }
 
@@ -119,10 +123,10 @@ where
     {
         return Err(Failure::new(
             SortOperation::LABEL,
-            IncomparableValues {
-                first: V::into_owned(collected[first_position].clone()),
-                second: V::into_owned(collected[second_position].clone()),
-            },
+            IncomparableValues::new(
+                V::into_owned(collected[first_position].clone()),
+                V::into_owned(collected[second_position].clone()),
+            ),
         ));
     }
 

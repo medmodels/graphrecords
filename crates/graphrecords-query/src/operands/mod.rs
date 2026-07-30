@@ -11,8 +11,9 @@ mod references;
 mod values;
 
 use crate::{
-    BoxedIterator, DuplicateIndex, Failure, IndexDomain, QueryResult,
+    BoxedIterator, Failure, IndexDomain, QueryResult,
     element::{Arity, ElementShape, Return},
+    error::index::DuplicateIndex,
     execution::EvaluationCache,
     explain::Explanation,
     optimizer::{Estimate, Estimated, PlanNode, Stats},
@@ -38,11 +39,10 @@ pub use errors::{
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashSet;
 pub use group::{
-    Bucket, BucketChange, BucketOwned, GroupOperand, InvalidPartitionBucketArity, KeyFailure,
-    KeyFailureChange, KeyFailureOwned, Partition, PartitionArity, PartitionBucketParts,
-    PartitionBuilder, PartitionClassification, PartitionKeyFailureParts, PartitionOwned,
-    PartitionOwnedParts, PartitionParts, PartitionShape, ReturnBucket, ReturnKeyFailure,
-    ReturnPartition,
+    Bucket, BucketChange, BucketOwned, GroupOperand, KeyFailure, KeyFailureChange, KeyFailureOwned,
+    Partition, PartitionArity, PartitionBucketParts, PartitionBuilder, PartitionClassification,
+    PartitionKeyFailureParts, PartitionOwned, PartitionOwnedParts, PartitionParts, PartitionShape,
+    ReturnBucket, ReturnKeyFailure, ReturnPartition,
 };
 pub use indices::{
     BareIndexOperand, BareIndicesOperand, DefiniteBareIndexOperand, DefiniteIndexOperand,

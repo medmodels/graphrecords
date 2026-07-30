@@ -334,17 +334,17 @@ mod test {
 
     #[test]
     fn test_partial_eq() {
-        assert!(
+        assert_eq!(
+            GraphRecordAttribute::String("attribute".to_string()),
             GraphRecordAttribute::String("attribute".to_string())
-                == GraphRecordAttribute::String("attribute".to_string())
         );
-        assert!(
-            GraphRecordAttribute::String("attribute2".to_string())
-                != GraphRecordAttribute::String("attribute".to_string())
+        assert_ne!(
+            GraphRecordAttribute::String("attribute2".to_string()),
+            GraphRecordAttribute::String("attribute".to_string())
         );
 
-        assert!(GraphRecordAttribute::Int(0) == GraphRecordAttribute::Int(0));
-        assert!(GraphRecordAttribute::Int(1) != GraphRecordAttribute::Int(0));
+        assert_eq!(GraphRecordAttribute::Int(0), GraphRecordAttribute::Int(0));
+        assert_ne!(GraphRecordAttribute::Int(1), GraphRecordAttribute::Int(0));
     }
 
     #[test]

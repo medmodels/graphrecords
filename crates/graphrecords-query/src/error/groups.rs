@@ -1,7 +1,9 @@
 use crate::{
     Diagnostic, ErrorGroup, FailureKind,
-    operations::{
-        ArgumentAbsent, MissingAttribute, MissingGroupAggregate, MissingTraversedAttribute,
+    error::{
+        argument::ArgumentAbsent,
+        grouping::MissingGroupAggregate,
+        structure::{MissingAttribute, MissingTraversedAttribute},
     },
 };
 use graphrecords_core::graphrecord::NodeIndex;

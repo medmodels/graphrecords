@@ -1,12 +1,13 @@
 use super::{string_map_bare, string_map_indexed};
 use crate::{
     Bare, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    capabilities::StringValue,
     element::Preserving,
+    error::string::InvalidStringSlice,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Slice,
-    value::{InvalidStringSlice, StringValue},
 };
 use graphrecords_core::GraphRecord;
 
@@ -16,11 +17,7 @@ fn slice_string(label: &'static str, value: &str, start: usize, end: usize) -> Q
     if start > end || end > characters.len() {
         return Err(Failure::new(
             label,
-            InvalidStringSlice {
-                start,
-                end,
-                length: characters.len(),
-            },
+            InvalidStringSlice::new(start, end, characters.len()),
         ));
     }
 

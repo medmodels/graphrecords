@@ -1,7 +1,6 @@
-use crate::{Diagnostic, Failure, IndexDomain, QueryResult, ValueType};
+use crate::{Failure, IndexDomain, QueryResult, ValueType};
 use std::{
     cmp::Ordering,
-    error::Error,
     fmt::{self, Debug, Display, Formatter},
     hash::{Hash, Hasher},
     marker::PhantomData,
@@ -336,8 +335,8 @@ impl<P: IndexDomain, C: IndexDomain> IndexDomain for ExpandedIndex<P, C> {
 }
 
 pub struct ExpandedChild<'a, C: IndexDomain, V: ValueType> {
-    pub(crate) index: C::Index<'a>,
-    pub(crate) outcome: QueryResult<V::Value<'a>>,
+    index: C::Index<'a>,
+    outcome: QueryResult<V::Value<'a>>,
 }
 
 impl<'a, C: IndexDomain, V: ValueType> ExpandedChild<'a, C, V> {
@@ -361,105 +360,8 @@ impl<'a, C: IndexDomain, V: ValueType> ExpandedChild<'a, C, V> {
     pub const fn from_outcome(index: C::Index<'a>, outcome: QueryResult<V::Value<'a>>) -> Self {
         Self { index, outcome }
     }
-}
 
-pub struct DuplicateExpandedChildIndex<C: IndexDomain> {
-    index: C::Owned,
-}
-
-impl<C: IndexDomain> DuplicateExpandedChildIndex<C> {
-    #[must_use]
-    pub const fn new(index: C::Owned) -> Self {
-        Self { index }
-    }
-
-    #[must_use]
-    pub const fn index(&self) -> &C::Owned {
-        &self.index
-    }
-}
-
-impl<C: IndexDomain> Debug for DuplicateExpandedChildIndex<C> {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("DuplicateExpandedChildIndex")
-            .field("index", &self.index)
-            .finish()
-    }
-}
-
-impl<C: IndexDomain> Display for DuplicateExpandedChildIndex<C> {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "expanded child index `{}` occurs more than once under one parent",
-            self.index
-        )
-    }
-}
-
-impl<C: IndexDomain> Error for DuplicateExpandedChildIndex<C> {}
-
-impl<C: IndexDomain> Diagnostic for DuplicateExpandedChildIndex<C> {
-    fn name() -> &'static str {
-        "DuplicateExpandedChildIndex"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some("emit each child index at most once for one expanded parent".to_string())
-    }
-}
-
-pub struct NoChildIndex<P: IndexDomain, C: IndexDomain> {
-    parent: P::Owned,
-    child_domain: PhantomData<fn() -> C>,
-}
-
-impl<P: IndexDomain, C: IndexDomain> NoChildIndex<P, C> {
-    #[must_use]
-    pub const fn new(parent: P::Owned) -> Self {
-        Self {
-            parent,
-            child_domain: PhantomData,
-        }
-    }
-
-    #[must_use]
-    pub const fn parent_index(&self) -> &P::Owned {
-        &self.parent
-    }
-}
-
-impl<P: IndexDomain, C: IndexDomain> Debug for NoChildIndex<P, C> {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("NoChildIndex")
-            .field("parent", &self.parent)
-            .finish()
-    }
-}
-
-impl<P: IndexDomain, C: IndexDomain> Display for NoChildIndex<P, C> {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "address `source({})` has no child component",
-            self.parent
-        )
-    }
-}
-
-impl<P: IndexDomain, C: IndexDomain> Error for NoChildIndex<P, C> {}
-
-impl<P: IndexDomain, C: IndexDomain> Diagnostic for NoChildIndex<P, C> {
-    fn name() -> &'static str {
-        "NoChildIndex"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some(
-            "source(...) addresses mark parents whose expansion failed; handle those elements with on_error before projecting child indices"
-                .to_string(),
-        )
+    pub(crate) fn into_parts(self) -> (C::Index<'a>, QueryResult<V::Value<'a>>) {
+        (self.index, self.outcome)
     }
 }

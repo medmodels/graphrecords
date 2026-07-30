@@ -1,7 +1,8 @@
-use super::{UnresolvedBucketFailures, reject_key_failures};
+use super::reject_key_failures;
 use crate::{
     Bare, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
     QueryResult, Unordered, ValueType,
+    error::grouping::UnresolvedBucketFailures,
     execution::EvaluationCache,
     index::GroupKey,
     operands::{CheckedIndexedLaneBuilder, OperandHandle, Partition, PartitionArity},

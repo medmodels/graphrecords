@@ -1,6 +1,8 @@
 use super::{string_argument_map_bare, string_argument_map_indexed};
 use crate::{
     Bare, Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    capabilities::StringValue,
+    error::string::InvalidRegexPattern,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
@@ -8,20 +10,13 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Matches,
-    value::{InvalidRegexPattern, StringValue},
 };
 use graphrecords_core::GraphRecord;
 use regex::Regex;
 
 fn regex_matches(label: &'static str, value: &str, pattern: &str) -> QueryResult<bool> {
     let expression = Regex::new(pattern).map_err(|error| {
-        Failure::new(
-            label,
-            InvalidRegexPattern {
-                pattern: pattern.to_string(),
-                error,
-            },
-        )
+        Failure::new(label, InvalidRegexPattern::new(pattern.to_string(), error))
     })?;
 
     Ok(expression.is_match(value))

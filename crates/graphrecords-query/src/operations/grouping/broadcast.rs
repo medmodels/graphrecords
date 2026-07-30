@@ -1,7 +1,7 @@
-use super::MissingGroupAggregate;
 use crate::{
     Bare, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple,
     Operand, QueryResult, Single, Unordered, ValueType,
+    error::grouping::MissingGroupAggregate,
     execution::EvaluationCache,
     index::GroupKey,
     operands::{OperandHandle, Partition},

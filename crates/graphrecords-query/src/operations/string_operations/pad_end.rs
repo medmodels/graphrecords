@@ -2,7 +2,9 @@ use super::{padding_character, string_pad_bare, string_pad_indexed};
 use crate::{
     Bare, Explain, External, Failure, IndexDomain, Indexed, Labeled, Operand, Position,
     QueryResult,
+    capabilities::StringValue,
     element::Retention,
+    error::string::StringPaddingOverflow,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
@@ -10,7 +12,6 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::PadEnd,
-    value::{StringPaddingOverflow, StringValue},
 };
 use graphrecords_core::GraphRecord;
 
@@ -29,10 +30,10 @@ fn pad(
     let capacity = padding_length
         .checked_mul(character.len_utf8())
         .and_then(|padding_bytes| padding_bytes.checked_add(value.len()))
-        .ok_or_else(|| Failure::new(label, StringPaddingOverflow { width }))?;
+        .ok_or_else(|| Failure::new(label, StringPaddingOverflow::new(width)))?;
     value
         .try_reserve(capacity - value.len())
-        .map_err(|error| Failure::new(label, External(error)))?;
+        .map_err(|error| Failure::new(label, External::new(error)))?;
     value.extend(std::iter::repeat_n(character, padding_length));
 
     Ok(value)

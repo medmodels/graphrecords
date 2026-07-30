@@ -20,9 +20,10 @@ mod uppercase;
 
 use crate::{
     Failure, IndexDomain, Position, QueryResult, ValueType,
+    capabilities::StringValue,
     element::{BarePipeline, IndexedValuePipeline, Pipeline, Preserving, Retention},
+    error::string::InvalidPaddingCharacter,
     operations::{ArgumentSource, Keyed, Unaligned},
-    value::{InvalidPaddingCharacter, StringValue},
 };
 pub use contains::ContainsOperation;
 pub use ends_with::EndsWithOperation;
@@ -248,11 +249,11 @@ where
 fn padding_character(label: &'static str, value: String) -> QueryResult<char> {
     let mut characters = value.chars();
     let Some(character) = characters.next() else {
-        return Err(Failure::new(label, InvalidPaddingCharacter { value }));
+        return Err(Failure::new(label, InvalidPaddingCharacter::new(value)));
     };
 
     if characters.next().is_some() {
-        return Err(Failure::new(label, InvalidPaddingCharacter { value }));
+        return Err(Failure::new(label, InvalidPaddingCharacter::new(value)));
     }
 
     Ok(character)

@@ -1,7 +1,7 @@
 use crate::{
-    Arity, BoxedIterator, Definite, Diagnostic, DuplicateIndex, ElementShape, EvaluateOperand,
-    Failure, IndexDomain, Indexed, Multiple, Operand, OperandContext, OrderState, QueryResult,
-    Single, ValueType,
+    Arity, BoxedIterator, Definite, ElementShape, EvaluateOperand, Failure, IndexDomain, Indexed,
+    Multiple, Operand, OperandContext, OrderState, QueryResult, Single, ValueType,
+    error::{grouping::InvalidPartitionBucketArity, index::DuplicateIndex},
     execution::{CacheableOperand, EvaluationCache},
     index::GroupKey,
     operands::OperandHandle,
@@ -9,12 +9,7 @@ use crate::{
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
-use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
-    marker::PhantomData,
-    sync::Arc,
-};
+use std::{marker::PhantomData, sync::Arc};
 
 pub struct GroupOperand<M: IndexDomain, K: GroupKey, O: Operand> {
     context: Arc<dyn OperandContext<Self>>,
@@ -390,42 +385,6 @@ pub trait PartitionArity<S: ElementShape>: Arity {
         S: 'a;
 }
 
-#[derive(Debug)]
-pub struct InvalidPartitionBucketArity {
-    expected: &'static str,
-    actual: usize,
-}
-
-impl InvalidPartitionBucketArity {
-    #[must_use]
-    pub const fn expected(&self) -> &'static str {
-        self.expected
-    }
-
-    #[must_use]
-    pub const fn actual(&self) -> usize {
-        self.actual
-    }
-}
-
-impl Display for InvalidPartitionBucketArity {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "partition bucket requires {} element(s), but received {}",
-            self.expected, self.actual,
-        )
-    }
-}
-
-impl Error for InvalidPartitionBucketArity {}
-
-impl Diagnostic for InvalidPartitionBucketArity {
-    fn name() -> &'static str {
-        "InvalidPartitionBucketArity"
-    }
-}
-
 impl<S: ElementShape> PartitionArity<S> for Definite {
     fn into_elements<'a>(
         container: Self::Container<'a, S::Element<'a>>,
@@ -446,10 +405,7 @@ impl<S: ElementShape> PartitionArity<S> for Definite {
             Ok([element]) => Ok(element),
             Err(elements) => Err(Failure::new(
                 "partition construction",
-                InvalidPartitionBucketArity {
-                    expected: "exactly one",
-                    actual: elements.len(),
-                },
+                InvalidPartitionBucketArity::new("exactly one", elements.len()),
             )),
         }
     }
@@ -474,10 +430,7 @@ impl<S: ElementShape> PartitionArity<S> for Single {
         if elements.len() > 1 {
             return Err(Failure::new(
                 "partition construction",
-                InvalidPartitionBucketArity {
-                    expected: "at most one",
-                    actual: elements.len(),
-                },
+                InvalidPartitionBucketArity::new("at most one", elements.len()),
             ));
         }
 

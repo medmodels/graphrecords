@@ -29,7 +29,19 @@ const DIRECTION_ORDER: [Direction; 3] =
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct OptimizerError {
-    pub misconfigurations: Vec<Misconfiguration>,
+    misconfigurations: Vec<Misconfiguration>,
+}
+
+impl OptimizerError {
+    #[must_use]
+    pub const fn new(misconfigurations: Vec<Misconfiguration>) -> Self {
+        Self { misconfigurations }
+    }
+
+    #[must_use]
+    pub fn misconfigurations(&self) -> &[Misconfiguration] {
+        &self.misconfigurations
+    }
 }
 
 #[derive(Debug)]
@@ -273,7 +285,7 @@ impl OptimizerBuilder {
             .collect();
 
         if !misconfigurations.is_empty() {
-            return Err(OptimizerError { misconfigurations });
+            return Err(OptimizerError::new(misconfigurations));
         }
 
         Ok(Optimizer {
@@ -840,9 +852,10 @@ fn apply_passes<O: Operand + Clone + 'static>(
             stats,
         };
         let transformed = session.optimize(&current);
+        let (value, was_changed) = transformed.into_parts();
 
-        current = transformed.value;
-        changed |= transformed.changed;
+        current = value;
+        changed |= was_changed;
     }
 
     (current, changed)
@@ -864,21 +877,25 @@ impl Session<'_> {
     pub fn optimize<O: Operand + Clone + 'static>(&self, operand: &O) -> Transformed<O> {
         match self.direction {
             Direction::BottomUp => {
-                let rebuilt = operand.context().optimize(operand, self);
-                let applied = self.apply_rules(rebuilt.value);
+                let (rebuilt, rebuilt_changed) =
+                    operand.context().optimize(operand, self).into_parts();
+                let (applied, applied_changed) = self.apply_rules(rebuilt).into_parts();
 
-                Transformed {
-                    changed: rebuilt.changed || applied.changed,
-                    value: applied.value,
+                if rebuilt_changed || applied_changed {
+                    Transformed::changed(applied)
+                } else {
+                    Transformed::unchanged(applied)
                 }
             }
             Direction::TopDown => {
-                let rewritten = self.apply_rules(operand.clone());
-                let rebuilt = rewritten.value.context().optimize(&rewritten.value, self);
+                let (rewritten, rewritten_changed) = self.apply_rules(operand.clone()).into_parts();
+                let (rebuilt, rebuilt_changed) =
+                    rewritten.context().optimize(&rewritten, self).into_parts();
 
-                Transformed {
-                    changed: rewritten.changed || rebuilt.changed,
-                    value: rebuilt.value,
+                if rewritten_changed || rebuilt_changed {
+                    Transformed::changed(rebuilt)
+                } else {
+                    Transformed::unchanged(rebuilt)
                 }
             }
             Direction::Manual => self.apply_rules(operand.clone()),
@@ -905,15 +922,16 @@ impl Session<'_> {
                 .rule
                 .downcast_ref::<ErasedRule<O>>()
                 .expect("Compiled rule must hold an erased rule matching its operand bucket");
-            let transformed = rule(operand, self);
+            let (value, was_changed) = rule(operand, self).into_parts();
 
-            operand = transformed.value;
-            changed |= transformed.changed;
+            operand = value;
+            changed |= was_changed;
         }
 
-        Transformed {
-            value: operand,
-            changed,
+        if changed {
+            Transformed::changed(operand)
+        } else {
+            Transformed::unchanged(operand)
         }
     }
 }

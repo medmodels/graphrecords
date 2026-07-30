@@ -69,8 +69,8 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
                 )*
 
                 let changed = false
-                    #( || #input_locals.changed )*
-                    #( || #argument_locals.changed )*;
+                    #( || #input_locals.is_changed() )*
+                    #( || #argument_locals.is_changed() )*;
 
                 if !changed {
                     return #crate_path::optimizer::Transformed::unchanged(
@@ -78,14 +78,13 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
                     );
                 }
 
-                #crate_path::optimizer::Transformed {
-                    value: Self {
-                        #( #inputs: #input_locals.value, )*
-                        #( #arguments: #argument_locals.value, )*
+                #crate_path::optimizer::Transformed::changed(
+                    Self {
+                        #( #inputs: #input_locals.into_parts().0, )*
+                        #( #arguments: #argument_locals.into_parts().0, )*
                         #( #payload: ::core::clone::Clone::clone(&self.#payload), )*
                     },
-                    changed: true,
-                }
+                )
             }
         }
     };

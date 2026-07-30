@@ -1,6 +1,7 @@
 use super::{equality_bare, equality_indexed};
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    capabilities::ValueEquality,
     execution::EvaluationCache,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
@@ -8,7 +9,6 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::EqualTo,
-    value::ValueEquality,
 };
 use graphrecords_core::GraphRecord;
 

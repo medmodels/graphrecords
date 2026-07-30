@@ -28,14 +28,11 @@ use crate::{
     },
     sealed::Sealed,
 };
-pub use aggregation::{
-    CountOperation, InvalidStandardDeviationValue, MaxOperation, MeanOperation, StdOperation,
-    SumOperation,
-};
+pub use aggregation::{CountOperation, MaxOperation, MeanOperation, StdOperation, SumOperation};
 pub use argument::{
-    Absent, AlignableArity, Alignment, ArgumentAbsent, ArgumentSource, EnumerableArity,
-    IndexedElementContainer, IndexedElementSource, Keyed, Lookup, Prepare, PreparedArity,
-    PreparedIndexedMultiple, SetArity, SetSource, Unaligned,
+    AlignableArity, Alignment, ArgumentSource, EnumerableArity, IndexedElementContainer,
+    IndexedElementSource, Keyed, Lookup, Prepare, PreparedArity, PreparedIndexedMultiple, SetArity,
+    SetSource, Unaligned,
 };
 pub use arithmetic::{
     AddOperation, DivideOperation, ModuloOperation, MultiplyOperation, PowerOperation,
@@ -50,7 +47,7 @@ pub use conversion::{
     DiscardOperation, EnumerateOperation, ExpandToOperation, ExpandToSource, ParentResolution,
 };
 pub use errors::{
-    AbsenceErrors, Drop, DropErrorsIn, DropErrorsOf, DropErrorsWithCause, ErrorKindNameOperation,
+    Drop, DropErrorsIn, DropErrorsOf, DropErrorsWithCause, ErrorKindNameOperation,
     ErrorKindOperation, ErrorPolicy, ErrorPolicyIn, ErrorPolicyOf, ErrorPolicyWithCause,
     ErrorsOperation, HasErrorCauseOperation, InErrorGroupOperation, IsErrorKindOperation, Raise,
     RaiseErrorsIn, RaiseErrorsOf, RaiseErrorsWithCause, RaiseWhen, RaiseWhenErrorsIn,
@@ -65,10 +62,9 @@ pub use grouping::{
     DropBucketErrors, DropBucketErrorsIn, DropBucketErrorsOf, DropBucketErrorsWithCause,
     DropKeyErrors, DropKeyErrorsIn, DropKeyErrorsOf, DropKeyErrorsWithCause, GroupByOperation,
     HavingOperation, KeyErrorPolicy, KeyErrorPolicyIn, KeyErrorPolicyOf, KeyErrorPolicyWithCause,
-    KeyErrorsOperation, KeyOperand, KeysOperation, MissingGroupAggregate, RaiseBucketErrors,
-    RaiseBucketErrorsIn, RaiseBucketErrorsOf, RaiseBucketErrorsWithCause, RaiseKeyErrors,
-    RaiseKeyErrorsIn, RaiseKeyErrorsOf, RaiseKeyErrorsWithCause, UngroupKeyedOperation,
-    UngroupOperation, UnresolvedBucketFailures, UnresolvedGroupKeyFailures,
+    KeyErrorsOperation, KeyOperand, KeysOperation, RaiseBucketErrors, RaiseBucketErrorsIn,
+    RaiseBucketErrorsOf, RaiseBucketErrorsWithCause, RaiseKeyErrors, RaiseKeyErrorsIn,
+    RaiseKeyErrorsOf, RaiseKeyErrorsWithCause, UngroupKeyedOperation, UngroupOperation,
 };
 pub use indexing::{
     ChildIndexOperation, IndexOperation, ParentIndexOperation, ResolveOperation, SelectOperation,
@@ -99,10 +95,7 @@ pub use string_operations::{
     SliceOperation, SplitOperation, StartsWithOperation, StripPrefixOperation,
     StripSuffixOperation, TrimEndOperation, TrimOperation, TrimStartOperation, UppercaseOperation,
 };
-pub use structure::{
-    AttributeOperation, AttributesOperation, FilterOperation, InGroupOperation, MissingAttribute,
-    MissingTraversedAttribute,
-};
+pub use structure::{AttributeOperation, AttributesOperation, FilterOperation, InGroupOperation};
 pub use traversal::{
     EdgeDirection, EdgeSource, EdgeTarget, EdgesOperation, NeighborsOperation, NodesOperation,
     Relation, RelationOperation, SelectRelationOperation,
@@ -246,16 +239,13 @@ impl<I: Apply<P>, P: Operation> OptimizePlan for OperationContext<I, P> {
         let input = session.optimize(&self.input);
         let operation = self.operation.optimize(session);
 
-        if !input.changed && !operation.changed {
+        if !input.is_changed() && !operation.is_changed() {
             return Transformed::unchanged(original.clone());
         }
 
-        Transformed {
-            value: <Self::Output as Operand>::new(Self {
-                input: input.value,
-                operation: operation.value,
-            }),
-            changed: true,
-        }
+        let input = input.into_parts().0;
+        let operation = operation.into_parts().0;
+
+        Transformed::changed(<Self::Output as Operand>::new(Self { input, operation }))
     }
 }

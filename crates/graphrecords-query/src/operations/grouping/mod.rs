@@ -10,13 +10,13 @@ mod ungroup;
 mod ungroup_keyed;
 
 use crate::{
-    Arity, AttributeName, Bare, Definite, Diagnostic, ElementShape, Failure, FailureKind,
-    IndexDomain, Indexed, Multiple, OrderState, Position, Positional, QueryResult, Single,
-    ValueType,
+    Arity, AttributeName, Bare, Definite, ElementShape, Failure, FailureKind, IndexDomain, Indexed,
+    Multiple, OrderState, Position, Positional, QueryResult, Single, ValueType,
+    capabilities::GroupingValue,
+    error::grouping::UnresolvedGroupKeyFailures,
     index::GroupKey,
     operands::OperandHandle,
     operations::{ArgumentSource, Keyed, MaybeAbsent, MissingPolicy, WithMissing},
-    value::GroupingValue,
 };
 pub use broadcast::BroadcastOperation;
 pub use broadcast_via::BroadcastViaOperation;
@@ -34,10 +34,6 @@ pub use on_key_error::{
     DropKeyErrors, DropKeyErrorsIn, DropKeyErrorsOf, DropKeyErrorsWithCause, KeyErrorPolicy,
     KeyErrorPolicyIn, KeyErrorPolicyOf, KeyErrorPolicyWithCause, RaiseKeyErrors, RaiseKeyErrorsIn,
     RaiseKeyErrorsOf, RaiseKeyErrorsWithCause,
-};
-use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
 };
 pub use ungroup::UngroupOperation;
 pub use ungroup_keyed::UngroupKeyedOperation;
@@ -247,122 +243,5 @@ impl<V: ValueType> BucketFailureArity<Bare<V>> for Definite {
             Err(failure) | Ok(Err(failure)) => Some(failure),
             Ok(Ok(_)) => None,
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct MissingGroupAggregate;
-
-impl Display for MissingGroupAggregate {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        formatter.write_str("no aggregate value for the element's group")
-    }
-}
-
-impl Error for MissingGroupAggregate {}
-
-impl Diagnostic for MissingGroupAggregate {
-    fn name() -> &'static str {
-        "MissingGroupAggregate"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some(
-            "ensure every group produces a value or handle the gap with `on_error(...)`"
-                .to_string(),
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct UnresolvedGroupKeyFailures {
-    failures: Vec<Failure>,
-}
-
-impl UnresolvedGroupKeyFailures {
-    #[must_use]
-    pub const fn new(failures: Vec<Failure>) -> Self {
-        Self { failures }
-    }
-
-    #[must_use]
-    pub fn failures(&self) -> &[Failure] {
-        &self.failures
-    }
-}
-
-impl Display for UnresolvedGroupKeyFailures {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{} unresolved grouping-key failure(s) cannot be represented by this exit",
-            self.failures.len(),
-        )
-    }
-}
-
-impl Error for UnresolvedGroupKeyFailures {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.failures
-            .first()
-            .map(|failure| failure as &(dyn Error + 'static))
-    }
-}
-
-impl Diagnostic for UnresolvedGroupKeyFailures {
-    fn name() -> &'static str {
-        "UnresolvedGroupKeyFailures"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some("resolve retained key failures with `on_key_error(...)` before this exit".to_string())
-    }
-}
-
-#[derive(Debug)]
-pub struct UnresolvedBucketFailures {
-    failures: Vec<Failure>,
-}
-
-impl UnresolvedBucketFailures {
-    #[must_use]
-    pub const fn new(failures: Vec<Failure>) -> Self {
-        Self { failures }
-    }
-
-    #[must_use]
-    pub fn failures(&self) -> &[Failure] {
-        &self.failures
-    }
-}
-
-impl Display for UnresolvedBucketFailures {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{} unresolved bucket failure(s) cannot be represented by this exit",
-            self.failures.len(),
-        )
-    }
-}
-
-impl Error for UnresolvedBucketFailures {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.failures
-            .first()
-            .map(|failure| failure as &(dyn Error + 'static))
-    }
-}
-
-impl Diagnostic for UnresolvedBucketFailures {
-    fn name() -> &'static str {
-        "UnresolvedBucketFailures"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some(
-            "resolve retained bucket failures with `on_bucket_error(...)` before this exit"
-                .to_string(),
-        )
     }
 }

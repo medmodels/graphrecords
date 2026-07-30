@@ -1,7 +1,10 @@
 use crate::{
-    AttributeName, Bare, EvaluateOperand, Explain, Failure, IncomparableValues,
-    IncomparableValuesAt, IndexDomain, IndexValue, Indexed, Labeled, Multiple, Operand, OrderState,
-    QueryResult, Scalar, Single, ValueType,
+    AttributeName, Bare, EvaluateOperand, Explain, Failure, IndexDomain, IndexValue, Indexed,
+    Labeled, Multiple, Operand, OrderState, QueryResult, Scalar, Single, ValueType,
+    error::{
+        comparison::{IncomparableValues, IncomparableValuesAt},
+        ordering::IncomparableIndices,
+    },
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -9,7 +12,6 @@ use crate::{
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     traits::Max,
-    value::IncomparableIndices,
 };
 use graphrecords_core::GraphRecord;
 use std::{
@@ -57,12 +59,12 @@ where
             Some(Ordering::Less) => return Ok(Some((maximum_index, maximum_value))),
             Some(Ordering::Equal) => {}
             None => {
-                let cause = IncomparableValuesAt {
-                    first: V::into_owned(value.clone()),
-                    second: V::into_owned(maximum_value.clone()),
-                    first_element: I::to_owned(&index),
-                    second_element: I::to_owned(&maximum_index),
-                };
+                let cause = IncomparableValuesAt::new(
+                    V::into_owned(value.clone()),
+                    V::into_owned(maximum_value.clone()),
+                    I::to_owned(&index),
+                    I::to_owned(&maximum_index),
+                );
                 let failure = Failure::new_at::<I, _>(MaxOperation::LABEL, cause, &index);
 
                 return Err((index, failure));
@@ -73,11 +75,11 @@ where
             Some(Ordering::Greater) => Ok(Some((index, value))),
             Some(Ordering::Less | Ordering::Equal) => Ok(Some((maximum_index, maximum_value))),
             None => {
-                let cause = IncomparableIndices {
-                    value: V::into_owned(value.clone()),
-                    first: I::to_owned(&index),
-                    second: I::to_owned(&maximum_index),
-                };
+                let cause = IncomparableIndices::new(
+                    V::into_owned(value.clone()),
+                    I::to_owned(&index),
+                    I::to_owned(&maximum_index),
+                );
                 let failure = Failure::new_at::<I, _>(MaxOperation::LABEL, cause, &index);
 
                 Err((index, failure))
@@ -112,10 +114,10 @@ where
             Some(Ordering::Less | Ordering::Equal) => Ok(Some(maximum)),
             None => Err(Failure::new(
                 MaxOperation::LABEL,
-                IncomparableValues {
-                    first: V::into_owned(value.clone()),
-                    second: V::into_owned(maximum.clone()),
-                },
+                IncomparableValues::new(
+                    V::into_owned(value.clone()),
+                    V::into_owned(maximum.clone()),
+                ),
             )),
         }
     });

@@ -1,6 +1,7 @@
 use crate::{
     Cache, EvaluateContext, EvaluateOperand, Explain, Failure, Labeled, QueryResult,
-    execution::{CacheSlot, CacheableOperand, EvaluationCache, EvaluationCacheGraphRecordMismatch},
+    error::execution::EvaluationCacheGraphRecordMismatch,
+    execution::{CacheSlot, CacheableOperand, EvaluationCache},
     optimizer::{
         Estimate, Estimated, MatchInputs, OptimizePlan, OptimizerHints, PlanNode, Session, Stats,
         Transformed,
@@ -67,17 +68,16 @@ impl<O: CacheableOperand> OptimizePlan for CacheContext<O> {
     fn optimize(&self, original: &Self::Output, session: &Session) -> Transformed<Self::Output> {
         let input = session.optimize(&self.input);
 
-        if !input.changed {
+        if !input.is_changed() {
             return Transformed::unchanged(original.clone());
         }
 
-        Transformed {
-            value: O::new(Self {
-                input: input.value,
-                slot: self.slot.clone(),
-            }),
-            changed: true,
-        }
+        let input = input.into_parts().0;
+
+        Transformed::changed(O::new(Self {
+            input,
+            slot: self.slot.clone(),
+        }))
     }
 }
 

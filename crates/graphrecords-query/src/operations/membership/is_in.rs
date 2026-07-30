@@ -1,5 +1,6 @@
 use crate::{
     Bare, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
+    capabilities::ValueEquality,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
     operations::{
@@ -9,7 +10,6 @@ use crate::{
         Estimate, Estimated, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
     },
     traits::IsIn,
-    value::ValueEquality,
 };
 use graphrecords_core::GraphRecord;
 use std::hash::Hash;
