@@ -35,7 +35,7 @@ impl<T: PartialEq + Hash> PlanIdentity for Vec<T> {
     }
 
     fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
+        self.hash(state);
     }
 }
 
@@ -98,7 +98,7 @@ impl<T: PartialEq + Hash, const N: usize> PlanIdentity for [T; N] {
     }
 
     fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
+        self.hash(state);
     }
 }
 

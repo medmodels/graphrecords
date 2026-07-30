@@ -225,7 +225,7 @@ impl<P: IndexDomain, C: IndexDomain, W: ValueType, S: ExpandToSource<P>>
         Ok(Pipeline::keyed(
             move |address: ExpandedIndexReference<'_, _, _>, template_outcome| {
                 match template_outcome {
-                    Err(failure) => <Self::Emission as Retention>::keep(Err(failure)),
+                    Err(failure) => Self::Emission::keep(Err(failure)),
                     Ok(_) => S::resolve_parent(&prepared, address.parent_index(), Self::LABEL),
                 }
             },

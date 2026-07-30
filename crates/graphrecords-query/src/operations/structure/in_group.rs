@@ -12,7 +12,6 @@ use graphrecords_core::{GraphRecord, graphrecord::Group};
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "InGroup")]
-#[plan(optimizer_hints(empty = if_any))]
 pub struct InGroupOperation {
     #[explain(label)]
     group: Group,

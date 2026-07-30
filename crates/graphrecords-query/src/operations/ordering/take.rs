@@ -14,6 +14,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
 #[explain(label = "Take")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct TakeOperation {
     #[explain(label)]
     elements: usize,

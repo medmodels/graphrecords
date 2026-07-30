@@ -27,7 +27,7 @@ impl PlanIdentity for GraphRecordValue {
     }
 
     fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
+        self.hash(state);
     }
 }
 
@@ -83,7 +83,7 @@ impl PlanIdentity for bool {
     }
 
     fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
+        self.hash(state);
     }
 }
 
@@ -142,7 +142,7 @@ impl PlanIdentity for GraphRecordAttribute {
     }
 
     fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
+        self.hash(state);
     }
 }
 
@@ -198,7 +198,7 @@ impl PlanIdentity for EdgeIndex {
     }
 
     fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
+        self.hash(state);
     }
 }
 
@@ -254,7 +254,7 @@ impl PlanIdentity for Position {
     }
 
     fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
+        self.hash(state);
     }
 }
 
@@ -310,7 +310,7 @@ impl PlanIdentity for FailureKind {
     }
 
     fn identity_hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(self, state);
+        self.hash(state);
     }
 }
 

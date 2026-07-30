@@ -1,13 +1,3 @@
-use crate::{IndexDomain, OwnedIndex};
-use graphrecords_core::errors::GraphRecordError;
-use std::{
-    any::{Any, TypeId},
-    error::Error,
-    fmt::{self, Display, Formatter},
-    hash::{Hash, Hasher},
-    sync::Arc,
-};
-
 pub mod aggregation;
 pub mod argument;
 pub mod arithmetic;
@@ -20,6 +10,16 @@ pub mod numeric;
 pub mod ordering;
 pub mod string;
 pub mod structure;
+
+use crate::{IndexDomain, OwnedIndex};
+use graphrecords_core::errors::GraphRecordError;
+use std::{
+    any::{Any, TypeId},
+    error::Error,
+    fmt::{self, Display, Formatter},
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 
 pub type QueryResult<T> = Result<T, Box<Failure>>;
 

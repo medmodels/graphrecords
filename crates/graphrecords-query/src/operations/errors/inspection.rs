@@ -3,12 +3,18 @@ use crate::{
     IndexDomain, Indexed, Mask, Operand, QueryResult, Scalar, ValueType,
     element::{Dropping, Pipeline, Preserving},
     execution::EvaluationCache,
+    explain::ExplainFormatter,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     traits::{ErrorKind, ErrorKindName, Errors, HasErrorCause, InErrorGroup, IsErrorKind},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
-use std::{any::type_name, error::Error, marker::PhantomData};
+use std::{
+    any::type_name,
+    error::Error,
+    fmt::{self, Write},
+    marker::PhantomData,
+};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -137,11 +143,8 @@ impl<D: Diagnostic> Clone for IsErrorKindOperation<D> {
 }
 
 impl<D: Diagnostic> Explain for IsErrorKindOperation<D> {
-    fn describe<'a>(
-        &'a self,
-        formatter: &mut crate::explain::ExplainFormatter<'a, '_>,
-    ) -> std::fmt::Result {
-        std::fmt::Write::write_fmt(formatter, format_args!("IsErrorKind kind={}", D::name()))
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "IsErrorKind kind={}", D::name())
     }
 }
 
@@ -227,11 +230,8 @@ impl<G: ErrorGroup> Clone for InErrorGroupOperation<G> {
 }
 
 impl<G: ErrorGroup> Explain for InErrorGroupOperation<G> {
-    fn describe<'a>(
-        &'a self,
-        formatter: &mut crate::explain::ExplainFormatter<'a, '_>,
-    ) -> std::fmt::Result {
-        std::fmt::Write::write_fmt(formatter, format_args!("InErrorGroup group={}", G::name()))
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "InErrorGroup group={}", G::name())
     }
 }
 
@@ -317,14 +317,8 @@ impl<C: Error + 'static> Clone for HasErrorCauseOperation<C> {
 }
 
 impl<C: Error + 'static> Explain for HasErrorCauseOperation<C> {
-    fn describe<'a>(
-        &'a self,
-        formatter: &mut crate::explain::ExplainFormatter<'a, '_>,
-    ) -> std::fmt::Result {
-        std::fmt::Write::write_fmt(
-            formatter,
-            format_args!("HasErrorCause cause={}", type_name::<C>()),
-        )
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "HasErrorCause cause={}", type_name::<C>())
     }
 }
 

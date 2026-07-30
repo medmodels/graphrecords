@@ -1,7 +1,7 @@
 use super::{combine_masks_bare, combine_masks_indexed};
 use crate::{
-    Arity, Bare, ElementShape, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
-    Xor,
+    Arity, Bare, ElementShape, ExclusiveOr, Explain, IndexDomain, Indexed, Labeled, Mask, Operand,
+    QueryResult,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -17,12 +17,12 @@ use std::ops::BitXor;
 #[operation(scope = Element)]
 #[explain(label = "Xor")]
 #[plan(optimizer_hints(empty = if_all))]
-pub struct XorOperation<M> {
+pub struct ExclusiveOrOperation<M> {
     #[argument]
     other: M,
 }
 
-impl<M: Prepare> Prepare for XorOperation<M> {
+impl<M: Prepare> Prepare for ExclusiveOrOperation<M> {
     type Prepared<'a>
         = M::Prepared<'a>
     where
@@ -37,7 +37,7 @@ impl<M: Prepare> Prepare for XorOperation<M> {
     }
 }
 
-impl<I, M> ElementKernel<Indexed<I, Mask>> for XorOperation<M>
+impl<I, M> ElementKernel<Indexed<I, Mask>> for ExclusiveOrOperation<M>
 where
     I: IndexDomain,
     for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
@@ -69,7 +69,7 @@ where
     }
 }
 
-impl<M> ElementKernel<Bare<Mask>> for XorOperation<M>
+impl<M> ElementKernel<Bare<Mask>> for ExclusiveOrOperation<M>
 where
     for<'a> M: ArgumentSource<Unaligned, Value<'a> = bool>,
 {
@@ -100,15 +100,18 @@ where
     }
 }
 
-impl<O, M> Xor<M> for O
+impl<O, M> ExclusiveOr<M> for O
 where
-    XorOperation<M>: Operation,
-    O: Apply<XorOperation<M>>,
+    ExclusiveOrOperation<M>: Operation,
+    O: Apply<ExclusiveOrOperation<M>>,
 {
     type ReturnOperand = O::Output;
 
     fn xor(&self, other: M) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), XorOperation { other }))
+        Self::ReturnOperand::new(OperationContext::new(
+            self.clone(),
+            ExclusiveOrOperation { other },
+        ))
     }
 }
 
@@ -116,9 +119,9 @@ impl<S, C, M> BitXor<M> for OperandHandle<S, C>
 where
     S: ElementShape,
     C: Arity,
-    Self: Xor<M>,
+    Self: ExclusiveOr<M>,
 {
-    type Output = <Self as Xor<M>>::ReturnOperand;
+    type Output = <Self as ExclusiveOr<M>>::ReturnOperand;
 
     fn bitxor(self, rhs: M) -> Self::Output {
         self.xor(rhs)

@@ -224,11 +224,11 @@ where
         let label = Self::LABEL;
 
         Ok(Pipeline::keyed(move |index, result| match result {
-            Ok(value) => <Self::Emission as Retention>::keep(Ok(value)),
+            Ok(value) => Self::Emission::keep(Ok(value)),
             Err(original) => {
                 let step = R::resolve(&prepared, &index, label);
 
-                <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                Self::Emission::map_step(step, |replacement| match replacement {
                     Ok(value) => Ok(value),
                     Err(_) => Err(original),
                 })
@@ -252,11 +252,11 @@ where
         let label = Self::LABEL;
 
         Ok(Pipeline::new(move |result| match result {
-            Ok(value) => <Self::Emission as Retention>::keep(Ok(value)),
+            Ok(value) => Self::Emission::keep(Ok(value)),
             Err(original) => {
                 let step = R::resolve(&prepared, &(), label);
 
-                <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                Self::Emission::map_step(step, |replacement| match replacement {
                     Ok(value) => Ok(value),
                     Err(_) => Err(original),
                 })
@@ -286,12 +286,12 @@ where
                 Err(original) if original.is_kind::<D>() => {
                     let step = R::resolve(&prepared, &index, label);
 
-                    <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                    Self::Emission::map_step(step, |replacement| match replacement {
                         Ok(value) => Ok(value),
                         Err(_) => Err(original),
                     })
                 }
-                result => <Self::Emission as Retention>::keep(result),
+                result => Self::Emission::keep(result),
             },
         ))
     }
@@ -316,12 +316,12 @@ where
             Err(original) if original.is_kind::<D>() => {
                 let step = R::resolve(&prepared, &(), label);
 
-                <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                Self::Emission::map_step(step, |replacement| match replacement {
                     Ok(value) => Ok(value),
                     Err(_) => Err(original),
                 })
             }
-            result => <Self::Emission as Retention>::keep(result),
+            result => Self::Emission::keep(result),
         }))
     }
 }
@@ -347,12 +347,12 @@ where
                 Err(original) if G::contains(&original.kind()) => {
                     let step = R::resolve(&prepared, &index, label);
 
-                    <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                    Self::Emission::map_step(step, |replacement| match replacement {
                         Ok(value) => Ok(value),
                         Err(_) => Err(original),
                     })
                 }
-                result => <Self::Emission as Retention>::keep(result),
+                result => Self::Emission::keep(result),
             },
         ))
     }
@@ -377,12 +377,12 @@ where
             Err(original) if G::contains(&original.kind()) => {
                 let step = R::resolve(&prepared, &(), label);
 
-                <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                Self::Emission::map_step(step, |replacement| match replacement {
                     Ok(value) => Ok(value),
                     Err(_) => Err(original),
                 })
             }
-            result => <Self::Emission as Retention>::keep(result),
+            result => Self::Emission::keep(result),
         }))
     }
 }
@@ -408,12 +408,12 @@ where
                 Err(original) if original.has_cause::<C>() => {
                     let step = R::resolve(&prepared, &index, label);
 
-                    <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                    Self::Emission::map_step(step, |replacement| match replacement {
                         Ok(value) => Ok(value),
                         Err(_) => Err(original),
                     })
                 }
-                result => <Self::Emission as Retention>::keep(result),
+                result => Self::Emission::keep(result),
             },
         ))
     }
@@ -438,12 +438,12 @@ where
             Err(original) if original.has_cause::<C>() => {
                 let step = R::resolve(&prepared, &(), label);
 
-                <Self::Emission as Retention>::map_step(step, |replacement| match replacement {
+                Self::Emission::map_step(step, |replacement| match replacement {
                     Ok(value) => Ok(value),
                     Err(_) => Err(original),
                 })
             }
-            result => <Self::Emission as Retention>::keep(result),
+            result => Self::Emission::keep(result),
         }))
     }
 }

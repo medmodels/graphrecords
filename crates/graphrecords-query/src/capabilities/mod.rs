@@ -1,3 +1,4 @@
+mod aggregation;
 mod arithmetic;
 mod comparison;
 mod grouping;
@@ -5,6 +6,7 @@ mod numeric;
 mod sortable;
 mod string;
 
+pub use aggregation::{ValueMode, ValueUniqueCount};
 pub use arithmetic::{
     ValueAdd, ValueDivide, ValueModulo, ValueMultiply, ValuePower, ValueSubtract,
 };

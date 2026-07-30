@@ -58,7 +58,7 @@ where
 
             let step = M::resolve(&prepared, &index, label);
 
-            match <M::Retention as Retention>::collapse(step) {
+            match M::Retention::collapse(step) {
                 Some(Ok(true)) => Some(Ok(value)),
                 Some(Ok(false)) | None => None,
                 Some(Err(failure)) => Some(Err(failure)),
@@ -96,7 +96,7 @@ where
 
             let step = M::resolve(&prepared, &(), label);
 
-            match <M::Retention as Retention>::collapse(step) {
+            match M::Retention::collapse(step) {
                 Some(Ok(true)) => Some(Ok(value)),
                 Some(Ok(false)) | None => None,
                 Some(Err(failure)) => Some(Err(failure)),

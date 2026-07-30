@@ -1,6 +1,6 @@
 use crate::{
-    AttributeName, Bare, EntityReference, ExpandedChild, ExpandedIndex, Explain, Failure,
-    IndexDomain, Indexed, Labeled, Operand, QueryResult, Unit, Unordered,
+    AttributeName, EntityReference, ExpandedChild, ExpandedIndex, Explain, IndexDomain, Indexed,
+    Operand, QueryResult, Unit, Unordered,
     element::{Expanding, Pipeline},
     execution::EvaluationCache,
     index::EntityAttributes,
@@ -37,8 +37,7 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributesOperatio
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
         Ok(Pipeline::keyed(move |parent_index, ()| {
-            let attributes = I::attributes(graphrecord, &parent_index)
-                .map_err(|error| Failure::new_at::<I, _>(Self::LABEL, error, &parent_index))?;
+            let attributes = I::attributes(graphrecord, &parent_index).expect("Entity must exist");
 
             Ok(attributes
                 .keys()
@@ -59,33 +58,14 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
         graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
-        Ok(Pipeline::keyed(move |parent_index, entity| {
-            let attributes = E::attributes(graphrecord, &entity)
-                .map_err(|error| Failure::new_at::<I, _>(Self::LABEL, error, &parent_index))?;
+        Ok(Pipeline::unkeyed(move |entity| {
+            let attributes = E::attributes(graphrecord, &entity).expect("Entity must exist");
 
             Ok(attributes
                 .keys()
                 .cloned()
                 .map(|attribute| ExpandedChild::success(attribute.clone(), attribute))
                 .collect())
-        }))
-    }
-}
-
-impl<E: EntityAttributes> ElementKernel<Bare<EntityReference<E>>> for AttributesOperation {
-    type Emission = Expanding<Unordered>;
-    type OutShape = Bare<AttributeName>;
-
-    fn pipeline<'a>(
-        graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<EntityReference<E>>, Self>> {
-        Ok(Pipeline::new(move |outcome| match outcome {
-            Err(failure) => vec![Err(failure)],
-            Ok(entity) => match E::attributes(graphrecord, &entity) {
-                Err(error) => vec![Err(Failure::new(Self::LABEL, error))],
-                Ok(attributes) => attributes.keys().cloned().map(Ok).collect(),
-            },
         }))
     }
 }

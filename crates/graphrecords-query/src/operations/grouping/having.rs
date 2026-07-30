@@ -61,7 +61,7 @@ where
             };
             let step = P::resolve(&prepared, &key, Self::LABEL);
 
-            match <P::Retention as Retention>::collapse(step) {
+            match P::Retention::collapse(step) {
                 None | Some(Ok(false)) => Some(BucketChange::Drop),
                 Some(Ok(true)) => None,
                 Some(Err(failure)) => Some(BucketChange::ReplacePayload(Err(failure))),

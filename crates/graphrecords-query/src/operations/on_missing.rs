@@ -11,7 +11,11 @@ use crate::{
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, PlanNode, Stats},
 };
 use graphrecords_core::GraphRecord;
-use std::{fmt, hash::Hasher, marker::PhantomData};
+use std::{
+    fmt::{self, Write},
+    hash::Hasher,
+    marker::PhantomData,
+};
 
 pub trait MaybeAbsent<A: Alignment>: ArgumentSource<A> {
     fn on_missing<P>(self, policy: P) -> WithMissing<A, Self, P>
@@ -140,9 +144,9 @@ impl<A: Alignment, S: MaybeAbsent<A> + Clone, P: Clone> Clone for WithMissing<A,
 impl<A: Alignment, S: MaybeAbsent<A>, P: Explain> Explain for WithMissing<A, S, P> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         self.inner.describe(formatter)?;
-        fmt::Write::write_str(formatter, " on_missing(")?;
+        formatter.write_str(" on_missing(")?;
         self.policy.describe(formatter)?;
-        fmt::Write::write_str(formatter, ")")
+        formatter.write_str(")")
     }
 }
 
@@ -159,8 +163,8 @@ impl<A: Alignment, S: MaybeAbsent<A>, P: PlanIdentity> PlanIdentity for WithMiss
 
 impl<A: Alignment, S: MaybeAbsent<A>, P: PlanInputs> PlanInputs for WithMissing<A, S, P> {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
-        let mut inputs = PlanInputs::inputs(&self.inner);
-        inputs.extend(PlanInputs::inputs(&self.policy));
+        let mut inputs = self.inner.inputs();
+        inputs.extend(self.policy.inputs());
 
         inputs
     }
@@ -220,7 +224,7 @@ impl<A: Alignment, S: MaybeAbsent<A>, P: MissingPolicy<A, S>> ArgumentSource<A>
         Self: 'a,
     {
         match S::lookup(&prepared.0, address) {
-            Lookup::Present(wrapped) => <P::Retention as Retention>::keep(wrapped.clone()),
+            Lookup::Present(wrapped) => P::Retention::keep(wrapped.clone()),
             Lookup::Absent(_) => P::resolve_absent(&prepared.1, address, label),
         }
     }

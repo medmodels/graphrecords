@@ -87,7 +87,7 @@ where
     }
 
     fn estimate(operation: &P, input: Estimate, stats: &Stats) -> Estimate {
-        ElementKernel::estimate(operation, input, stats)
+        operation.estimate(input, stats)
     }
 }
 
@@ -106,7 +106,7 @@ impl<S: ElementShape, C: Arity, P: LaneKernel<S, C>> Apply<P, Lane> for OperandH
     }
 
     fn estimate(operation: &P, input: Estimate, stats: &Stats) -> Estimate {
-        LaneKernel::estimate(operation, input, stats)
+        operation.estimate(input, stats)
     }
 }
 
@@ -205,7 +205,7 @@ where
     }
 
     fn estimate(operation: &P, input: Estimate, stats: &Stats) -> Estimate {
-        GroupKernel::estimate(operation, input, stats)
+        operation.estimate(input, stats)
     }
 }
 

@@ -19,8 +19,8 @@ pub use element::{
 pub use error::{Diagnostic, ErrorGroup, External, Failure, FailureKind, QueryResult};
 pub use explain::{Explain, Explanation, Labeled};
 pub use index::{
-    EntityDomain, ExpandedChild, ExpandedIndex, ExpandedIndexOwned, ExpandedIndexReference,
-    IndexDomain, OwnedIndex, Position, Positional,
+    EdgeEndpointRole, EntityDomain, ExpandedChild, ExpandedIndex, ExpandedIndexOwned,
+    ExpandedIndexReference, IndexDomain, OwnedIndex, Position, Positional,
 };
 pub use operands::{
     BucketOwned, CheckedIndexedLaneBuilder, DefiniteEdgeOperand, DefiniteNodeOperand,

@@ -66,8 +66,7 @@ where
             .filter_map(|(index, subject)| {
                 let step = A::resolve(&prepared, &index, label);
 
-                <A::Retention as Retention>::collapse(step)
-                    .map(|key| key.map(|key| (index, subject, key)))
+                A::Retention::collapse(step).map(|key| key.map(|key| (index, subject, key)))
             })
             .collect::<QueryResult<_>>()?;
 

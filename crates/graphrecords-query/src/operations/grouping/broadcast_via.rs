@@ -58,7 +58,7 @@ where
 {
     let elements = A::elements(prepared);
 
-    <A::Arity as Arity>::map_elements(elements, move |(index, via_outcome)| {
+    A::Arity::map_elements(elements, move |(index, via_outcome)| {
         let outcome = match via_outcome {
             Err(failure) => Err(failure),
             Ok(value) => match aggregates.get(&A::to_key(&value)) {

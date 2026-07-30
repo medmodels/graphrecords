@@ -51,7 +51,7 @@ impl<O: CacheableOperand> PlanNode for CacheContext<O> {
     }
 
     fn dyn_hash(&self, mut state: &mut dyn Hasher) {
-        Any::type_id(self).hash(&mut state);
+        self.type_id().hash(&mut state);
         self.input.as_plan_node().dyn_hash(state);
     }
 }

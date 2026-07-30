@@ -14,6 +14,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
 #[explain(label = "ReverseOrder")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct ReverseOrderOperation;
 
 impl Prepare for ReverseOrderOperation {

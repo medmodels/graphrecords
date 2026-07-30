@@ -1,8 +1,10 @@
+mod edge_endpoint;
 mod entity;
 mod expanded;
 mod key;
 
 use crate::{AttributeName, FailureKind};
+pub use edge_endpoint::EdgeEndpointRole;
 pub use entity::{EntityAttributes, IndicesInGroup};
 pub use expanded::{ExpandedChild, ExpandedIndex, ExpandedIndexOwned, ExpandedIndexReference};
 use graphrecords_core::{

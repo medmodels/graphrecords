@@ -28,7 +28,11 @@ use crate::{
     },
     sealed::Sealed,
 };
-pub use aggregation::{CountOperation, MaxOperation, MeanOperation, StdOperation, SumOperation};
+pub use aggregation::{
+    AllOperation, AnyOperation, CountOperation, MaximumOperation, MeanOperation, MinimumOperation,
+    ModeOperation, ProductOperation, RandomOperation, StandardDeviationOperation, SumOperation,
+    UniqueCountOperation, VarianceOperation,
+};
 pub use argument::{
     AlignableArity, Alignment, ArgumentSource, EnumerableArity, IndexedElementContainer,
     IndexedElementSource, Keyed, Lookup, Prepare, PreparedArity, PreparedIndexedMultiple, SetArity,
@@ -44,7 +48,8 @@ pub use comparison::{
     LessThanOrEqualToOperation, NotEqualToOperation,
 };
 pub use conversion::{
-    DiscardOperation, EnumerateOperation, ExpandToOperation, ExpandToSource, ParentResolution,
+    DiscardIndexOperation, DiscardValueOperation, EnumerateOperation, ExpandToOperation,
+    ExpandToSource, ParentResolution,
 };
 pub use errors::{
     Drop, DropErrorsIn, DropErrorsOf, DropErrorsWithCause, ErrorKindNameOperation,
@@ -69,10 +74,14 @@ pub use grouping::{
 pub use indexing::{
     ChildIndexOperation, IndexOperation, ParentIndexOperation, ResolveOperation, SelectOperation,
 };
+pub use is_type::{
+    IsBoolOperation, IsDateTimeOperation, IsDurationOperation, IsFloatOperation, IsIntOperation,
+    IsNullOperation, IsStringOperation,
+};
 pub use kernel::{
     BareStream, ElementKernel, ElementPipeline, GroupKernel, KeyedStream, LaneKernel,
 };
-pub use logic::{AndOperation, NotOperation, OrOperation, XorOperation};
+pub use logic::{AndOperation, ExclusiveOrOperation, NotOperation, OrOperation};
 pub use membership::IsInOperation;
 pub use numeric::{
     AbsoluteOperation, CeilOperation, ClipOperation, CubeRootOperation, ExponentialOperation,
@@ -81,8 +90,8 @@ pub use numeric::{
 };
 pub use on_missing::{MaybeAbsent, MissingPolicy, WithMissing};
 pub use ordering::{
-    FirstOperation, LastOperation, ReverseOrderOperation, SortByOperation, SortOperation,
-    TakeOperation, UnorderOperation,
+    FirstOperation, LastOperation, ReverseOrderOperation, ShuffleOperation, SortByOperation,
+    SortOperation, TakeOperation, UnorderOperation,
 };
 use std::{
     any::Any,
@@ -95,10 +104,13 @@ pub use string_operations::{
     SliceOperation, SplitOperation, StartsWithOperation, StripPrefixOperation,
     StripSuffixOperation, TrimEndOperation, TrimOperation, TrimStartOperation, UppercaseOperation,
 };
-pub use structure::{AttributeOperation, AttributesOperation, FilterOperation, InGroupOperation};
+pub use structure::{
+    AttributeOperation, AttributesOperation, FilterOperation, HasAttributeOperation,
+    InGroupOperation,
+};
 pub use traversal::{
-    EdgeDirection, EdgeSource, EdgeTarget, EdgesOperation, NeighborsOperation, NodesOperation,
-    Relation, RelationOperation, SelectRelationOperation,
+    EdgeDirection, EdgesOperation, EndpointOperation, NeighborsOperation, NodesOperation,
+    ViaEdgesOperation, ViaNeighborsOperation, ViaNodesOperation,
 };
 
 pub trait OperationScope: Sealed + 'static {}
@@ -178,7 +190,7 @@ impl<I: Apply<P>, P: Operation> PlanNode for OperationContext<I, P> {
     }
 
     fn dyn_hash(&self, mut state: &mut dyn Hasher) {
-        Any::type_id(self).hash(&mut state);
+        self.type_id().hash(&mut state);
         self.operation.identity_hash(&mut state);
         self.input.as_plan_node().dyn_hash(state);
     }
@@ -246,6 +258,6 @@ impl<I: Apply<P>, P: Operation> OptimizePlan for OperationContext<I, P> {
         let input = input.into_parts().0;
         let operation = operation.into_parts().0;
 
-        Transformed::changed(<Self::Output as Operand>::new(Self { input, operation }))
+        Transformed::changed(Self::Output::new(Self { input, operation }))
     }
 }

@@ -59,18 +59,16 @@ where
             let value = match item {
                 Ok(value) => value,
                 Err(failure) => {
-                    return <<L::Retention as Retention>::Then<U::Retention> as Retention>::keep(
-                        Err(failure),
-                    );
+                    return Self::Emission::keep(Err(failure));
                 }
             };
 
             let lower = L::resolve(&prepared.0, &index, Self::LABEL);
 
-            <L::Retention as Retention>::and_then(lower, |lower| {
+            L::Retention::and_then(lower, |lower| {
                 let upper = U::resolve(&prepared.1, &index, Self::LABEL);
 
-                <U::Retention as Retention>::map_step(upper, |upper| {
+                U::Retention::map_step(upper, |upper| {
                     upper.and_then(|upper| {
                         V::clip(Self::LABEL, value, lower, upper)
                             .map_err(|failure| failure.at::<I>(&index))
@@ -102,18 +100,16 @@ where
             let value = match item {
                 Ok(value) => value,
                 Err(failure) => {
-                    return <<L::Retention as Retention>::Then<U::Retention> as Retention>::keep(
-                        Err(failure),
-                    );
+                    return Self::Emission::keep(Err(failure));
                 }
             };
 
             let lower = L::resolve(&prepared.0, &(), Self::LABEL);
 
-            <L::Retention as Retention>::and_then(lower, |lower| {
+            L::Retention::and_then(lower, |lower| {
                 let upper = U::resolve(&prepared.1, &(), Self::LABEL);
 
-                <U::Retention as Retention>::map_step(upper, |upper| {
+                U::Retention::map_step(upper, |upper| {
                     upper.and_then(|upper| V::clip(Self::LABEL, value, lower, upper))
                 })
             })

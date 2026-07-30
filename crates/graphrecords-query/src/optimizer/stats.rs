@@ -80,7 +80,7 @@ impl Statistic for NodeAttributeCardinality {
             .filter_map(|node_index| {
                 graphrecord
                     .node_attributes(node_index)
-                    .ok()?
+                    .expect("Node must exist")
                     .get(key)
                     .cloned()
             })
@@ -101,7 +101,7 @@ impl Statistic for EdgeAttributeCardinality {
             .filter_map(|edge_index| {
                 graphrecord
                     .edge_attributes(edge_index)
-                    .ok()?
+                    .expect("Edge must exist")
                     .get(key)
                     .cloned()
             })

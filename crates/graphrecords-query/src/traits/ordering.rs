@@ -16,6 +16,12 @@ pub trait ReverseOrder {
     fn reverse_order(&self) -> Self::ReturnOperand;
 }
 
+pub trait Shuffle {
+    type ReturnOperand;
+
+    fn shuffle(&self) -> Self::ReturnOperand;
+}
+
 pub trait Sort {
     type ReturnOperand;
 

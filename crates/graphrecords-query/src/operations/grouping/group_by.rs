@@ -52,7 +52,7 @@ impl<I: IndexDomain, V: ValueType, K: KeyOperand<I>, C: PartitionArity<Indexed<I
             let member = &element.0;
             let step = K::resolve(&prepared, member, label);
 
-            match <K::Retention as Retention>::collapse(step) {
+            match K::Retention::collapse(step) {
                 None => PartitionClassification::Omit,
                 Some(Err(failure)) => PartitionClassification::KeyFailure(failure),
                 Some(Ok(value)) => PartitionClassification::Key(K::to_key(&value)),

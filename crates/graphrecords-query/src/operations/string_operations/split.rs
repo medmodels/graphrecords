@@ -54,11 +54,8 @@ where
         Ok(Pipeline::keyed(move |index, value| {
             let value =
                 V::into_string(Self::LABEL, value).map_err(|failure| failure.at::<I>(&index))?;
-            let delimiter = match <A::Retention as Retention>::collapse(A::resolve(
-                &prepared,
-                &index,
-                Self::LABEL,
-            )) {
+            let delimiter = match A::Retention::collapse(A::resolve(&prepared, &index, Self::LABEL))
+            {
                 None => return Ok(Vec::new()),
                 Some(Err(failure)) => return Err(failure),
                 Some(Ok(delimiter)) => V::into_string(Self::LABEL, delimiter)
@@ -104,11 +101,7 @@ where
                     Err(failure) => return vec![Err(failure)],
                 },
             };
-            let delimiter = match <A::Retention as Retention>::collapse(A::resolve(
-                &prepared,
-                &(),
-                Self::LABEL,
-            )) {
+            let delimiter = match A::Retention::collapse(A::resolve(&prepared, &(), Self::LABEL)) {
                 None => return Vec::new(),
                 Some(Err(failure)) => return vec![Err(failure)],
                 Some(Ok(delimiter)) => match V::into_string(Self::LABEL, delimiter) {

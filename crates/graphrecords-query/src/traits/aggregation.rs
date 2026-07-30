@@ -1,13 +1,13 @@
-pub trait Max {
+pub trait All {
     type ReturnOperand;
 
-    fn max(&self) -> Self::ReturnOperand;
+    fn all(&self) -> Self::ReturnOperand;
 }
 
-pub trait Min {
+pub trait Any {
     type ReturnOperand;
 
-    fn min(&mut self) -> Self::ReturnOperand;
+    fn any(&self) -> Self::ReturnOperand;
 }
 
 pub trait Count {
@@ -16,10 +16,10 @@ pub trait Count {
     fn count(&self) -> Self::ReturnOperand;
 }
 
-pub trait Sum {
+pub trait Maximum {
     type ReturnOperand;
 
-    fn sum(&self) -> Self::ReturnOperand;
+    fn max(&self) -> Self::ReturnOperand;
 }
 
 pub trait Mean {
@@ -34,26 +34,50 @@ pub trait Median {
     fn median(&mut self) -> Self::ReturnOperand;
 }
 
+pub trait Minimum {
+    type ReturnOperand;
+
+    fn min(&self) -> Self::ReturnOperand;
+}
+
 pub trait Mode {
     type ReturnOperand;
 
-    fn mode(&mut self) -> Self::ReturnOperand;
+    fn mode(&self) -> Self::ReturnOperand;
 }
 
-pub trait Std {
+pub trait UniqueCount {
     type ReturnOperand;
 
-    fn std(&self) -> Self::ReturnOperand;
+    fn n_unique(&self) -> Self::ReturnOperand;
 }
 
-pub trait Var {
+pub trait Product {
     type ReturnOperand;
 
-    fn var(&mut self) -> Self::ReturnOperand;
+    fn product(&self) -> Self::ReturnOperand;
 }
 
 pub trait Random {
     type ReturnOperand;
 
     fn random(&self) -> Self::ReturnOperand;
+}
+
+pub trait StandardDeviation {
+    type ReturnOperand;
+
+    fn std(&self) -> Self::ReturnOperand;
+}
+
+pub trait Sum {
+    type ReturnOperand;
+
+    fn sum(&self) -> Self::ReturnOperand;
+}
+
+pub trait Variance {
+    type ReturnOperand;
+
+    fn var(&self) -> Self::ReturnOperand;
 }

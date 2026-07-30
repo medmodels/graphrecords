@@ -41,18 +41,8 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
         Ok(Pipeline::keyed(move |index, membership| {
-            if let Err(failure) = membership {
-                return Err(failure);
-            }
-
-            let attributes = match I::attributes(graphrecord, &index) {
-                Ok(attributes) => attributes,
-                Err(error) => {
-                    let failure = Failure::new_at::<I, _>(Self::LABEL, error, &index);
-
-                    return Err(failure);
-                }
-            };
+            membership?;
+            let attributes = I::attributes(graphrecord, &index).expect("Entity must exist");
 
             if let Some(value) = attributes.get(prepared) {
                 return Ok(value.clone());
@@ -94,8 +84,7 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
         Ok(Pipeline::keyed(move |key, reference: QueryResult<_>| {
             reference.and_then(|entity| {
-                let attributes = E::attributes(graphrecord, &entity)
-                    .map_err(|error| Failure::new_at::<I, _>(Self::LABEL, error, &key))?;
+                let attributes = E::attributes(graphrecord, &entity).expect("Entity must exist");
 
                 if let Some(value) = attributes.get(prepared) {
                     return Ok(value.clone());

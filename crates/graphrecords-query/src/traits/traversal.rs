@@ -12,6 +12,12 @@ pub trait Neighbors {
     fn neighbors(&self, direction: EdgeDirection) -> Self::ReturnOperand;
 }
 
+pub trait Nodes {
+    type ReturnOperand;
+
+    fn nodes(&self) -> Self::ReturnOperand;
+}
+
 pub trait SourceNode {
     type ReturnOperand;
 
@@ -24,10 +30,22 @@ pub trait TargetNode {
     fn target_node(&self) -> Self::ReturnOperand;
 }
 
-pub trait Nodes {
+pub trait ViaEdges {
     type ReturnOperand;
 
-    fn nodes(&self) -> Self::ReturnOperand;
+    fn via_edges(&self, direction: EdgeDirection) -> Self::ReturnOperand;
+}
+
+pub trait ViaNeighbors {
+    type ReturnOperand;
+
+    fn via_neighbors(&self, direction: EdgeDirection) -> Self::ReturnOperand;
+}
+
+pub trait ViaNodes {
+    type ReturnOperand;
+
+    fn via_nodes(&self) -> Self::ReturnOperand;
 }
 
 pub trait ViaSourceNode {

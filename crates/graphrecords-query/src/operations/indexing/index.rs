@@ -1,5 +1,5 @@
 use crate::{
-    AttributeName, Bare, EntityDomain, EntityReference, Explain, FailureKindValue, FailureValue,
+    AttributeName, EntityDomain, EntityReference, Explain, FailureKindValue, FailureValue,
     IndexDomain, IndexValue, Indexed, Mask, Operand, QueryResult, Scalar, Unit,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
@@ -185,24 +185,6 @@ impl<E: EntityDomain, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
         Ok(Pipeline::unkeyed(|reference: QueryResult<_>| {
-            reference.map(|entity| E::to_owned(&entity))
-        }))
-    }
-
-    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input
-    }
-}
-
-impl<E: EntityDomain> ElementKernel<Bare<EntityReference<E>>> for IndexOperation {
-    type Emission = Preserving;
-    type OutShape = Bare<IndexValue<E>>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<EntityReference<E>>, Self>> {
-        Ok(Pipeline::new(|reference: QueryResult<_>| {
             reference.map(|entity| E::to_owned(&entity))
         }))
     }

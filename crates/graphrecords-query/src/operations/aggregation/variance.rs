@@ -1,24 +1,24 @@
 use crate::{
     Bare, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
     OrderState, QueryResult, Scalar,
-    error::aggregation::InvalidStandardDeviationValue,
+    error::aggregation::InvalidVarianceValue,
     execution::EvaluationCache,
     operands::BareValueOperand,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::StandardDeviation,
+    traits::Variance,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
-#[explain(label = "Std")]
+#[explain(label = "Var")]
 #[plan(optimizer_hints(empty = if_any))]
-pub struct StandardDeviationOperation;
+pub struct VarianceOperation;
 
-impl Prepare for StandardDeviationOperation {
+impl Prepare for VarianceOperation {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -44,7 +44,7 @@ fn update_state(
 }
 
 impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Scalar>, Multiple<O>>
-    for StandardDeviationOperation
+    for VarianceOperation
 {
     type Output = BareValueOperand;
 
@@ -53,15 +53,15 @@ impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Scalar>, Multiple<O>>
         mut values: KeyedStream<'a, I, Scalar, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let standard_deviation = values
-            .try_fold((0_usize, 0.0, 0.0), |state, (index, value)| {
+        let variance = values
+            .try_fold((0, 0.0, 0.0), |state, (index, value)| {
                 let value = match value? {
                     GraphRecordValue::Int(value) => value as f64,
                     GraphRecordValue::Float(value) => value,
                     value => {
                         return Err(Failure::new_at::<I, _>(
                             Self::LABEL,
-                            InvalidStandardDeviationValue::new(value),
+                            InvalidVarianceValue::new(value),
                             &index,
                         ));
                     }
@@ -70,12 +70,10 @@ impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Scalar>, Multiple<O>>
                 Ok(update_state(state, value))
             })
             .map(|(count, _, squared_deviation)| {
-                (count > 1).then(|| {
-                    GraphRecordValue::Float((squared_deviation / (count - 1) as f64).sqrt())
-                })
+                (count > 1).then(|| GraphRecordValue::Float(squared_deviation / (count - 1) as f64))
             });
 
-        Ok(standard_deviation.transpose())
+        Ok(variance.transpose())
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -83,7 +81,7 @@ impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Scalar>, Multiple<O>>
     }
 }
 
-impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for StandardDeviationOperation {
+impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for VarianceOperation {
     type Output = BareValueOperand;
 
     fn execute<'a>(
@@ -91,28 +89,23 @@ impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for StandardDeviationO
         mut values: BareStream<'a, Scalar, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let standard_deviation = values
-            .try_fold((0_usize, 0.0, 0.0), |state, value| {
+        let variance = values
+            .try_fold((0, 0.0, 0.0), |state, value| {
                 let value = match value? {
                     GraphRecordValue::Int(value) => value as f64,
                     GraphRecordValue::Float(value) => value,
                     value => {
-                        return Err(Failure::new(
-                            Self::LABEL,
-                            InvalidStandardDeviationValue::new(value),
-                        ));
+                        return Err(Failure::new(Self::LABEL, InvalidVarianceValue::new(value)));
                     }
                 };
 
                 Ok(update_state(state, value))
             })
             .map(|(count, _, squared_deviation)| {
-                (count > 1).then(|| {
-                    GraphRecordValue::Float((squared_deviation / (count - 1) as f64).sqrt())
-                })
+                (count > 1).then(|| GraphRecordValue::Float(squared_deviation / (count - 1) as f64))
             });
 
-        Ok(standard_deviation.transpose())
+        Ok(variance.transpose())
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -120,13 +113,10 @@ impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for StandardDeviationO
     }
 }
 
-impl<O: Apply<StandardDeviationOperation>> StandardDeviation for O {
+impl<O: Apply<VarianceOperation>> Variance for O {
     type ReturnOperand = O::Output;
 
-    fn std(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            StandardDeviationOperation,
-        ))
+    fn var(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), VarianceOperation))
     }
 }

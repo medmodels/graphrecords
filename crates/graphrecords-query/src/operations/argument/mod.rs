@@ -101,10 +101,10 @@ pub trait ArgumentSource<A: Alignment>:
         Self: 'a,
     {
         match Self::lookup(prepared, address) {
-            Lookup::Present(wrapped) => <Self::Retention as Retention>::keep(wrapped.clone()),
-            Lookup::Absent(absent) => <Self::Retention as Retention>::absent(|| {
-                A::raise_at(label, ArgumentAbsent::new(absent), address)
-            }),
+            Lookup::Present(wrapped) => Self::Retention::keep(wrapped.clone()),
+            Lookup::Absent(absent) => {
+                Self::Retention::absent(|| A::raise_at(label, ArgumentAbsent::new(absent), address))
+            }
         }
     }
 }

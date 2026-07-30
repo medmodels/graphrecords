@@ -1,6 +1,6 @@
 use crate::{
-    BoxedIterator, Definite, EdgeDirection, EvaluateOperand, Explain, Failure, Indexed, Labeled,
-    Multiple, Operand, OrderState, QueryResult, Single, Unit, Unordered,
+    BoxedIterator, Definite, EdgeDirection, EntityReference, EvaluateOperand, Explain, IndexDomain,
+    Indexed, Multiple, Operand, OrderState, QueryResult, Single, Unit, Unordered,
     execution::EvaluationCache,
     operands::EdgesOperand,
     operations::{Apply, KeyedStream, LaneKernel, Operation, OperationContext, Prepare},
@@ -17,25 +17,29 @@ fn edges_for_node<'a>(
     graphrecord: &'a GraphRecord,
     node: &'a NodeIndex,
     direction: EdgeDirection,
-) -> QueryResult<BoxedIterator<'a, &'a EdgeIndex>> {
-    let raise = |error| Failure::new_at::<NodeIndex, _>(EdgesOperation::LABEL, error, &node);
-
-    Ok(match direction {
-        EdgeDirection::Outgoing => Box::new(graphrecord.outgoing_edges(node).map_err(raise)?),
-        EdgeDirection::Incoming => Box::new(graphrecord.incoming_edges(node).map_err(raise)?),
+) -> BoxedIterator<'a, &'a EdgeIndex> {
+    match direction {
+        EdgeDirection::Outgoing => {
+            Box::new(graphrecord.outgoing_edges(node).expect("Node must exist"))
+        }
+        EdgeDirection::Incoming => {
+            Box::new(graphrecord.incoming_edges(node).expect("Node must exist"))
+        }
         EdgeDirection::Both => Box::new(
             graphrecord
                 .outgoing_edges(node)
-                .map_err(raise)?
-                .chain(graphrecord.incoming_edges(node).map_err(raise)?),
+                .expect("Node must exist")
+                .chain(graphrecord.incoming_edges(node).expect("Node must exist")),
         ),
-    })
+    }
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
 #[explain(label = "Edges")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct EdgesOperation {
+    #[explain(label)]
     direction: EdgeDirection,
 }
 
@@ -59,14 +63,12 @@ impl<O: OrderState> LaneKernel<Indexed<NodeIndex, Unit>, Multiple<O>> for EdgesO
         values: KeyedStream<'a, NodeIndex, Unit, Multiple<O>>,
         direction: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let edges: GrHashSet<_> = values
-            .map(|(node, membership)| {
-                membership.and_then(|()| edges_for_node(graphrecord, node, direction))
-            })
-            .collect::<QueryResult<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect();
+        let mut edges = GrHashSet::default();
+
+        for (node, membership) in values {
+            membership?;
+            edges.extend(edges_for_node(graphrecord, node, direction));
+        }
 
         Ok(Box::new(edges.into_iter().map(|edge| (edge, Ok(())))))
     }
@@ -85,7 +87,7 @@ impl LaneKernel<Indexed<NodeIndex, Unit>, Single> for EdgesOperation {
         };
         membership?;
 
-        let edges: GrHashSet<_> = edges_for_node(graphrecord, node, direction)?.collect();
+        let edges: GrHashSet<_> = edges_for_node(graphrecord, node, direction).collect();
 
         Ok(Box::new(edges.into_iter().map(|edge| (edge, Ok(())))))
     }
@@ -102,7 +104,63 @@ impl LaneKernel<Indexed<NodeIndex, Unit>, Definite> for EdgesOperation {
         let (node, membership) = value;
         membership?;
 
-        let edges: GrHashSet<_> = edges_for_node(graphrecord, node, direction)?.collect();
+        let edges: GrHashSet<_> = edges_for_node(graphrecord, node, direction).collect();
+
+        Ok(Box::new(edges.into_iter().map(|edge| (edge, Ok(())))))
+    }
+}
+
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, EntityReference<NodeIndex>>, Multiple<O>>
+    for EdgesOperation
+{
+    type Output = EdgesOperand<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, I, EntityReference<NodeIndex>, Multiple<O>>,
+        direction: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let mut edges = GrHashSet::default();
+
+        for value in values {
+            let node = value.1?;
+            edges.extend(edges_for_node(graphrecord, node, direction));
+        }
+
+        Ok(Box::new(edges.into_iter().map(|edge| (edge, Ok(())))))
+    }
+}
+
+impl<I: IndexDomain> LaneKernel<Indexed<I, EntityReference<NodeIndex>>, Single> for EdgesOperation {
+    type Output = EdgesOperand<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, I, EntityReference<NodeIndex>, Single>,
+        direction: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let Some(value) = value else {
+            return Ok(Box::new(std::iter::empty()));
+        };
+        let node = value.1?;
+        let edges: GrHashSet<_> = edges_for_node(graphrecord, node, direction).collect();
+
+        Ok(Box::new(edges.into_iter().map(|edge| (edge, Ok(())))))
+    }
+}
+
+impl<I: IndexDomain> LaneKernel<Indexed<I, EntityReference<NodeIndex>>, Definite>
+    for EdgesOperation
+{
+    type Output = EdgesOperand<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, I, EntityReference<NodeIndex>, Definite>,
+        direction: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+        let node = value.1?;
+        let edges: GrHashSet<_> = edges_for_node(graphrecord, node, direction).collect();
 
         Ok(Box::new(edges.into_iter().map(|edge| (edge, Ok(())))))
     }

@@ -7,4 +7,5 @@ mod in_group;
 pub use attribute::AttributeOperation;
 pub use attributes::AttributesOperation;
 pub use filter::FilterOperation;
+pub use has_attribute::HasAttributeOperation;
 pub use in_group::InGroupOperation;

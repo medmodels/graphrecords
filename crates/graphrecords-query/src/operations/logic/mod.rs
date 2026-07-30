@@ -1,9 +1,7 @@
 mod and;
-mod is_max;
-mod is_min;
+mod exclusive_or;
 mod not;
 mod or;
-mod xor;
 
 use crate::{
     IndexDomain, Mask,
@@ -11,9 +9,9 @@ use crate::{
     operations::{ArgumentSource, Keyed, Unaligned},
 };
 pub use and::AndOperation;
+pub use exclusive_or::ExclusiveOrOperation;
 pub use not::NotOperation;
 pub use or::OrOperation;
-pub use xor::XorOperation;
 
 fn combine_masks_indexed<'a, I, M>(
     prepared: M::Prepared<'a>,
@@ -26,11 +24,11 @@ where
     M::Prepared<'a>: 'a,
 {
     Pipeline::keyed(move |index, left| match left {
-        Err(failure) => <M::Retention as Retention>::keep(Err(failure)),
+        Err(failure) => M::Retention::keep(Err(failure)),
         Ok(left) => {
             let step = M::resolve(&prepared, &index, label);
 
-            <M::Retention as Retention>::map_step(step, |resolved| {
+            M::Retention::map_step(step, |resolved| {
                 resolved.map(|right| operation(left, right))
             })
         }
@@ -47,11 +45,11 @@ where
     M::Prepared<'a>: 'a,
 {
     Pipeline::new(move |left| match left {
-        Err(failure) => <M::Retention as Retention>::keep(Err(failure)),
+        Err(failure) => M::Retention::keep(Err(failure)),
         Ok(left) => {
             let step = M::resolve(&prepared, &(), label);
 
-            <M::Retention as Retention>::map_step(step, |resolved| {
+            M::Retention::map_step(step, |resolved| {
                 resolved.map(|right| operation(left, right))
             })
         }

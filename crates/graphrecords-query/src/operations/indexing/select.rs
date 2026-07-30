@@ -15,6 +15,7 @@ use graphrecords_utils::aliases::GrHashSet;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
 #[explain(label = "Select")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct SelectOperation;
 
 const fn multiple_estimate(input: &Estimate) -> Estimate {

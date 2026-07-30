@@ -1,23 +1,23 @@
-pub trait Discard {
+pub trait DiscardIndex {
     type ReturnOperand;
 
-    fn discard(&self) -> Self::ReturnOperand;
+    fn discard_index(&self) -> Self::ReturnOperand;
 }
 
-pub trait ExpandTo<T> {
+pub trait DiscardValue {
     type ReturnOperand;
 
-    fn expand_to(&self, template: &T) -> Self::ReturnOperand;
-}
-
-pub trait ToValues {
-    type ReturnOperand;
-
-    fn to_values(&self) -> Self::ReturnOperand;
+    fn discard_value(&self) -> Self::ReturnOperand;
 }
 
 pub trait Enumerate {
     type ReturnOperand;
 
     fn enumerate(&self) -> Self::ReturnOperand;
+}
+
+pub trait ExpandTo<T> {
+    type ReturnOperand;
+
+    fn expand_to(&self, template: &T) -> Self::ReturnOperand;
 }

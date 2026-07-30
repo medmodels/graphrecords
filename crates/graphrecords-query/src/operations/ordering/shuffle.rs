@@ -1,24 +1,24 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Single, ValueType,
+    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState, Ordered,
+    QueryResult, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
-    traits::Random,
+    traits::Shuffle,
 };
 use graphrecords_core::GraphRecord;
-use rand::seq::IteratorRandom;
+use rand::seq::SliceRandom;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
-#[explain(label = "Random")]
+#[explain(label = "Shuffle")]
 #[plan(optimizer_hints(volatile, empty = if_any))]
-pub struct RandomOperation;
+pub struct ShuffleOperation;
 
-impl Prepare for RandomOperation {
+impl Prepare for ShuffleOperation {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -30,51 +30,50 @@ impl Prepare for RandomOperation {
     }
 }
 
-impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for RandomOperation
-where
-    I: IndexDomain,
-    V: ValueType,
-    O: OrderState,
+impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
+    for ShuffleOperation
 {
-    type Output = OperandHandle<Indexed<I, V>, Single>;
+    type Output = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(values.choose(&mut rand::rng()))
+        let mut values: Vec<_> = values.collect();
+        values.shuffle(&mut rand::rng());
+
+        Ok(Box::new(values.into_iter()))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input.zero_or_one()
+        input
     }
 }
 
-impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for RandomOperation
-where
-    V: ValueType,
-    O: OrderState,
-{
-    type Output = OperandHandle<Bare<V>, Single>;
+impl<V: ValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for ShuffleOperation {
+    type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(values.choose(&mut rand::rng()))
+        let mut values: Vec<_> = values.collect();
+        values.shuffle(&mut rand::rng());
+
+        Ok(Box::new(values.into_iter()))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        input.zero_or_one()
+        input
     }
 }
 
-impl<O: Apply<RandomOperation>> Random for O {
+impl<O: Apply<ShuffleOperation>> Shuffle for O {
     type ReturnOperand = O::Output;
 
-    fn random(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), RandomOperation))
+    fn shuffle(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), ShuffleOperation))
     }
 }

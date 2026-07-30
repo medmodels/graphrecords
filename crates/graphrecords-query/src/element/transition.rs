@@ -196,12 +196,9 @@ impl<P: IndexDomain, C: IndexDomain, V: ValueType, W: ValueType>
         'a,
         <Indexed<ExpandedIndex<P, C>, W> as ElementShape>::Element<'a>,
     > {
-        <Expanding<Ordered> as ElementEmission>::apply::<A, _, _>(
-            values,
-            move |(parent, source)| {
-                expand_indexed_source::<_, _, V, _, _>(parent, source, &pipeline)
-            },
-        )
+        Expanding::<Ordered>::apply::<A, _, _>(values, move |(parent, source)| {
+            expand_indexed_source::<_, _, V, _, _>(parent, source, &pipeline)
+        })
     }
 }
 
@@ -221,11 +218,8 @@ impl<P: IndexDomain, C: IndexDomain, V: ValueType, W: ValueType>
         'a,
         <Indexed<ExpandedIndex<P, C>, W> as ElementShape>::Element<'a>,
     > {
-        <Expanding<Unordered> as ElementEmission>::apply::<A, _, _>(
-            values,
-            move |(parent, source)| {
-                expand_indexed_source::<_, _, V, _, _>(parent, source, &pipeline)
-            },
-        )
+        Expanding::<Unordered>::apply::<A, _, _>(values, move |(parent, source)| {
+            expand_indexed_source::<_, _, V, _, _>(parent, source, &pipeline)
+        })
     }
 }

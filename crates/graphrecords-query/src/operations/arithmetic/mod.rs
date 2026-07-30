@@ -38,13 +38,13 @@ where
         let value = match item {
             Ok(value) => value,
             Err(original) => {
-                return <A::Retention as Retention>::keep(Err(original));
+                return A::Retention::keep(Err(original));
             }
         };
 
         let step = A::resolve(&prepared, &index, label);
 
-        <A::Retention as Retention>::map_step(step, |resolved| {
+        A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| {
                 operation(label, value, argument).map_err(|failure| failure.at::<I>(&index))
             })
@@ -66,13 +66,13 @@ where
         let value = match item {
             Ok(value) => value,
             Err(original) => {
-                return <A::Retention as Retention>::keep(Err(original));
+                return A::Retention::keep(Err(original));
             }
         };
 
         let step = A::resolve(&prepared, &(), label);
 
-        <A::Retention as Retention>::map_step(step, |resolved| {
+        A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| operation(label, value, argument))
         })
     })

@@ -4,17 +4,21 @@ use crate::{
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
-    traits::Discard,
+    traits::DiscardValue,
 };
 use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
-#[explain(label = "Discard")]
-#[plan(optimizer_hints(empty = if_any))]
-pub struct DiscardOperation;
+#[explain(label = "DiscardValue")]
+#[plan(optimizer_hints(
+    commutes_with_filter,
+    allows_limit_pushdown,
+    empty = if_any
+))]
+pub struct DiscardValueOperation;
 
-impl Prepare for DiscardOperation {
+impl Prepare for DiscardValueOperation {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -26,7 +30,7 @@ impl Prepare for DiscardOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for DiscardOperation {
+impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for DiscardValueOperation {
     type Emission = Preserving;
     type OutShape = Indexed<I, Unit>;
 
@@ -40,10 +44,10 @@ impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for DiscardOpera
     }
 }
 
-impl<O: Apply<DiscardOperation>> Discard for O {
+impl<O: Apply<DiscardValueOperation>> DiscardValue for O {
     type ReturnOperand = O::Output;
 
-    fn discard(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), DiscardOperation))
+    fn discard_value(&self) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(self.clone(), DiscardValueOperation))
     }
 }

@@ -89,18 +89,18 @@ where
 {
     Pipeline::keyed(move |index, outcome| {
         let value = match outcome {
-            Err(failure) => return <A::Retention as Retention>::keep(Err(failure)),
+            Err(failure) => return A::Retention::keep(Err(failure)),
             Ok(value) => match V::into_string(label, value) {
                 Ok(value) => value,
                 Err(failure) => {
-                    return <A::Retention as Retention>::keep(Err(failure.at::<I>(&index)));
+                    return A::Retention::keep(Err(failure.at::<I>(&index)));
                 }
             },
         };
 
         let step = A::resolve(&prepared, &index, label);
 
-        <A::Retention as Retention>::map_step(step, |resolved| {
+        A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| {
                 let argument =
                     V::into_string(label, argument).map_err(|failure| failure.at::<I>(&index))?;
@@ -123,18 +123,18 @@ where
 {
     Pipeline::new(move |outcome| {
         let value = match outcome {
-            Err(failure) => return <A::Retention as Retention>::keep(Err(failure)),
+            Err(failure) => return A::Retention::keep(Err(failure)),
             Ok(value) => match V::into_string(label, value) {
                 Ok(value) => value,
                 Err(failure) => {
-                    return <A::Retention as Retention>::keep(Err(failure));
+                    return A::Retention::keep(Err(failure));
                 }
             },
         };
 
         let step = A::resolve(&prepared, &(), label);
 
-        <A::Retention as Retention>::map_step(step, |resolved| {
+        A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| {
                 let argument = V::into_string(label, argument)?;
 
@@ -174,17 +174,17 @@ where
 
         let first = A::resolve(&prepared.0, &index, label);
 
-        <A::Retention as Retention>::and_then(first, |first| {
+        A::Retention::and_then(first, |first| {
             let first = match V::into_string(label, first) {
                 Ok(first) => first,
                 Err(failure) => {
-                    return <B::Retention as Retention>::keep(Err(failure.at::<I>(&index)));
+                    return B::Retention::keep(Err(failure.at::<I>(&index)));
                 }
             };
 
             let second = B::resolve(&prepared.1, &index, label);
 
-            <B::Retention as Retention>::map_step(second, |second| {
+            B::Retention::map_step(second, |second| {
                 second.and_then(|second| {
                     let second =
                         V::into_string(label, second).map_err(|failure| failure.at::<I>(&index))?;
@@ -225,17 +225,17 @@ where
 
         let first = A::resolve(&prepared.0, &(), label);
 
-        <A::Retention as Retention>::and_then(first, |first| {
+        A::Retention::and_then(first, |first| {
             let first = match V::into_string(label, first) {
                 Ok(first) => first,
                 Err(failure) => {
-                    return <B::Retention as Retention>::keep(Err(failure));
+                    return B::Retention::keep(Err(failure));
                 }
             };
 
             let second = B::resolve(&prepared.1, &(), label);
 
-            <B::Retention as Retention>::map_step(second, |second| {
+            B::Retention::map_step(second, |second| {
                 second.and_then(|second| {
                     let second = V::into_string(label, second)?;
 
@@ -289,10 +289,10 @@ where
 
         let width = W::resolve(&prepared.0, &index, label);
 
-        <W::Retention as Retention>::and_then(width, |width| {
+        W::Retention::and_then(width, |width| {
             let character = C::resolve(&prepared.1, &index, label);
 
-            <C::Retention as Retention>::map_step(character, |character| {
+            C::Retention::map_step(character, |character| {
                 character.and_then(|character| {
                     let character = V::into_string(label, character)
                         .map_err(|failure| failure.at::<I>(&index))?;
@@ -335,10 +335,10 @@ where
 
         let width = W::resolve(&prepared.0, &(), label);
 
-        <W::Retention as Retention>::and_then(width, |width| {
+        W::Retention::and_then(width, |width| {
             let character = C::resolve(&prepared.1, &(), label);
 
-            <C::Retention as Retention>::map_step(character, |character| {
+            C::Retention::map_step(character, |character| {
                 character.and_then(|character| {
                     let character = V::into_string(label, character)?;
 
