@@ -17,7 +17,7 @@ use crate::{
     execution::EvaluationCache,
     explain::Explanation,
     optimizer::{Estimate, Estimated, PlanNode, Stats},
-    value::ValueType,
+    value::ValueDomain,
 };
 pub use attributes::{
     AttributeOperand, AttributesOperand, BareAttributeOperand, BareAttributesOperand,
@@ -42,7 +42,7 @@ pub use group::{
     Bucket, BucketChange, BucketOwned, GroupOperand, KeyFailure, KeyFailureChange, KeyFailureOwned,
     Partition, PartitionArity, PartitionBucketParts, PartitionBuilder, PartitionClassification,
     PartitionKeyFailureParts, PartitionOwned, PartitionOwnedParts, PartitionParts, PartitionShape,
-    ReturnBucket, ReturnKeyFailure, ReturnPartition,
+    ReturnBucket, ReturnKeyFailure, ReturnPartition, ReturnPartitionParts,
 };
 pub use indices::{
     BareIndexOperand, BareIndicesOperand, DefiniteBareIndexOperand, DefiniteIndexOperand,
@@ -72,7 +72,7 @@ pub trait EvaluateOperand {
     ) -> QueryResult<Self::ReturnValue<'a>>;
 }
 
-pub trait Operand: 'static + Sized + Clone + EvaluateOperand {
+pub trait Operand: 'static + Sized + Clone + EvaluateOperand + Send + Sync {
     fn context(&self) -> &dyn OperandContext<Self>;
 
     fn as_plan_node(&self) -> &dyn PlanNode;
@@ -133,12 +133,12 @@ impl<S: ElementShape, C: Arity> Operand for OperandHandle<S, C> {
     }
 }
 
-pub struct CheckedIndexedLaneBuilder<'a, I: IndexDomain, V: ValueType> {
+pub struct CheckedIndexedLaneBuilder<'a, I: IndexDomain, V: ValueDomain> {
     seen: GrHashSet<I::Owned>,
     elements: Vec<(I::Index<'a>, QueryResult<V::Value<'a>>)>,
 }
 
-impl<'a, I: IndexDomain, V: ValueType> CheckedIndexedLaneBuilder<'a, I, V> {
+impl<'a, I: IndexDomain, V: ValueDomain> CheckedIndexedLaneBuilder<'a, I, V> {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -171,7 +171,7 @@ impl<'a, I: IndexDomain, V: ValueType> CheckedIndexedLaneBuilder<'a, I, V> {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> Default for CheckedIndexedLaneBuilder<'_, I, V> {
+impl<I: IndexDomain, V: ValueDomain> Default for CheckedIndexedLaneBuilder<'_, I, V> {
     fn default() -> Self {
         Self::new()
     }

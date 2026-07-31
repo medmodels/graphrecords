@@ -1,5 +1,5 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
     OrderState, QueryResult,
     capabilities::ValueEquivalence,
     execution::EvaluationCache,
@@ -8,6 +8,7 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::UniqueCount,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
@@ -58,7 +59,7 @@ impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V
     }
 }
 
-impl<V: ValueEquivalence + BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
     for UniqueCountOperation
 {
     type Output = DefiniteBareValueOperand;
@@ -88,5 +89,31 @@ impl<O: Apply<UniqueCountOperation>> UniqueCount for O {
 
     fn n_unique(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), UniqueCountOperation))
+    }
+}
+
+operation_manifest! {
+    UniqueCountOperation {
+        method: UniqueCount::n_unique;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueEquivalence,
+                O: OrderState,
+            >;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: DefiniteBareValueOperand;
+        }
+
+        kernel {
+            parameters: <
+                V: ValueEquivalence + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Bare<V>, Multiple<O>);
+            output: DefiniteBareValueOperand;
+        }
     }
 }

@@ -1,6 +1,6 @@
 use super::{string_map_bare, string_map_indexed};
 use crate::{
-    Bare, BareValueType, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     Scalar,
     capabilities::StringValue,
     element::Preserving,
@@ -8,11 +8,12 @@ use crate::{
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Length,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
 
-fn length_chars(label: &'static str, value: &str) -> QueryResult<GraphRecordValue> {
+pub(super) fn length_chars(label: &'static str, value: &str) -> QueryResult<GraphRecordValue> {
     let length = value.chars().count();
     let length = i64::try_from(length)
         .map_err(|_| Failure::new(label, StringLengthOverflow::new(length)))?;
@@ -23,7 +24,7 @@ fn length_chars(label: &'static str, value: &str) -> QueryResult<GraphRecordValu
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Length")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct LengthOperation;
 
 impl Prepare for LengthOperation {
@@ -63,7 +64,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for LengthOperation
 where
-    V: StringValue + BareValueType,
+    V: StringValue + BareValueDomain,
 {
     type Emission = Preserving;
     type OutShape = Bare<Scalar>;
@@ -87,5 +88,25 @@ impl<O: Apply<LengthOperation>> Length for O {
 
     fn length(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), LengthOperation))
+    }
+}
+
+operation_manifest! {
+    LengthOperation {
+        method: Length::length;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: StringValue>;
+            input: Indexed<I, V>;
+            output: Indexed<I, Scalar>;
+            emission: Preserving;
+        }
+        kernel {
+            parameters: <V: StringValue + BareValueDomain>;
+            input: Bare<V>;
+            output: Bare<Scalar>;
+            emission: Preserving;
+        }
     }
 }

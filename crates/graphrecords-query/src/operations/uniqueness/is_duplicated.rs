@@ -1,5 +1,5 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Mask, Multiple, Operand,
+    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Mask, Multiple, Operand,
     OrderState, QueryResult,
     capabilities::ValueEquivalence,
     execution::EvaluationCache,
@@ -8,6 +8,7 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::IsDuplicated,
 };
 use graphrecords_core::GraphRecord;
@@ -73,7 +74,7 @@ impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V
     }
 }
 
-impl<V: ValueEquivalence + BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
     for IsDuplicatedOperation
 {
     type Output = OperandHandle<Bare<Mask>, Multiple<O>>;
@@ -116,5 +117,30 @@ impl<O: Apply<IsDuplicatedOperation>> IsDuplicated for O {
 
     fn is_duplicated(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), IsDuplicatedOperation))
+    }
+}
+
+operation_manifest! {
+    IsDuplicatedOperation {
+        method: IsDuplicated::is_duplicated;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueEquivalence,
+                O: OrderState,
+            >;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: OperandHandle<Indexed<I, Mask>, Multiple<O>>;
+        }
+        kernel {
+            parameters: <
+                V: ValueEquivalence + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Bare<V>, Multiple<O>);
+            output: OperandHandle<Bare<Mask>, Multiple<O>>;
+        }
     }
 }

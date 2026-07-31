@@ -1,6 +1,6 @@
 use crate::{
-    Bare, BareValueType, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Operand,
-    QueryResult, ValueType,
+    Bare, BareValueDomain, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Labeled, Operand,
+    QueryResult, ValueDomain,
     element::{Dropping, Pipeline},
     execution::EvaluationCache,
     explain::ExplainFormatter,
@@ -9,6 +9,8 @@ use crate::{
         ErrorPolicyWithCause, Operation, OperationContext, Prepare,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
+    traits::OnError,
 };
 use graphrecords_core::GraphRecord;
 use std::{
@@ -29,6 +31,10 @@ pub struct Drop;
 #[plan(optimizer_hints(empty = if_any))]
 pub struct DropErrorsOf<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
+}
+
+impl<D: Diagnostic> Labeled for DropErrorsOf<D> {
+    const LABEL: &'static str = "DropErrorsOf";
 }
 
 impl<D: Diagnostic> DropErrorsOf<D> {
@@ -58,6 +64,10 @@ pub struct DropErrorsIn<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
 }
 
+impl<G: ErrorGroup> Labeled for DropErrorsIn<G> {
+    const LABEL: &'static str = "DropErrorsIn";
+}
+
 impl<G: ErrorGroup> DropErrorsIn<G> {
     const fn new() -> Self {
         Self {
@@ -83,6 +93,10 @@ impl<G: ErrorGroup> Explain for DropErrorsIn<G> {
 #[plan(optimizer_hints(empty = if_any))]
 pub struct DropErrorsWithCause<C: Error + 'static> {
     marker: PhantomData<fn() -> C>,
+}
+
+impl<C: Error + 'static> Labeled for DropErrorsWithCause<C> {
+    const LABEL: &'static str = "DropErrorsWithCause";
 }
 
 impl<C: Error + 'static> DropErrorsWithCause<C> {
@@ -153,7 +167,7 @@ impl<C: Error + 'static> Prepare for DropErrorsWithCause<C> {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for Drop {
+impl<I: IndexDomain, V: ValueDomain> ElementKernel<Indexed<I, V>> for Drop {
     type Emission = Dropping;
     type OutShape = Indexed<I, V>;
 
@@ -167,7 +181,7 @@ impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for Drop {
     }
 }
 
-impl<V: BareValueType> ElementKernel<Bare<V>> for Drop {
+impl<V: BareValueDomain> ElementKernel<Bare<V>> for Drop {
     type Emission = Dropping;
     type OutShape = Bare<V>;
 
@@ -179,7 +193,9 @@ impl<V: BareValueType> ElementKernel<Bare<V>> for Drop {
     }
 }
 
-impl<I: IndexDomain, V: ValueType, D: Diagnostic> ElementKernel<Indexed<I, V>> for DropErrorsOf<D> {
+impl<I: IndexDomain, V: ValueDomain, D: Diagnostic> ElementKernel<Indexed<I, V>>
+    for DropErrorsOf<D>
+{
     type Emission = Dropping;
     type OutShape = Indexed<I, V>;
 
@@ -194,7 +210,7 @@ impl<I: IndexDomain, V: ValueType, D: Diagnostic> ElementKernel<Indexed<I, V>> f
     }
 }
 
-impl<V: BareValueType, D: Diagnostic> ElementKernel<Bare<V>> for DropErrorsOf<D> {
+impl<V: BareValueDomain, D: Diagnostic> ElementKernel<Bare<V>> for DropErrorsOf<D> {
     type Emission = Dropping;
     type OutShape = Bare<V>;
 
@@ -209,7 +225,9 @@ impl<V: BareValueType, D: Diagnostic> ElementKernel<Bare<V>> for DropErrorsOf<D>
     }
 }
 
-impl<I: IndexDomain, V: ValueType, G: ErrorGroup> ElementKernel<Indexed<I, V>> for DropErrorsIn<G> {
+impl<I: IndexDomain, V: ValueDomain, G: ErrorGroup> ElementKernel<Indexed<I, V>>
+    for DropErrorsIn<G>
+{
     type Emission = Dropping;
     type OutShape = Indexed<I, V>;
 
@@ -224,7 +242,7 @@ impl<I: IndexDomain, V: ValueType, G: ErrorGroup> ElementKernel<Indexed<I, V>> f
     }
 }
 
-impl<V: BareValueType, G: ErrorGroup> ElementKernel<Bare<V>> for DropErrorsIn<G> {
+impl<V: BareValueDomain, G: ErrorGroup> ElementKernel<Bare<V>> for DropErrorsIn<G> {
     type Emission = Dropping;
     type OutShape = Bare<V>;
 
@@ -239,7 +257,7 @@ impl<V: BareValueType, G: ErrorGroup> ElementKernel<Bare<V>> for DropErrorsIn<G>
     }
 }
 
-impl<I: IndexDomain, V: ValueType, C: Error + 'static> ElementKernel<Indexed<I, V>>
+impl<I: IndexDomain, V: ValueDomain, C: Error + 'static> ElementKernel<Indexed<I, V>>
     for DropErrorsWithCause<C>
 {
     type Emission = Dropping;
@@ -256,7 +274,7 @@ impl<I: IndexDomain, V: ValueType, C: Error + 'static> ElementKernel<Indexed<I, 
     }
 }
 
-impl<V: BareValueType, C: Error + 'static> ElementKernel<Bare<V>> for DropErrorsWithCause<C> {
+impl<V: BareValueDomain, C: Error + 'static> ElementKernel<Bare<V>> for DropErrorsWithCause<C> {
     type Emission = Dropping;
     type OutShape = Bare<V>;
 
@@ -300,5 +318,27 @@ impl<I: Apply<DropErrorsWithCause<C>>, C: Error + 'static> ErrorPolicyWithCause<
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, DropErrorsWithCause::new()))
+    }
+}
+
+operation_manifest! {
+    Drop as "on_error_drop" {
+        method: OnError::on_error;
+        policy: Drop;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: Dropping;
+        }
+
+        kernel {
+            parameters: <V: BareValueDomain>;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: Dropping;
+        }
     }
 }

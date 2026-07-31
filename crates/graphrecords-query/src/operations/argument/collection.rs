@@ -1,5 +1,5 @@
 use crate::{
-    Explain, QueryResult,
+    Explain, QueryResult, ValueDomain,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operations::{Prepare, SetSource},
@@ -41,7 +41,7 @@ impl<T: PartialEq + Hash> PlanIdentity for Vec<T> {
 
 impl<T: Clone> PlanInputs for Vec<T> {}
 
-impl<T: 'static> Prepare for Vec<T> {
+impl<T: 'static + Send + Sync> Prepare for Vec<T> {
     type Prepared<'a> = &'a [T];
 
     fn prepare<'a>(
@@ -62,13 +62,12 @@ impl<T> Estimated for Vec<T> {
     }
 }
 
-impl<T> SetSource for Vec<T>
+impl<T, V> SetSource<V> for Vec<T>
 where
-    T: 'static + Clone + Eq + Hash + Display,
+    T: 'static + Clone + Eq + Hash + Display + Send + Sync,
+    for<'a> V: ValueDomain<Value<'a> = T>,
 {
-    type Value<'a> = T;
-
-    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<V::Value<'a>>>
     where
         Self: 'a,
     {
@@ -104,7 +103,7 @@ impl<T: PartialEq + Hash, const N: usize> PlanIdentity for [T; N] {
 
 impl<T: Clone, const N: usize> PlanInputs for [T; N] {}
 
-impl<T: 'static, const N: usize> Prepare for [T; N] {
+impl<T: 'static + Send + Sync, const N: usize> Prepare for [T; N] {
     type Prepared<'a> = &'a [T];
 
     fn prepare<'a>(
@@ -125,13 +124,12 @@ impl<T, const N: usize> Estimated for [T; N] {
     }
 }
 
-impl<T, const N: usize> SetSource for [T; N]
+impl<T, V, const N: usize> SetSource<V> for [T; N]
 where
-    T: 'static + Clone + Eq + Hash + Display,
+    T: 'static + Clone + Eq + Hash + Display + Send + Sync,
+    for<'a> V: ValueDomain<Value<'a> = T>,
 {
-    type Value<'a> = T;
-
-    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<V::Value<'a>>>
     where
         Self: 'a,
     {
@@ -181,7 +179,7 @@ impl<T: Eq + Hash> PlanIdentity for GrHashSet<T> {
 
 impl<T: Clone> PlanInputs for GrHashSet<T> {}
 
-impl<T: 'static> Prepare for GrHashSet<T> {
+impl<T: 'static + Send + Sync> Prepare for GrHashSet<T> {
     type Prepared<'a> = &'a Self;
 
     fn prepare<'a>(
@@ -199,13 +197,12 @@ impl<T> Estimated for GrHashSet<T> {
     }
 }
 
-impl<T> SetSource for GrHashSet<T>
+impl<T, V> SetSource<V> for GrHashSet<T>
 where
-    T: 'static + Clone + Eq + Hash + Display,
+    T: 'static + Clone + Eq + Hash + Display + Send + Sync,
+    for<'a> V: ValueDomain<Value<'a> = T>,
 {
-    type Value<'a> = T;
-
-    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<V::Value<'a>>>
     where
         Self: 'a,
     {
@@ -255,7 +252,7 @@ impl<T: Eq + Hash, S: BuildHasher> PlanIdentity for HashSet<T, S> {
 
 impl<T: Clone, S: Clone> PlanInputs for HashSet<T, S> {}
 
-impl<T: 'static, S: 'static> Prepare for HashSet<T, S> {
+impl<T: 'static + Send + Sync, S: 'static + Send + Sync> Prepare for HashSet<T, S> {
     type Prepared<'a> = &'a Self;
 
     fn prepare<'a>(
@@ -273,14 +270,13 @@ impl<T, S> Estimated for HashSet<T, S> {
     }
 }
 
-impl<T, S> SetSource for HashSet<T, S>
+impl<T, S, V> SetSource<V> for HashSet<T, S>
 where
-    T: 'static + Clone + Eq + Hash + Display,
-    S: 'static + Clone + BuildHasher,
+    T: 'static + Clone + Eq + Hash + Display + Send + Sync,
+    for<'a> V: ValueDomain<Value<'a> = T>,
+    S: 'static + Clone + BuildHasher + Send + Sync,
 {
-    type Value<'a> = T;
-
-    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<Self::Value<'a>>>
+    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<V::Value<'a>>>
     where
         Self: 'a,
     {

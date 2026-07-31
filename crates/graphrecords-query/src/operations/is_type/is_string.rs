@@ -1,21 +1,23 @@
 use crate::{
-    AttributeName, Bare, Explain, IndexDomain, IndexValue, Indexed, Mask, Operand, QueryResult,
-    Scalar,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
+    capabilities::{PayloadKind, ValueKindTest},
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::IsString,
 };
-use graphrecords_core::{
-    GraphRecord,
-    graphrecord::{GraphRecordAttribute, GraphRecordValue, NodeIndex},
-};
+use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "IsString")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(
+    commutes_with_filter,
+    allows_limit_pushdown,
+    empty = if_any
+))]
 pub struct IsStringOperation;
 
 impl Prepare for IsStringOperation {
@@ -30,142 +32,30 @@ impl Prepare for IsStringOperation {
     }
 }
 
-impl<I: IndexDomain> ElementKernel<Indexed<I, Scalar>> for IsStringOperation {
+impl<I: IndexDomain, V: ValueKindTest> ElementKernel<Indexed<I, V>> for IsStringOperation {
     type Emission = Preserving;
     type OutShape = Indexed<I, Mask>;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, Scalar>, Self>> {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         Ok(Pipeline::unkeyed(|value: QueryResult<_>| {
-            value.map(|value| matches!(value, GraphRecordValue::String(_)))
+            value.map(|value| matches!(V::kind(&value), PayloadKind::String))
         }))
     }
 }
 
-impl ElementKernel<Bare<Scalar>> for IsStringOperation {
+impl<V: ValueKindTest + BareValueDomain> ElementKernel<Bare<V>> for IsStringOperation {
     type Emission = Preserving;
     type OutShape = Bare<Mask>;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<Scalar>, Self>> {
+    ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         Ok(Pipeline::new(|value: QueryResult<_>| {
-            value.map(|value| matches!(value, GraphRecordValue::String(_)))
-        }))
-    }
-}
-
-impl<I: IndexDomain> ElementKernel<Indexed<I, AttributeName>> for IsStringOperation {
-    type Emission = Preserving;
-    type OutShape = Indexed<I, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, AttributeName>, Self>> {
-        Ok(Pipeline::unkeyed(|attribute: QueryResult<_>| {
-            attribute.map(|attribute| matches!(attribute, GraphRecordAttribute::String(_)))
-        }))
-    }
-}
-
-impl ElementKernel<Bare<AttributeName>> for IsStringOperation {
-    type Emission = Preserving;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<AttributeName>, Self>> {
-        Ok(Pipeline::new(|attribute: QueryResult<_>| {
-            attribute.map(|attribute| matches!(attribute, GraphRecordAttribute::String(_)))
-        }))
-    }
-}
-
-impl<I: IndexDomain> ElementKernel<Indexed<I, IndexValue<GraphRecordValue>>> for IsStringOperation {
-    type Emission = Preserving;
-    type OutShape = Indexed<I, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, IndexValue<GraphRecordValue>>, Self>> {
-        Ok(Pipeline::unkeyed(|value: QueryResult<_>| {
-            value.map(|value| matches!(value, GraphRecordValue::String(_)))
-        }))
-    }
-}
-
-impl ElementKernel<Bare<IndexValue<GraphRecordValue>>> for IsStringOperation {
-    type Emission = Preserving;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<GraphRecordValue>>, Self>> {
-        Ok(Pipeline::new(|value: QueryResult<_>| {
-            value.map(|value| matches!(value, GraphRecordValue::String(_)))
-        }))
-    }
-}
-
-impl<I: IndexDomain> ElementKernel<Indexed<I, IndexValue<NodeIndex>>> for IsStringOperation {
-    type Emission = Preserving;
-    type OutShape = Indexed<I, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, IndexValue<NodeIndex>>, Self>> {
-        Ok(Pipeline::unkeyed(|value: QueryResult<_>| {
-            value.map(|value| matches!(value, GraphRecordAttribute::String(_)))
-        }))
-    }
-}
-
-impl ElementKernel<Bare<IndexValue<NodeIndex>>> for IsStringOperation {
-    type Emission = Preserving;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<NodeIndex>>, Self>> {
-        Ok(Pipeline::new(|value: QueryResult<_>| {
-            value.map(|value| matches!(value, GraphRecordAttribute::String(_)))
-        }))
-    }
-}
-
-impl<I: IndexDomain> ElementKernel<Indexed<I, IndexValue<AttributeName>>> for IsStringOperation {
-    type Emission = Preserving;
-    type OutShape = Indexed<I, Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, IndexValue<AttributeName>>, Self>> {
-        Ok(Pipeline::unkeyed(|value: QueryResult<_>| {
-            value.map(|value| matches!(value, GraphRecordAttribute::String(_)))
-        }))
-    }
-}
-
-impl ElementKernel<Bare<IndexValue<AttributeName>>> for IsStringOperation {
-    type Emission = Preserving;
-    type OutShape = Bare<Mask>;
-
-    fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
-        _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Bare<IndexValue<AttributeName>>, Self>> {
-        Ok(Pipeline::new(|value: QueryResult<_>| {
-            value.map(|value| matches!(value, GraphRecordAttribute::String(_)))
+            value.map(|value| matches!(V::kind(&value), PayloadKind::String))
         }))
     }
 }
@@ -175,5 +65,26 @@ impl<O: Apply<IsStringOperation>> IsString for O {
 
     fn is_string(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), IsStringOperation))
+    }
+}
+
+operation_manifest! {
+    IsStringOperation {
+        method: IsString::is_string;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueKindTest>;
+            input: Indexed<I, V>;
+            output: Indexed<I, Mask>;
+            emission: Preserving;
+        }
+
+        kernel {
+            parameters: <V: ValueKindTest + BareValueDomain>;
+            input: Bare<V>;
+            output: Bare<Mask>;
+            emission: Preserving;
+        }
     }
 }

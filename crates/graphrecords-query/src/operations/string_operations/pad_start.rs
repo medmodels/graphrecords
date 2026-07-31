@@ -1,8 +1,8 @@
 use super::{padding_character, string_pad_bare, string_pad_indexed};
 use crate::{
-    Bare, BareValueType, Explain, External, Failure, IndexDomain, Indexed, Labeled, Operand,
+    Bare, BareValueDomain, Explain, External, Failure, IndexDomain, Indexed, Labeled, Operand,
     Position, QueryResult,
-    capabilities::StringValue,
+    capabilities::{IntValue, StringValue},
     element::Retention,
     error::string::StringPaddingOverflow,
     execution::EvaluationCache,
@@ -11,11 +11,13 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
     traits::PadStart,
 };
 use graphrecords_core::GraphRecord;
+use std::iter::repeat_n;
 
-fn pad(
+pub(super) fn pad(
     label: &'static str,
     value: String,
     width: Position,
@@ -35,7 +37,7 @@ fn pad(
     padded
         .try_reserve(capacity)
         .map_err(|error| Failure::new(label, External::new(error)))?;
-    padded.extend(std::iter::repeat_n(character, padding_length));
+    padded.extend(repeat_n(character, padding_length));
     padded.push_str(&value);
 
     Ok(padded)
@@ -74,8 +76,10 @@ impl<I, V, W, C> ElementKernel<Indexed<I, V>> for PadStartOperation<W, C>
 where
     I: IndexDomain,
     V: StringValue,
-    for<'a> W: ArgumentSource<Keyed<I>, Value<'a> = Position>,
-    for<'a> C: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    W: ArgumentSource<Keyed<I>>,
+    W::ValueDomain: IntValue,
+    C: ArgumentSource<Keyed<I>>,
+    C::ValueDomain: StringValue,
 {
     type Emission = <W::Retention as Retention>::Then<C::Retention>;
     type OutShape = Indexed<I, V>;
@@ -94,9 +98,11 @@ where
 
 impl<V, W, C> ElementKernel<Bare<V>> for PadStartOperation<W, C>
 where
-    V: StringValue + BareValueType,
-    for<'a> W: ArgumentSource<Unaligned, Value<'a> = Position>,
-    for<'a> C: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: StringValue + BareValueDomain,
+    W: ArgumentSource<Unaligned>,
+    W::ValueDomain: IntValue,
+    C: ArgumentSource<Unaligned>,
+    C::ValueDomain: StringValue,
 {
     type Emission = <W::Retention as Retention>::Then<C::Retention>;
     type OutShape = Bare<V>;
@@ -125,5 +131,29 @@ where
             self.clone(),
             PadStartOperation { width, character },
         ))
+    }
+}
+
+operation_manifest! {
+    PadStartOperation<W, C> {
+        method: PadStart<W, C>::pad_start;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: StringValue>;
+            argument: W: ArgumentSource<Keyed<I>> where W::ValueDomain: IntValue;
+            argument: C: ArgumentSource<Keyed<I>> where C::ValueDomain: StringValue;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: ArgumentRetention;
+        }
+        kernel {
+            parameters: <V: StringValue + BareValueDomain>;
+            argument: W: ArgumentSource<Unaligned> where W::ValueDomain: IntValue;
+            argument: C: ArgumentSource<Unaligned> where C::ValueDomain: StringValue;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: ArgumentRetention;
+        }
     }
 }

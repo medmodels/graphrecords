@@ -1,6 +1,6 @@
 use crate::{
-    Arity, Bare, BareValueType, Definite, ElementShape, IndexDomain, Indexed, Multiple, Operand,
-    OrderState, QueryResult, Single, ValueType, operands::OperandHandle,
+    Arity, Bare, BareValueDomain, Definite, ElementShape, IndexDomain, Indexed, Multiple, Operand,
+    OrderState, QueryResult, Single, ValueDomain, operands::OperandHandle,
 };
 use elsa::FrozenMap;
 use graphrecords_core::GraphRecord;
@@ -35,7 +35,7 @@ pub trait CacheableOperand: Operand {
     fn from_cached(cached: &Self::Cached) -> Self::ReturnValue<'_>;
 }
 
-impl<I: IndexDomain, V: ValueType> CacheableShape for Indexed<I, V> {
+impl<I: IndexDomain, V: ValueDomain> CacheableShape for Indexed<I, V> {
     type CachedElement = (I::Owned, QueryResult<V::Owned>);
 
     fn into_cached_element(element: Self::Element<'_>) -> Self::CachedElement {
@@ -54,7 +54,7 @@ impl<I: IndexDomain, V: ValueType> CacheableShape for Indexed<I, V> {
     }
 }
 
-impl<V: BareValueType> CacheableShape for Bare<V> {
+impl<V: BareValueDomain> CacheableShape for Bare<V> {
     type CachedElement = QueryResult<V::Owned>;
 
     fn into_cached_element(element: Self::Element<'_>) -> Self::CachedElement {

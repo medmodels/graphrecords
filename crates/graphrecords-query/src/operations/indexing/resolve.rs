@@ -5,6 +5,7 @@ use crate::{
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::Resolve,
 };
 use graphrecords_core::GraphRecord;
@@ -12,6 +13,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Resolve")]
+#[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct ResolveOperation;
 
 impl Prepare for ResolveOperation {
@@ -67,5 +69,26 @@ impl<O: Apply<ResolveOperation>> Resolve for O {
 
     fn resolve(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), ResolveOperation))
+    }
+}
+
+operation_manifest! {
+    ResolveOperation {
+        method: Resolve::resolve;
+        scope: element;
+
+        kernel {
+            parameters: <E: EntityDomain, I: IndexDomain>;
+            input: Indexed<I, IndexValue<E>>;
+            output: Indexed<I, EntityReference<E>>;
+            emission: Preserving;
+        }
+
+        kernel {
+            parameters: <E: EntityDomain>;
+            input: Bare<IndexValue<E>>;
+            output: Bare<EntityReference<E>>;
+            emission: Preserving;
+        }
     }
 }

@@ -1,12 +1,13 @@
 use crate::{
-    Bare, BareValueType, Definite, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple,
-    Operand, OrderState, QueryResult, Single, ValueType,
+    Bare, BareValueDomain, Definite, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple,
+    Operand, OrderState, QueryResult, Single, ValueDomain,
     execution::EvaluationCache,
     operands::DefiniteBareValueOperand,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Count,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
@@ -28,7 +29,7 @@ impl Prepare for CountOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
+impl<I: IndexDomain, V: ValueDomain, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
     for CountOperation
 {
     type Output = DefiniteBareValueOperand;
@@ -48,7 +49,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Mult
     }
 }
 
-impl<V: BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for CountOperation {
+impl<V: BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -66,7 +67,7 @@ impl<V: BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for Count
     }
 }
 
-impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Single> for CountOperation {
+impl<I: IndexDomain, V: ValueDomain> LaneKernel<Indexed<I, V>, Single> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -87,7 +88,7 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Single> for CountOp
     }
 }
 
-impl<V: BareValueType> LaneKernel<Bare<V>, Single> for CountOperation {
+impl<V: BareValueDomain> LaneKernel<Bare<V>, Single> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -108,7 +109,7 @@ impl<V: BareValueType> LaneKernel<Bare<V>, Single> for CountOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Definite> for CountOperation {
+impl<I: IndexDomain, V: ValueDomain> LaneKernel<Indexed<I, V>, Definite> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -124,7 +125,7 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Definite> for Count
     }
 }
 
-impl<V: BareValueType> LaneKernel<Bare<V>, Definite> for CountOperation {
+impl<V: BareValueDomain> LaneKernel<Bare<V>, Definite> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -145,5 +146,61 @@ impl<O: Apply<CountOperation>> Count for O {
 
     fn count(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), CountOperation))
+    }
+}
+
+operation_manifest! {
+    CountOperation {
+        method: Count::count;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueDomain,
+                O: OrderState,
+            >;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: DefiniteBareValueOperand;
+        }
+
+        kernel {
+            parameters: <
+                V: BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Bare<V>, Multiple<O>);
+            output: DefiniteBareValueOperand;
+        }
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueDomain,
+            >;
+            input: (Indexed<I, V>, Single);
+            output: DefiniteBareValueOperand;
+        }
+
+        kernel {
+            parameters: <V: BareValueDomain>;
+            input: (Bare<V>, Single);
+            output: DefiniteBareValueOperand;
+        }
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueDomain,
+            >;
+            input: (Indexed<I, V>, Definite);
+            output: DefiniteBareValueOperand;
+        }
+
+        kernel {
+            parameters: <V: BareValueDomain>;
+            input: (Bare<V>, Definite);
+            output: DefiniteBareValueOperand;
+        }
     }
 }

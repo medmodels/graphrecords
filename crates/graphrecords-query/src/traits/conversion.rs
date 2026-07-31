@@ -1,5 +1,5 @@
 use crate::{
-    Operand, ValueType,
+    ValueDomain,
     cast::CastTarget,
     operations::{Apply, TransitionOperation},
 };
@@ -34,14 +34,14 @@ pub trait ExpandTo<T> {
     fn expand_to(&self, template: &T) -> Self::ReturnOperand;
 }
 
-pub trait Transition: Operand {
+pub trait Transition {
     type ReturnOperand<T>
     where
-        T: ValueType,
+        T: ValueDomain,
         Self: Apply<TransitionOperation<T>>;
 
     fn transition<T>(&self) -> Self::ReturnOperand<T>
     where
-        T: ValueType,
+        T: ValueDomain,
         Self: Apply<TransitionOperation<T>>;
 }

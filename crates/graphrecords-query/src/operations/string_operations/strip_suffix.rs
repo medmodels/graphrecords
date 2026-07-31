@@ -1,6 +1,6 @@
-use super::{string_argument_map_bare, string_argument_map_indexed};
+use super::{string_rebuild_argument_map_bare, string_rebuild_argument_map_indexed};
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::StringValue,
     execution::EvaluationCache,
     operations::{
@@ -8,6 +8,7 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
     traits::StripSuffix,
 };
 use graphrecords_core::GraphRecord;
@@ -40,7 +41,8 @@ impl<I, V, A> ElementKernel<Indexed<I, V>> for StripSuffixOperation<A>
 where
     I: IndexDomain,
     V: StringValue,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Keyed<I>>,
+    A::ValueDomain: StringValue,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, V>;
@@ -49,7 +51,7 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(string_argument_map_indexed::<_, V, V, A>(
+        Ok(string_rebuild_argument_map_indexed::<I, V, A>(
             prepared,
             Self::LABEL,
             |_, value, suffix| {
@@ -58,7 +60,7 @@ where
                     None => value,
                 };
 
-                Ok(V::from_string(value))
+                Ok(value)
             },
         ))
     }
@@ -70,8 +72,9 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for StripSuffixOperation<A>
 where
-    V: StringValue + BareValueType,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: StringValue + BareValueDomain,
+    A: ArgumentSource<Unaligned>,
+    A::ValueDomain: StringValue,
 {
     type Emission = A::Retention;
     type OutShape = Bare<V>;
@@ -80,7 +83,7 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(string_argument_map_bare::<V, V, A>(
+        Ok(string_rebuild_argument_map_bare::<V, A>(
             prepared,
             Self::LABEL,
             |_, value, suffix| {
@@ -89,7 +92,7 @@ where
                     None => value,
                 };
 
-                Ok(V::from_string(value))
+                Ok(value)
             },
         ))
     }
@@ -111,5 +114,27 @@ where
             self.clone(),
             StripSuffixOperation { suffix },
         ))
+    }
+}
+
+operation_manifest! {
+    StripSuffixOperation<A> {
+        method: StripSuffix<A>::strip_suffix;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: StringValue>;
+            argument: A: ArgumentSource<Keyed<I>> where A::ValueDomain: StringValue;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: ArgumentRetention;
+        }
+        kernel {
+            parameters: <V: StringValue + BareValueDomain>;
+            argument: A: ArgumentSource<Unaligned> where A::ValueDomain: StringValue;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: ArgumentRetention;
+        }
     }
 }

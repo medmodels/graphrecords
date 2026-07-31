@@ -1,12 +1,12 @@
 use crate::{
-    AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueType,
+    AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
     error::arithmetic::ModuloByZero,
 };
 use graphrecords_core::graphrecord::{
     EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex, datatypes::Mod,
 };
 
-pub trait ValueModulo: ValueType {
+pub trait ValueModulo: ValueDomain {
     fn modulo<'a>(
         label: &'static str,
         value: Self::Value<'a>,

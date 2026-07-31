@@ -1,11 +1,12 @@
-use super::{string_map_bare, string_map_indexed};
+use super::{string_rebuild_map_bare, string_rebuild_map_indexed};
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::StringValue,
     element::Preserving,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::TrimEnd,
 };
 use graphrecords_core::GraphRecord;
@@ -13,7 +14,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "TrimEnd")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct TrimEndOperation;
 
 impl Prepare for TrimEndOperation {
@@ -40,9 +41,10 @@ where
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(string_map_indexed::<I, V, V>(Self::LABEL, |_, value| {
-            Ok(V::from_string(value.trim_end().to_string()))
-        }))
+        Ok(string_rebuild_map_indexed::<I, V>(
+            Self::LABEL,
+            |_, value| Ok(value.trim_end().to_string()),
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -52,7 +54,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for TrimEndOperation
 where
-    V: StringValue + BareValueType,
+    V: StringValue + BareValueDomain,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;
@@ -61,8 +63,8 @@ where
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(string_map_bare::<V, V>(Self::LABEL, |_, value| {
-            Ok(V::from_string(value.trim_end().to_string()))
+        Ok(string_rebuild_map_bare::<V>(Self::LABEL, |_, value| {
+            Ok(value.trim_end().to_string())
         }))
     }
 
@@ -76,5 +78,25 @@ impl<O: Apply<TrimEndOperation>> TrimEnd for O {
 
     fn trim_end(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), TrimEndOperation))
+    }
+}
+
+operation_manifest! {
+    TrimEndOperation {
+        method: TrimEnd::trim_end;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: StringValue>;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: Preserving;
+        }
+        kernel {
+            parameters: <V: StringValue + BareValueDomain>;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: Preserving;
+        }
     }
 }

@@ -1,12 +1,12 @@
 use crate::{
-    AttributeName, Failure, IndexValue, QueryResult, Scalar, ValueType,
+    AttributeName, Failure, IndexValue, QueryResult, Scalar, ValueDomain,
     error::numeric::NonNumericValue,
 };
 use graphrecords_core::graphrecord::{
     GraphRecordAttribute, GraphRecordValue, NodeIndex, datatypes::Abs,
 };
 
-pub trait ValueAbsolute: ValueType {
+pub trait ValueAbsolute: ValueDomain {
     fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 

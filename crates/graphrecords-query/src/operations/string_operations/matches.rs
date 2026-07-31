@@ -1,6 +1,6 @@
 use super::{string_argument_map_bare, string_argument_map_indexed};
 use crate::{
-    Bare, BareValueType, Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand,
+    Bare, BareValueDomain, Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand,
     QueryResult,
     capabilities::StringValue,
     error::string::InvalidRegexPattern,
@@ -10,12 +10,13 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
     traits::Matches,
 };
 use graphrecords_core::GraphRecord;
 use regex::Regex;
 
-fn regex_matches(label: &'static str, value: &str, pattern: &str) -> QueryResult<bool> {
+pub(super) fn regex_matches(label: &'static str, value: &str, pattern: &str) -> QueryResult<bool> {
     let expression = Regex::new(pattern).map_err(|error| {
         Failure::new(label, InvalidRegexPattern::new(pattern.to_string(), error))
     })?;
@@ -51,7 +52,8 @@ impl<I, V, A> ElementKernel<Indexed<I, V>> for MatchesOperation<A>
 where
     I: IndexDomain,
     V: StringValue,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Keyed<I>>,
+    A::ValueDomain: StringValue,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, Mask>;
@@ -77,8 +79,9 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for MatchesOperation<A>
 where
-    V: StringValue + BareValueType,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: StringValue + BareValueDomain,
+    A: ArgumentSource<Unaligned>,
+    A::ValueDomain: StringValue,
 {
     type Emission = A::Retention;
     type OutShape = Bare<Mask>;
@@ -114,5 +117,27 @@ where
             self.clone(),
             MatchesOperation { pattern },
         ))
+    }
+}
+
+operation_manifest! {
+    MatchesOperation<A> {
+        method: Matches<A>::matches;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: StringValue>;
+            argument: A: ArgumentSource<Keyed<I>> where A::ValueDomain: StringValue;
+            input: Indexed<I, V>;
+            output: Indexed<I, Mask>;
+            emission: ArgumentRetention;
+        }
+        kernel {
+            parameters: <V: StringValue + BareValueDomain>;
+            argument: A: ArgumentSource<Unaligned> where A::ValueDomain: StringValue;
+            input: Bare<V>;
+            output: Bare<Mask>;
+            emission: ArgumentRetention;
+        }
     }
 }

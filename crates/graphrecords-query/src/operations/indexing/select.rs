@@ -7,6 +7,7 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Select,
 };
 use graphrecords_core::GraphRecord;
@@ -170,5 +171,43 @@ impl<O: Apply<SelectOperation>> Select for O {
 
     fn select(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), SelectOperation))
+    }
+}
+
+operation_manifest! {
+    SelectOperation {
+        method: Select::select;
+        scope: lane;
+
+        kernel {
+            parameters: <E: EntityDomain, I: IndexDomain, O: OrderState>;
+            input: (Indexed<I, EntityReference<E>>, Multiple<O>);
+            output: ElementsOperand<E, Unordered>;
+        }
+        kernel {
+            parameters: <E: EntityDomain, I: IndexDomain>;
+            input: (Indexed<I, EntityReference<E>>, Single);
+            output: ElementOperand<E>;
+        }
+        kernel {
+            parameters: <E: EntityDomain, I: IndexDomain>;
+            input: (Indexed<I, EntityReference<E>>, Definite);
+            output: DefiniteElementOperand<E>;
+        }
+        kernel {
+            parameters: <E: EntityDomain, O: OrderState>;
+            input: (Bare<EntityReference<E>>, Multiple<O>);
+            output: ElementsOperand<E, Unordered>;
+        }
+        kernel {
+            parameters: <E: EntityDomain>;
+            input: (Bare<EntityReference<E>>, Single);
+            output: ElementOperand<E>;
+        }
+        kernel {
+            parameters: <E: EntityDomain>;
+            input: (Bare<EntityReference<E>>, Definite);
+            output: DefiniteElementOperand<E>;
+        }
     }
 }

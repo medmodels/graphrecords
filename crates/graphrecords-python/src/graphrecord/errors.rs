@@ -1,4 +1,7 @@
+use crate::querying::exception::FailureConversion;
 use graphrecords_core::errors::{GraphRecordError, SchemaError};
+use graphrecords_overview::OverviewError;
+use graphrecords_query::Failure;
 use pyo3::{
     PyErr,
     exceptions::{PyAssertionError, PyIndexError, PyKeyError, PyRuntimeError, PyValueError},
@@ -7,6 +10,7 @@ use pyo3::{
 pub enum PyGraphRecordError {
     GraphRecord(GraphRecordError),
     Conversion(String),
+    Query(Box<Failure>),
 }
 pub type PyGraphRecordResult<T> = Result<T, PyGraphRecordError>;
 
@@ -22,12 +26,24 @@ impl From<SchemaError> for PyGraphRecordError {
     }
 }
 
+impl From<OverviewError> for PyGraphRecordError {
+    fn from(error: OverviewError) -> Self {
+        match error {
+            OverviewError::GraphRecord(error) => Self::GraphRecord(error),
+            OverviewError::Query(failure) => Self::Query(failure),
+        }
+    }
+}
+
 impl From<PyGraphRecordError> for PyErr {
     fn from(error: PyGraphRecordError) -> Self {
         let error = match error {
             PyGraphRecordError::GraphRecord(error) => error,
             PyGraphRecordError::Conversion(message) => {
                 return PyRuntimeError::new_err(message);
+            }
+            PyGraphRecordError::Query(failure) => {
+                return failure.to_python_error();
             }
         };
 
@@ -53,8 +69,7 @@ impl From<PyGraphRecordError> for PyErr {
             GraphRecordError::Schema(_) => PyValueError::new_err(message),
             GraphRecordError::PluginFailure { .. }
             | GraphRecordError::ConnectorFailure { .. }
-            | GraphRecordError::Conversion(_)
-            | GraphRecordError::QueryError(_) => PyRuntimeError::new_err(message),
+            | GraphRecordError::Conversion(_) => PyRuntimeError::new_err(message),
         }
     }
 }

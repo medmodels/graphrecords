@@ -24,10 +24,10 @@ from graphrecords.types import (
 if TYPE_CHECKING:
     from graphrecords import GraphRecord
     from graphrecords.querying import (
-        EdgeIndexQuery,
-        EdgeIndicesQuery,
-        NodeIndexQuery,
-        NodeIndicesQuery,
+        EdgeQuery,
+        EdgesQuery,
+        NodeQuery,
+        NodesQuery,
     )
 
 
@@ -49,9 +49,9 @@ class NodeIndexer:
         self,
         key: Union[
             NodeIndex,
-            NodeIndexQuery,
+            NodeQuery,
             Tuple[
-                Union[NodeIndex, NodeIndexQuery],
+                Union[NodeIndex, NodeQuery],
                 Union[GraphRecordAttributeInputList, slice],
             ],
         ],
@@ -59,7 +59,7 @@ class NodeIndexer:
 
     @overload
     def __getitem__(
-        self, key: Tuple[Union[NodeIndex, NodeIndexQuery], GraphRecordAttribute]
+        self, key: Tuple[Union[NodeIndex, NodeQuery], GraphRecordAttribute]
     ) -> GraphRecordValue: ...
 
     @overload
@@ -67,10 +67,10 @@ class NodeIndexer:
         self,
         key: Union[
             NodeIndexInputList,
-            NodeIndicesQuery,
+            NodesQuery,
             slice,
             Tuple[
-                Union[NodeIndexInputList, NodeIndicesQuery, slice],
+                Union[NodeIndexInputList, NodesQuery, slice],
                 Union[GraphRecordAttributeInputList, slice],
             ],
         ],
@@ -79,9 +79,7 @@ class NodeIndexer:
     @overload
     def __getitem__(
         self,
-        key: Tuple[
-            Union[NodeIndexInputList, NodeIndicesQuery, slice], GraphRecordAttribute
-        ],
+        key: Tuple[Union[NodeIndexInputList, NodesQuery, slice], GraphRecordAttribute],
     ) -> Dict[NodeIndex, GraphRecordValue]: ...
 
     def __getitem__(  # noqa: C901
@@ -89,15 +87,15 @@ class NodeIndexer:
         key: Union[
             NodeIndex,
             NodeIndexInputList,
-            NodeIndexQuery,
-            NodeIndicesQuery,
+            NodeQuery,
+            NodesQuery,
             slice,
             Tuple[
                 Union[
                     NodeIndex,
                     NodeIndexInputList,
-                    NodeIndexQuery,
-                    NodeIndicesQuery,
+                    NodeQuery,
+                    NodesQuery,
                     slice,
                 ],
                 Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice],
@@ -112,7 +110,7 @@ class NodeIndexer:
         """Gets the node attributes for the specified key.
 
         Args:
-            key (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice, Tuple[Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
+            key (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery, slice, Tuple[Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
                 The nodes to get attributes for.
 
         Returns:
@@ -130,7 +128,7 @@ class NodeIndexer:
             return self._graphrecord._graphrecord.node(key)
 
         if isinstance(key, Callable):
-            query_result = self._graphrecord.query_nodes(key)
+            query_result = self._graphrecord._query_node_indices(key)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.node(query_result)
@@ -166,7 +164,7 @@ class NodeIndexer:
         if isinstance(index_selection, Callable) and is_graphrecord_attribute(
             attribute_selection
         ):
-            query_result = self._graphrecord.query_nodes(index_selection)
+            query_result = self._graphrecord._query_node_indices(index_selection)
             if isinstance(query_result, list):
                 attributes = self._graphrecord._graphrecord.node(query_result)
 
@@ -213,7 +211,7 @@ class NodeIndexer:
         if isinstance(index_selection, Callable) and isinstance(
             attribute_selection, list
         ):
-            query_result = self._graphrecord.query_nodes(index_selection)
+            query_result = self._graphrecord._query_node_indices(index_selection)
 
             if isinstance(query_result, list):
                 attributes = self._graphrecord._graphrecord.node(query_result)
@@ -284,7 +282,7 @@ class NodeIndexer:
                 msg = "Invalid slice, only ':' is allowed"
                 raise ValueError(msg)
 
-            query_result = self._graphrecord.query_nodes(index_selection)
+            query_result = self._graphrecord._query_node_indices(index_selection)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.node(query_result)
@@ -316,9 +314,7 @@ class NodeIndexer:
     @overload
     def __setitem__(
         self,
-        key: Union[
-            NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice
-        ],
+        key: Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery, slice],
         value: AttributesInput,
     ) -> None: ...
 
@@ -326,9 +322,7 @@ class NodeIndexer:
     def __setitem__(
         self,
         key: Tuple[
-            Union[
-                NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice
-            ],
+            Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery, slice],
             Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice],
         ],
         value: GraphRecordValue,
@@ -339,15 +333,15 @@ class NodeIndexer:
         key: Union[
             NodeIndex,
             NodeIndexInputList,
-            NodeIndexQuery,
-            NodeIndicesQuery,
+            NodeQuery,
+            NodesQuery,
             slice,
             Tuple[
                 Union[
                     NodeIndex,
                     NodeIndexInputList,
-                    NodeIndexQuery,
-                    NodeIndicesQuery,
+                    NodeQuery,
+                    NodesQuery,
                     slice,
                 ],
                 Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice],
@@ -358,7 +352,7 @@ class NodeIndexer:
         """Sets the specified node attributes.
 
         Args:
-            key (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice, Tuple[Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
+            key (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery, slice, Tuple[Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
                 The nodes to set attributes for.
             value (Union[AttributesInput, GraphRecordValue]): The values to set.
 
@@ -385,7 +379,7 @@ class NodeIndexer:
                 msg = "Should never be reached"
                 raise NotImplementedError(msg)
 
-            query_result = self._graphrecord.query_nodes(key)
+            query_result = self._graphrecord._query_node_indices(key)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.replace_node_attributes(
@@ -442,7 +436,7 @@ class NodeIndexer:
                 msg = "Should never be reached"
                 raise NotImplementedError(msg)
 
-            query_result = self._graphrecord.query_nodes(index_selection)
+            query_result = self._graphrecord._query_node_indices(index_selection)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.update_node_attribute(
@@ -507,7 +501,7 @@ class NodeIndexer:
                 msg = "Should never be reached"
                 raise NotImplementedError(msg)
 
-            query_result = self._graphrecord.query_nodes(index_selection)
+            query_result = self._graphrecord._query_node_indices(index_selection)
 
             if isinstance(query_result, list):
                 for attribute in attribute_selection:
@@ -608,7 +602,7 @@ class NodeIndexer:
                 msg = "Should never be reached"
                 raise NotImplementedError(msg)
 
-            query_result = self._graphrecord.query_nodes(index_selection)
+            query_result = self._graphrecord._query_node_indices(index_selection)
 
             if isinstance(query_result, list):
                 attributes = self._graphrecord._graphrecord.node(query_result)
@@ -666,16 +660,14 @@ class NodeIndexer:
     def __delitem__(  # noqa: C901
         self,
         key: Tuple[
-            Union[
-                NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice
-            ],
+            Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery, slice],
             Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice],
         ],
     ) -> None:
         """Deletes the specified node attributes.
 
         Args:
-            key (Tuple[Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
+            key (Tuple[Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
                 The key to delete.
 
         Raises:
@@ -700,7 +692,7 @@ class NodeIndexer:
         if isinstance(index_selection, Callable) and is_graphrecord_attribute(
             attribute_selection
         ):
-            query_result = self._graphrecord.query_nodes(index_selection)
+            query_result = self._graphrecord._query_node_indices(index_selection)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.remove_node_attribute(
@@ -748,7 +740,7 @@ class NodeIndexer:
         if isinstance(index_selection, Callable) and isinstance(
             attribute_selection, list
         ):
-            query_result = self._graphrecord.query_nodes(index_selection)
+            query_result = self._graphrecord._query_node_indices(index_selection)
 
             if isinstance(query_result, list):
                 for attribute in attribute_selection:
@@ -816,7 +808,7 @@ class NodeIndexer:
                 msg = "Invalid slice, only ':' is allowed"
                 raise ValueError(msg)
 
-            query_result = self._graphrecord.query_nodes(index_selection)
+            query_result = self._graphrecord._query_node_indices(index_selection)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.replace_node_attributes(
@@ -869,9 +861,9 @@ class EdgeIndexer:
         self,
         key: Union[
             EdgeIndex,
-            EdgeIndexQuery,
+            EdgeQuery,
             Tuple[
-                Union[EdgeIndex, EdgeIndexQuery],
+                Union[EdgeIndex, EdgeQuery],
                 Union[GraphRecordAttributeInputList, slice],
             ],
         ],
@@ -879,7 +871,7 @@ class EdgeIndexer:
 
     @overload
     def __getitem__(
-        self, key: Tuple[Union[EdgeIndex, EdgeIndexQuery], GraphRecordAttribute]
+        self, key: Tuple[Union[EdgeIndex, EdgeQuery], GraphRecordAttribute]
     ) -> GraphRecordValue: ...
 
     @overload
@@ -887,10 +879,10 @@ class EdgeIndexer:
         self,
         key: Union[
             EdgeIndexInputList,
-            EdgeIndicesQuery,
+            EdgesQuery,
             slice,
             Tuple[
-                Union[EdgeIndexInputList, EdgeIndicesQuery, slice],
+                Union[EdgeIndexInputList, EdgesQuery, slice],
                 Union[GraphRecordAttributeInputList, slice],
             ],
         ],
@@ -899,9 +891,7 @@ class EdgeIndexer:
     @overload
     def __getitem__(
         self,
-        key: Tuple[
-            Union[EdgeIndexInputList, EdgeIndicesQuery, slice], GraphRecordAttribute
-        ],
+        key: Tuple[Union[EdgeIndexInputList, EdgesQuery, slice], GraphRecordAttribute],
     ) -> Dict[EdgeIndex, GraphRecordValue]: ...
 
     def __getitem__(  # noqa: C901
@@ -909,15 +899,15 @@ class EdgeIndexer:
         key: Union[
             EdgeIndex,
             EdgeIndexInputList,
-            EdgeIndexQuery,
-            EdgeIndicesQuery,
+            EdgeQuery,
+            EdgesQuery,
             slice,
             Tuple[
                 Union[
                     EdgeIndex,
                     EdgeIndexInputList,
-                    EdgeIndexQuery,
-                    EdgeIndicesQuery,
+                    EdgeQuery,
+                    EdgesQuery,
                     slice,
                 ],
                 Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice],
@@ -950,7 +940,7 @@ class EdgeIndexer:
             return self._graphrecord._graphrecord.edge(key)
 
         if isinstance(key, Callable):
-            query_result = self._graphrecord.query_edges(key)
+            query_result = self._graphrecord._query_edge_indices(key)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.edge(query_result)
@@ -986,7 +976,7 @@ class EdgeIndexer:
         if isinstance(index_selection, Callable) and is_graphrecord_attribute(
             attribute_selection
         ):
-            query_result = self._graphrecord.query_edges(index_selection)
+            query_result = self._graphrecord._query_edge_indices(index_selection)
 
             if isinstance(query_result, list):
                 attributes = self._graphrecord._graphrecord.edge(query_result)
@@ -1034,7 +1024,7 @@ class EdgeIndexer:
         if isinstance(index_selection, Callable) and isinstance(
             attribute_selection, list
         ):
-            query_result = self._graphrecord.query_edges(index_selection)
+            query_result = self._graphrecord._query_edge_indices(index_selection)
 
             if isinstance(query_result, list):
                 attributes = self._graphrecord._graphrecord.edge(query_result)
@@ -1105,7 +1095,7 @@ class EdgeIndexer:
                 msg = "Invalid slice, only ':' is allowed"
                 raise ValueError(msg)
 
-            query_result = self._graphrecord.query_edges(index_selection)
+            query_result = self._graphrecord._query_edge_indices(index_selection)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.edge(query_result)
@@ -1137,9 +1127,7 @@ class EdgeIndexer:
     @overload
     def __setitem__(
         self,
-        key: Union[
-            EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery, slice
-        ],
+        key: Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery, slice],
         value: AttributesInput,
     ) -> None: ...
 
@@ -1147,9 +1135,7 @@ class EdgeIndexer:
     def __setitem__(
         self,
         key: Tuple[
-            Union[
-                EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery, slice
-            ],
+            Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery, slice],
             Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice],
         ],
         value: GraphRecordValue,
@@ -1160,15 +1146,15 @@ class EdgeIndexer:
         key: Union[
             EdgeIndex,
             EdgeIndexInputList,
-            EdgeIndexQuery,
-            EdgeIndicesQuery,
+            EdgeQuery,
+            EdgesQuery,
             slice,
             Tuple[
                 Union[
                     EdgeIndex,
                     EdgeIndexInputList,
-                    EdgeIndexQuery,
-                    EdgeIndicesQuery,
+                    EdgeQuery,
+                    EdgesQuery,
                     slice,
                 ],
                 Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice],
@@ -1179,7 +1165,7 @@ class EdgeIndexer:
         """Sets the edge attributes for the specified key.
 
         Args:
-            key (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery, slice, Tuple[Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
+            key (Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery, slice, Tuple[Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
                 The edges to which the attributes should be set.
 
             value (Union[AttributesInput, GraphRecordValue]):
@@ -1208,7 +1194,7 @@ class EdgeIndexer:
                 msg = "Should never be reached"
                 raise NotImplementedError(msg)
 
-            query_result = self._graphrecord.query_edges(key)
+            query_result = self._graphrecord._query_edge_indices(key)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.replace_edge_attributes(
@@ -1265,7 +1251,7 @@ class EdgeIndexer:
                 msg = "Should never be reached"
                 raise NotImplementedError(msg)
 
-            query_result = self._graphrecord.query_edges(index_selection)
+            query_result = self._graphrecord._query_edge_indices(index_selection)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.update_edge_attribute(
@@ -1330,7 +1316,7 @@ class EdgeIndexer:
                 msg = "Should never be reached"
                 raise NotImplementedError(msg)
 
-            query_result = self._graphrecord.query_edges(index_selection)
+            query_result = self._graphrecord._query_edge_indices(index_selection)
 
             if isinstance(query_result, list):
                 for attribute in attribute_selection:
@@ -1427,7 +1413,7 @@ class EdgeIndexer:
                 msg = "Should never be reached"
                 raise NotImplementedError(msg)
 
-            query_result = self._graphrecord.query_edges(index_selection)
+            query_result = self._graphrecord._query_edge_indices(index_selection)
 
             if isinstance(query_result, list):
                 attributes = self._graphrecord._graphrecord.edge(query_result)
@@ -1483,16 +1469,14 @@ class EdgeIndexer:
     def __delitem__(  # noqa: C901
         self,
         key: Tuple[
-            Union[
-                EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery, slice
-            ],
+            Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery, slice],
             Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice],
         ],
     ) -> None:
         """Deletes the specified edge attributes.
 
         Args:
-            key (Tuple[Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
+            key (Tuple[Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery, slice], Union[GraphRecordAttribute, GraphRecordAttributeInputList, slice]]):
                 The edges from which to delete the attributes.
 
         Raises:
@@ -1517,7 +1501,7 @@ class EdgeIndexer:
         if isinstance(index_selection, Callable) and is_graphrecord_attribute(
             attribute_selection
         ):
-            query_result = self._graphrecord.query_edges(index_selection)
+            query_result = self._graphrecord._query_edge_indices(index_selection)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.remove_edge_attribute(
@@ -1565,7 +1549,7 @@ class EdgeIndexer:
         if isinstance(index_selection, Callable) and isinstance(
             attribute_selection, list
         ):
-            query_result = self._graphrecord.query_edges(index_selection)
+            query_result = self._graphrecord._query_edge_indices(index_selection)
 
             if isinstance(query_result, list):
                 for attribute in attribute_selection:
@@ -1633,7 +1617,7 @@ class EdgeIndexer:
                 msg = "Invalid slice, only ':' is allowed"
                 raise ValueError(msg)
 
-            query_result = self._graphrecord.query_edges(index_selection)
+            query_result = self._graphrecord._query_edge_indices(index_selection)
 
             if isinstance(query_result, list):
                 return self._graphrecord._graphrecord.replace_edge_attributes(

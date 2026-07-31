@@ -1,5 +1,5 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Bare, BareValueDomain, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
     Multiple, Operand, OrderState, QueryResult, Single,
     capabilities::ValueOrdering,
     error::comparison::{IncomparableValues, IncomparableValuesAt},
@@ -9,6 +9,7 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Minimum,
 };
 use graphrecords_core::GraphRecord;
@@ -38,7 +39,7 @@ impl Prepare for MinimumOperation {
 impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for MinimumOperation
 where
     I: IndexDomain,
-    V: ValueOrdering + BareValueType,
+    V: ValueOrdering + BareValueDomain,
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {
@@ -87,7 +88,7 @@ where
 
 impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for MinimumOperation
 where
-    V: ValueOrdering + BareValueType,
+    V: ValueOrdering + BareValueDomain,
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {
@@ -128,5 +129,33 @@ impl<O: Apply<MinimumOperation>> Minimum for O {
 
     fn min(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), MinimumOperation))
+    }
+}
+
+operation_manifest! {
+    MinimumOperation {
+        method: Minimum::min;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueOrdering + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Single>;
+            where V::Owned: Debug + Display + Send + Sync;
+        }
+
+        kernel {
+            parameters: <
+                V: ValueOrdering + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Bare<V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Single>;
+            where V::Owned: Debug + Display + Send + Sync;
+        }
     }
 }

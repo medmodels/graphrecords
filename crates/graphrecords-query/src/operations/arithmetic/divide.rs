@@ -1,6 +1,6 @@
 use super::{arithmetic_bare, arithmetic_indexed};
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::ValueDivide,
     execution::EvaluationCache,
     operations::{
@@ -8,6 +8,7 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
     traits::Divide,
 };
 use graphrecords_core::GraphRecord;
@@ -40,7 +41,7 @@ impl<I, V, A> ElementKernel<Indexed<I, V>> for DivideOperation<A>
 where
     I: IndexDomain,
     V: ValueDivide,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Keyed<I>, V>,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, V>;
@@ -63,8 +64,8 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for DivideOperation<A>
 where
-    V: ValueDivide + BareValueType,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: ValueDivide + BareValueDomain,
+    A: ArgumentSource<Unaligned, V>,
 {
     type Emission = A::Retention;
     type OutShape = Bare<V>;
@@ -93,5 +94,28 @@ where
             self.clone(),
             DivideOperation { argument },
         ))
+    }
+}
+
+operation_manifest! {
+    DivideOperation<A> {
+        method: Divide<A>::divide;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDivide>;
+            argument: A: ArgumentSource<Keyed<I>, V>;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: ArgumentRetention;
+        }
+
+        kernel {
+            parameters: <V: ValueDivide + BareValueDomain>;
+            argument: A: ArgumentSource<Unaligned, V>;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: ArgumentRetention;
+        }
     }
 }

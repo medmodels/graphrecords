@@ -6,10 +6,11 @@ mod less_than_or_equal_to;
 mod not_equal_to;
 
 use crate::{
-    Failure, IndexDomain, Mask, ValueType,
+    Failure, IndexDomain, Mask, ValueDomain,
     element::{BarePipeline, IndexedValuePipeline, Pipeline, Retention},
     error::comparison::IncomparableValues,
     operations::{ArgumentSource, Keyed, Unaligned},
+    registry::OperationManifest,
 };
 pub use equal_to::EqualToOperation;
 pub use greater_than::GreaterThanOperation;
@@ -22,6 +23,17 @@ use std::{
     fmt::{Debug, Display},
 };
 
+pub(super) fn operation_manifests() -> Vec<OperationManifest> {
+    vec![
+        equal_to::operation_manifest(),
+        greater_than::operation_manifest(),
+        greater_than_or_equal_to::operation_manifest(),
+        less_than::operation_manifest(),
+        less_than_or_equal_to::operation_manifest(),
+        not_equal_to::operation_manifest(),
+    ]
+}
+
 fn equality_indexed<'a, I, V, A>(
     prepared: A::Prepared<'a>,
     label: &'static str,
@@ -29,8 +41,8 @@ fn equality_indexed<'a, I, V, A>(
 ) -> IndexedValuePipeline<'a, I, V, Mask, A::Retention>
 where
     I: IndexDomain,
-    V: ValueType,
-    A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    V: ValueDomain,
+    A: ArgumentSource<Keyed<I>, V>,
     A::Prepared<'a>: 'a,
 {
     Pipeline::keyed(move |index, item| {
@@ -55,8 +67,8 @@ fn equality_bare<'a, V, A>(
     equality: fn(&V::Value<'a>, &V::Value<'a>) -> bool,
 ) -> BarePipeline<'a, V, Mask, A::Retention>
 where
-    V: ValueType,
-    A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: ValueDomain,
+    A: ArgumentSource<Unaligned, V>,
     A::Prepared<'a>: 'a,
 {
     Pipeline::new(move |item| {
@@ -83,8 +95,8 @@ fn ordering_indexed<'a, I, V, A>(
 ) -> IndexedValuePipeline<'a, I, V, Mask, A::Retention>
 where
     I: IndexDomain,
-    V: ValueType,
-    A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    V: ValueDomain,
+    A: ArgumentSource<Keyed<I>, V>,
     V::Owned: Debug + Display + Send + Sync,
     A::Prepared<'a>: 'a,
 {
@@ -118,8 +130,8 @@ fn ordering_bare<'a, V, A>(
     predicate: fn(Ordering) -> bool,
 ) -> BarePipeline<'a, V, Mask, A::Retention>
 where
-    V: ValueType,
-    A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: ValueDomain,
+    A: ArgumentSource<Unaligned, V>,
     V::Owned: Debug + Display + Send + Sync,
     A::Prepared<'a>: 'a,
 {

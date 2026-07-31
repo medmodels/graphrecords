@@ -1,10 +1,11 @@
 use crate::{
-    AttributeName, FailureKind, FailureKindValue, IndexDomain, IndexValue, Mask, Scalar, ValueType,
+    AttributeName, FailureKind, FailureKindValue, IndexDomain, IndexValue, Mask, Scalar,
+    ValueDomain,
 };
 use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue};
 use std::hash::Hash;
 
-pub trait ValueEquivalence: ValueType {
+pub trait ValueEquivalence: ValueDomain {
     type Key: Eq + Hash;
 
     fn equivalence_key(value: &Self::Value<'_>) -> Self::Key;

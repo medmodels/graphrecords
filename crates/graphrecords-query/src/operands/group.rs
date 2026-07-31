@@ -1,6 +1,6 @@
 use crate::{
     Arity, BoxedIterator, Definite, ElementShape, EvaluateOperand, Failure, IndexDomain, Indexed,
-    Multiple, Operand, OperandContext, OrderState, QueryResult, Single, ValueType,
+    Multiple, Operand, OperandContext, OrderState, QueryResult, Single, ValueDomain,
     error::{grouping::InvalidPartitionBucketArity, index::DuplicateIndex},
     execution::{CacheableOperand, EvaluationCache},
     index::GroupKey,
@@ -156,6 +156,37 @@ impl<'a, M: IndexDomain, K: GroupKey, O: Operand> Partition<'a, M, K, O> {
         }
     }
 
+    #[cfg(feature = "dynamic")]
+    pub(crate) fn map_domains<N, L>(
+        self,
+        mut map_member: impl FnMut(M::Index<'a>) -> N::Index<'a>,
+        mut map_key: impl FnMut(K::Owned) -> L::Owned,
+    ) -> Partition<'a, N, L, O>
+    where
+        N: IndexDomain,
+        L: GroupKey,
+    {
+        Partition {
+            buckets: self
+                .buckets
+                .into_iter()
+                .map(|bucket| Bucket {
+                    key: map_key(bucket.key),
+                    members: bucket.members.into_iter().map(&mut map_member).collect(),
+                    payload: bucket.payload,
+                })
+                .collect(),
+            key_failures: self
+                .key_failures
+                .into_iter()
+                .map(|key_failure| KeyFailure {
+                    member: map_member(key_failure.member),
+                    failure: key_failure.failure,
+                })
+                .collect(),
+        }
+    }
+
     #[must_use]
     pub fn change_buckets(
         self,
@@ -274,19 +305,76 @@ impl<'a, M: IndexDomain, K: GroupKey, O: Operand> Partition<'a, M, K, O> {
 }
 
 pub struct ReturnPartition<'a, M: IndexDomain, K: GroupKey, T> {
-    pub buckets: Vec<ReturnBucket<'a, M, K, T>>,
-    pub key_failures: Vec<ReturnKeyFailure<'a, M>>,
+    buckets: Vec<ReturnBucket<'a, M, K, T>>,
+    key_failures: Vec<ReturnKeyFailure<'a, M>>,
 }
 
 pub struct ReturnBucket<'a, M: IndexDomain, K: GroupKey, T> {
-    pub key: K::Owned,
-    pub members: Vec<M::Index<'a>>,
-    pub payload: QueryResult<T>,
+    key: K::Owned,
+    members: Vec<M::Index<'a>>,
+    payload: QueryResult<T>,
+}
+
+impl<'a, M: IndexDomain, K: GroupKey, T> ReturnBucket<'a, M, K, T> {
+    #[must_use]
+    pub const fn key(&self) -> &K::Owned {
+        &self.key
+    }
+
+    #[must_use]
+    pub fn members(&self) -> &[M::Index<'a>] {
+        &self.members
+    }
+
+    pub const fn payload(&self) -> &QueryResult<T> {
+        &self.payload
+    }
+
+    pub fn into_parts(self) -> (K::Owned, Vec<M::Index<'a>>, QueryResult<T>) {
+        (self.key, self.members, self.payload)
+    }
 }
 
 pub struct ReturnKeyFailure<'a, M: IndexDomain> {
-    pub member: M::Index<'a>,
-    pub failure: Box<Failure>,
+    member: M::Index<'a>,
+    failure: Box<Failure>,
+}
+
+impl<'a, M: IndexDomain> ReturnKeyFailure<'a, M> {
+    #[must_use]
+    pub const fn member(&self) -> &M::Index<'a> {
+        &self.member
+    }
+
+    #[must_use]
+    pub fn failure(&self) -> &Failure {
+        &self.failure
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (M::Index<'a>, Box<Failure>) {
+        (self.member, self.failure)
+    }
+}
+
+pub type ReturnPartitionParts<'a, M, K, T> =
+    (Vec<ReturnBucket<'a, M, K, T>>, Vec<ReturnKeyFailure<'a, M>>);
+
+impl<'a, M: IndexDomain, K: GroupKey, T> ReturnPartition<'a, M, K, T> {
+    #[must_use]
+    pub fn buckets(&self) -> &[ReturnBucket<'a, M, K, T>] {
+        &self.buckets
+    }
+
+    #[must_use]
+    pub fn key_failures(&self) -> &[ReturnKeyFailure<'a, M>] {
+        &self.key_failures
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> ReturnPartitionParts<'a, M, K, T> {
+        (self.buckets, self.key_failures)
+    }
 }
 
 pub struct PartitionOwned<M: IndexDomain, K: GroupKey, T> {
@@ -365,7 +453,7 @@ pub trait PartitionShape<M: IndexDomain>: ElementShape {
     fn member<'a>(element: &Self::Element<'a>) -> M::Index<'a>;
 }
 
-impl<M: IndexDomain, V: ValueType> PartitionShape<M> for Indexed<M, V> {
+impl<M: IndexDomain, V: ValueDomain> PartitionShape<M> for Indexed<M, V> {
     fn member<'a>(element: &Self::Element<'a>) -> M::Index<'a> {
         element.0.clone()
     }

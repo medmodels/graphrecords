@@ -1,11 +1,12 @@
 use super::{numeric_bare, numeric_indexed};
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::ValueCeil,
     element::Preserving,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Ceil,
 };
 use graphrecords_core::GraphRecord;
@@ -13,7 +14,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Ceil")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct CeilOperation;
 
 impl Prepare for CeilOperation {
@@ -40,7 +41,7 @@ where
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(numeric_indexed::<I, V>(Self::LABEL, V::ceil))
+        Ok(numeric_indexed::<I, V, _>(Self::LABEL, V::ceil))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -50,7 +51,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for CeilOperation
 where
-    V: ValueCeil + BareValueType,
+    V: ValueCeil + BareValueDomain,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;
@@ -59,7 +60,7 @@ where
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(numeric_bare::<V>(Self::LABEL, V::ceil))
+        Ok(numeric_bare::<V, _>(Self::LABEL, V::ceil))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -72,5 +73,26 @@ impl<O: Apply<CeilOperation>> Ceil for O {
 
     fn ceil(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), CeilOperation))
+    }
+}
+
+operation_manifest! {
+    CeilOperation {
+        method: Ceil::ceil;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueCeil>;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: Preserving;
+        }
+
+        kernel {
+            parameters: <V: ValueCeil + BareValueDomain>;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: Preserving;
+        }
     }
 }

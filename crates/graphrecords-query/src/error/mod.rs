@@ -3,6 +3,8 @@ pub mod argument;
 pub mod arithmetic;
 pub mod comparison;
 pub mod conversion;
+#[cfg(feature = "dynamic")]
+pub mod dispatch;
 pub mod execution;
 pub mod grouping;
 pub mod groups;

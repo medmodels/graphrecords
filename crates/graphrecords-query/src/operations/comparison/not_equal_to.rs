@@ -1,6 +1,6 @@
 use super::{equality_bare, equality_indexed};
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
     capabilities::ValueEquality,
     execution::EvaluationCache,
     operations::{
@@ -8,6 +8,7 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
     traits::NotEqualTo,
 };
 use graphrecords_core::GraphRecord;
@@ -40,7 +41,7 @@ impl<I, V, A> ElementKernel<Indexed<I, V>> for NotEqualToOperation<A>
 where
     I: IndexDomain,
     V: ValueEquality,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Keyed<I>, V>,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, Mask>;
@@ -70,8 +71,8 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for NotEqualToOperation<A>
 where
-    V: ValueEquality + BareValueType,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: ValueEquality + BareValueDomain,
+    A: ArgumentSource<Unaligned, V>,
 {
     type Emission = A::Retention;
     type OutShape = Bare<Mask>;
@@ -111,5 +112,28 @@ where
             self.clone(),
             NotEqualToOperation { argument },
         ))
+    }
+}
+
+operation_manifest! {
+    NotEqualToOperation<A> {
+        method: NotEqualTo<A>::not_equal_to;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueEquality>;
+            argument: A: ArgumentSource<Keyed<I>, V>;
+            input: Indexed<I, V>;
+            output: Indexed<I, Mask>;
+            emission: ArgumentRetention;
+        }
+
+        kernel {
+            parameters: <V: ValueEquality + BareValueDomain>;
+            argument: A: ArgumentSource<Unaligned, V>;
+            input: Bare<V>;
+            output: Bare<Mask>;
+            emission: ArgumentRetention;
+        }
     }
 }

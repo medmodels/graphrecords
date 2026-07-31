@@ -1,5 +1,5 @@
-mod drop;
-mod raise;
+pub(super) mod drop;
+pub(super) mod raise;
 
 use crate::{
     Diagnostic, ErrorGroup, Operand,
@@ -40,13 +40,13 @@ impl<O: Operand> OnKeyError for O {
 }
 
 impl<O: Operand, A> OnKeyErrorOf<A> for O {
-    type Output<D>
+    type ReturnOperand<D>
         = A::Output
     where
         D: Diagnostic,
         A: KeyErrorPolicyOf<Self, D>;
 
-    fn on_key_error_of<D>(&self, policy: A) -> Self::Output<D>
+    fn on_key_error_of<D>(&self, policy: A) -> Self::ReturnOperand<D>
     where
         D: Diagnostic,
         A: KeyErrorPolicyOf<Self, D>,
@@ -56,13 +56,13 @@ impl<O: Operand, A> OnKeyErrorOf<A> for O {
 }
 
 impl<O: Operand, A> OnKeyErrorIn<A> for O {
-    type Output<G>
+    type ReturnOperand<G>
         = A::Output
     where
         G: ErrorGroup,
         A: KeyErrorPolicyIn<Self, G>;
 
-    fn on_key_error_in<G>(&self, policy: A) -> Self::Output<G>
+    fn on_key_error_in<G>(&self, policy: A) -> Self::ReturnOperand<G>
     where
         G: ErrorGroup,
         A: KeyErrorPolicyIn<Self, G>,
@@ -72,13 +72,13 @@ impl<O: Operand, A> OnKeyErrorIn<A> for O {
 }
 
 impl<O: Operand, A> OnKeyErrorWithCause<A> for O {
-    type Output<C>
+    type ReturnOperand<C>
         = A::Output
     where
         C: Error + 'static,
         A: KeyErrorPolicyWithCause<Self, C>;
 
-    fn on_key_error_with_cause<C>(&self, policy: A) -> Self::Output<C>
+    fn on_key_error_with_cause<C>(&self, policy: A) -> Self::ReturnOperand<C>
     where
         C: Error + 'static,
         A: KeyErrorPolicyWithCause<Self, C>,

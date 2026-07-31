@@ -1,12 +1,13 @@
 use crate::{
-    Bare, BareValueType, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed,
-    Labeled, Multiple, Operand, QueryResult, Single, Unordered, ValueType,
+    Bare, BareValueDomain, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed,
+    Labeled, Multiple, Operand, QueryResult, Single, Unordered, ValueDomain,
     error::grouping::MissingGroupAggregate,
     execution::EvaluationCache,
     index::GroupKey,
     operands::{OperandHandle, Partition},
     operations::{Apply, GroupKernel, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Broadcast,
 };
 use graphrecords_core::GraphRecord;
@@ -29,7 +30,7 @@ impl Prepare for BroadcastOperation {
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
+impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueDomain>
     GroupKernel<M, K, OperandHandle<Indexed<I, V>, Single>> for BroadcastOperation
 {
     type Output = OperandHandle<Indexed<M, V>, Multiple<Unordered>>;
@@ -79,7 +80,7 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, V: BareValueType>
+impl<M: IndexDomain, K: GroupKey, V: BareValueDomain>
     GroupKernel<M, K, OperandHandle<Bare<V>, Single>> for BroadcastOperation
 {
     type Output = OperandHandle<Indexed<M, V>, Multiple<Unordered>>;
@@ -129,7 +130,7 @@ impl<M: IndexDomain, K: GroupKey, V: BareValueType>
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
+impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueDomain>
     GroupKernel<M, K, OperandHandle<Indexed<I, V>, Definite>> for BroadcastOperation
 {
     type Output = OperandHandle<Indexed<M, V>, Multiple<Unordered>>;
@@ -170,7 +171,7 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, V: BareValueType>
+impl<M: IndexDomain, K: GroupKey, V: BareValueDomain>
     GroupKernel<M, K, OperandHandle<Bare<V>, Definite>> for BroadcastOperation
 {
     type Output = OperandHandle<Indexed<M, V>, Multiple<Unordered>>;
@@ -216,5 +217,37 @@ impl<O: Apply<BroadcastOperation>> Broadcast for O {
 
     fn broadcast(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), BroadcastOperation))
+    }
+}
+
+operation_manifest! {
+    BroadcastOperation {
+        method: Broadcast::broadcast;
+        scope: group;
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: OperandHandle<Indexed<I, V>, Single>;
+            output: OperandHandle<Indexed<M, V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <V: BareValueDomain>;
+            input: OperandHandle<Bare<V>, Single>;
+            output: OperandHandle<Indexed<M, V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: OperandHandle<Indexed<I, V>, Definite>;
+            output: OperandHandle<Indexed<M, V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <V: BareValueDomain>;
+            input: OperandHandle<Bare<V>, Definite>;
+            output: OperandHandle<Indexed<M, V>, Multiple<Unordered>>;
+        }
     }
 }

@@ -1,7 +1,9 @@
-use crate::{Failure, IndexValue, QueryResult, Scalar, ValueType, error::numeric::NonNumericValue};
+use crate::{
+    Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::numeric::NonNumericValue,
+};
 use graphrecords_core::graphrecord::{GraphRecordValue, datatypes::Round};
 
-pub trait ValueRound: ValueType {
+pub trait ValueRound: ValueDomain {
     fn round<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 

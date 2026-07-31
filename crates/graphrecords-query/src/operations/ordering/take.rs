@@ -1,12 +1,13 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
-    Ordered, QueryResult, ValueType,
+    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    Ordered, QueryResult, ValueDomain,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Take,
 };
 use graphrecords_core::GraphRecord;
@@ -32,7 +33,9 @@ impl Prepare for TakeOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>> for TakeOperation {
+impl<I: IndexDomain, V: ValueDomain> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
+    for TakeOperation
+{
     type Output = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -53,7 +56,7 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>> 
     }
 }
 
-impl<V: BareValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for TakeOperation {
+impl<V: BareValueDomain> LaneKernel<Bare<V>, Multiple<Ordered>> for TakeOperation {
     type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -82,5 +85,25 @@ impl<O: Apply<TakeOperation>> Take for O {
             self.clone(),
             TakeOperation { elements },
         ))
+    }
+}
+
+operation_manifest! {
+    TakeOperation {
+        method: Take::take;
+        scope: lane;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            field: elements: usize;
+            input: (Indexed<I, V>, Multiple<Ordered>);
+            output: OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
+        }
+        kernel {
+            parameters: <V: BareValueDomain>;
+            field: elements: usize;
+            input: (Bare<V>, Multiple<Ordered>);
+            output: OperandHandle<Bare<V>, Multiple<Ordered>>;
+        }
     }
 }

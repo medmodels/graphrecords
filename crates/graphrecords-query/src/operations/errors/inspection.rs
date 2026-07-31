@@ -1,11 +1,12 @@
 use crate::{
-    Bare, BareValueType, Diagnostic, ErrorGroup, Explain, Failure, FailureKind, FailureKindValue,
-    FailureValue, IndexDomain, Indexed, Mask, Operand, QueryResult, Scalar, ValueType,
+    Bare, BareValueDomain, Diagnostic, ErrorGroup, Explain, Failure, FailureKind, FailureKindValue,
+    FailureValue, IndexDomain, Indexed, Mask, Operand, QueryResult, Scalar, ValueDomain,
     element::{Dropping, Pipeline, Preserving},
     execution::EvaluationCache,
     explain::ExplainFormatter,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::{ErrorKind, ErrorKindName, Errors, HasErrorCause, InErrorGroup, IsErrorKind},
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
@@ -19,6 +20,7 @@ use std::{
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Errors")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct ErrorsOperation;
 
 impl Prepare for ErrorsOperation {
@@ -33,7 +35,7 @@ impl Prepare for ErrorsOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for ErrorsOperation {
+impl<I: IndexDomain, V: ValueDomain> ElementKernel<Indexed<I, V>> for ErrorsOperation {
     type Emission = Dropping;
     type OutShape = Indexed<I, FailureValue>;
 
@@ -47,7 +49,7 @@ impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for ErrorsOperat
     }
 }
 
-impl<V: BareValueType> ElementKernel<Bare<V>> for ErrorsOperation {
+impl<V: BareValueDomain> ElementKernel<Bare<V>> for ErrorsOperation {
     type Emission = Dropping;
     type OutShape = Bare<FailureValue>;
 
@@ -69,9 +71,40 @@ impl<O: Apply<ErrorsOperation>> Errors for O {
     }
 }
 
+pub(super) mod errors {
+    use super::{
+        Bare, Dropping, Errors, ErrorsOperation, FailureValue, Indexed, operation_manifest,
+    };
+
+    operation_manifest! {
+        ErrorsOperation {
+            method: Errors::errors;
+            scope: element;
+
+            kernel {
+                parameters: <I: IndexDomain, V: ValueDomain>;
+                input: Indexed<I, V>;
+                output: Indexed<I, FailureValue>;
+                emission: Dropping;
+            }
+            kernel {
+                parameters: <V: BareValueDomain>;
+                input: Bare<V>;
+                output: Bare<FailureValue>;
+                emission: Dropping;
+            }
+        }
+    }
+}
+
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "ErrorKind")]
+#[plan(optimizer_hints(
+    commutes_with_filter,
+    allows_limit_pushdown,
+    empty = if_any
+))]
 pub struct ErrorKindOperation;
 
 impl Prepare for ErrorKindOperation {
@@ -122,8 +155,40 @@ impl<O: Apply<ErrorKindOperation>> ErrorKind for O {
     }
 }
 
+pub(super) mod kind {
+    use super::{
+        Bare, ErrorKind, ErrorKindOperation, FailureKindValue, FailureValue, Indexed, Preserving,
+        operation_manifest,
+    };
+
+    operation_manifest! {
+        ErrorKindOperation {
+            method: ErrorKind::kind;
+            scope: element;
+
+            kernel {
+                parameters: <I: IndexDomain>;
+                input: Indexed<I, FailureValue>;
+                output: Indexed<I, FailureKindValue>;
+                emission: Preserving;
+            }
+            kernel {
+                parameters: <>;
+                input: Bare<FailureValue>;
+                output: Bare<FailureKindValue>;
+                emission: Preserving;
+            }
+        }
+    }
+}
+
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
+#[plan(optimizer_hints(
+    commutes_with_filter,
+    allows_limit_pushdown,
+    empty = if_any
+))]
 pub struct IsErrorKindOperation<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
 }
@@ -211,6 +276,11 @@ impl<O: Operand> IsErrorKind for O {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
+#[plan(optimizer_hints(
+    commutes_with_filter,
+    allows_limit_pushdown,
+    empty = if_any
+))]
 pub struct InErrorGroupOperation<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
 }
@@ -298,6 +368,11 @@ impl<O: Operand> InErrorGroup for O {
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
+#[plan(optimizer_hints(
+    commutes_with_filter,
+    allows_limit_pushdown,
+    empty = if_any
+))]
 pub struct HasErrorCauseOperation<C: Error + 'static> {
     marker: PhantomData<fn() -> C>,
 }
@@ -386,6 +461,11 @@ impl<O: Operand> HasErrorCause for O {
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "ErrorKindName")]
+#[plan(optimizer_hints(
+    commutes_with_filter,
+    allows_limit_pushdown,
+    empty = if_any
+))]
 pub struct ErrorKindNameOperation;
 
 impl Prepare for ErrorKindNameOperation {
@@ -433,5 +513,32 @@ impl<O: Apply<ErrorKindNameOperation>> ErrorKindName for O {
 
     fn name(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), ErrorKindNameOperation))
+    }
+}
+
+pub(super) mod name {
+    use super::{
+        Bare, ErrorKindName, ErrorKindNameOperation, FailureKindValue, Indexed, Preserving, Scalar,
+        operation_manifest,
+    };
+
+    operation_manifest! {
+        ErrorKindNameOperation {
+            method: ErrorKindName::name;
+            scope: element;
+
+            kernel {
+                parameters: <I: IndexDomain>;
+                input: Indexed<I, FailureKindValue>;
+                output: Indexed<I, Scalar>;
+                emission: Preserving;
+            }
+            kernel {
+                parameters: <>;
+                input: Bare<FailureKindValue>;
+                output: Bare<Scalar>;
+                emission: Preserving;
+            }
+        }
     }
 }

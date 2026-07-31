@@ -15,6 +15,7 @@ from __future__ import annotations
 from enum import Enum, auto
 from typing import (
     TYPE_CHECKING,
+    Any,
     Callable,
     Dict,
     List,
@@ -36,99 +37,9 @@ from graphrecords.overview import (
     Overview,
 )
 from graphrecords.plugins import Plugin, _PluginBridge
-from graphrecords.querying import (
-    EdgeAttributesTreeGroupOperand,
-    EdgeAttributesTreeGroupQueryResult,
-    EdgeAttributesTreeOperand,
-    EdgeAttributesTreeQueryResult,
-    EdgeIndexGroupOperand,
-    EdgeIndexGroupQueryResult,
-    EdgeIndexOperand,
-    EdgeIndexQuery,
-    EdgeIndexQueryResult,
-    EdgeIndicesGroupOperand,
-    EdgeIndicesGroupQueryResult,
-    EdgeIndicesOperand,
-    EdgeIndicesQuery,
-    EdgeIndicesQueryResult,
-    EdgeMultipleAttributesWithIndexGroupOperand,
-    EdgeMultipleAttributesWithIndexGroupQueryResult,
-    EdgeMultipleAttributesWithIndexOperand,
-    EdgeMultipleAttributesWithIndexQueryResult,
-    EdgeMultipleAttributesWithoutIndexOperand,
-    EdgeMultipleAttributesWithoutIndexQueryResult,
-    EdgeMultipleValuesWithIndexGroupOperand,
-    EdgeMultipleValuesWithIndexGroupQueryResult,
-    EdgeMultipleValuesWithIndexOperand,
-    EdgeMultipleValuesWithIndexQueryResult,
-    EdgeMultipleValuesWithoutIndexOperand,
-    EdgeMultipleValuesWithoutIndexQueryResult,
-    EdgeOperand,
-    EdgeQuery,
-    EdgeSingleAttributeWithIndexGroupOperand,
-    EdgeSingleAttributeWithIndexGroupQueryResult,
-    EdgeSingleAttributeWithIndexOperand,
-    EdgeSingleAttributeWithIndexQueryResult,
-    EdgeSingleAttributeWithoutIndexGroupOperand,
-    EdgeSingleAttributeWithoutIndexGroupQueryResult,
-    EdgeSingleAttributeWithoutIndexOperand,
-    EdgeSingleAttributeWithoutIndexQueryResult,
-    EdgeSingleValueWithIndexGroupOperand,
-    EdgeSingleValueWithIndexGroupQueryResult,
-    EdgeSingleValueWithIndexOperand,
-    EdgeSingleValueWithIndexQueryResult,
-    EdgeSingleValueWithoutIndexGroupOperand,
-    EdgeSingleValueWithoutIndexGroupQueryResult,
-    EdgeSingleValueWithoutIndexOperand,
-    EdgeSingleValueWithoutIndexQueryResult,
-    NodeAttributesTreeGroupOperand,
-    NodeAttributesTreeGroupQueryResult,
-    NodeAttributesTreeOperand,
-    NodeAttributesTreeQueryResult,
-    NodeIndexGroupOperand,
-    NodeIndexGroupQueryResult,
-    NodeIndexOperand,
-    NodeIndexQuery,
-    NodeIndexQueryResult,
-    NodeIndicesGroupOperand,
-    NodeIndicesGroupQueryResult,
-    NodeIndicesOperand,
-    NodeIndicesQuery,
-    NodeIndicesQueryResult,
-    NodeMultipleAttributesWithIndexGroupOperand,
-    NodeMultipleAttributesWithIndexGroupQueryResult,
-    NodeMultipleAttributesWithIndexOperand,
-    NodeMultipleAttributesWithIndexQueryResult,
-    NodeMultipleAttributesWithoutIndexOperand,
-    NodeMultipleAttributesWithoutIndexQueryResult,
-    NodeMultipleValuesWithIndexGroupOperand,
-    NodeMultipleValuesWithIndexGroupQueryResult,
-    NodeMultipleValuesWithIndexOperand,
-    NodeMultipleValuesWithIndexQueryResult,
-    NodeMultipleValuesWithoutIndexOperand,
-    NodeMultipleValuesWithoutIndexQueryResult,
-    NodeOperand,
-    NodeQuery,
-    NodeSingleAttributeWithIndexGroupOperand,
-    NodeSingleAttributeWithIndexGroupQueryResult,
-    NodeSingleAttributeWithIndexOperand,
-    NodeSingleAttributeWithIndexQueryResult,
-    NodeSingleAttributeWithoutIndexGroupOperand,
-    NodeSingleAttributeWithoutIndexGroupQueryResult,
-    NodeSingleAttributeWithoutIndexOperand,
-    NodeSingleAttributeWithoutIndexQueryResult,
-    NodeSingleValueWithIndexGroupOperand,
-    NodeSingleValueWithIndexGroupQueryResult,
-    NodeSingleValueWithIndexOperand,
-    NodeSingleValueWithIndexQueryResult,
-    NodeSingleValueWithoutIndexGroupOperand,
-    NodeSingleValueWithoutIndexGroupQueryResult,
-    NodeSingleValueWithoutIndexOperand,
-    NodeSingleValueWithoutIndexQueryResult,
-    PyQueryReturnOperand,
-    QueryResult,
-    QueryReturnOperand,
-)
+from graphrecords.querying import QueryError
+from graphrecords.querying import query_edges as _query_edges
+from graphrecords.querying import query_nodes as _query_nodes
 from graphrecords.schema import Schema
 from graphrecords.types import (
     Attributes,
@@ -165,8 +76,16 @@ from graphrecords.types import (
 )
 
 if TYPE_CHECKING:
-    from graphrecords._graphrecords.querying import PyEdgeOperand, PyNodeOperand
     from graphrecords.connectors import ConnectedGraphRecord, Connector
+    from graphrecords.querying import (
+        EdgeQuery,
+        EdgesOperand,
+        EdgesQuery,
+        NodeQuery,
+        NodesOperand,
+        NodesQuery,
+        Operand,
+    )
 
     ConnectorType = TypeVar("ConnectorType", bound=Connector)
 
@@ -202,74 +121,6 @@ def process_edges_dataframe(
     """
     edges_polars = pl.from_pandas(edges[0])
     return edges_polars, edges[1], edges[2]
-
-
-def _convert_queryreturnoperand_to_pyqueryreturnoperand(
-    operand: QueryReturnOperand,
-) -> PyQueryReturnOperand:
-    if isinstance(
-        operand,
-        (
-            NodeAttributesTreeOperand,
-            NodeAttributesTreeGroupOperand,
-            EdgeAttributesTreeOperand,
-            EdgeAttributesTreeGroupOperand,
-        ),
-    ):
-        return operand._attributes_tree_operand
-    if isinstance(
-        operand,
-        (
-            NodeMultipleAttributesWithIndexOperand,
-            NodeMultipleAttributesWithIndexGroupOperand,
-            NodeMultipleAttributesWithoutIndexOperand,
-            EdgeMultipleAttributesWithIndexOperand,
-            EdgeMultipleAttributesWithIndexGroupOperand,
-            EdgeMultipleAttributesWithoutIndexOperand,
-        ),
-    ):
-        return operand._multiple_attributes_operand
-    if isinstance(
-        operand,
-        (
-            NodeSingleAttributeWithIndexOperand,
-            NodeSingleAttributeWithIndexGroupOperand,
-            NodeSingleAttributeWithoutIndexOperand,
-            NodeSingleAttributeWithoutIndexGroupOperand,
-            EdgeSingleAttributeWithIndexOperand,
-            EdgeSingleAttributeWithIndexGroupOperand,
-            EdgeSingleAttributeWithoutIndexOperand,
-            EdgeSingleAttributeWithoutIndexGroupOperand,
-        ),
-    ):
-        return operand._single_attribute_operand
-    if isinstance(operand, (EdgeIndicesOperand, EdgeIndicesGroupOperand)):
-        return operand._edge_indices_operand
-    if isinstance(operand, (EdgeIndexOperand, EdgeIndexGroupOperand)):
-        return operand._edge_index_operand
-    if isinstance(operand, (NodeIndicesOperand, NodeIndicesGroupOperand)):
-        return operand._node_indices_operand
-    if isinstance(operand, (NodeIndexOperand, NodeIndexGroupOperand)):
-        return operand._node_index_operand
-    if isinstance(
-        operand,
-        (
-            NodeMultipleValuesWithIndexOperand,
-            NodeMultipleValuesWithIndexGroupOperand,
-            NodeMultipleValuesWithoutIndexOperand,
-            EdgeMultipleValuesWithIndexOperand,
-            EdgeMultipleValuesWithIndexGroupOperand,
-            EdgeMultipleValuesWithoutIndexOperand,
-        ),
-    ):
-        return operand._multiple_values_operand
-    if isinstance(operand, Sequence):
-        return [
-            _convert_queryreturnoperand_to_pyqueryreturnoperand(operand)
-            for operand in operand
-        ]
-
-    return operand._single_value_operand
 
 
 class EdgesDirection(Enum):
@@ -716,18 +567,16 @@ class GraphRecord:
         return {"nodes": nodes_in_group[group], "edges": edges_in_group[group]}
 
     @overload
-    def outgoing_edges(
-        self, node: Union[NodeIndex, NodeIndexQuery]
-    ) -> List[EdgeIndex]: ...
+    def outgoing_edges(self, node: Union[NodeIndex, NodeQuery]) -> List[EdgeIndex]: ...
 
     @overload
     def outgoing_edges(
-        self, node: Union[NodeIndexInputList, NodeIndicesQuery]
+        self, node: Union[NodeIndexInputList, NodesQuery]
     ) -> Dict[NodeIndex, List[EdgeIndex]]: ...
 
     def outgoing_edges(
         self,
-        node: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        node: Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery],
     ) -> Union[List[EdgeIndex], Dict[NodeIndex, List[EdgeIndex]]]:
         """Lists the outgoing edges of the specified node(s) in the GraphRecord.
 
@@ -736,15 +585,15 @@ class GraphRecord:
         its list of outgoing edge indices.
 
         Args:
-            node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            node (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]):
                 One or more node indices or a node query.
 
         Returns:
             Union[List[EdgeIndex], Dict[NodeIndex, List[EdgeIndex]]]: Outgoing
                 edge indices for each specified node.
-        """  # noqa: W505
+        """
         if isinstance(node, Callable):
-            query_result = self.query_nodes(node)
+            query_result = self._query_node_indices(node)
 
             if isinstance(query_result, list):
                 return self._graphrecord.outgoing_edges(query_result)
@@ -763,18 +612,16 @@ class GraphRecord:
         return indices[node]
 
     @overload
-    def incoming_edges(
-        self, node: Union[NodeIndex, NodeIndexQuery]
-    ) -> List[EdgeIndex]: ...
+    def incoming_edges(self, node: Union[NodeIndex, NodeQuery]) -> List[EdgeIndex]: ...
 
     @overload
     def incoming_edges(
-        self, node: Union[NodeIndexInputList, NodeIndicesQuery]
+        self, node: Union[NodeIndexInputList, NodesQuery]
     ) -> Dict[NodeIndex, List[EdgeIndex]]: ...
 
     def incoming_edges(
         self,
-        node: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        node: Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery],
     ) -> Union[List[EdgeIndex], Dict[NodeIndex, List[EdgeIndex]]]:
         """Lists the incoming edges of the specified node(s) in the GraphRecord.
 
@@ -783,15 +630,15 @@ class GraphRecord:
         its list of incoming edge indices.
 
         Args:
-            node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            node (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]):
                 One or more node indices or a node query.
 
         Returns:
             Union[List[EdgeIndex], Dict[NodeIndex, List[EdgeIndex]]]: Incoming
                 edge indices for each specified node.
-        """  # noqa: W505
+        """
         if isinstance(node, Callable):
-            query_result = self.query_nodes(node)
+            query_result = self._query_node_indices(node)
 
             if isinstance(query_result, list):
                 return self._graphrecord.incoming_edges(query_result)
@@ -811,17 +658,17 @@ class GraphRecord:
 
     @overload
     def edge_endpoints(
-        self, edge: Union[EdgeIndex, EdgeIndexQuery]
+        self, edge: Union[EdgeIndex, EdgeQuery]
     ) -> tuple[NodeIndex, NodeIndex]: ...
 
     @overload
     def edge_endpoints(
-        self, edge: Union[EdgeIndexInputList, EdgeIndicesQuery]
+        self, edge: Union[EdgeIndexInputList, EdgesQuery]
     ) -> Dict[EdgeIndex, tuple[NodeIndex, NodeIndex]]: ...
 
     def edge_endpoints(
         self,
-        edge: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
+        edge: Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery],
     ) -> Union[
         tuple[NodeIndex, NodeIndex], Dict[EdgeIndex, tuple[NodeIndex, NodeIndex]]
     ]:
@@ -832,7 +679,7 @@ class GraphRecord:
         a dictionary mapping each edge index to its tuple of node indices.
 
         Args:
-            edge (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
+            edge (Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery]):
                 One or more edge indices or an edge query.
 
         Returns:
@@ -843,9 +690,9 @@ class GraphRecord:
 
         Raises:
             IndexError: If the query returned no results.
-        """  # noqa: W505
+        """
         if isinstance(edge, Callable):
-            query_result = self.query_edges(edge)
+            query_result = self._query_edge_indices(edge)
 
             if isinstance(query_result, list):
                 return self._graphrecord.edge_endpoints(query_result)
@@ -866,12 +713,8 @@ class GraphRecord:
 
     def edges_connecting(
         self,
-        source_node: Union[
-            NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery
-        ],
-        target_node: Union[
-            NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery
-        ],
+        source_node: Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery],
+        target_node: Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery],
         directed: EdgesDirection = EdgesDirection.OUTGOING,
     ) -> List[EdgeIndex]:
         """Retrieves the edges connecting the specified source and target nodes.
@@ -882,10 +725,10 @@ class GraphRecord:
         target nodes.
 
         Args:
-            source_node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            source_node (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]):
                 The index or indices of the source node(s), or a node query to
                 select source nodes.
-            target_node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            target_node (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]):
                 The index or indices of the target node(s), or a node query to
                 select target nodes.
             directed (EdgesDirection, optional): The direction to traverse edges.
@@ -894,9 +737,9 @@ class GraphRecord:
         Returns:
             List[EdgeIndex]: A list of edge indices connecting the specified source and
                 target nodes.
-        """  # noqa: W505
+        """
         if isinstance(source_node, Callable):
-            query_result = self.query_nodes(source_node)
+            query_result = self._query_node_indices(source_node)
 
             if query_result is None:
                 return []
@@ -904,7 +747,7 @@ class GraphRecord:
             source_node = query_result
 
         if isinstance(target_node, Callable):
-            query_result = self.query_nodes(target_node)
+            query_result = self._query_node_indices(target_node)
 
             if query_result is None:
                 return []
@@ -933,7 +776,7 @@ class GraphRecord:
     @overload
     def remove_nodes(
         self,
-        nodes: Union[NodeIndex, NodeIndexQuery],
+        nodes: Union[NodeIndex, NodeQuery],
         *,
         bypass_plugins: bool = False,
     ) -> Attributes: ...
@@ -941,14 +784,14 @@ class GraphRecord:
     @overload
     def remove_nodes(
         self,
-        nodes: Union[NodeIndexInputList, NodeIndicesQuery],
+        nodes: Union[NodeIndexInputList, NodesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> Dict[NodeIndex, Attributes]: ...
 
     def remove_nodes(
         self,
-        nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        nodes: Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> Union[Attributes, Dict[NodeIndex, Attributes]]:
@@ -959,7 +802,7 @@ class GraphRecord:
         index to its attributes.
 
         Args:
-            nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            nodes (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]):
                 One or more node indices or a node query.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
@@ -967,9 +810,9 @@ class GraphRecord:
         Returns:
             Union[Attributes, Dict[NodeIndex, Attributes]]: Attributes of the
                 removed node(s).
-        """  # noqa: W505
+        """
         if isinstance(nodes, Callable):
-            query_result = self.query_nodes(nodes)
+            query_result = self._query_node_indices(nodes)
 
             if isinstance(query_result, list):
                 return self._graphrecord.remove_nodes(query_result, bypass_plugins)
@@ -1103,7 +946,7 @@ class GraphRecord:
     @overload
     def remove_edges(
         self,
-        edges: Union[EdgeIndex, EdgeIndexQuery],
+        edges: Union[EdgeIndex, EdgeQuery],
         *,
         bypass_plugins: bool = False,
     ) -> Attributes: ...
@@ -1111,14 +954,14 @@ class GraphRecord:
     @overload
     def remove_edges(
         self,
-        edges: Union[EdgeIndexInputList, EdgeIndicesQuery],
+        edges: Union[EdgeIndexInputList, EdgesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> Dict[EdgeIndex, Attributes]: ...
 
     def remove_edges(
         self,
-        edges: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
+        edges: Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> Union[Attributes, Dict[EdgeIndex, Attributes]]:
@@ -1129,7 +972,7 @@ class GraphRecord:
         index to its attributes.
 
         Args:
-            edges (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
+            edges (Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery]):
                 One or more edge indices or an edge query.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
@@ -1137,9 +980,9 @@ class GraphRecord:
         Returns:
             Union[Attributes, Dict[EdgeIndex, Attributes]]: Attributes of the
                 removed edge(s).
-        """  # noqa: W505
+        """
         if isinstance(edges, Callable):
-            query_result = self.query_edges(edges)
+            query_result = self._query_edge_indices(edges)
 
             if isinstance(query_result, list):
                 return self._graphrecord.remove_edges(query_result, bypass_plugins)
@@ -1284,10 +1127,10 @@ class GraphRecord:
         self,
         group: Group,
         nodes: Optional[
-            Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]
+            Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]
         ] = None,
         edges: Optional[
-            Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]
+            Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery]
         ] = None,
         *,
         bypass_plugins: bool = False,
@@ -1299,20 +1142,20 @@ class GraphRecord:
 
         Args:
             group (Group): The name of the group to add.
-            nodes (Optional[Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]]):
+            nodes (Optional[Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]]):
                 One or more node indices or a node query to add
                 to the group, optional.
-            edges (Optional[Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]]):
+            edges (Optional[Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery]]):
                 One or more edge indices or an edge query to add
                 to the group, optional.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
         """  # noqa: W505
         if isinstance(nodes, Callable):
-            nodes = self.query_nodes(nodes)
+            nodes = self._query_node_indices(nodes)
 
         if isinstance(edges, Callable):
-            edges = self.query_edges(edges)
+            edges = self._query_edge_indices(edges)
 
         if nodes is not None and not isinstance(nodes, list):
             nodes = [nodes]
@@ -1343,7 +1186,7 @@ class GraphRecord:
     def add_nodes_to_group(
         self,
         group: Union[Group, GroupInputList],
-        nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        nodes: Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> None:
@@ -1352,13 +1195,13 @@ class GraphRecord:
         Args:
             group (Union[Group, GroupInputList]): The name of the group or list of
                 groups to add nodes to.
-            nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            nodes (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]):
                 One or more node indices or a node query to add to the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
-        """  # noqa: W505
+        """
         if isinstance(nodes, Callable):
-            query_result = self.query_nodes(nodes)
+            query_result = self._query_node_indices(nodes)
             if query_result is None:
                 return
             nodes = list(
@@ -1375,7 +1218,7 @@ class GraphRecord:
     def add_edges_to_group(
         self,
         group: Union[Group, GroupInputList],
-        edges: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
+        edges: Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> None:
@@ -1384,13 +1227,13 @@ class GraphRecord:
         Args:
             group (Union[Group, GroupInputList]): The name of the group or list of
                 groups to add edges to.
-            edges (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
+            edges (Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery]):
                 One or more edge indices or an edge query to add to the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
-        """  # noqa: W505
+        """
         if isinstance(edges, Callable):
-            query_result = self.query_edges(edges)
+            query_result = self._query_edge_indices(edges)
             if query_result is None:
                 return
             edges = list(
@@ -1407,22 +1250,22 @@ class GraphRecord:
     def remove_nodes_from_group(
         self,
         group: Union[Group, GroupInputList],
-        nodes: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        nodes: Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> None:
-        """Removes one or more nodes from a specified group or groups in the GraphRecord.
+        """Removes nodes from a specified group or groups in the GraphRecord.
 
         Args:
             group (Union[Group, GroupInputList]): The name of the group or list of
                 groups from which to remove nodes.
-            nodes (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            nodes (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]):
                 One or more node indices or a node query to remove from the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
-        """  # noqa: W505
+        """
         if isinstance(nodes, Callable):
-            query_result = self.query_nodes(nodes)
+            query_result = self._query_node_indices(nodes)
             if query_result is None:
                 return
             nodes = list(
@@ -1439,22 +1282,22 @@ class GraphRecord:
     def remove_edges_from_group(
         self,
         group: Union[Group, GroupInputList],
-        edges: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
+        edges: Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery],
         *,
         bypass_plugins: bool = False,
     ) -> None:
-        """Removes one or more edges from a specified group or groups in the GraphRecord.
+        """Removes edges from a specified group or groups in the GraphRecord.
 
         Args:
             group (Union[Group, GroupInputList]): The name of the group or list of
                 groups from which to remove edges.
-            edges (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
+            edges (Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery]):
                 One or more edge indices or an edge query to remove from the group.
             bypass_plugins (bool): If True, plugin hooks are not called.
                 Defaults to False.
-        """  # noqa: W505
+        """
         if isinstance(edges, Callable):
-            query_result = self.query_edges(edges)
+            query_result = self._query_edge_indices(edges)
             if query_result is None:
                 return
             edges = list(
@@ -1547,33 +1390,33 @@ class GraphRecord:
         return self._graphrecord.ungrouped_edges()
 
     @overload
-    def groups_of_node(self, node: Union[NodeIndex, NodeIndexQuery]) -> List[Group]: ...
+    def groups_of_node(self, node: Union[NodeIndex, NodeQuery]) -> List[Group]: ...
 
     @overload
     def groups_of_node(
-        self, node: Union[NodeIndexInputList, NodeIndicesQuery]
+        self, node: Union[NodeIndexInputList, NodesQuery]
     ) -> Dict[NodeIndex, List[Group]]: ...
 
     def groups_of_node(
         self,
-        node: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        node: Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery],
     ) -> Union[List[Group], Dict[NodeIndex, List[Group]]]:
-        """Retrieves the groups associated with the specified node(s) in the GraphRecord.
+        """Retrieves the groups associated with specified nodes in the GraphRecord.
 
         If a single node index is provided, returns a list of groups for that node.
         If multiple nodes are specified, returns a dictionary mapping each node index to
         its list of groups.
 
         Args:
-            node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            node (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]):
                 One or more node indices or a node query.
 
         Returns:
             Union[List[Group], Dict[NodeIndex, List[Group]]]: Groups associated with
                 each node.
-        """  # noqa: W505
+        """
         if isinstance(node, Callable):
-            query_result = self.query_nodes(node)
+            query_result = self._query_node_indices(node)
 
             if isinstance(query_result, list):
                 return self._graphrecord.groups_of_node(query_result)
@@ -1592,33 +1435,33 @@ class GraphRecord:
         return groups[node]
 
     @overload
-    def groups_of_edge(self, edge: Union[EdgeIndex, EdgeIndexQuery]) -> List[Group]: ...
+    def groups_of_edge(self, edge: Union[EdgeIndex, EdgeQuery]) -> List[Group]: ...
 
     @overload
     def groups_of_edge(
-        self, edge: Union[EdgeIndexInputList, EdgeIndicesQuery]
+        self, edge: Union[EdgeIndexInputList, EdgesQuery]
     ) -> Dict[EdgeIndex, List[Group]]: ...
 
     def groups_of_edge(
         self,
-        edge: Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery],
+        edge: Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery],
     ) -> Union[List[Group], Dict[EdgeIndex, List[Group]]]:
-        """Retrieves the groups associated with the specified edge(s) in the GraphRecord.
+        """Retrieves the groups associated with specified edges in the GraphRecord.
 
         If a single edge index is provided, returns a list of groups for that edge.
         If multiple edges are specified, returns a dictionary mapping each edge index to
         its list of groups.
 
         Args:
-            edge (Union[EdgeIndex, EdgeIndexInputList, EdgeIndexQuery, EdgeIndicesQuery]):
+            edge (Union[EdgeIndex, EdgeIndexInputList, EdgeQuery, EdgesQuery]):
                 One or more edge indices or an edge query.
 
         Returns:
             Union[List[Group], Dict[EdgeIndex, List[Group]]]: Groups associated with
                 each edge.
-        """  # noqa: W505
+        """
         if isinstance(edge, Callable):
-            query_result = self.query_edges(edge)
+            query_result = self._query_edge_indices(edge)
 
             if isinstance(query_result, list):
                 return self._graphrecord.groups_of_edge(query_result)
@@ -1696,20 +1539,20 @@ class GraphRecord:
     @overload
     def neighbors(
         self,
-        node: Union[NodeIndex, NodeIndexQuery],
+        node: Union[NodeIndex, NodeQuery],
         directed: EdgesDirection = EdgesDirection.OUTGOING,
     ) -> List[NodeIndex]: ...
 
     @overload
     def neighbors(
         self,
-        node: Union[NodeIndexInputList, NodeIndicesQuery],
+        node: Union[NodeIndexInputList, NodesQuery],
         directed: EdgesDirection = EdgesDirection.OUTGOING,
     ) -> Dict[NodeIndex, List[NodeIndex]]: ...
 
     def neighbors(
         self,
-        node: Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery],
+        node: Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery],
         directed: EdgesDirection = EdgesDirection.OUTGOING,
     ) -> Union[List[NodeIndex], Dict[NodeIndex, List[NodeIndex]]]:
         """Retrieves the neighbors of the specified node(s) in the GraphRecord.
@@ -1719,16 +1562,16 @@ class GraphRecord:
         each node index to its list of neighboring nodes.
 
         Args:
-            node (Union[NodeIndex, NodeIndexInputList, NodeIndexQuery, NodeIndicesQuery]):
+            node (Union[NodeIndex, NodeIndexInputList, NodeQuery, NodesQuery]):
                 One or more node indices or a query that returns node indices.
             directed (EdgesDirection, optional): The direction to traverse edges.
                 Defaults to EdgesDirection.OUTGOING.
 
         Returns:
             Union[List[NodeIndex], Dict[NodeIndex, List[NodeIndex]]]: Neighboring nodes.
-        """  # noqa: W505
+        """
         if isinstance(node, Callable):
-            query_result = self.query_nodes(node)
+            query_result = self._query_node_indices(node)
 
             if query_result is None:
                 return []
@@ -1760,383 +1603,56 @@ class GraphRecord:
         """
         self._graphrecord.clear(bypass_plugins)
 
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeAttributesTreeOperand]
-    ) -> NodeAttributesTreeQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeAttributesTreeGroupOperand]
-    ) -> NodeAttributesTreeGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeAttributesTreeOperand]
-    ) -> EdgeAttributesTreeQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeAttributesTreeGroupOperand]
-    ) -> EdgeAttributesTreeGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeMultipleAttributesWithIndexOperand]
-    ) -> NodeMultipleAttributesWithIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self,
-        query: Callable[[NodeOperand], NodeMultipleAttributesWithIndexGroupOperand],
-    ) -> NodeMultipleAttributesWithIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeMultipleAttributesWithoutIndexOperand]
-    ) -> NodeMultipleAttributesWithoutIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeMultipleAttributesWithIndexOperand]
-    ) -> EdgeMultipleAttributesWithIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self,
-        query: Callable[[NodeOperand], EdgeMultipleAttributesWithIndexGroupOperand],
-    ) -> EdgeMultipleAttributesWithIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeMultipleAttributesWithoutIndexOperand]
-    ) -> EdgeMultipleAttributesWithoutIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeSingleAttributeWithIndexOperand]
-    ) -> NodeSingleAttributeWithIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeSingleAttributeWithIndexGroupOperand]
-    ) -> NodeSingleAttributeWithIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeSingleAttributeWithoutIndexOperand]
-    ) -> NodeSingleAttributeWithoutIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self,
-        query: Callable[[NodeOperand], NodeSingleAttributeWithoutIndexGroupOperand],
-    ) -> NodeSingleAttributeWithoutIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeSingleAttributeWithIndexOperand]
-    ) -> EdgeSingleAttributeWithIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeSingleAttributeWithIndexGroupOperand]
-    ) -> EdgeSingleAttributeWithIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeSingleAttributeWithoutIndexOperand]
-    ) -> EdgeSingleAttributeWithoutIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self,
-        query: Callable[[NodeOperand], EdgeSingleAttributeWithoutIndexGroupOperand],
-    ) -> EdgeSingleAttributeWithoutIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeIndicesOperand]
-    ) -> EdgeIndicesQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeIndicesGroupOperand]
-    ) -> EdgeIndicesGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeIndexOperand]
-    ) -> EdgeIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeIndexGroupOperand]
-    ) -> EdgeIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeIndicesOperand]
-    ) -> NodeIndicesQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeIndicesGroupOperand]
-    ) -> NodeIndicesGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeIndexOperand]
-    ) -> NodeIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeIndexGroupOperand]
-    ) -> NodeIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeMultipleValuesWithIndexOperand]
-    ) -> NodeMultipleValuesWithIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeMultipleValuesWithIndexGroupOperand]
-    ) -> NodeMultipleValuesWithIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeMultipleValuesWithoutIndexOperand]
-    ) -> NodeMultipleValuesWithoutIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeMultipleValuesWithIndexOperand]
-    ) -> EdgeMultipleValuesWithIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeMultipleValuesWithIndexGroupOperand]
-    ) -> EdgeMultipleValuesWithIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeMultipleValuesWithoutIndexOperand]
-    ) -> EdgeMultipleValuesWithoutIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeSingleValueWithIndexOperand]
-    ) -> NodeSingleValueWithIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeSingleValueWithIndexGroupOperand]
-    ) -> NodeSingleValueWithIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeSingleValueWithoutIndexOperand]
-    ) -> NodeSingleValueWithoutIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], NodeSingleValueWithoutIndexGroupOperand]
-    ) -> NodeSingleValueWithoutIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeSingleValueWithIndexOperand]
-    ) -> EdgeSingleValueWithIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeSingleValueWithIndexGroupOperand]
-    ) -> EdgeSingleValueWithIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeSingleValueWithoutIndexOperand]
-    ) -> EdgeSingleValueWithoutIndexQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], EdgeSingleValueWithoutIndexGroupOperand]
-    ) -> EdgeSingleValueWithoutIndexGroupQueryResult: ...
-    @overload
-    def query_nodes(
-        self, query: Callable[[NodeOperand], Sequence[QueryReturnOperand]]
-    ) -> List[QueryResult]: ...
-
-    def query_nodes(self, query: NodeQuery) -> QueryResult:
-        """Retrieves information on the nodes from the GraphRecord given the query.
-
-        Args:
-            query (NodeQuery): A query to define the information to be retrieved.
-                The query should be a callable that takes a NodeOperand and returns
-                a QueryReturnOperand.
-
-        Returns:
-            QueryResult: The result of the query, which can be a list of node indices
-                or a dictionary of node attributes, among others.
-        """
-
-        def _query(node: PyNodeOperand) -> PyQueryReturnOperand:
-            result = query(NodeOperand._from_py_node_operand(node))
-
-            return _convert_queryreturnoperand_to_pyqueryreturnoperand(result)
-
-        return self._graphrecord.query_nodes(_query)
+    query_nodes = _query_nodes
+    query_edges = _query_edges
 
     @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeAttributesTreeOperand]
-    ) -> NodeAttributesTreeQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeAttributesTreeGroupOperand]
-    ) -> NodeAttributesTreeGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeAttributesTreeOperand]
-    ) -> EdgeAttributesTreeQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeAttributesTreeGroupOperand]
-    ) -> EdgeAttributesTreeGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeMultipleAttributesWithIndexOperand]
-    ) -> NodeMultipleAttributesWithIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self,
-        query: Callable[[EdgeOperand], NodeMultipleAttributesWithIndexGroupOperand],
-    ) -> NodeMultipleAttributesWithIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeMultipleAttributesWithoutIndexOperand]
-    ) -> NodeMultipleAttributesWithoutIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeMultipleAttributesWithIndexOperand]
-    ) -> EdgeMultipleAttributesWithIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self,
-        query: Callable[[EdgeOperand], EdgeMultipleAttributesWithIndexGroupOperand],
-    ) -> EdgeMultipleAttributesWithIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeMultipleAttributesWithoutIndexOperand]
-    ) -> EdgeMultipleAttributesWithoutIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeSingleAttributeWithIndexOperand]
-    ) -> NodeSingleAttributeWithIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeSingleAttributeWithIndexGroupOperand]
-    ) -> NodeSingleAttributeWithIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeSingleAttributeWithoutIndexOperand]
-    ) -> NodeSingleAttributeWithoutIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self,
-        query: Callable[[EdgeOperand], NodeSingleAttributeWithoutIndexGroupOperand],
-    ) -> NodeSingleAttributeWithoutIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeSingleAttributeWithIndexOperand]
-    ) -> EdgeSingleAttributeWithIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeSingleAttributeWithIndexGroupOperand]
-    ) -> EdgeSingleAttributeWithIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeSingleAttributeWithoutIndexOperand]
-    ) -> EdgeSingleAttributeWithoutIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self,
-        query: Callable[[EdgeOperand], EdgeSingleAttributeWithoutIndexGroupOperand],
-    ) -> EdgeSingleAttributeWithoutIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeIndicesOperand]
-    ) -> EdgeIndicesQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeIndicesGroupOperand]
-    ) -> EdgeIndicesGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeIndexOperand]
-    ) -> EdgeIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeIndexGroupOperand]
-    ) -> EdgeIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeIndicesOperand]
-    ) -> NodeIndicesQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeIndicesGroupOperand]
-    ) -> NodeIndicesGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeIndexOperand]
-    ) -> NodeIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeIndexGroupOperand]
-    ) -> NodeIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeMultipleValuesWithIndexOperand]
-    ) -> NodeMultipleValuesWithIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeMultipleValuesWithIndexGroupOperand]
-    ) -> NodeMultipleValuesWithIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeMultipleValuesWithoutIndexOperand]
-    ) -> NodeMultipleValuesWithoutIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeMultipleValuesWithIndexOperand]
-    ) -> EdgeMultipleValuesWithIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeMultipleValuesWithIndexGroupOperand]
-    ) -> EdgeMultipleValuesWithIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeMultipleValuesWithoutIndexOperand]
-    ) -> EdgeMultipleValuesWithoutIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeSingleValueWithIndexOperand]
-    ) -> NodeSingleValueWithIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeSingleValueWithIndexGroupOperand]
-    ) -> NodeSingleValueWithIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeSingleValueWithoutIndexOperand]
-    ) -> NodeSingleValueWithoutIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], NodeSingleValueWithoutIndexGroupOperand]
-    ) -> NodeSingleValueWithoutIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeSingleValueWithIndexOperand]
-    ) -> EdgeSingleValueWithIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeSingleValueWithIndexGroupOperand]
-    ) -> EdgeSingleValueWithIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeSingleValueWithoutIndexOperand]
-    ) -> EdgeSingleValueWithoutIndexQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], EdgeSingleValueWithoutIndexGroupOperand]
-    ) -> EdgeSingleValueWithoutIndexGroupQueryResult: ...
-    @overload
-    def query_edges(
-        self, query: Callable[[EdgeOperand], Sequence[QueryReturnOperand]]
-    ) -> List[QueryResult]: ...
+    def _query_node_indices(self, query: NodeQuery) -> Optional[NodeIndex]: ...
 
-    def query_edges(self, query: EdgeQuery) -> QueryResult:
-        """Retrieves information on the edges from the GraphRecord given the query.
+    @overload
+    def _query_node_indices(self, query: NodesQuery) -> List[NodeIndex]: ...
 
-        Args:
-            query (EdgeQuery): A query to define the information to be retrieved.
-                The query should be a callable that takes an EdgeOperand and returns
-                a QueryReturnOperand.
+    def _query_node_indices(
+        self, query: Callable[[NodesOperand], Operand[Any, Any, Any]]
+    ) -> object:
+        result = self.query_nodes(query)
 
-        Returns:
-            QueryResult: The result of the query, which can be a list of edge indices or
-                a dictionary of edge attributes, among others.
-        """
+        if isinstance(result, list):
+            indices = []
+            for index in result:
+                if isinstance(index, QueryError):
+                    raise index
+                indices.append(index)
+            return indices
 
-        def _query(edge: PyEdgeOperand) -> PyQueryReturnOperand:
-            result = query(EdgeOperand._from_py_edge_operand(edge))
+        if isinstance(result, QueryError):
+            raise result
 
-            return _convert_queryreturnoperand_to_pyqueryreturnoperand(result)
+        return result
 
-        return self._graphrecord.query_edges(_query)
+    @overload
+    def _query_edge_indices(self, query: EdgeQuery) -> Optional[EdgeIndex]: ...
+
+    @overload
+    def _query_edge_indices(self, query: EdgesQuery) -> List[EdgeIndex]: ...
+
+    def _query_edge_indices(
+        self, query: Callable[[EdgesOperand], Operand[Any, Any, Any]]
+    ) -> object:
+        result = self.query_edges(query)
+
+        if isinstance(result, list):
+            indices = []
+            for index in result:
+                if isinstance(index, QueryError):
+                    raise index
+                indices.append(index)
+            return indices
+
+        if isinstance(result, QueryError):
+            raise result
+
+        return result
 
     def clone(self) -> GraphRecord:
         """Clones the GraphRecord instance.

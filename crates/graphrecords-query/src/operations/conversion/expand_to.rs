@@ -1,192 +1,17 @@
 use crate::{
-    Arity, AttributeName, Bare, BareValueType, ExpandedIndex, ExpandedIndexReference, Explain,
-    FailureKind, IndexDomain, IndexValue, Indexed, Labeled, Mask, Operand, Position, Positional,
-    QueryResult, Scalar, ValueType,
-    element::{ElementEmission, Pipeline, Retention},
+    ExpandedIndex, ExpandedIndexReference, Explain, IndexDomain, Indexed, Labeled, Operand,
+    QueryResult, ValueDomain,
+    element::{Pipeline, Retention},
     execution::EvaluationCache,
-    operands::OperandHandle,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, MaybeAbsent, MissingPolicy,
-        Operation, OperationContext, Prepare, WithMissing,
+        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
+        Prepare,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::{describe::ArgumentRetention, operation_manifest},
     traits::ExpandTo,
 };
-use graphrecords_core::{
-    GraphRecord,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue},
-};
-
-pub type ParentResolution<'a, P, S> =
-    <<S as ArgumentSource<Keyed<P>>>::Retention as ElementEmission>::Step<
-        QueryResult<<<S as ExpandToSource<P>>::ParentValue as ValueType>::Value<'a>>,
-    >;
-
-pub trait ExpandToSource<P: IndexDomain>: ArgumentSource<Keyed<P>> + Clone {
-    type ParentValue: ValueType;
-
-    fn resolve_parent<'a>(
-        prepared: &Self::Prepared<'a>,
-        parent: &P::Index<'a>,
-        label: &'static str,
-    ) -> ParentResolution<'a, P, Self>
-    where
-        Self: 'a;
-}
-
-impl<P: IndexDomain> ExpandToSource<P> for GraphRecordValue {
-    type ParentValue = Scalar;
-
-    fn resolve_parent<'a>(
-        prepared: &Self::Prepared<'a>,
-        parent: &P::Index<'a>,
-        label: &'static str,
-    ) -> ParentResolution<'a, P, Self>
-    where
-        Self: 'a,
-    {
-        <Self as ArgumentSource<Keyed<P>>>::resolve(prepared, parent, label)
-    }
-}
-
-impl<P: IndexDomain> ExpandToSource<P> for bool {
-    type ParentValue = Mask;
-
-    fn resolve_parent<'a>(
-        prepared: &Self::Prepared<'a>,
-        parent: &P::Index<'a>,
-        label: &'static str,
-    ) -> ParentResolution<'a, P, Self>
-    where
-        Self: 'a,
-    {
-        <Self as ArgumentSource<Keyed<P>>>::resolve(prepared, parent, label)
-    }
-}
-
-impl<P: IndexDomain> ExpandToSource<P> for GraphRecordAttribute {
-    type ParentValue = AttributeName;
-
-    fn resolve_parent<'a>(
-        prepared: &Self::Prepared<'a>,
-        parent: &P::Index<'a>,
-        label: &'static str,
-    ) -> ParentResolution<'a, P, Self>
-    where
-        Self: 'a,
-    {
-        <Self as ArgumentSource<Keyed<P>>>::resolve(prepared, parent, label)
-    }
-}
-
-impl<P: IndexDomain> ExpandToSource<P> for Position {
-    type ParentValue = IndexValue<Positional>;
-
-    fn resolve_parent<'a>(
-        prepared: &Self::Prepared<'a>,
-        parent: &P::Index<'a>,
-        label: &'static str,
-    ) -> ParentResolution<'a, P, Self>
-    where
-        Self: 'a,
-    {
-        <Self as ArgumentSource<Keyed<P>>>::resolve(prepared, parent, label)
-    }
-}
-
-impl<P: IndexDomain> ExpandToSource<P> for EdgeIndex {
-    type ParentValue = IndexValue<Self>;
-
-    fn resolve_parent<'a>(
-        prepared: &Self::Prepared<'a>,
-        parent: &P::Index<'a>,
-        label: &'static str,
-    ) -> ParentResolution<'a, P, Self>
-    where
-        Self: 'a,
-    {
-        <Self as ArgumentSource<Keyed<P>>>::resolve(prepared, parent, label)
-    }
-}
-
-impl<P: IndexDomain> ExpandToSource<P> for FailureKind {
-    type ParentValue = IndexValue<Self>;
-
-    fn resolve_parent<'a>(
-        prepared: &Self::Prepared<'a>,
-        parent: &P::Index<'a>,
-        label: &'static str,
-    ) -> ParentResolution<'a, P, Self>
-    where
-        Self: 'a,
-    {
-        <Self as ArgumentSource<Keyed<P>>>::resolve(prepared, parent, label)
-    }
-}
-
-impl<P, I, V, A> ExpandToSource<P> for OperandHandle<Indexed<I, V>, A>
-where
-    P: IndexDomain,
-    I: IndexDomain,
-    V: ValueType,
-    A: Arity,
-    for<'a> Self: ArgumentSource<Keyed<P>, Value<'a> = V::Value<'a>>,
-{
-    type ParentValue = V;
-
-    fn resolve_parent<'a>(
-        prepared: &Self::Prepared<'a>,
-        parent: &P::Index<'a>,
-        label: &'static str,
-    ) -> ParentResolution<'a, P, Self>
-    where
-        Self: 'a,
-    {
-        Self::resolve(prepared, parent, label)
-    }
-}
-
-impl<P, V, A> ExpandToSource<P> for OperandHandle<Bare<V>, A>
-where
-    P: IndexDomain,
-    V: BareValueType,
-    A: Arity,
-    for<'a> Self: ArgumentSource<Keyed<P>, Value<'a> = V::Value<'a>>,
-{
-    type ParentValue = V;
-
-    fn resolve_parent<'a>(
-        prepared: &Self::Prepared<'a>,
-        parent: &P::Index<'a>,
-        label: &'static str,
-    ) -> ParentResolution<'a, P, Self>
-    where
-        Self: 'a,
-    {
-        Self::resolve(prepared, parent, label)
-    }
-}
-
-impl<P, S, M> ExpandToSource<P> for WithMissing<Keyed<P>, S, M>
-where
-    P: IndexDomain,
-    S: MaybeAbsent<Keyed<P>> + ExpandToSource<P> + Clone,
-    M: MissingPolicy<Keyed<P>, S>,
-    for<'a> Self: ArgumentSource<Keyed<P>, Value<'a> = <S::ParentValue as ValueType>::Value<'a>>,
-{
-    type ParentValue = S::ParentValue;
-
-    fn resolve_parent<'a>(
-        prepared: &Self::Prepared<'a>,
-        parent: &P::Index<'a>,
-        label: &'static str,
-    ) -> ParentResolution<'a, P, Self>
-    where
-        Self: 'a,
-    {
-        Self::resolve(prepared, parent, label)
-    }
-}
+use graphrecords_core::GraphRecord;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -212,11 +37,15 @@ impl<S: Prepare> Prepare for ExpandToOperation<S> {
     }
 }
 
-impl<P: IndexDomain, C: IndexDomain, W: ValueType, S: ExpandToSource<P>>
-    ElementKernel<Indexed<ExpandedIndex<P, C>, W>> for ExpandToOperation<S>
+impl<P, C, W, S> ElementKernel<Indexed<ExpandedIndex<P, C>, W>> for ExpandToOperation<S>
+where
+    P: IndexDomain,
+    C: IndexDomain,
+    W: ValueDomain,
+    S: ArgumentSource<Keyed<P>> + Clone,
 {
     type Emission = S::Retention;
-    type OutShape = Indexed<ExpandedIndex<P, C>, S::ParentValue>;
+    type OutShape = Indexed<ExpandedIndex<P, C>, S::ValueDomain>;
 
     fn pipeline<'a>(
         _graphrecord: &'a GraphRecord,
@@ -226,7 +55,7 @@ impl<P: IndexDomain, C: IndexDomain, W: ValueType, S: ExpandToSource<P>>
             move |address: ExpandedIndexReference<'_, _, _>, template_outcome| {
                 match template_outcome {
                     Err(failure) => Self::Emission::keep(Err(failure)),
-                    Ok(_) => S::resolve_parent(&prepared, address.parent_index(), Self::LABEL),
+                    Ok(_) => S::resolve(&prepared, address.parent_index(), Self::LABEL),
                 }
             },
         ))
@@ -248,5 +77,21 @@ where
                 parent: self.clone(),
             },
         ))
+    }
+}
+
+operation_manifest! {
+    ExpandToOperation<S> {
+        method: ExpandTo::expand_to;
+        scope: element;
+
+        kernel {
+            parameters: <P: IndexDomain, C: IndexDomain, W: ValueDomain, X: ValueDomain>;
+            argument: S: ArgumentSource<Keyed<P>, X>;
+            receiver: S;
+            input: Indexed<ExpandedIndex<P, C>, W>;
+            output: Indexed<ExpandedIndex<P, C>, X>;
+            emission: ArgumentRetention;
+        }
     }
 }

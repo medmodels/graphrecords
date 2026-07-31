@@ -1,5 +1,6 @@
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    ValueDomain,
     element::{Dropping, Pipeline, Retention},
     execution::EvaluationCache,
     operations::{
@@ -7,6 +8,7 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Filter,
 };
 use graphrecords_core::GraphRecord;
@@ -38,8 +40,8 @@ impl<M: Prepare> Prepare for FilterOperation<M> {
 impl<I, V, M> ElementKernel<Indexed<I, V>> for FilterOperation<M>
 where
     I: IndexDomain,
-    V: ValueType,
-    for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
+    V: ValueDomain,
+    M: ArgumentSource<Keyed<I>, Mask>,
 {
     type Emission = Dropping;
     type OutShape = Indexed<I, V>;
@@ -76,8 +78,8 @@ where
 
 impl<V, M> ElementKernel<Bare<V>> for FilterOperation<M>
 where
-    V: BareValueType,
-    for<'a> M: ArgumentSource<Unaligned, Value<'a> = bool>,
+    V: BareValueDomain,
+    M: ArgumentSource<Unaligned, Mask>,
 {
     type Emission = Dropping;
     type OutShape = Bare<V>;
@@ -124,5 +126,28 @@ where
             self.clone(),
             FilterOperation { mask },
         ))
+    }
+}
+
+operation_manifest! {
+    FilterOperation<M> {
+        method: Filter<M>::filter;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            argument: M: ArgumentSource<Keyed<I>, Mask>;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: Dropping;
+        }
+
+        kernel {
+            parameters: <V: BareValueDomain>;
+            argument: M: ArgumentSource<Unaligned, Mask>;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: Dropping;
+        }
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
     OrderState, QueryResult,
     capabilities::ValueMode,
     execution::EvaluationCache,
@@ -8,6 +8,7 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::Mode,
 };
 use graphrecords_core::GraphRecord;
@@ -64,7 +65,7 @@ fn modal_values<'a, V: ValueMode>(
         .collect()
 }
 
-impl<I: IndexDomain, V: ValueMode + BareValueType, O: OrderState>
+impl<I: IndexDomain, V: ValueMode + BareValueDomain, O: OrderState>
     LaneKernel<Indexed<I, V>, Multiple<O>> for ModeOperation
 {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
@@ -80,7 +81,7 @@ impl<I: IndexDomain, V: ValueMode + BareValueType, O: OrderState>
     }
 }
 
-impl<V: ValueMode + BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+impl<V: ValueMode + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
     for ModeOperation
 {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
@@ -99,5 +100,31 @@ impl<O: Apply<ModeOperation>> Mode for O {
 
     fn mode(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), ModeOperation))
+    }
+}
+
+operation_manifest! {
+    ModeOperation {
+        method: Mode::mode;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueMode + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Multiple<O>>;
+        }
+
+        kernel {
+            parameters: <
+                V: ValueMode + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Bare<V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Multiple<O>>;
+        }
     }
 }

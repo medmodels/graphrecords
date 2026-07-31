@@ -1,5 +1,5 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple,
+    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple,
     Operand, OrderState, QueryResult, Single,
     capabilities::ValueMultiply,
     execution::EvaluationCache,
@@ -8,6 +8,7 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Product,
 };
 use graphrecords_core::GraphRecord;
@@ -33,7 +34,7 @@ impl Prepare for ProductOperation {
 impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for ProductOperation
 where
     I: IndexDomain,
-    V: ValueMultiply + BareValueType,
+    V: ValueMultiply + BareValueDomain,
     O: OrderState,
 {
     type Output = OperandHandle<Bare<V>, Single>;
@@ -64,7 +65,7 @@ where
 
 impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for ProductOperation
 where
-    V: ValueMultiply + BareValueType,
+    V: ValueMultiply + BareValueDomain,
     O: OrderState,
 {
     type Output = OperandHandle<Bare<V>, Single>;
@@ -96,5 +97,31 @@ impl<O: Apply<ProductOperation>> Product for O {
 
     fn product(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), ProductOperation))
+    }
+}
+
+operation_manifest! {
+    ProductOperation {
+        method: Product::product;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueMultiply + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Single>;
+        }
+
+        kernel {
+            parameters: <
+                V: ValueMultiply + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Bare<V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Single>;
+        }
     }
 }

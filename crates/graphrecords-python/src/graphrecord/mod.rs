@@ -7,7 +7,6 @@ pub mod datatype;
 pub mod errors;
 pub mod overview;
 pub mod plugins;
-pub mod querying;
 pub mod schema;
 pub mod traits;
 pub mod value;
@@ -18,6 +17,7 @@ use crate::{
         overview::{PyGroupOverview, PyOverview},
         plugins::PyPlugin,
     },
+    querying::PyOperand,
 };
 use attribute::PyGraphRecordAttribute;
 use borrowed::BorrowedGraphRecord;
@@ -32,6 +32,7 @@ use graphrecords_core::{
     },
     prelude::NodeIndex,
 };
+use graphrecords_overview::{GroupOverviewable, Overviewable};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use pyo3::{
     exceptions::PyRuntimeError,
@@ -39,7 +40,6 @@ use pyo3::{
     types::{PyBytes, PyDict, PyFunction},
 };
 use pyo3_polars::PyDataFrame;
-use querying::{PyReturnOperand, edges::PyEdgeOperand, nodes::PyNodeOperand};
 use schema::PySchema;
 use std::{
     collections::HashMap,
@@ -1684,56 +1684,16 @@ impl PyGraphRecord {
         }
     }
 
-    /// # Panics
-    ///
-    /// Panics if the python typing was not followed.
-    pub fn query_nodes(
-        &self,
-        py: Python<'_>,
-        query: &Bound<'_, PyFunction>,
-    ) -> PyResult<Py<PyAny>> {
+    pub fn query_nodes(&self, query: &Bound<'_, PyFunction>) -> PyResult<Py<PyAny>> {
         let graphrecord = self.inner()?;
 
-        let result = graphrecord
-            .query_nodes(|nodes| {
-                let result = query
-                    .call1((PyNodeOperand::from(nodes.clone()),))
-                    .expect("Call should succeed");
-
-                result
-                    .extract::<PyReturnOperand>()
-                    .expect("Extraction must succeed")
-            })
-            .evaluate()
-            .map_err(PyGraphRecordError::from)?;
-
-        Ok(result.into_pyobject(py)?.unbind())
+        PyOperand::query_nodes(&graphrecord, query)
     }
 
-    /// # Panics
-    ///
-    /// Panics if the python typing was not followed.
-    pub fn query_edges(
-        &self,
-        py: Python<'_>,
-        query: &Bound<'_, PyFunction>,
-    ) -> PyResult<Py<PyAny>> {
+    pub fn query_edges(&self, query: &Bound<'_, PyFunction>) -> PyResult<Py<PyAny>> {
         let graphrecord = self.inner()?;
 
-        let result = graphrecord
-            .query_edges(|edges| {
-                let result = query
-                    .call1((PyEdgeOperand::from(edges.clone()),))
-                    .expect("Call should succeed");
-
-                result
-                    .extract::<PyReturnOperand>()
-                    .expect("Extraction must succeed")
-            })
-            .evaluate()
-            .map_err(PyGraphRecordError::from)?;
-
-        Ok(result.into_pyobject(py)?.unbind())
+        PyOperand::query_edges(&graphrecord, query)
     }
 
     #[allow(clippy::should_implement_trait)]

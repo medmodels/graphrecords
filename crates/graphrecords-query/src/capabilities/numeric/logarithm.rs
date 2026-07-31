@@ -1,10 +1,10 @@
 use crate::{
-    Failure, IndexValue, QueryResult, Scalar, ValueType,
+    Failure, IndexValue, QueryResult, Scalar, ValueDomain,
     error::numeric::{NonNumericValue, NonPositiveLogarithm},
 };
 use graphrecords_core::graphrecord::GraphRecordValue;
 
-pub trait ValueLogarithm: ValueType {
+pub trait ValueLogarithm: ValueDomain {
     fn logarithm<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 

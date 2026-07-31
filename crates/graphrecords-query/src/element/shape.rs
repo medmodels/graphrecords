@@ -1,10 +1,12 @@
 use crate::{
-    BareValueType, IndexDomain, QueryResult, ReturnValueType, Unit, ValueType, element::Arity,
+    BareValueDomain, IndexDomain, QueryResult, ReturnValueDomain, Unit, ValueDomain, element::Arity,
 };
 use std::marker::PhantomData;
 
 pub trait ElementShape: 'static {
     type Element<'a>: 'a;
+
+    type ValueDomain: ValueDomain;
 }
 
 pub trait ReturnShape: ElementShape {
@@ -13,17 +15,19 @@ pub trait ReturnShape: ElementShape {
     fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_>;
 }
 
-pub struct Indexed<K: IndexDomain, V: ValueType>(PhantomData<(K, V)>);
-pub struct Bare<V: BareValueType>(PhantomData<V>);
+pub struct Indexed<K: IndexDomain, V: ValueDomain>(PhantomData<(K, V)>);
+pub struct Bare<V: BareValueDomain>(PhantomData<V>);
 
-impl<K: IndexDomain, V: ValueType> ElementShape for Indexed<K, V> {
+impl<K: IndexDomain, V: ValueDomain> ElementShape for Indexed<K, V> {
     type Element<'a> = (K::Index<'a>, QueryResult<V::Value<'a>>);
+    type ValueDomain = V;
 }
-impl<V: BareValueType> ElementShape for Bare<V> {
+impl<V: BareValueDomain> ElementShape for Bare<V> {
     type Element<'a> = QueryResult<V::Value<'a>>;
+    type ValueDomain = V;
 }
 
-impl<K: IndexDomain, V: ReturnValueType> ReturnShape for Indexed<K, V> {
+impl<K: IndexDomain, V: ReturnValueDomain> ReturnShape for Indexed<K, V> {
     type ReturnElement<'a> = (K::Index<'a>, QueryResult<V::Value<'a>>);
 
     fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_> {
@@ -41,7 +45,7 @@ impl<K: IndexDomain> ReturnShape for Indexed<K, Unit> {
     }
 }
 
-impl<V: BareValueType + ReturnValueType> ReturnShape for Bare<V> {
+impl<V: BareValueDomain + ReturnValueDomain> ReturnShape for Bare<V> {
     type ReturnElement<'a> = QueryResult<V::Value<'a>>;
 
     fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_> {

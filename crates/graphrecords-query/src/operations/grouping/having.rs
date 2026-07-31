@@ -1,11 +1,12 @@
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, Labeled, Operand, QueryResult,
+    EvaluateOperand, Explain, IndexDomain, Labeled, Mask, Operand, QueryResult,
     element::Retention,
     execution::EvaluationCache,
     index::GroupKey,
     operands::{BucketChange, GroupOperand, Partition},
     operations::{Apply, ArgumentSource, GroupKernel, Keyed, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Having,
 };
 use graphrecords_core::GraphRecord;
@@ -39,7 +40,7 @@ where
     M: IndexDomain,
     K: GroupKey,
     O: Operand,
-    for<'a> P: ArgumentSource<Keyed<K>, Value<'a> = bool>,
+    P: ArgumentSource<Keyed<K>, Mask>,
 {
     type Output = GroupOperand<M, K, O>;
 
@@ -89,5 +90,20 @@ where
             self.clone(),
             HavingOperation { predicate },
         ))
+    }
+}
+
+operation_manifest! {
+    HavingOperation<P> {
+        method: Having<P>::having;
+        scope: group;
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <O: Lane>;
+            argument: P: ArgumentSource<Keyed<K>, Mask>;
+            input: O;
+            output: GroupOperand<M, K, O>;
+        }
     }
 }

@@ -16,13 +16,25 @@ pub trait EvaluateContext {
 }
 
 pub trait OperandContext<O: Operand>:
-    PlanNode + OptimizePlan<Output = O> + Explain + EvaluateContext<Operand = O> + Estimated
+    PlanNode
+    + OptimizePlan<Output = O>
+    + Explain
+    + EvaluateContext<Operand = O>
+    + Estimated
+    + Send
+    + Sync
 {
 }
 
 impl<O, C> OperandContext<O> for C
 where
     O: Operand,
-    C: PlanNode + OptimizePlan<Output = O> + Explain + EvaluateContext<Operand = O> + Estimated,
+    C: PlanNode
+        + OptimizePlan<Output = O>
+        + Explain
+        + EvaluateContext<Operand = O>
+        + Estimated
+        + Send
+        + Sync,
 {
 }

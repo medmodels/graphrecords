@@ -1,12 +1,13 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
-    Ordered, Positional, QueryResult, ValueType,
+    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    Ordered, Positional, QueryResult, ValueDomain,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Enumerate,
 };
 use graphrecords_core::GraphRecord;
@@ -14,6 +15,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
 #[explain(label = "Enumerate")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct EnumerateOperation;
 
 impl Prepare for EnumerateOperation {
@@ -28,7 +30,7 @@ impl Prepare for EnumerateOperation {
     }
 }
 
-impl<V: BareValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for EnumerateOperation {
+impl<V: BareValueDomain> LaneKernel<Bare<V>, Multiple<Ordered>> for EnumerateOperation {
     type Output = OperandHandle<Indexed<Positional, V>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -44,7 +46,7 @@ impl<V: BareValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for EnumerateOpera
     }
 }
 
-impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
+impl<I: IndexDomain, V: ValueDomain> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
     for EnumerateOperation
 {
     type Output = OperandHandle<Indexed<Positional, V>, Multiple<Ordered>>;
@@ -71,5 +73,26 @@ impl<O: Apply<EnumerateOperation>> Enumerate for O {
 
     fn enumerate(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), EnumerateOperation))
+    }
+}
+
+operation_manifest! {
+    EnumerateOperation {
+        method: Enumerate::enumerate;
+        scope: lane;
+
+        kernel {
+            parameters: <V: BareValueDomain>;
+            input: (Bare<V>, Multiple<Ordered>);
+            output: OperandHandle<Indexed<Positional, V>, Multiple<Ordered>>;
+        }
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueDomain,
+            >;
+            input: (Indexed<I, V>, Multiple<Ordered>);
+            output: OperandHandle<Indexed<Positional, V>, Multiple<Ordered>>;
+        }
     }
 }

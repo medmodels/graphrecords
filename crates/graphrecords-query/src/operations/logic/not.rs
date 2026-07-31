@@ -5,6 +5,7 @@ use crate::{
     operands::OperandHandle,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
 };
 use graphrecords_core::GraphRecord;
 use std::ops::Not as BitNot;
@@ -12,7 +13,11 @@ use std::ops::Not as BitNot;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Not")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(
+    commutes_with_filter,
+    allows_limit_pushdown,
+    empty = if_any
+))]
 pub struct NotOperation;
 
 impl Prepare for NotOperation {
@@ -87,5 +92,26 @@ where
 
     fn not(self) -> Self::Output {
         <Self as Not>::not(&self)
+    }
+}
+
+operation_manifest! {
+    NotOperation {
+        method: Not::not;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain>;
+            input: Indexed<I, Mask>;
+            output: Indexed<I, Mask>;
+            emission: Preserving;
+        }
+
+        kernel {
+            parameters: <>;
+            input: Bare<Mask>;
+            output: Bare<Mask>;
+            emission: Preserving;
+        }
     }
 }

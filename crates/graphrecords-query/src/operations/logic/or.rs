@@ -9,6 +9,7 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
 };
 use graphrecords_core::GraphRecord;
 use std::ops::BitOr;
@@ -40,7 +41,7 @@ impl<M: Prepare> Prepare for OrOperation<M> {
 impl<I, M> ElementKernel<Indexed<I, Mask>> for OrOperation<M>
 where
     I: IndexDomain,
-    for<'a> M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
+    M: ArgumentSource<Keyed<I>, Mask>,
 {
     type Emission = M::Retention;
     type OutShape = Indexed<I, Mask>;
@@ -71,7 +72,7 @@ where
 
 impl<M> ElementKernel<Bare<Mask>> for OrOperation<M>
 where
-    for<'a> M: ArgumentSource<Unaligned, Value<'a> = bool>,
+    M: ArgumentSource<Unaligned, Mask>,
 {
     type Emission = M::Retention;
     type OutShape = Bare<Mask>;
@@ -122,5 +123,28 @@ where
 
     fn bitor(self, rhs: M) -> Self::Output {
         self.or(rhs)
+    }
+}
+
+operation_manifest! {
+    OrOperation<M> {
+        method: Or<M>::or;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain>;
+            argument: M: ArgumentSource<Keyed<I>, Mask>;
+            input: Indexed<I, Mask>;
+            output: Indexed<I, Mask>;
+            emission: ArgumentRetention;
+        }
+
+        kernel {
+            parameters: <>;
+            argument: M: ArgumentSource<Unaligned, Mask>;
+            input: Bare<Mask>;
+            output: Bare<Mask>;
+            emission: ArgumentRetention;
+        }
     }
 }

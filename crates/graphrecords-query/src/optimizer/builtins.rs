@@ -1,8 +1,17 @@
-use super::{Direction, Optimizer, OptimizerBuilder, Pattern, PhaseLabel, Rule, capture, matching};
+use super::{
+    Direction, MatchInputs, OperationInputs, Optimizer, OptimizerBuilder, Pattern, PhaseLabel,
+    Rule, capture, matching, rule,
+};
+#[cfg(feature = "dynamic")]
+use crate::dynamic::register_dyn_builtins;
 use crate::{
-    IndexDomain, OrderState, Ordered, Unordered,
-    operands::BoolMaskOperand,
-    operations::{NotOperation, OperationContext},
+    Arity, Bare, ElementShape, Indexed, Mask, Multiple, Operand, Ordered, Unordered,
+    element::{ElementTransition, Preserving},
+    operands::{BoolMaskOperand, OperandHandle},
+    operations::{
+        Apply, DiscardIndexOperation, DiscardValueOperation, ElementKernel, NotOperation,
+        OperationContext, TakeOperation,
+    },
 };
 use graphrecords_core::graphrecord::{EdgeIndex, NodeIndex};
 use std::sync::OnceLock;
@@ -20,12 +29,50 @@ pub enum BuiltinPhase {
 
 pub struct EliminateDoubleNegation;
 
-fn eliminate_double_negation<I: IndexDomain, O: OrderState>() -> impl Rule<BoolMaskOperand<I, O>> {
+fn eliminate_double_negation<O: Apply<NotOperation, Output = O>>() -> impl Rule<O> {
     matching::<OperationContext<_, NotOperation>, _>((matching::<
         OperationContext<_, NotOperation>,
         _,
     >((capture(),)),))
     .rewrite(|((inner,),), _| Some(inner))
+}
+
+pub struct PushDownTake;
+
+fn push_down_take<S, C, P>() -> impl Rule<OperandHandle<P::OutShape, C>>
+where
+    S: ElementShape + ElementTransition<P::OutShape, Preserving>,
+    C: Arity,
+    P: ElementKernel<S, Emission = Preserving>
+        + for<'a> OperationInputs<Inputs<'a, OperandHandle<S, C>> = (&'a OperandHandle<S, C>,)>,
+    OperandHandle<S, C>: Apply<TakeOperation, Output = OperandHandle<S, C>>,
+    OperandHandle<P::OutShape, C>: Apply<TakeOperation, Output = OperandHandle<P::OutShape, C>>,
+{
+    rule(
+        |outer: &OperationContext<OperandHandle<P::OutShape, C>, TakeOperation>,
+         _|
+         -> Option<OperandHandle<P::OutShape, C>> {
+            let (operand,) = MatchInputs::inputs(outer);
+            let inner = operand
+                .as_plan_node()
+                .downcast::<OperationContext<OperandHandle<S, C>, P>>()?;
+
+            if !inner.operation().allows_limit_pushdown() {
+                return None;
+            }
+
+            let (input,) = MatchInputs::inputs(inner);
+            let taken: OperandHandle<S, C> = Operand::new(OperationContext::new(
+                input.clone(),
+                outer.operation().clone(),
+            ));
+
+            let pushed =
+                OperationContext::<OperandHandle<S, C>, P>::new(taken, inner.operation().clone());
+
+            Some(Operand::new(pushed))
+        },
+    )
 }
 
 impl Optimizer {
@@ -34,6 +81,9 @@ impl Optimizer {
         let mut builder = Self::builder();
 
         register_builtins(&mut builder);
+
+        #[cfg(feature = "dynamic")]
+        register_dyn_builtins(&mut builder);
 
         #[allow(clippy::missing_panics_doc)]
         builder
@@ -90,22 +140,77 @@ pub fn register_builtins(builder: &mut OptimizerBuilder) {
     builder
         .add_rule(
             Simplify,
-            eliminate_double_negation::<NodeIndex, Unordered>(),
+            eliminate_double_negation::<BoolMaskOperand<NodeIndex, Unordered>>(),
         )
-        .label::<EliminateDoubleNegation>();
-
-    builder
-        .add_rule(Simplify, eliminate_double_negation::<NodeIndex, Ordered>())
         .label::<EliminateDoubleNegation>();
 
     builder
         .add_rule(
             Simplify,
-            eliminate_double_negation::<EdgeIndex, Unordered>(),
+            eliminate_double_negation::<BoolMaskOperand<NodeIndex, Ordered>>(),
         )
         .label::<EliminateDoubleNegation>();
 
     builder
-        .add_rule(Simplify, eliminate_double_negation::<EdgeIndex, Ordered>())
+        .add_rule(
+            Simplify,
+            eliminate_double_negation::<BoolMaskOperand<EdgeIndex, Unordered>>(),
+        )
         .label::<EliminateDoubleNegation>();
+
+    builder
+        .add_rule(
+            Simplify,
+            eliminate_double_negation::<BoolMaskOperand<EdgeIndex, Ordered>>(),
+        )
+        .label::<EliminateDoubleNegation>();
+
+    builder
+        .add_rule(
+            Limit,
+            push_down_take::<Indexed<NodeIndex, Mask>, Multiple<Ordered>, NotOperation>(),
+        )
+        .label::<PushDownTake>();
+
+    builder
+        .add_rule(
+            Limit,
+            push_down_take::<Indexed<EdgeIndex, Mask>, Multiple<Ordered>, NotOperation>(),
+        )
+        .label::<PushDownTake>();
+
+    builder
+        .add_rule(
+            Limit,
+            push_down_take::<Bare<Mask>, Multiple<Ordered>, NotOperation>(),
+        )
+        .label::<PushDownTake>();
+
+    builder
+        .add_rule(
+            Limit,
+            push_down_take::<Indexed<NodeIndex, Mask>, Multiple<Ordered>, DiscardIndexOperation>(),
+        )
+        .label::<PushDownTake>();
+
+    builder
+        .add_rule(
+            Limit,
+            push_down_take::<Indexed<EdgeIndex, Mask>, Multiple<Ordered>, DiscardIndexOperation>(),
+        )
+        .label::<PushDownTake>();
+
+    builder
+        .add_rule(
+            Limit,
+            push_down_take::<Indexed<NodeIndex, Mask>, Multiple<Ordered>, DiscardValueOperation>(),
+        )
+        .label::<PushDownTake>();
+
+    builder
+        .add_rule(
+            Limit,
+            push_down_take::<Indexed<EdgeIndex, Mask>, Multiple<Ordered>, DiscardValueOperation>(),
+        )
+        .label::<PushDownTake>();
 }

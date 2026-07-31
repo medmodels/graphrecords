@@ -1,5 +1,5 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Bare, BareValueDomain, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
     Multiple, Operand, OrderState, QueryResult, Single,
     capabilities::ValueMedian,
     error::comparison::{IncomparableValues, IncomparableValuesAt},
@@ -9,6 +9,7 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Median,
 };
 use graphrecords_core::GraphRecord;
@@ -65,7 +66,7 @@ where
 impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for MedianOperation
 where
     I: IndexDomain,
-    V: ValueMedian + BareValueType,
+    V: ValueMedian + BareValueDomain,
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {
@@ -132,7 +133,7 @@ where
 
 impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for MedianOperation
 where
-    V: ValueMedian + BareValueType,
+    V: ValueMedian + BareValueDomain,
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {
@@ -189,5 +190,33 @@ impl<O: Apply<MedianOperation>> Median for O {
 
     fn median(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), MedianOperation))
+    }
+}
+
+operation_manifest! {
+    MedianOperation {
+        method: Median::median;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueMedian + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Single>;
+            where V::Owned: Debug + Display + Send + Sync;
+        }
+
+        kernel {
+            parameters: <
+                V: ValueMedian + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Bare<V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Single>;
+            where V::Owned: Debug + Display + Send + Sync;
+        }
     }
 }

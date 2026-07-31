@@ -1,10 +1,10 @@
 use crate::{
-    AttributeName, Failure, IndexValue, QueryResult, Scalar, ValueType,
+    AttributeName, Failure, IndexValue, QueryResult, Scalar, ValueDomain,
     error::numeric::NonNumericValue,
 };
 use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue, NodeIndex};
 
-pub trait ValueSign: ValueType {
+pub trait ValueSign: ValueDomain {
     fn sign<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 

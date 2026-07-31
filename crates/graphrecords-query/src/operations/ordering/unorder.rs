@@ -1,12 +1,13 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
-    OrderState, QueryResult, Unordered, ValueType,
+    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    OrderState, QueryResult, Unordered, ValueDomain,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Unorder,
 };
 use graphrecords_core::GraphRecord;
@@ -14,6 +15,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
 #[explain(label = "Unorder")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct UnorderOperation;
 
 impl Prepare for UnorderOperation {
@@ -28,7 +30,7 @@ impl Prepare for UnorderOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
+impl<I: IndexDomain, V: ValueDomain, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
     for UnorderOperation
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
@@ -46,7 +48,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Mult
     }
 }
 
-impl<V: BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for UnorderOperation {
+impl<V: BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for UnorderOperation {
     type Output = OperandHandle<Bare<V>, Multiple<Unordered>>;
 
     fn execute<'a>(
@@ -67,5 +69,23 @@ impl<O: Apply<UnorderOperation>> Unorder for O {
 
     fn unorder(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), UnorderOperation))
+    }
+}
+
+operation_manifest! {
+    UnorderOperation {
+        method: Unorder::unorder;
+        scope: lane;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain, O: OrderState>;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+        }
+        kernel {
+            parameters: <V: BareValueDomain, O: OrderState>;
+            input: (Bare<V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Multiple<Unordered>>;
+        }
     }
 }

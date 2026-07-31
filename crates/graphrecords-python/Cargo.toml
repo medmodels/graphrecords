@@ -14,6 +14,8 @@ graphrecords-core = { workspace = true, features = [
     "connectors",
 ] }
 graphrecords-utils = { workspace = true }
+graphrecords-query = { workspace = true, features = ["dynamic"] }
+graphrecords-overview = { workspace = true }
 
 polars = { workspace = true }
 chrono = { workspace = true }

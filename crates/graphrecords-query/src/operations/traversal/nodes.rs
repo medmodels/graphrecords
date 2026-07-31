@@ -5,10 +5,12 @@ use crate::{
     operands::NodesOperand,
     operations::{Apply, KeyedStream, LaneKernel, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::Nodes,
 };
 use graphrecords_core::{GraphRecord, graphrecord::EdgeIndex};
 use graphrecords_utils::aliases::GrHashSet;
+use std::iter::{empty, once};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
@@ -58,14 +60,12 @@ impl LaneKernel<Indexed<EdgeIndex, Unit>, Single> for NodesOperation {
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let Some((edge, membership)) = value else {
-            return Ok(Box::new(std::iter::empty()));
+            return Ok(Box::new(empty()));
         };
         membership?;
 
         let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
-        let nodes: GrHashSet<_> = std::iter::once(source)
-            .chain(std::iter::once(target))
-            .collect();
+        let nodes: GrHashSet<_> = once(source).chain(once(target)).collect();
 
         Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
     }
@@ -83,9 +83,7 @@ impl LaneKernel<Indexed<EdgeIndex, Unit>, Definite> for NodesOperation {
         membership?;
 
         let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
-        let nodes: GrHashSet<_> = std::iter::once(source)
-            .chain(std::iter::once(target))
-            .collect();
+        let nodes: GrHashSet<_> = once(source).chain(once(target)).collect();
 
         Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
     }
@@ -123,13 +121,11 @@ impl<I: IndexDomain> LaneKernel<Indexed<I, EntityReference<EdgeIndex>>, Single> 
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let Some(value) = value else {
-            return Ok(Box::new(std::iter::empty()));
+            return Ok(Box::new(empty()));
         };
         let edge = value.1?;
         let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
-        let nodes: GrHashSet<_> = std::iter::once(source)
-            .chain(std::iter::once(target))
-            .collect();
+        let nodes: GrHashSet<_> = once(source).chain(once(target)).collect();
 
         Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
     }
@@ -147,9 +143,7 @@ impl<I: IndexDomain> LaneKernel<Indexed<I, EntityReference<EdgeIndex>>, Definite
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let edge = value.1?;
         let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
-        let nodes: GrHashSet<_> = std::iter::once(source)
-            .chain(std::iter::once(target))
-            .collect();
+        let nodes: GrHashSet<_> = once(source).chain(once(target)).collect();
 
         Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
     }
@@ -160,5 +154,43 @@ impl<O: Apply<NodesOperation>> Nodes for O {
 
     fn nodes(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), NodesOperation))
+    }
+}
+
+operation_manifest! {
+    NodesOperation {
+        method: Nodes::nodes;
+        scope: lane;
+
+        kernel {
+            parameters: <O: OrderState>;
+            input: (Indexed<EdgeIndex, Unit>, Multiple<O>);
+            output: NodesOperand<Unordered>;
+        }
+        kernel {
+            parameters: <>;
+            input: (Indexed<EdgeIndex, Unit>, Single);
+            output: NodesOperand<Unordered>;
+        }
+        kernel {
+            parameters: <>;
+            input: (Indexed<EdgeIndex, Unit>, Definite);
+            output: NodesOperand<Unordered>;
+        }
+        kernel {
+            parameters: <I: IndexDomain, O: OrderState>;
+            input: (Indexed<I, EntityReference<EdgeIndex>>, Multiple<O>);
+            output: NodesOperand<Unordered>;
+        }
+        kernel {
+            parameters: <I: IndexDomain>;
+            input: (Indexed<I, EntityReference<EdgeIndex>>, Single);
+            output: NodesOperand<Unordered>;
+        }
+        kernel {
+            parameters: <I: IndexDomain>;
+            input: (Indexed<I, EntityReference<EdgeIndex>>, Definite);
+            output: NodesOperand<Unordered>;
+        }
     }
 }

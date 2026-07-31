@@ -81,7 +81,6 @@ pub enum GraphRecordError {
     },
     Schema(SchemaError),
     Conversion(ConversionError),
-    QueryError(String),
 }
 
 impl Error for GraphRecordError {}
@@ -183,7 +182,6 @@ impl Display for GraphRecordError {
             Self::ConnectorFailure { message } => write!(f, "Connector failed: {message}"),
             Self::Schema(error) => write!(f, "{error}"),
             Self::Conversion(error) => write!(f, "{error}"),
-            Self::QueryError(message) => write!(f, "{message}"),
         }
     }
 }
@@ -368,10 +366,6 @@ mod test {
                 group: "test".into()
             })
             .to_string()
-        );
-        assert_eq!(
-            "value",
-            GraphRecordError::QueryError("value".to_string()).to_string()
         );
         assert_eq!(
             "Cannot convert `true` into `GraphRecordAttribute`",

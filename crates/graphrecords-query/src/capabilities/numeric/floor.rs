@@ -1,7 +1,9 @@
-use crate::{Failure, IndexValue, QueryResult, Scalar, ValueType, error::numeric::NonNumericValue};
+use crate::{
+    Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::numeric::NonNumericValue,
+};
 use graphrecords_core::graphrecord::{GraphRecordValue, datatypes::Floor};
 
-pub trait ValueFloor: ValueType {
+pub trait ValueFloor: ValueDomain {
     fn floor<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 

@@ -1,12 +1,13 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
-    Ordered, QueryResult, ValueType,
+    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    Ordered, QueryResult, ValueDomain,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::ReverseOrder,
 };
 use graphrecords_core::GraphRecord;
@@ -29,7 +30,7 @@ impl Prepare for ReverseOrderOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
+impl<I: IndexDomain, V: ValueDomain> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
     for ReverseOrderOperation
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
@@ -53,7 +54,7 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
     }
 }
 
-impl<V: BareValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for ReverseOrderOperation {
+impl<V: BareValueDomain> LaneKernel<Bare<V>, Multiple<Ordered>> for ReverseOrderOperation {
     type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -80,5 +81,23 @@ impl<O: Apply<ReverseOrderOperation>> ReverseOrder for O {
 
     fn reverse_order(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), ReverseOrderOperation))
+    }
+}
+
+operation_manifest! {
+    ReverseOrderOperation {
+        method: ReverseOrder::reverse_order;
+        scope: lane;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: (Indexed<I, V>, Multiple<Ordered>);
+            output: OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
+        }
+        kernel {
+            parameters: <V: BareValueDomain>;
+            input: (Bare<V>, Multiple<Ordered>);
+            output: OperandHandle<Bare<V>, Multiple<Ordered>>;
+        }
     }
 }

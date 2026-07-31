@@ -5,6 +5,7 @@ use crate::{
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::ViaNodes,
 };
 use graphrecords_core::{
@@ -75,5 +76,26 @@ impl<O: Apply<ViaNodesOperation>> ViaNodes for O {
 
     fn via_nodes(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), ViaNodesOperation))
+    }
+}
+
+operation_manifest! {
+    ViaNodesOperation {
+        method: ViaNodes::via_nodes;
+        scope: element;
+
+        kernel {
+            parameters: <>;
+            input: Indexed<EdgeIndex, Unit>;
+            output: Indexed<ExpandedIndex<EdgeIndex, EdgeEndpointRole>, EntityReference<NodeIndex>>;
+            emission: Expanding<Ordered>;
+        }
+
+        kernel {
+            parameters: <I: IndexDomain>;
+            input: Indexed<I, EntityReference<EdgeIndex>>;
+            output: Indexed<ExpandedIndex<I, EdgeEndpointRole>, EntityReference<NodeIndex>>;
+            emission: Expanding<Ordered>;
+        }
     }
 }

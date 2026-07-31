@@ -1,34 +1,35 @@
 use super::reject_key_failures;
 use crate::{
-    Arity, Bare, BareValueType, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed,
-    Labeled, Operand, QueryResult, Single, ValueType,
+    Arity, Bare, BareValueDomain, Definite, EvaluateOperand, Explain, Failure, IndexDomain,
+    Indexed, Labeled, Operand, QueryResult, Single, ValueDomain,
+    capabilities::GroupingValue,
     error::grouping::MissingGroupAggregate,
     execution::EvaluationCache,
     index::GroupKey,
     operands::{OperandHandle, Partition},
     operations::{
-        Apply, ArgumentSource, GroupKernel, IndexedElementContainer, IndexedElementSource,
-        KeyOperand, Keyed, Operation, OperationContext, Prepare,
+        Apply, GroupKernel, IndexedElementContainer, IndexedElementSource, Operation,
+        OperationContext, Prepare,
     },
     optimizer::{
         Estimate, Estimated, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
     },
+    registry::operation_manifest,
     traits::BroadcastVia,
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
-use std::marker::PhantomData;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
 #[explain(label = "BroadcastVia")]
-pub struct BroadcastViaOperation<I: IndexDomain, A> {
+#[plan(optimizer_hints(empty = if_all))]
+pub struct BroadcastViaOperation<A> {
     #[argument]
     via: A,
-    index: PhantomData<fn() -> I>,
 }
 
-impl<I: IndexDomain, A: Prepare> Prepare for BroadcastViaOperation<I, A> {
+impl<A: Prepare> Prepare for BroadcastViaOperation<A> {
     type Prepared<'a>
         = A::Prepared<'a>
     where
@@ -43,27 +44,25 @@ impl<I: IndexDomain, A: Prepare> Prepare for BroadcastViaOperation<I, A> {
     }
 }
 
-fn broadcast_via<'a, I, K, V, A>(
+fn broadcast_via<'a, K, V, A>(
     prepared: A::Prepared<'a>,
     aggregates: GrHashMap<K::Owned, Option<QueryResult<V::Value<'a>>>>,
     label: &'static str,
-) -> IndexedElementContainer<'a, I, V::Value<'a>, A::Arity>
+) -> IndexedElementContainer<'a, A::IndexDomain, V::Value<'a>, A::Arity>
 where
-    I: IndexDomain,
     K: GroupKey,
-    V: ValueType,
-    for<'source> A: KeyOperand<I, Key = K>
-        + IndexedElementSource<I, Value<'source> = <A as ArgumentSource<Keyed<I>>>::Value<'source>>
-        + 'a,
+    V: ValueDomain,
+    A: IndexedElementSource + 'a,
+    A::ValueDomain: GroupingValue<Key = K>,
 {
     let elements = A::elements(prepared);
 
     A::Arity::map_elements(elements, move |(index, via_outcome)| {
         let outcome = match via_outcome {
             Err(failure) => Err(failure),
-            Ok(value) => match aggregates.get(&A::to_key(&value)) {
+            Ok(value) => match aggregates.get(&A::ValueDomain::to_group_key(&value)) {
                 Some(Some(aggregate)) => aggregate.clone(),
-                Some(None) | None => Err(Failure::new_at::<I, _>(
+                Some(None) | None => Err(Failure::new_at::<A::IndexDomain, _>(
                     label,
                     MissingGroupAggregate,
                     &index,
@@ -75,8 +74,8 @@ where
     })
 }
 
-fn broadcast_via_estimate<I: IndexDomain, A: Estimated>(
-    operation: &BroadcastViaOperation<I, A>,
+fn broadcast_via_estimate<A: Estimated>(
+    operation: &BroadcastViaOperation<A>,
     input: &Estimate,
     stats: &Stats,
 ) -> Estimate {
@@ -90,18 +89,17 @@ fn broadcast_via_estimate<I: IndexDomain, A: Estimated>(
     }
 }
 
-impl<M, K, I, J, V, A> GroupKernel<M, K, OperandHandle<Indexed<J, V>, Single>>
-    for BroadcastViaOperation<I, A>
+impl<M, K, J, V, A> GroupKernel<M, K, OperandHandle<Indexed<J, V>, Single>>
+    for BroadcastViaOperation<A>
 where
     M: IndexDomain,
     K: GroupKey,
-    I: IndexDomain,
     J: IndexDomain,
-    V: ValueType,
-    for<'a> A: KeyOperand<I, Key = K>
-        + IndexedElementSource<I, Value<'a> = <A as ArgumentSource<Keyed<I>>>::Value<'a>>,
+    V: ValueDomain,
+    A: IndexedElementSource,
+    A::ValueDomain: GroupingValue<Key = K>,
 {
-    type Output = OperandHandle<Indexed<I, V>, A::Arity>;
+    type Output = OperandHandle<Indexed<A::IndexDomain, V>, A::Arity>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -124,11 +122,7 @@ where
             })
             .collect();
 
-        Ok(broadcast_via::<_, _, V, A>(
-            prepared,
-            aggregates,
-            Self::LABEL,
-        ))
+        Ok(broadcast_via::<K, V, A>(prepared, aggregates, Self::LABEL))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -136,17 +130,15 @@ where
     }
 }
 
-impl<M, K, I, V, A> GroupKernel<M, K, OperandHandle<Bare<V>, Single>>
-    for BroadcastViaOperation<I, A>
+impl<M, K, V, A> GroupKernel<M, K, OperandHandle<Bare<V>, Single>> for BroadcastViaOperation<A>
 where
     M: IndexDomain,
     K: GroupKey,
-    I: IndexDomain,
-    V: BareValueType,
-    for<'a> A: KeyOperand<I, Key = K>
-        + IndexedElementSource<I, Value<'a> = <A as ArgumentSource<Keyed<I>>>::Value<'a>>,
+    V: BareValueDomain,
+    A: IndexedElementSource,
+    A::ValueDomain: GroupingValue<Key = K>,
 {
-    type Output = OperandHandle<Indexed<I, V>, A::Arity>;
+    type Output = OperandHandle<Indexed<A::IndexDomain, V>, A::Arity>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -169,11 +161,7 @@ where
             })
             .collect();
 
-        Ok(broadcast_via::<_, _, V, A>(
-            prepared,
-            aggregates,
-            Self::LABEL,
-        ))
+        Ok(broadcast_via::<K, V, A>(prepared, aggregates, Self::LABEL))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -181,18 +169,17 @@ where
     }
 }
 
-impl<M, K, I, J, V, A> GroupKernel<M, K, OperandHandle<Indexed<J, V>, Definite>>
-    for BroadcastViaOperation<I, A>
+impl<M, K, J, V, A> GroupKernel<M, K, OperandHandle<Indexed<J, V>, Definite>>
+    for BroadcastViaOperation<A>
 where
     M: IndexDomain,
     K: GroupKey,
-    I: IndexDomain,
     J: IndexDomain,
-    V: ValueType,
-    for<'a> A: KeyOperand<I, Key = K>
-        + IndexedElementSource<I, Value<'a> = <A as ArgumentSource<Keyed<I>>>::Value<'a>>,
+    V: ValueDomain,
+    A: IndexedElementSource,
+    A::ValueDomain: GroupingValue<Key = K>,
 {
-    type Output = OperandHandle<Indexed<I, V>, A::Arity>;
+    type Output = OperandHandle<Indexed<A::IndexDomain, V>, A::Arity>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -214,11 +201,7 @@ where
             })
             .collect();
 
-        Ok(broadcast_via::<_, _, V, A>(
-            prepared,
-            aggregates,
-            Self::LABEL,
-        ))
+        Ok(broadcast_via::<K, V, A>(prepared, aggregates, Self::LABEL))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -226,17 +209,15 @@ where
     }
 }
 
-impl<M, K, I, V, A> GroupKernel<M, K, OperandHandle<Bare<V>, Definite>>
-    for BroadcastViaOperation<I, A>
+impl<M, K, V, A> GroupKernel<M, K, OperandHandle<Bare<V>, Definite>> for BroadcastViaOperation<A>
 where
     M: IndexDomain,
     K: GroupKey,
-    I: IndexDomain,
-    V: BareValueType,
-    for<'a> A: KeyOperand<I, Key = K>
-        + IndexedElementSource<I, Value<'a> = <A as ArgumentSource<Keyed<I>>>::Value<'a>>,
+    V: BareValueDomain,
+    A: IndexedElementSource,
+    A::ValueDomain: GroupingValue<Key = K>,
 {
-    type Output = OperandHandle<Indexed<I, V>, A::Arity>;
+    type Output = OperandHandle<Indexed<A::IndexDomain, V>, A::Arity>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -258,11 +239,7 @@ where
             })
             .collect();
 
-        Ok(broadcast_via::<_, _, V, A>(
-            prepared,
-            aggregates,
-            Self::LABEL,
-        ))
+        Ok(broadcast_via::<K, V, A>(prepared, aggregates, Self::LABEL))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -270,21 +247,79 @@ where
     }
 }
 
-impl<O, I, A> BroadcastVia<I, A> for O
+impl<O, A> BroadcastVia<A::IndexDomain, A> for O
 where
-    I: IndexDomain,
-    BroadcastViaOperation<I, A>: Operation,
-    O: Apply<BroadcastViaOperation<I, A>>,
+    A: IndexedElementSource,
+    BroadcastViaOperation<A>: Operation,
+    O: Apply<BroadcastViaOperation<A>>,
 {
     type ReturnOperand = O::Output;
 
     fn broadcast_via(&self, via: A) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(
             self.clone(),
-            BroadcastViaOperation {
-                via,
-                index: PhantomData,
-            },
+            BroadcastViaOperation { via },
         ))
+    }
+}
+
+operation_manifest! {
+    BroadcastViaOperation<A> {
+        method: BroadcastVia<J, A>::broadcast_via;
+        scope: group;
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <
+                P: IndexDomain,
+                V: ValueDomain,
+                J: IndexDomain,
+                X: GroupingValue<K>,
+                C: EnumerableArity,
+            >;
+            argument: A: IndexedElementSource<Indexed<J, X>, C>;
+            input: OperandHandle<Indexed<P, V>, Single>;
+            output: OperandHandle<Indexed<J, V>, C>;
+        }
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <
+                P: IndexDomain,
+                V: ValueDomain,
+                J: IndexDomain,
+                X: GroupingValue<K>,
+                C: EnumerableArity,
+            >;
+            argument: A: IndexedElementSource<Indexed<J, X>, C>;
+            input: OperandHandle<Indexed<P, V>, Definite>;
+            output: OperandHandle<Indexed<J, V>, C>;
+        }
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <
+                V: BareValueDomain,
+                J: IndexDomain,
+                X: GroupingValue<K>,
+                C: EnumerableArity,
+            >;
+            argument: A: IndexedElementSource<Indexed<J, X>, C>;
+            input: OperandHandle<Bare<V>, Single>;
+            output: OperandHandle<Indexed<J, V>, C>;
+        }
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <
+                V: BareValueDomain,
+                J: IndexDomain,
+                X: GroupingValue<K>,
+                C: EnumerableArity,
+            >;
+            argument: A: IndexedElementSource<Indexed<J, X>, C>;
+            input: OperandHandle<Bare<V>, Definite>;
+            output: OperandHandle<Indexed<J, V>, C>;
+        }
     }
 }

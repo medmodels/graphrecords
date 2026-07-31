@@ -6,6 +6,41 @@ use std::{
 };
 
 #[derive(Debug)]
+pub struct IntegerOverflow<T> {
+    value: T,
+}
+
+impl<T> IntegerOverflow<T> {
+    #[must_use]
+    pub const fn new(value: T) -> Self {
+        Self { value }
+    }
+
+    #[must_use]
+    pub const fn value(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T: Display> Display for IntegerOverflow<T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "`{}` exceeds the representable integer range",
+            self.value
+        )
+    }
+}
+
+impl<T: Debug + Display> Error for IntegerOverflow<T> {}
+
+impl<T: Debug + Display + Send + Sync + 'static> Diagnostic for IntegerOverflow<T> {
+    fn name() -> &'static str {
+        "IntegerOverflow"
+    }
+}
+
+#[derive(Debug)]
 pub struct InvalidClipBounds<T> {
     lower: T,
     upper: T,
@@ -51,6 +86,37 @@ impl<T: Debug + Display + Send + Sync + 'static> Diagnostic for InvalidClipBound
 }
 
 #[derive(Debug)]
+pub struct NegativeLength {
+    value: i64,
+}
+
+impl NegativeLength {
+    #[must_use]
+    pub const fn new(value: i64) -> Self {
+        Self { value }
+    }
+
+    #[must_use]
+    pub const fn value(&self) -> i64 {
+        self.value
+    }
+}
+
+impl Display for NegativeLength {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "`{}` is a negative length", self.value)
+    }
+}
+
+impl Error for NegativeLength {}
+
+impl Diagnostic for NegativeLength {
+    fn name() -> &'static str {
+        "NegativeLength"
+    }
+}
+
+#[derive(Debug)]
 pub struct NegativeSquareRoot {
     value: GraphRecordValue,
 }
@@ -82,6 +148,37 @@ impl Error for NegativeSquareRoot {}
 impl Diagnostic for NegativeSquareRoot {
     fn name() -> &'static str {
         "NegativeSquareRoot"
+    }
+}
+
+#[derive(Debug)]
+pub struct NonIntegerValue<T> {
+    value: T,
+}
+
+impl<T> NonIntegerValue<T> {
+    #[must_use]
+    pub const fn new(value: T) -> Self {
+        Self { value }
+    }
+
+    #[must_use]
+    pub const fn value(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T: Display> Display for NonIntegerValue<T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "`{}` is not an integer value", self.value)
+    }
+}
+
+impl<T: Debug + Display> Error for NonIntegerValue<T> {}
+
+impl<T: Debug + Display + Send + Sync + 'static> Diagnostic for NonIntegerValue<T> {
+    fn name() -> &'static str {
+        "NonIntegerValue"
     }
 }
 

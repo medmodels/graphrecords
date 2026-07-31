@@ -16,5 +16,8 @@ elsa = "1.11.2"
 rand = "0.10.2"
 regex = "1.11.2"
 
+[features]
+dynamic = []
+
 [lints]
 workspace = true

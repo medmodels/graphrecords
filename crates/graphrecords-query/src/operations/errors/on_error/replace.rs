@@ -1,6 +1,6 @@
 use crate::{
-    Bare, BareValueType, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Labeled, Operand,
-    QueryResult, ValueType,
+    Bare, BareValueDomain, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Labeled, Operand,
+    QueryResult, ValueDomain,
     element::{Pipeline, Retention},
     execution::EvaluationCache,
     explain::ExplainFormatter,
@@ -10,6 +10,8 @@ use crate::{
         Unaligned,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::{describe::ArgumentRetention, operation_manifest},
+    traits::OnError,
 };
 use graphrecords_core::GraphRecord;
 use std::{
@@ -22,7 +24,21 @@ use std::{
 #[derive(Clone, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[plan(optimizer_hints(empty = if_all))]
-pub struct Replace<A>(#[argument] pub A);
+pub struct Replace<A> {
+    #[argument]
+    replacement: A,
+}
+
+impl<A> Replace<A> {
+    #[must_use]
+    pub const fn new(replacement: A) -> Self {
+        Self { replacement }
+    }
+
+    pub(crate) const fn replacement(&self) -> &A {
+        &self.replacement
+    }
+}
 
 impl<A> Labeled for Replace<A> {
     const LABEL: &'static str = "Replace";
@@ -52,7 +68,10 @@ impl<D: Diagnostic, R> ReplaceErrorsOf<D, R> {
 
 impl<D: Diagnostic, R: Clone> Clone for ReplaceErrorsOf<D, R> {
     fn clone(&self) -> Self {
-        Self::new(self.replacement.clone())
+        Self {
+            replacement: self.replacement.clone(),
+            marker: PhantomData,
+        }
     }
 }
 
@@ -89,7 +108,10 @@ impl<G: ErrorGroup, R> ReplaceErrorsIn<G, R> {
 
 impl<G: ErrorGroup, R: Clone> Clone for ReplaceErrorsIn<G, R> {
     fn clone(&self) -> Self {
-        Self::new(self.replacement.clone())
+        Self {
+            replacement: self.replacement.clone(),
+            marker: PhantomData,
+        }
     }
 }
 
@@ -126,7 +148,10 @@ impl<C: Error + 'static, R> ReplaceErrorsWithCause<C, R> {
 
 impl<C: Error + 'static, R: Clone> Clone for ReplaceErrorsWithCause<C, R> {
     fn clone(&self) -> Self {
-        Self::new(self.replacement.clone())
+        Self {
+            replacement: self.replacement.clone(),
+            marker: PhantomData,
+        }
     }
 }
 
@@ -142,7 +167,7 @@ impl<C: Error + 'static, R: Explain> Explain for ReplaceErrorsWithCause<C, R> {
 impl<A: Explain> Explain for Replace<A> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         formatter.write_str(Self::LABEL)?;
-        formatter.labeled_child("replacement", &self.0);
+        formatter.labeled_child("replacement", &self.replacement);
 
         Ok(())
     }
@@ -159,7 +184,7 @@ impl<R: Prepare> Prepare for Replace<R> {
         graphrecord: &'a GraphRecord,
         cache: &'a EvaluationCache<'a>,
     ) -> QueryResult<Self::Prepared<'a>> {
-        self.0.prepare(graphrecord, cache)
+        self.replacement.prepare(graphrecord, cache)
     }
 }
 
@@ -211,8 +236,8 @@ impl<C: Error + 'static, R: Prepare> Prepare for ReplaceErrorsWithCause<C, R> {
 impl<I, V, R> ElementKernel<Indexed<I, V>> for Replace<R>
 where
     I: IndexDomain,
-    V: ValueType,
-    for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    V: ValueDomain,
+    R: ArgumentSource<Keyed<I>, V>,
 {
     type Emission = R::Retention;
     type OutShape = Indexed<I, V>;
@@ -239,8 +264,8 @@ where
 
 impl<V, R> ElementKernel<Bare<V>> for Replace<R>
 where
-    V: BareValueType,
-    for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: BareValueDomain,
+    R: ArgumentSource<Unaligned, V>,
 {
     type Emission = R::Retention;
     type OutShape = Bare<V>;
@@ -268,9 +293,9 @@ where
 impl<I, V, D, R> ElementKernel<Indexed<I, V>> for ReplaceErrorsOf<D, R>
 where
     I: IndexDomain,
-    V: ValueType,
+    V: ValueDomain,
     D: Diagnostic,
-    for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    R: ArgumentSource<Keyed<I>, V>,
 {
     type Emission = R::Retention;
     type OutShape = Indexed<I, V>;
@@ -299,9 +324,9 @@ where
 
 impl<V, D, R> ElementKernel<Bare<V>> for ReplaceErrorsOf<D, R>
 where
-    V: BareValueType,
+    V: BareValueDomain,
     D: Diagnostic,
-    for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    R: ArgumentSource<Unaligned, V>,
 {
     type Emission = R::Retention;
     type OutShape = Bare<V>;
@@ -329,9 +354,9 @@ where
 impl<I, V, G, R> ElementKernel<Indexed<I, V>> for ReplaceErrorsIn<G, R>
 where
     I: IndexDomain,
-    V: ValueType,
+    V: ValueDomain,
     G: ErrorGroup,
-    for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    R: ArgumentSource<Keyed<I>, V>,
 {
     type Emission = R::Retention;
     type OutShape = Indexed<I, V>;
@@ -360,9 +385,9 @@ where
 
 impl<V, G, R> ElementKernel<Bare<V>> for ReplaceErrorsIn<G, R>
 where
-    V: BareValueType,
+    V: BareValueDomain,
     G: ErrorGroup,
-    for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    R: ArgumentSource<Unaligned, V>,
 {
     type Emission = R::Retention;
     type OutShape = Bare<V>;
@@ -390,9 +415,9 @@ where
 impl<I, V, C, R> ElementKernel<Indexed<I, V>> for ReplaceErrorsWithCause<C, R>
 where
     I: IndexDomain,
-    V: ValueType,
+    V: ValueDomain,
     C: Error + 'static,
-    for<'a> R: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    R: ArgumentSource<Keyed<I>, V>,
 {
     type Emission = R::Retention;
     type OutShape = Indexed<I, V>;
@@ -421,9 +446,9 @@ where
 
 impl<V, C, R> ElementKernel<Bare<V>> for ReplaceErrorsWithCause<C, R>
 where
-    V: BareValueType,
+    V: BareValueDomain,
     C: Error + 'static,
-    for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    R: ArgumentSource<Unaligned, V>,
 {
     type Emission = R::Retention;
     type OutShape = Bare<V>;
@@ -473,7 +498,7 @@ where
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(
             input,
-            ReplaceErrorsOf::new(self.0.clone()),
+            ReplaceErrorsOf::new(self.replacement.clone()),
         ))
     }
 }
@@ -490,7 +515,7 @@ where
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(
             input,
-            ReplaceErrorsIn::new(self.0.clone()),
+            ReplaceErrorsIn::new(self.replacement.clone()),
         ))
     }
 }
@@ -507,7 +532,31 @@ where
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(
             input,
-            ReplaceErrorsWithCause::new(self.0.clone()),
+            ReplaceErrorsWithCause::new(self.replacement.clone()),
         ))
+    }
+}
+
+operation_manifest! {
+    Replace<R> as "on_error_replace" {
+        method: OnError::on_error;
+        policy: Replace<R> = Replace::new(R);
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            argument: R: ArgumentSource<Keyed<I>, V>;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: ArgumentRetention;
+        }
+
+        kernel {
+            parameters: <V: BareValueDomain>;
+            argument: R: ArgumentSource<Unaligned, V>;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: ArgumentRetention;
+        }
     }
 }

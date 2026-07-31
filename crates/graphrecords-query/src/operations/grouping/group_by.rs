@@ -1,14 +1,17 @@
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Definite, EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple, Operand,
+    QueryResult, Single, ValueDomain,
+    capabilities::GroupingValue,
     element::Retention,
     execution::EvaluationCache,
     operands::{
         GroupOperand, OperandHandle, PartitionArity, PartitionBuilder, PartitionClassification,
     },
     operations::{
-        Apply, KeyOperand, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
+        Apply, ArgumentSource, Keyed, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::GroupBy,
 };
 use graphrecords_core::GraphRecord;
@@ -36,10 +39,16 @@ impl<K: Prepare> Prepare for GroupByOperation<K> {
     }
 }
 
-impl<I: IndexDomain, V: ValueType, K: KeyOperand<I>, C: PartitionArity<Indexed<I, V>>>
-    LaneKernel<Indexed<I, V>, C> for GroupByOperation<K>
+impl<I, V, K, C> LaneKernel<Indexed<I, V>, C> for GroupByOperation<K>
+where
+    I: IndexDomain,
+    V: ValueDomain,
+    K: ArgumentSource<Keyed<I>>,
+    K::ValueDomain: GroupingValue,
+    C: PartitionArity<Indexed<I, V>>,
 {
-    type Output = GroupOperand<I, K::Key, OperandHandle<Indexed<I, V>, C>>;
+    type Output =
+        GroupOperand<I, <K::ValueDomain as GroupingValue>::Key, OperandHandle<Indexed<I, V>, C>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
@@ -55,7 +64,9 @@ impl<I: IndexDomain, V: ValueType, K: KeyOperand<I>, C: PartitionArity<Indexed<I
             match K::Retention::collapse(step) {
                 None => PartitionClassification::Omit,
                 Some(Err(failure)) => PartitionClassification::KeyFailure(failure),
-                Some(Ok(value)) => PartitionClassification::Key(K::to_key(&value)),
+                Some(Ok(value)) => {
+                    PartitionClassification::Key(K::ValueDomain::to_group_key(&value))
+                }
             }
         })
     }
@@ -104,5 +115,45 @@ where
             self.clone(),
             GroupByOperation { key },
         ))
+    }
+}
+
+operation_manifest! {
+    GroupByOperation<K> {
+        method: GroupBy<K>::group_by;
+        scope: lane;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain, X: GroupingValue, O: OrderState>;
+            argument: K: ArgumentSource<Keyed<I>, X>;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: GroupOperand<
+                I,
+                <X as GroupingValue>::Key,
+                OperandHandle<Indexed<I, V>, Multiple<O>>,
+            >;
+        }
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain, X: GroupingValue>;
+            argument: K: ArgumentSource<Keyed<I>, X>;
+            input: (Indexed<I, V>, Single);
+            output: GroupOperand<
+                I,
+                <X as GroupingValue>::Key,
+                OperandHandle<Indexed<I, V>, Single>,
+            >;
+        }
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain, X: GroupingValue>;
+            argument: K: ArgumentSource<Keyed<I>, X>;
+            input: (Indexed<I, V>, Definite);
+            output: GroupOperand<
+                I,
+                <X as GroupingValue>::Key,
+                OperandHandle<Indexed<I, V>, Definite>,
+            >;
+        }
     }
 }

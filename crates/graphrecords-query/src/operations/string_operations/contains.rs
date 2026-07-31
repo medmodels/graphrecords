@@ -1,6 +1,6 @@
 use super::{string_argument_map_bare, string_argument_map_indexed};
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
     capabilities::StringValue,
     execution::EvaluationCache,
     operations::{
@@ -8,6 +8,7 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
     traits::Contains,
 };
 use graphrecords_core::GraphRecord;
@@ -40,7 +41,8 @@ impl<I, V, A> ElementKernel<Indexed<I, V>> for ContainsOperation<A>
 where
     I: IndexDomain,
     V: StringValue,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Keyed<I>>,
+    A::ValueDomain: StringValue,
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, Mask>;
@@ -66,8 +68,9 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for ContainsOperation<A>
 where
-    V: StringValue + BareValueType,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: StringValue + BareValueDomain,
+    A: ArgumentSource<Unaligned>,
+    A::ValueDomain: StringValue,
 {
     type Emission = A::Retention;
     type OutShape = Bare<Mask>;
@@ -103,5 +106,27 @@ where
             self.clone(),
             ContainsOperation { argument },
         ))
+    }
+}
+
+operation_manifest! {
+    ContainsOperation<A> {
+        method: Contains<A>::contains;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: StringValue>;
+            argument: A: ArgumentSource<Keyed<I>> where A::ValueDomain: StringValue;
+            input: Indexed<I, V>;
+            output: Indexed<I, Mask>;
+            emission: ArgumentRetention;
+        }
+        kernel {
+            parameters: <V: StringValue + BareValueDomain>;
+            argument: A: ArgumentSource<Unaligned> where A::ValueDomain: StringValue;
+            input: Bare<V>;
+            output: Bare<Mask>;
+            emission: ArgumentRetention;
+        }
     }
 }

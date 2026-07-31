@@ -5,6 +5,7 @@ use crate::{
     operands::OperandHandle,
     operations::{Apply, KeyedStream, LaneKernel, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::DropDuplicates,
 };
 use graphrecords_core::GraphRecord;
@@ -64,5 +65,21 @@ impl<O: Apply<DropDuplicatesOperation>> DropDuplicates for O {
 
     fn drop_duplicates(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), DropDuplicatesOperation))
+    }
+}
+
+operation_manifest! {
+    DropDuplicatesOperation {
+        method: DropDuplicates::drop_duplicates;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueEquivalence,
+            >;
+            input: (Indexed<I, V>, Multiple<Ordered>);
+            output: OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
+        }
     }
 }

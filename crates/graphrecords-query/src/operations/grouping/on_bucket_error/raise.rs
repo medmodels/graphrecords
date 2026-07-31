@@ -2,16 +2,18 @@ use super::{
     BucketErrorPolicy, BucketErrorPolicyIn, BucketErrorPolicyOf, BucketErrorPolicyWithCause,
 };
 use crate::{
-    Diagnostic, ElementShape, ErrorGroup, EvaluateOperand, Explain, IndexDomain, Operand,
-    QueryResult,
+    Bare, Definite, Diagnostic, ElementShape, ErrorGroup, EvaluateOperand, Explain, IndexDomain,
+    Indexed, Multiple, Operand, QueryResult, Single,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     index::GroupKey,
     operands::{GroupOperand, OperandHandle, Partition},
     operations::{
-        Apply, BucketFailureArity, GroupKernel, Operation, OperationContext, Prepare, Raise,
+        Apply, BucketFailureArity, GroupKernel, Operation, OperationContext, Prepare, policy::Raise,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
+    traits::OnBucketError,
 };
 use graphrecords_core::GraphRecord;
 use std::{
@@ -296,5 +298,55 @@ impl<I: Apply<RaiseBucketErrorsWithCause<E>>, E: Error + 'static> BucketErrorPol
             input,
             RaiseBucketErrorsWithCause::new(),
         ))
+    }
+}
+
+operation_manifest! {
+    RaiseBucketErrors as "on_bucket_error_raise" {
+        method: OnBucketError::on_bucket_error;
+        policy: Raise;
+        scope: group;
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <I: IndexDomain, V: ValueDomain, O: OrderState>;
+            input: OperandHandle<Indexed<I, V>, Multiple<O>>;
+            output: GroupOperand<M, K, OperandHandle<Indexed<I, V>, Multiple<O>>>;
+        }
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: OperandHandle<Indexed<I, V>, Single>;
+            output: GroupOperand<M, K, OperandHandle<Indexed<I, V>, Single>>;
+        }
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: OperandHandle<Indexed<I, V>, Definite>;
+            output: GroupOperand<M, K, OperandHandle<Indexed<I, V>, Definite>>;
+        }
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <V: BareValueDomain, O: OrderState>;
+            input: OperandHandle<Bare<V>, Multiple<O>>;
+            output: GroupOperand<M, K, OperandHandle<Bare<V>, Multiple<O>>>;
+        }
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <V: BareValueDomain>;
+            input: OperandHandle<Bare<V>, Single>;
+            output: GroupOperand<M, K, OperandHandle<Bare<V>, Single>>;
+        }
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <V: BareValueDomain>;
+            input: OperandHandle<Bare<V>, Definite>;
+            output: GroupOperand<M, K, OperandHandle<Bare<V>, Definite>>;
+        }
     }
 }

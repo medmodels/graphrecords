@@ -1,7 +1,7 @@
-use crate::{AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueType};
+use crate::{AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain};
 use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex};
 
-pub trait ValueSubtract: ValueType {
+pub trait ValueSubtract: ValueDomain {
     fn subtract<'a>(
         label: &'static str,
         value: Self::Value<'a>,

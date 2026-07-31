@@ -3,7 +3,7 @@ use std::{
     hash::Hash,
 };
 
-pub trait CastTarget: Clone + Display + Eq + Hash + 'static {}
+pub trait CastTarget: Clone + Display + Eq + Hash + 'static + Send + Sync {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Bool;

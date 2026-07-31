@@ -1,7 +1,7 @@
-use crate::{AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueType};
+use crate::{AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain};
 use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex};
 
-pub trait ValueMultiply: ValueType {
+pub trait ValueMultiply: ValueDomain {
     fn multiply<'a>(
         label: &'static str,
         value: Self::Value<'a>,

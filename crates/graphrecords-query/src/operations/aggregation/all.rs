@@ -7,6 +7,7 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::All,
 };
 use graphrecords_core::GraphRecord;
@@ -75,5 +76,27 @@ impl<O: Apply<AllOperation>> All for O {
 
     fn all(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), AllOperation))
+    }
+}
+
+operation_manifest! {
+    AllOperation {
+        method: All::all;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                O: OrderState,
+            >;
+            input: (Indexed<I, Mask>, Multiple<O>);
+            output: DefiniteBareBoolOperand;
+        }
+
+        kernel {
+            parameters: <O: OrderState>;
+            input: (Bare<Mask>, Multiple<O>);
+            output: DefiniteBareBoolOperand;
+        }
     }
 }

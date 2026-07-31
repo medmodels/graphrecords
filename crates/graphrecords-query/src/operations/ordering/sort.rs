@@ -1,6 +1,6 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, OrderState, Ordered, QueryResult, ValueType,
+    Bare, BareValueDomain, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Multiple, Operand, OrderState, Ordered, QueryResult, ValueDomain,
     capabilities::{EnsureSortable, ValueOrdering},
     error::{
         comparison::{IncomparableValues, IncomparableValuesAt},
@@ -12,6 +12,7 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Sort,
 };
 use graphrecords_core::GraphRecord;
@@ -23,6 +24,7 @@ use std::{
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
 #[explain(label = "Sort")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct SortOperation;
 
 impl Prepare for SortOperation {
@@ -42,7 +44,7 @@ fn sort_indexed<'a, I, V, O>(
 ) -> QueryResult<KeyedStream<'a, I, V, Multiple<Ordered>>>
 where
     I: IndexDomain,
-    V: ValueType,
+    V: ValueDomain,
     O: OrderState,
     for<'b> I::Index<'b>: EnsureSortable,
     for<'b> V::Value<'b>: EnsureSortable,
@@ -111,7 +113,7 @@ fn sort_bare<'a, V, O>(
     values: BareStream<'a, V, Multiple<O>>,
 ) -> QueryResult<<OperandHandle<Bare<V>, Multiple<Ordered>> as EvaluateOperand>::ReturnValue<'a>>
 where
-    V: BareValueType,
+    V: BareValueDomain,
     O: OrderState,
     for<'b> V::Value<'b>: EnsureSortable,
     V::Owned: Debug + Display + Send + Sync,
@@ -164,7 +166,7 @@ where
 
 impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for SortOperation
 where
-    V: ValueOrdering + BareValueType,
+    V: ValueOrdering + BareValueDomain,
     O: OrderState,
     for<'a> V::Value<'a>: EnsureSortable,
     V::Owned: Debug + Display + Send + Sync,
@@ -189,5 +191,26 @@ impl<O: Apply<SortOperation>> Sort for O {
 
     fn sort(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), SortOperation))
+    }
+}
+
+operation_manifest! {
+    SortOperation {
+        method: Sort::sort;
+        scope: lane;
+
+        kernel {
+            parameters: <I: EnsureSortable, V: ValueOrdering + EnsureSortable, O: OrderState>;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
+            where V::Owned: Debug + Display + Send + Sync;
+        }
+
+        kernel {
+            parameters: <V: ValueOrdering + EnsureSortable + BareValueDomain, O: OrderState>;
+            input: (Bare<V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Multiple<Ordered>>;
+            where V::Owned: Debug + Display + Send + Sync;
+        }
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    AttributeName, Failure, IndexValue, QueryResult, Scalar, ValueType,
+    AttributeName, Failure, IndexValue, QueryResult, Scalar, ValueDomain,
     cast::{
         Bool as BoolTarget, CastTarget, DateTime as DateTimeTarget, Duration as DurationTarget,
         Float as FloatTarget, Int as IntTarget, String as StringTarget,
@@ -15,7 +15,7 @@ use std::{
     time::Duration as StandardDuration,
 };
 
-pub trait ValueCast<T: CastTarget>: ValueType {
+pub trait ValueCast<T: CastTarget>: ValueDomain {
     fn cast<'a>(
         label: &'static str,
         value: Self::Value<'a>,

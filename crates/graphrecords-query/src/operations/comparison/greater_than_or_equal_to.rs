@@ -1,6 +1,6 @@
 use super::{ordering_bare, ordering_indexed};
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
     capabilities::ValueOrdering,
     execution::EvaluationCache,
     operations::{
@@ -8,6 +8,7 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
     traits::GreaterThanOrEqualTo,
 };
 use graphrecords_core::GraphRecord;
@@ -44,7 +45,7 @@ impl<I, V, A> ElementKernel<Indexed<I, V>> for GreaterThanOrEqualToOperation<A>
 where
     I: IndexDomain,
     V: ValueOrdering,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Keyed<I>, V>,
     V::Owned: Debug + Display + Send + Sync,
 {
     type Emission = A::Retention;
@@ -72,8 +73,8 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for GreaterThanOrEqualToOperation<A>
 where
-    V: ValueOrdering + BareValueType,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: ValueOrdering + BareValueDomain,
+    A: ArgumentSource<Unaligned, V>,
     V::Owned: Debug + Display + Send + Sync,
 {
     type Emission = A::Retention;
@@ -111,5 +112,30 @@ where
             self.clone(),
             GreaterThanOrEqualToOperation { argument },
         ))
+    }
+}
+
+operation_manifest! {
+    GreaterThanOrEqualToOperation<A> {
+        method: GreaterThanOrEqualTo<A>::greater_than_or_equal_to;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueOrdering>;
+            argument: A: ArgumentSource<Keyed<I>, V>;
+            input: Indexed<I, V>;
+            output: Indexed<I, Mask>;
+            emission: ArgumentRetention;
+            where V::Owned: Debug + Display + Send + Sync;
+        }
+
+        kernel {
+            parameters: <V: ValueOrdering + BareValueDomain>;
+            argument: A: ArgumentSource<Unaligned, V>;
+            input: Bare<V>;
+            output: Bare<Mask>;
+            emission: ArgumentRetention;
+            where V::Owned: Debug + Display + Send + Sync;
+        }
     }
 }

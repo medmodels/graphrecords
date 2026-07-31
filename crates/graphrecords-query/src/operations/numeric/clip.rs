@@ -1,5 +1,5 @@
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::ValueClip,
     element::{Pipeline, Retention},
     execution::EvaluationCache,
@@ -8,6 +8,7 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
     traits::Clip,
 };
 use graphrecords_core::GraphRecord;
@@ -45,8 +46,8 @@ impl<I, V, L, U> ElementKernel<Indexed<I, V>> for ClipOperation<L, U>
 where
     I: IndexDomain,
     V: ValueClip,
-    for<'a> L: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
-    for<'a> U: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    L: ArgumentSource<Keyed<I>, V>,
+    U: ArgumentSource<Keyed<I>, V>,
 {
     type Emission = <L::Retention as Retention>::Then<U::Retention>;
     type OutShape = Indexed<I, V>;
@@ -85,9 +86,9 @@ where
 
 impl<V, L, U> ElementKernel<Bare<V>> for ClipOperation<L, U>
 where
-    V: ValueClip + BareValueType,
-    for<'a> L: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
-    for<'a> U: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: ValueClip + BareValueDomain,
+    L: ArgumentSource<Unaligned, V>,
+    U: ArgumentSource<Unaligned, V>,
 {
     type Emission = <L::Retention as Retention>::Then<U::Retention>;
     type OutShape = Bare<V>;
@@ -133,5 +134,30 @@ where
             self.clone(),
             ClipOperation { lower, upper },
         ))
+    }
+}
+
+operation_manifest! {
+    ClipOperation<L, U> {
+        method: Clip<L, U>::clip;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueClip>;
+            argument: L: ArgumentSource<Keyed<I>, V>;
+            argument: U: ArgumentSource<Keyed<I>, V>;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: ArgumentRetention;
+        }
+
+        kernel {
+            parameters: <V: ValueClip + BareValueDomain>;
+            argument: L: ArgumentSource<Unaligned, V>;
+            argument: U: ArgumentSource<Unaligned, V>;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: ArgumentRetention;
+        }
     }
 }

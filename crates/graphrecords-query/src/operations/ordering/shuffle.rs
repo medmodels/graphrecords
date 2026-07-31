@@ -1,12 +1,13 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
-    OrderState, Ordered, QueryResult, ValueType,
+    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    OrderState, Ordered, QueryResult, ValueDomain,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Shuffle,
 };
 use graphrecords_core::GraphRecord;
@@ -30,7 +31,7 @@ impl Prepare for ShuffleOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
+impl<I: IndexDomain, V: ValueDomain, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
     for ShuffleOperation
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
@@ -51,7 +52,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Mult
     }
 }
 
-impl<V: BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for ShuffleOperation {
+impl<V: BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for ShuffleOperation {
     type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(
@@ -75,5 +76,23 @@ impl<O: Apply<ShuffleOperation>> Shuffle for O {
 
     fn shuffle(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), ShuffleOperation))
+    }
+}
+
+operation_manifest! {
+    ShuffleOperation {
+        method: Shuffle::shuffle;
+        scope: lane;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain, O: OrderState>;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
+        }
+        kernel {
+            parameters: <V: BareValueDomain, O: OrderState>;
+            input: (Bare<V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Multiple<Ordered>>;
+        }
     }
 }

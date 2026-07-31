@@ -1,9 +1,11 @@
 use crate::{
-    Explain, FailureKind, Position, QueryResult,
+    AttributeName, Explain, FailureKind, FailureKindValue, IndexValue, Mask, Position, QueryResult,
+    Scalar, ValueDomain,
     element::Preserving,
     execution::EvaluationCache,
     explain::ExplainFormatter,
-    operations::{Alignment, ArgumentSource, Lookup, Prepare},
+    index::Positional,
+    operations::{Alignment, ArgumentSource, Lookup, Prepare, SourceDomain},
     optimizer::{Estimate, Estimated, PlanIdentity, PlanInputs, Stats},
 };
 use graphrecords_core::{
@@ -51,19 +53,21 @@ impl Estimated for GraphRecordValue {
     }
 }
 
-impl<A: Alignment> ArgumentSource<A> for GraphRecordValue {
-    type OwnedValue = Self;
-    type Retention = Preserving;
-    type Value<'a> = Self;
+impl SourceDomain for GraphRecordValue {
+    type ValueDomain = Scalar;
+}
 
-    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
-        value.clone()
-    }
+impl<A, V> ArgumentSource<A, V> for GraphRecordValue
+where
+    A: Alignment,
+    for<'a> V: ValueDomain<Value<'a> = Self>,
+{
+    type Retention = Preserving;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
     where
         Self: 'a,
     {
@@ -110,19 +114,21 @@ impl Estimated for bool {
     }
 }
 
-impl<A: Alignment> ArgumentSource<A> for bool {
-    type OwnedValue = Self;
-    type Retention = Preserving;
-    type Value<'a> = Self;
+impl SourceDomain for bool {
+    type ValueDomain = Mask;
+}
 
-    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
-        *value
-    }
+impl<A, V> ArgumentSource<A, V> for bool
+where
+    A: Alignment,
+    for<'a> V: ValueDomain<Value<'a> = Self>,
+{
+    type Retention = Preserving;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
     where
         Self: 'a,
     {
@@ -166,19 +172,21 @@ impl Estimated for GraphRecordAttribute {
     }
 }
 
-impl<A: Alignment> ArgumentSource<A> for GraphRecordAttribute {
-    type OwnedValue = Self;
-    type Retention = Preserving;
-    type Value<'a> = Self;
+impl SourceDomain for GraphRecordAttribute {
+    type ValueDomain = AttributeName;
+}
 
-    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
-        value.clone()
-    }
+impl<A, V> ArgumentSource<A, V> for GraphRecordAttribute
+where
+    A: Alignment,
+    for<'a> V: ValueDomain<Value<'a> = Self>,
+{
+    type Retention = Preserving;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
     where
         Self: 'a,
     {
@@ -222,19 +230,21 @@ impl Estimated for EdgeIndex {
     }
 }
 
-impl<A: Alignment> ArgumentSource<A> for EdgeIndex {
-    type OwnedValue = Self;
-    type Retention = Preserving;
-    type Value<'a> = Self;
+impl SourceDomain for EdgeIndex {
+    type ValueDomain = IndexValue<Self>;
+}
 
-    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
-        *value
-    }
+impl<A, V> ArgumentSource<A, V> for EdgeIndex
+where
+    A: Alignment,
+    for<'a> V: ValueDomain<Value<'a> = Self>,
+{
+    type Retention = Preserving;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
     where
         Self: 'a,
     {
@@ -278,19 +288,21 @@ impl Estimated for Position {
     }
 }
 
-impl<A: Alignment> ArgumentSource<A> for Position {
-    type OwnedValue = Self;
-    type Retention = Preserving;
-    type Value<'a> = Self;
+impl SourceDomain for Position {
+    type ValueDomain = IndexValue<Positional>;
+}
 
-    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
-        *value
-    }
+impl<A, V> ArgumentSource<A, V> for Position
+where
+    A: Alignment,
+    for<'a> V: ValueDomain<Value<'a> = Self>,
+{
+    type Retention = Preserving;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
     where
         Self: 'a,
     {
@@ -334,19 +346,21 @@ impl Estimated for FailureKind {
     }
 }
 
-impl<A: Alignment> ArgumentSource<A> for FailureKind {
-    type OwnedValue = Self;
-    type Retention = Preserving;
-    type Value<'a> = Self;
+impl SourceDomain for FailureKind {
+    type ValueDomain = FailureKindValue;
+}
 
-    fn to_owned_value(value: &Self::Value<'_>) -> Self::OwnedValue {
-        *value
-    }
+impl<A, V> ArgumentSource<A, V> for FailureKind
+where
+    A: Alignment,
+    for<'a> V: ValueDomain<Value<'a> = Self>,
+{
+    type Retention = Preserving;
 
     fn lookup<'a, 'prepared>(
         prepared: &'prepared Self::Prepared<'a>,
         _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self::Value<'a>>>
+    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
     where
         Self: 'a,
     {

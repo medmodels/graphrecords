@@ -49,101 +49,97 @@ pub mod _graphrecords {
     #[pymodule]
     pub mod querying {
         #[pymodule_export]
-        use crate::prelude::EdgeOperandGroupDiscriminator;
+        use crate::prelude::ArgumentAbsentError;
         #[pymodule_export]
-        use crate::prelude::NodeOperandGroupDiscriminator;
+        use crate::prelude::DivisionByZeroError;
         #[pymodule_export]
-        use crate::prelude::PyEdgeAttributesTreeGroupOperand;
+        use crate::prelude::DuplicateExpandedChildIndexError;
         #[pymodule_export]
-        use crate::prelude::PyEdgeAttributesTreeOperand;
+        use crate::prelude::DuplicateIndexError;
+        #[pymodule_export]
+        use crate::prelude::EmptySplitDelimiterError;
+        #[pymodule_export]
+        use crate::prelude::EvaluationCacheGraphRecordMismatchError;
+        #[pymodule_export]
+        use crate::prelude::ExternalError;
+        #[pymodule_export]
+        use crate::prelude::GraphRecordError;
+        #[pymodule_export]
+        use crate::prelude::IncomparableIndicesError;
+        #[pymodule_export]
+        use crate::prelude::IncomparableValuesAtError;
+        #[pymodule_export]
+        use crate::prelude::IncomparableValuesError;
+        #[pymodule_export]
+        use crate::prelude::IntegerOverflowError;
+        #[pymodule_export]
+        use crate::prelude::InvalidCastError;
+        #[pymodule_export]
+        use crate::prelude::InvalidClipBoundsError;
+        #[pymodule_export]
+        use crate::prelude::InvalidMedianValueError;
+        #[pymodule_export]
+        use crate::prelude::InvalidPaddingCharacterError;
+        #[pymodule_export]
+        use crate::prelude::InvalidPartitionBucketArityError;
+        #[pymodule_export]
+        use crate::prelude::InvalidRegexPatternError;
+        #[pymodule_export]
+        use crate::prelude::InvalidStandardDeviationValueError;
+        #[pymodule_export]
+        use crate::prelude::InvalidStringSliceError;
+        #[pymodule_export]
+        use crate::prelude::InvalidTransitionError;
+        #[pymodule_export]
+        use crate::prelude::InvalidVarianceValueError;
+        #[pymodule_export]
+        use crate::prelude::MissingAttributeError;
+        #[pymodule_export]
+        use crate::prelude::MissingGroupAggregateError;
+        #[pymodule_export]
+        use crate::prelude::MissingTraversedAttributeError;
+        #[pymodule_export]
+        use crate::prelude::ModuloByZeroError;
+        #[pymodule_export]
+        use crate::prelude::NegativeLengthError;
+        #[pymodule_export]
+        use crate::prelude::NegativeSquareRootError;
+        #[pymodule_export]
+        use crate::prelude::NoChildIndexError;
+        #[pymodule_export]
+        use crate::prelude::NonIntegerValueError;
+        #[pymodule_export]
+        use crate::prelude::NonNumericValueError;
+        #[pymodule_export]
+        use crate::prelude::NonPositiveLogarithmError;
+        #[pymodule_export]
+        use crate::prelude::NonStringValueError;
+        #[pymodule_export]
+        use crate::prelude::PyArgument;
+        #[pymodule_export]
+        use crate::prelude::PyCastTarget;
         #[pymodule_export]
         use crate::prelude::PyEdgeDirection;
         #[pymodule_export]
-        use crate::prelude::PyEdgeGroupOperand;
+        use crate::prelude::PyEdgeEndpointRole;
         #[pymodule_export]
-        use crate::prelude::PyEdgeIndexGroupOperand;
+        use crate::prelude::PyFailureKind;
         #[pymodule_export]
-        use crate::prelude::PyEdgeIndexOperand;
+        use crate::prelude::PyOperand;
         #[pymodule_export]
-        use crate::prelude::PyEdgeIndicesGroupOperand;
+        use crate::prelude::PyValueTarget;
         #[pymodule_export]
-        use crate::prelude::PyEdgeIndicesOperand;
+        use crate::prelude::QueryError;
         #[pymodule_export]
-        use crate::prelude::PyEdgeMultipleAttributesWithIndexGroupOperand;
+        use crate::prelude::StringLengthOverflowError;
         #[pymodule_export]
-        use crate::prelude::PyEdgeMultipleAttributesWithIndexOperand;
+        use crate::prelude::StringPaddingOverflowError;
         #[pymodule_export]
-        use crate::prelude::PyEdgeMultipleAttributesWithoutIndexOperand;
+        use crate::prelude::UnresolvedBucketFailuresError;
         #[pymodule_export]
-        use crate::prelude::PyEdgeMultipleValuesWithIndexGroupOperand;
+        use crate::prelude::UnresolvedGroupKeyFailuresError;
         #[pymodule_export]
-        use crate::prelude::PyEdgeMultipleValuesWithIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyEdgeMultipleValuesWithoutIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyEdgeOperand;
-        #[pymodule_export]
-        use crate::prelude::PyEdgeSingleAttributeWithIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyEdgeSingleAttributeWithIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyEdgeSingleAttributeWithoutIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyEdgeSingleAttributeWithoutIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyEdgeSingleValueWithIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyEdgeSingleValueWithIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyEdgeSingleValueWithoutIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyEdgeSingleValueWithoutIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyMatchMode;
-        #[pymodule_export]
-        use crate::prelude::PyNodeAttributesTreeGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeAttributesTreeOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeIndicesGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeIndicesOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeMultipleAttributesWithIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeMultipleAttributesWithIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeMultipleAttributesWithoutIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeMultipleValuesWithIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeMultipleValuesWithIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeMultipleValuesWithoutIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeSingleAttributeWithIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeSingleAttributeWithIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeSingleAttributeWithoutIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeSingleAttributeWithoutIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeSingleValueWithIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeSingleValueWithIndexOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeSingleValueWithoutIndexGroupOperand;
-        #[pymodule_export]
-        use crate::prelude::PyNodeSingleValueWithoutIndexOperand;
+        use crate::prelude::UnsupportedValueRoleError;
     }
 
     #[pymodule]
@@ -164,7 +160,7 @@ pub mod _graphrecords {
         fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
             m.add(
                 "PY_DEFAULT_TRUNCATE_DETAILS",
-                graphrecords_core::graphrecord::overview::DEFAULT_TRUNCATE_DETAILS,
+                graphrecords_overview::DEFAULT_TRUNCATE_DETAILS,
             )
         }
     }

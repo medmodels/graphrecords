@@ -6,9 +6,10 @@ mod power;
 mod subtract;
 
 use crate::{
-    IndexDomain, QueryResult, ValueType,
+    IndexDomain, QueryResult, ValueDomain,
     element::{BarePipeline, IndexedValuePipeline, Pipeline, Retention},
     operations::{ArgumentSource, Keyed, Unaligned},
+    registry::OperationManifest,
 };
 pub use add::AddOperation;
 pub use divide::DivideOperation;
@@ -17,11 +18,22 @@ pub use multiply::MultiplyOperation;
 pub use power::PowerOperation;
 pub use subtract::SubtractOperation;
 
+pub(super) fn operation_manifests() -> Vec<OperationManifest> {
+    vec![
+        add::operation_manifest(),
+        divide::operation_manifest(),
+        modulo::operation_manifest(),
+        multiply::operation_manifest(),
+        power::operation_manifest(),
+        subtract::operation_manifest(),
+    ]
+}
+
 type ArithmeticFunction<'a, V> = fn(
     &'static str,
-    <V as ValueType>::Value<'a>,
-    <V as ValueType>::Value<'a>,
-) -> QueryResult<<V as ValueType>::Value<'a>>;
+    <V as ValueDomain>::Value<'a>,
+    <V as ValueDomain>::Value<'a>,
+) -> QueryResult<<V as ValueDomain>::Value<'a>>;
 
 fn arithmetic_indexed<'a, I, V, A>(
     prepared: A::Prepared<'a>,
@@ -30,8 +42,8 @@ fn arithmetic_indexed<'a, I, V, A>(
 ) -> IndexedValuePipeline<'a, I, V, V, A::Retention>
 where
     I: IndexDomain,
-    V: ValueType,
-    A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    V: ValueDomain,
+    A: ArgumentSource<Keyed<I>, V>,
     A::Prepared<'a>: 'a,
 {
     Pipeline::keyed(move |index, item| {
@@ -58,8 +70,8 @@ fn arithmetic_bare<'a, V, A>(
     operation: ArithmeticFunction<'a, V>,
 ) -> BarePipeline<'a, V, V, A::Retention>
 where
-    V: ValueType,
-    A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: ValueDomain,
+    A: ArgumentSource<Unaligned, V>,
     A::Prepared<'a>: 'a,
 {
     Pipeline::new(move |item| {

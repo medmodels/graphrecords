@@ -1,5 +1,6 @@
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    ValueDomain,
     capabilities::ValueTransition,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
@@ -17,12 +18,12 @@ use std::{
 
 #[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
-#[plan(optimizer_hints(empty = if_any))]
-pub struct TransitionOperation<T: ValueType> {
+#[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
+pub struct TransitionOperation<T: ValueDomain> {
     marker: PhantomData<fn() -> T>,
 }
 
-impl<T: ValueType> TransitionOperation<T> {
+impl<T: ValueDomain> TransitionOperation<T> {
     const fn new() -> Self {
         Self {
             marker: PhantomData,
@@ -30,23 +31,23 @@ impl<T: ValueType> TransitionOperation<T> {
     }
 }
 
-impl<T: ValueType> Clone for TransitionOperation<T> {
+impl<T: ValueDomain> Clone for TransitionOperation<T> {
     fn clone(&self) -> Self {
         Self::new()
     }
 }
 
-impl<T: ValueType> Labeled for TransitionOperation<T> {
+impl<T: ValueDomain> Labeled for TransitionOperation<T> {
     const LABEL: &'static str = "Transition";
 }
 
-impl<T: ValueType> Explain for TransitionOperation<T> {
+impl<T: ValueDomain> Explain for TransitionOperation<T> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         write!(formatter, "Transition target={}", type_name::<T>())
     }
 }
 
-impl<T: ValueType> Prepare for TransitionOperation<T> {
+impl<T: ValueDomain> Prepare for TransitionOperation<T> {
     type Prepared<'a> = ();
 
     fn prepare<'a>(
@@ -62,7 +63,7 @@ impl<I, S, T> ElementKernel<Indexed<I, S>> for TransitionOperation<T>
 where
     I: IndexDomain,
     S: ValueTransition<T>,
-    T: ValueType,
+    T: ValueDomain,
 {
     type Emission = Preserving;
     type OutShape = Indexed<I, T>;
@@ -85,8 +86,8 @@ where
 
 impl<S, T> ElementKernel<Bare<S>> for TransitionOperation<T>
 where
-    S: ValueTransition<T> + BareValueType,
-    T: BareValueType,
+    S: ValueTransition<T> + BareValueDomain,
+    T: BareValueDomain,
 {
     type Emission = Preserving;
     type OutShape = Bare<T>;
@@ -109,12 +110,12 @@ impl<O: Operand> Transition for O {
     type ReturnOperand<T>
         = O::Output
     where
-        T: ValueType,
+        T: ValueDomain,
         O: Apply<TransitionOperation<T>>;
 
     fn transition<T>(&self) -> Self::ReturnOperand<T>
     where
-        T: ValueType,
+        T: ValueDomain,
         Self: Apply<TransitionOperation<T>>,
     {
         Self::ReturnOperand::new(OperationContext::new(

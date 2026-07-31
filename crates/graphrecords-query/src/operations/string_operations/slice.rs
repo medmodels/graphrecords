@@ -1,12 +1,13 @@
-use super::{string_map_bare, string_map_indexed};
+use super::{string_rebuild_map_bare, string_rebuild_map_indexed};
 use crate::{
-    Bare, BareValueType, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::StringValue,
     element::Preserving,
     error::string::InvalidStringSlice,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Slice,
 };
 use graphrecords_core::GraphRecord;
@@ -27,7 +28,7 @@ fn slice_string(label: &'static str, value: &str, start: usize, end: usize) -> Q
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Slice")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct SliceOperation {
     #[explain(label)]
     start: usize,
@@ -59,11 +60,9 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(string_map_indexed::<I, V, V>(
+        Ok(string_rebuild_map_indexed::<I, V>(
             Self::LABEL,
-            move |label, value| {
-                slice_string(label, &value, prepared.0, prepared.1).map(V::from_string)
-            },
+            move |label, value| slice_string(label, &value, prepared.0, prepared.1),
         ))
     }
 
@@ -74,7 +73,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for SliceOperation
 where
-    V: StringValue + BareValueType,
+    V: StringValue + BareValueDomain,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;
@@ -83,9 +82,10 @@ where
         _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(string_map_bare::<V, V>(Self::LABEL, move |label, value| {
-            slice_string(label, &value, prepared.0, prepared.1).map(V::from_string)
-        }))
+        Ok(string_rebuild_map_bare::<V>(
+            Self::LABEL,
+            move |label, value| slice_string(label, &value, prepared.0, prepared.1),
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -101,5 +101,29 @@ impl<O: Apply<SliceOperation>> Slice for O {
             self.clone(),
             SliceOperation { start, end },
         ))
+    }
+}
+
+operation_manifest! {
+    SliceOperation {
+        method: Slice::slice;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: StringValue>;
+            field: start: usize;
+            field: end: usize;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: Preserving;
+        }
+        kernel {
+            parameters: <V: StringValue + BareValueDomain>;
+            field: start: usize;
+            field: end: usize;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: Preserving;
+        }
     }
 }

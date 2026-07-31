@@ -2,21 +2,21 @@ use crate::{EntityDomain, Failure, FailureKind, IndexDomain};
 use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue};
 use std::marker::PhantomData;
 
-pub trait ValueType: 'static {
+pub trait ValueDomain: 'static {
+    type Owned: 'static + Clone;
+
     type Value<'a>: 'a + Clone
     where
         Self: 'a;
-
-    type Owned: 'static + Clone;
 
     fn into_owned(value: Self::Value<'_>) -> Self::Owned;
 
     fn from_owned(owned: &Self::Owned) -> Self::Value<'_>;
 }
 
-pub trait BareValueType: ValueType {}
+pub trait BareValueDomain: ValueDomain {}
 
-pub trait ReturnValueType: ValueType {}
+pub trait ReturnValueDomain: ValueDomain {}
 
 pub struct Scalar;
 pub struct Mask;
@@ -28,7 +28,7 @@ pub struct EntityReference<E: EntityDomain>(PhantomData<E>);
 pub struct FailureValue;
 pub struct FailureKindValue;
 
-impl ValueType for Scalar {
+impl ValueDomain for Scalar {
     type Owned = GraphRecordValue;
     type Value<'a> = GraphRecordValue;
 
@@ -40,7 +40,7 @@ impl ValueType for Scalar {
         owned.clone()
     }
 }
-impl ValueType for Mask {
+impl ValueDomain for Mask {
     type Owned = bool;
     type Value<'a> = bool;
 
@@ -52,7 +52,7 @@ impl ValueType for Mask {
         *owned
     }
 }
-impl ValueType for AttributeName {
+impl ValueDomain for AttributeName {
     type Owned = GraphRecordAttribute;
     type Value<'a> = GraphRecordAttribute;
 
@@ -64,7 +64,7 @@ impl ValueType for AttributeName {
         owned.clone()
     }
 }
-impl ValueType for Unit {
+impl ValueDomain for Unit {
     type Owned = ();
     type Value<'a> = ();
 
@@ -72,7 +72,7 @@ impl ValueType for Unit {
 
     fn from_owned(_owned: &Self::Owned) -> Self::Value<'_> {}
 }
-impl<I: IndexDomain> ValueType for IndexValue<I> {
+impl<I: IndexDomain> ValueDomain for IndexValue<I> {
     type Owned = I::Owned;
     type Value<'a> = I::Owned;
 
@@ -84,7 +84,7 @@ impl<I: IndexDomain> ValueType for IndexValue<I> {
         owned.clone()
     }
 }
-impl<E: EntityDomain> ValueType for EntityReference<E> {
+impl<E: EntityDomain> ValueDomain for EntityReference<E> {
     type Owned = E::Owned;
     type Value<'a> = E::Index<'a>;
 
@@ -96,7 +96,7 @@ impl<E: EntityDomain> ValueType for EntityReference<E> {
         E::from_owned(owned)
     }
 }
-impl ValueType for FailureValue {
+impl ValueDomain for FailureValue {
     type Owned = Failure;
     type Value<'a> = Failure;
 
@@ -108,7 +108,7 @@ impl ValueType for FailureValue {
         owned.clone()
     }
 }
-impl ValueType for FailureKindValue {
+impl ValueDomain for FailureKindValue {
     type Owned = FailureKind;
     type Value<'a> = FailureKind;
 
@@ -121,18 +121,18 @@ impl ValueType for FailureKindValue {
     }
 }
 
-impl BareValueType for Scalar {}
-impl BareValueType for Mask {}
-impl BareValueType for AttributeName {}
-impl<I: IndexDomain> BareValueType for IndexValue<I> {}
-impl<E: EntityDomain> BareValueType for EntityReference<E> {}
-impl BareValueType for FailureValue {}
-impl BareValueType for FailureKindValue {}
+impl BareValueDomain for Scalar {}
+impl BareValueDomain for Mask {}
+impl BareValueDomain for AttributeName {}
+impl<I: IndexDomain> BareValueDomain for IndexValue<I> {}
+impl<E: EntityDomain> BareValueDomain for EntityReference<E> {}
+impl BareValueDomain for FailureValue {}
+impl BareValueDomain for FailureKindValue {}
 
-impl ReturnValueType for Scalar {}
-impl ReturnValueType for Mask {}
-impl ReturnValueType for AttributeName {}
-impl<I: IndexDomain> ReturnValueType for IndexValue<I> {}
-impl<E: EntityDomain> ReturnValueType for EntityReference<E> {}
-impl ReturnValueType for FailureValue {}
-impl ReturnValueType for FailureKindValue {}
+impl ReturnValueDomain for Scalar {}
+impl ReturnValueDomain for Mask {}
+impl ReturnValueDomain for AttributeName {}
+impl<I: IndexDomain> ReturnValueDomain for IndexValue<I> {}
+impl<E: EntityDomain> ReturnValueDomain for EntityReference<E> {}
+impl ReturnValueDomain for FailureValue {}
+impl ReturnValueDomain for FailureKindValue {}

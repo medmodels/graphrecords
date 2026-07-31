@@ -1,6 +1,6 @@
 use crate::{
     EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
-    OrderState, Ordered, QueryResult, ValueType,
+    OrderState, Ordered, QueryResult, ValueDomain,
     capabilities::EnsureSortable,
     element::Retention,
     error::{comparison::IncomparableValuesAt, ordering::IncomparableIndices},
@@ -10,6 +10,7 @@ use crate::{
         Apply, ArgumentSource, Keyed, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::SortBy,
 };
 use graphrecords_core::GraphRecord;
@@ -21,6 +22,7 @@ use std::{
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
 #[explain(label = "SortBy")]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct SortByOperation<A> {
     #[argument]
     key: A,
@@ -46,12 +48,12 @@ impl<A: Prepare> Prepare for SortByOperation<A> {
 impl<I, V, A, O> LaneKernel<Indexed<I, V>, Multiple<O>> for SortByOperation<A>
 where
     I: IndexDomain,
-    V: ValueType,
+    V: ValueDomain,
     A: ArgumentSource<Keyed<I>>,
     O: OrderState,
     for<'a> I::Index<'a>: EnsureSortable,
-    for<'a> A::Value<'a>: EnsureSortable,
-    A::OwnedValue: Debug + Display + Send + Sync,
+    for<'a> <A::ValueDomain as ValueDomain>::Value<'a>: EnsureSortable,
+    <A::ValueDomain as ValueDomain>::Owned: Debug + Display + Send + Sync,
 {
     type Output = SortedBy<I, V>;
 
@@ -79,8 +81,8 @@ where
             return Err(Failure::new(
                 label,
                 IncomparableValuesAt::new(
-                    A::to_owned_value(first),
-                    A::to_owned_value(second),
+                    A::ValueDomain::into_owned(first.clone()),
+                    A::ValueDomain::into_owned(second.clone()),
                     I::to_owned(first_index),
                     I::to_owned(second_index),
                 ),
@@ -104,7 +106,7 @@ where
                 return Err(Failure::new(
                     label,
                     IncomparableIndices::new(
-                        A::to_owned_value(key),
+                        A::ValueDomain::into_owned(key.clone()),
                         I::to_owned(first_index),
                         I::to_owned(second_index),
                     ),
@@ -139,5 +141,19 @@ where
 
     fn sort_by(&self, key: A) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), SortByOperation { key }))
+    }
+}
+
+operation_manifest! {
+    SortByOperation<A> {
+        method: SortBy<A>::sort_by;
+        scope: lane;
+
+        kernel {
+            parameters: <I: EnsureSortable, V: ValueDomain, O: OrderState>;
+            argument: A: ArgumentSource<Keyed<I>> where A::ValueDomain: EnsureSortable;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: SortedBy<I, V>;
+        }
     }
 }

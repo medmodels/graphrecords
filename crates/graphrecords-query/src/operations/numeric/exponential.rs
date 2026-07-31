@@ -1,11 +1,12 @@
 use super::{numeric_bare, numeric_indexed};
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::ValueExponential,
     element::Preserving,
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Exponential,
 };
 use graphrecords_core::GraphRecord;
@@ -13,7 +14,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Exponential")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct ExponentialOperation;
 
 impl Prepare for ExponentialOperation {
@@ -40,7 +41,7 @@ where
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(numeric_indexed::<I, V>(Self::LABEL, V::exponential))
+        Ok(numeric_indexed::<I, V, _>(Self::LABEL, V::exponential))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -50,7 +51,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for ExponentialOperation
 where
-    V: ValueExponential + BareValueType,
+    V: ValueExponential + BareValueDomain,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;
@@ -59,7 +60,7 @@ where
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(numeric_bare::<V>(Self::LABEL, V::exponential))
+        Ok(numeric_bare::<V, _>(Self::LABEL, V::exponential))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -72,5 +73,26 @@ impl<O: Apply<ExponentialOperation>> Exponential for O {
 
     fn exp(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), ExponentialOperation))
+    }
+}
+
+operation_manifest! {
+    ExponentialOperation {
+        method: Exponential::exp;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueExponential>;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: Preserving;
+        }
+
+        kernel {
+            parameters: <V: ValueExponential + BareValueDomain>;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: Preserving;
+        }
     }
 }

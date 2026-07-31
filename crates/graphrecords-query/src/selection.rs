@@ -179,19 +179,6 @@ impl_return_operand_for_tuples!(
     R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15
 );
 
-fn optimize<'a, R: ReturnOperand<'a>>(
-    return_operand: R,
-    optimizer: &Optimizer,
-    graphrecord: &GraphRecord,
-) -> (R, OptimizationReport) {
-    if optimizer.is_empty() {
-        return (return_operand, OptimizationReport::default());
-    }
-
-    let stats = Stats::new(graphrecord);
-    return_operand.optimize(optimizer, &stats)
-}
-
 pub struct Selection<'a, R: ReturnOperand<'a>> {
     graphrecord: &'a GraphRecord,
     cache: EvaluationCache<'a>,
@@ -215,7 +202,7 @@ impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
         let operand = NodesOperand::new(AllNodes);
         let unoptimized_return_operand = query(&operand);
         let (optimized_return_operand, report) =
-            optimize(unoptimized_return_operand.clone(), optimizer, graphrecord);
+            Self::optimize(unoptimized_return_operand.clone(), optimizer, graphrecord);
 
         Self {
             graphrecord,
@@ -240,7 +227,7 @@ impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
         let operand = EdgesOperand::new(AllEdges);
         let unoptimized_return_operand = query(&operand);
         let (optimized_return_operand, report) =
-            optimize(unoptimized_return_operand.clone(), optimizer, graphrecord);
+            Self::optimize(unoptimized_return_operand.clone(), optimizer, graphrecord);
 
         Self {
             graphrecord,
@@ -249,6 +236,20 @@ impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
             optimized_return_operand,
             report,
         }
+    }
+
+    fn optimize(
+        return_operand: R,
+        optimizer: &Optimizer,
+        graphrecord: &GraphRecord,
+    ) -> (R, OptimizationReport) {
+        if optimizer.is_empty() {
+            return (return_operand, OptimizationReport::default());
+        }
+
+        let stats = Stats::new(graphrecord);
+
+        return_operand.optimize(optimizer, &stats)
     }
 
     pub fn evaluate(&'a self) -> QueryResult<R::ReturnValue> {

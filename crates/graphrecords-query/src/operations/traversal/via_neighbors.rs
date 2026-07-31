@@ -1,34 +1,15 @@
 use crate::{
-    BoxedIterator, EdgeDirection, EntityReference, ExpandedChild, ExpandedIndex, Explain,
-    IndexDomain, Indexed, Operand, QueryResult, Unit, Unordered,
+    EdgeDirection, EntityReference, ExpandedChild, ExpandedIndex, Explain, IndexDomain, Indexed,
+    Operand, QueryResult, Unit, Unordered,
     element::{Expanding, Pipeline},
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::ViaNeighbors,
 };
 use graphrecords_core::{GraphRecord, graphrecord::NodeIndex};
 use graphrecords_utils::aliases::GrHashSet;
-
-fn neighbors_for_node<'a>(
-    graphrecord: &'a GraphRecord,
-    node: &'a NodeIndex,
-    direction: EdgeDirection,
-) -> BoxedIterator<'a, &'a NodeIndex> {
-    match direction {
-        EdgeDirection::Outgoing => Box::new(
-            graphrecord
-                .outgoing_neighbors(node)
-                .expect("Node must exist"),
-        ),
-        EdgeDirection::Incoming => Box::new(
-            graphrecord
-                .incoming_neighbors(node)
-                .expect("Node must exist"),
-        ),
-        EdgeDirection::Both => Box::new(graphrecord.neighbors(node).expect("Node must exist")),
-    }
-}
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -60,8 +41,9 @@ impl ElementKernel<Indexed<NodeIndex, Unit>> for ViaNeighborsOperation {
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<NodeIndex, Unit>, Self>> {
         Ok(Pipeline::keyed(move |parent_index, ()| {
-            let neighbors: GrHashSet<_> =
-                neighbors_for_node(graphrecord, parent_index, prepared).collect();
+            let neighbors: GrHashSet<_> = prepared
+                .neighbors_for_node(graphrecord, parent_index)
+                .collect();
 
             Ok(neighbors
                 .into_iter()
@@ -82,7 +64,7 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<NodeIndex>>>
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<NodeIndex>>, Self>> {
         Ok(Pipeline::unkeyed(move |node| {
-            let neighbors: GrHashSet<_> = neighbors_for_node(graphrecord, node, prepared).collect();
+            let neighbors: GrHashSet<_> = prepared.neighbors_for_node(graphrecord, node).collect();
 
             Ok(neighbors
                 .into_iter()
@@ -100,5 +82,27 @@ impl<O: Apply<ViaNeighborsOperation>> ViaNeighbors for O {
             self.clone(),
             ViaNeighborsOperation { direction },
         ))
+    }
+}
+
+operation_manifest! {
+    ViaNeighborsOperation {
+        method: ViaNeighbors::via_neighbors;
+        scope: element;
+
+        kernel {
+            parameters: <>;
+            field: direction: EdgeDirection;
+            input: Indexed<NodeIndex, Unit>;
+            output: Indexed<ExpandedIndex<NodeIndex, NodeIndex>, EntityReference<NodeIndex>>;
+            emission: Expanding<Unordered>;
+        }
+        kernel {
+            parameters: <I: IndexDomain>;
+            field: direction: EdgeDirection;
+            input: Indexed<I, EntityReference<NodeIndex>>;
+            output: Indexed<ExpandedIndex<I, NodeIndex>, EntityReference<NodeIndex>>;
+            emission: Expanding<Unordered>;
+        }
     }
 }

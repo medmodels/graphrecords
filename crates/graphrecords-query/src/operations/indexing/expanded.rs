@@ -6,6 +6,7 @@ use crate::{
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::{ChildIndex, ParentIndex},
 };
 use graphrecords_core::GraphRecord;
@@ -13,7 +14,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "ParentIndex")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct ParentIndexOperation;
 
 impl Prepare for ParentIndexOperation {
@@ -72,10 +73,37 @@ impl<O: Apply<ParentIndexOperation>> ParentIndex for O {
     }
 }
 
+pub(super) mod parent_index {
+    use super::{
+        Bare, ExpandedIndex, IndexValue, Indexed, ParentIndex, ParentIndexOperation, Preserving,
+        operation_manifest,
+    };
+
+    operation_manifest! {
+        ParentIndexOperation {
+            method: ParentIndex::parent_index;
+            scope: element;
+
+            kernel {
+                parameters: <I: IndexDomain, P: IndexDomain, C: IndexDomain>;
+                input: Indexed<I, IndexValue<ExpandedIndex<P, C>>>;
+                output: Indexed<I, IndexValue<P>>;
+                emission: Preserving;
+            }
+            kernel {
+                parameters: <P: IndexDomain, C: IndexDomain>;
+                input: Bare<IndexValue<ExpandedIndex<P, C>>>;
+                output: Bare<IndexValue<P>>;
+                emission: Preserving;
+            }
+        }
+    }
+}
+
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "ChildIndex")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct ChildIndexOperation;
 
 impl Prepare for ChildIndexOperation {
@@ -107,7 +135,7 @@ impl<I: IndexDomain, P: IndexDomain, C: IndexDomain>
                 child.ok_or_else(|| {
                     Failure::new_at::<I, _>(
                         Self::LABEL,
-                        NoChildIndex::<P, C>::new(parent),
+                        NoChildIndex::<P>::new(parent),
                         &lane_index,
                     )
                 })
@@ -130,7 +158,7 @@ impl<P: IndexDomain, C: IndexDomain> ElementKernel<Bare<IndexValue<ExpandedIndex
             |outcome: QueryResult<ExpandedIndexOwned<_, _>>| {
                 let (parent, child) = outcome?.into_parts();
 
-                child.ok_or_else(|| Failure::new(Self::LABEL, NoChildIndex::<P, C>::new(parent)))
+                child.ok_or_else(|| Failure::new(Self::LABEL, NoChildIndex::<P>::new(parent)))
             },
         ))
     }
@@ -141,5 +169,32 @@ impl<O: Apply<ChildIndexOperation>> ChildIndex for O {
 
     fn child_index(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), ChildIndexOperation))
+    }
+}
+
+pub(super) mod child_index {
+    use super::{
+        Bare, ChildIndex, ChildIndexOperation, ExpandedIndex, IndexValue, Indexed, Preserving,
+        operation_manifest,
+    };
+
+    operation_manifest! {
+        ChildIndexOperation {
+            method: ChildIndex::child_index;
+            scope: element;
+
+            kernel {
+                parameters: <I: IndexDomain, P: IndexDomain, C: IndexDomain>;
+                input: Indexed<I, IndexValue<ExpandedIndex<P, C>>>;
+                output: Indexed<I, IndexValue<C>>;
+                emission: Preserving;
+            }
+            kernel {
+                parameters: <P: IndexDomain, C: IndexDomain>;
+                input: Bare<IndexValue<ExpandedIndex<P, C>>>;
+                output: Bare<IndexValue<C>>;
+                emission: Preserving;
+            }
+        }
     }
 }

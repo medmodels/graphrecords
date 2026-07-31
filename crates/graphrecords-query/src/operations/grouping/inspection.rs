@@ -1,11 +1,12 @@
 use crate::{
-    Arity, ElementShape, EvaluateOperand, Explain, IndexDomain, Labeled, Operand, QueryResult,
-    Unordered,
+    Arity, Bare, Definite, ElementShape, EvaluateOperand, Explain, IndexDomain, Indexed, Labeled,
+    Multiple, Operand, QueryResult, Single, Unordered,
     execution::EvaluationCache,
     index::GroupKey,
     operands::{FailuresOperand, OperandHandle, Partition},
     operations::{Apply, BucketFailureArity, GroupKernel, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::{BucketErrors, KeyErrors},
 };
 use graphrecords_core::GraphRecord;
@@ -61,6 +62,57 @@ impl<O: Apply<BucketErrorsOperation>> BucketErrors for O {
     }
 }
 
+pub(super) mod bucket_errors {
+    use super::{
+        Bare, BucketErrors, BucketErrorsOperation, Definite, FailuresOperand, Indexed, Multiple,
+        OperandHandle, Single, Unordered, operation_manifest,
+    };
+
+    operation_manifest! {
+        BucketErrorsOperation {
+            method: BucketErrors::bucket_errors;
+            scope: group;
+
+            kernel {
+                group: <M: IndexDomain, K: GroupKey>;
+                parameters: <I: IndexDomain, V: ValueDomain, O: OrderState>;
+                input: OperandHandle<Indexed<I, V>, Multiple<O>>;
+                output: FailuresOperand<K, Unordered>;
+            }
+            kernel {
+                group: <M: IndexDomain, K: GroupKey>;
+                parameters: <I: IndexDomain, V: ValueDomain>;
+                input: OperandHandle<Indexed<I, V>, Single>;
+                output: FailuresOperand<K, Unordered>;
+            }
+            kernel {
+                group: <M: IndexDomain, K: GroupKey>;
+                parameters: <I: IndexDomain, V: ValueDomain>;
+                input: OperandHandle<Indexed<I, V>, Definite>;
+                output: FailuresOperand<K, Unordered>;
+            }
+            kernel {
+                group: <M: IndexDomain, K: GroupKey>;
+                parameters: <V: BareValueDomain, O: OrderState>;
+                input: OperandHandle<Bare<V>, Multiple<O>>;
+                output: FailuresOperand<K, Unordered>;
+            }
+            kernel {
+                group: <M: IndexDomain, K: GroupKey>;
+                parameters: <V: BareValueDomain>;
+                input: OperandHandle<Bare<V>, Single>;
+                output: FailuresOperand<K, Unordered>;
+            }
+            kernel {
+                group: <M: IndexDomain, K: GroupKey>;
+                parameters: <V: BareValueDomain>;
+                input: OperandHandle<Bare<V>, Definite>;
+                output: FailuresOperand<K, Unordered>;
+            }
+        }
+    }
+}
+
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
 #[explain(label = "KeyErrors")]
@@ -104,5 +156,26 @@ impl<O: Apply<KeyErrorsOperation>> KeyErrors for O {
 
     fn key_errors(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), KeyErrorsOperation))
+    }
+}
+
+pub(super) mod key_errors {
+    use super::{
+        FailuresOperand, KeyErrors, KeyErrorsOperation, OperandHandle, Unordered,
+        operation_manifest,
+    };
+
+    operation_manifest! {
+        KeyErrorsOperation {
+            method: KeyErrors::key_errors;
+            scope: group;
+
+            kernel {
+                group: <M: IndexDomain, K: GroupKey>;
+                parameters: <S: ElementShape, C: Arity>;
+                input: OperandHandle<S, C>;
+                output: FailuresOperand<M, Unordered>;
+            }
+        }
     }
 }

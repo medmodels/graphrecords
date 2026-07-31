@@ -1,6 +1,6 @@
 use crate::{
-    BareValueType, ExpandedChild, ExpandedIndex, ExpandedIndexReference, Failure, IndexDomain,
-    QueryResult, ValueType,
+    BareValueDomain, ExpandedChild, ExpandedIndex, ExpandedIndexReference, Failure, IndexDomain,
+    QueryResult, ValueDomain,
     element::{
         Arity, Bare, ElementEmission, ElementShape, Expanding, Indexed, OrderState, Ordered,
         Retention, Unordered,
@@ -12,7 +12,7 @@ use std::marker::PhantomData;
 
 type ExpandedElement<'a, P, C, V> = (
     ExpandedIndexReference<'a, P, C>,
-    QueryResult<<V as ValueType>::Value<'a>>,
+    QueryResult<<V as ValueDomain>::Value<'a>>,
 );
 
 pub struct Pipeline<'a, X: 'a, Y: 'a, E: ElementEmission> {
@@ -29,7 +29,7 @@ impl<'a, X: 'a, Y: 'a, E: ElementEmission> Pipeline<'a, X, Y, E> {
         }
     }
 
-    fn run(&self, input: X) -> Y {
+    pub(crate) fn run(&self, input: X) -> Y {
         (self.run)(input)
     }
 }
@@ -50,24 +50,22 @@ pub type IndexedValuePipeline<'a, I, V, W, E> = Pipeline<
     'a,
     (
         <I as IndexDomain>::Index<'a>,
-        QueryResult<<V as ValueType>::Value<'a>>,
+        QueryResult<<V as ValueDomain>::Value<'a>>,
     ),
-    <E as ElementEmission>::Step<QueryResult<<W as ValueType>::Value<'a>>>,
+    <E as ElementEmission>::Step<QueryResult<<W as ValueDomain>::Value<'a>>>,
     E,
 >;
 
-pub type IndexedToBarePipeline<'a, I, V, W, E> = IndexedValuePipeline<'a, I, V, W, E>;
-
 pub type BarePipeline<'a, V, W, E> = Pipeline<
     'a,
-    QueryResult<<V as ValueType>::Value<'a>>,
-    <E as ElementEmission>::Step<QueryResult<<W as ValueType>::Value<'a>>>,
+    QueryResult<<V as ValueDomain>::Value<'a>>,
+    <E as ElementEmission>::Step<QueryResult<<W as ValueDomain>::Value<'a>>>,
     E,
 >;
 
 pub type IndexedExpansionPipeline<'a, P, C, V, W, O> = Pipeline<
     'a,
-    (<P as IndexDomain>::Index<'a>, <V as ValueType>::Value<'a>),
+    (<P as IndexDomain>::Index<'a>, <V as ValueDomain>::Value<'a>),
     QueryResult<Vec<ExpandedChild<'a, C, W>>>,
     Expanding<O>,
 >;
@@ -84,8 +82,8 @@ pub trait ElementTransition<T: ElementShape, E: ElementEmission>: ElementShape {
     ) -> <E::OutArity<C> as Arity>::Container<'a, T::Element<'a>>;
 }
 
-impl<I: IndexDomain, V: ValueType, W: ValueType, E: Retention> ElementTransition<Indexed<I, W>, E>
-    for Indexed<I, V>
+impl<I: IndexDomain, V: ValueDomain, W: ValueDomain, E: Retention>
+    ElementTransition<Indexed<I, W>, E> for Indexed<I, V>
 {
     type Pipeline<'a> = IndexedValuePipeline<'a, I, V, W, E>;
 
@@ -103,10 +101,10 @@ impl<I: IndexDomain, V: ValueType, W: ValueType, E: Retention> ElementTransition
     }
 }
 
-impl<I: IndexDomain, V: ValueType, W: BareValueType, E: ElementEmission>
+impl<I: IndexDomain, V: ValueDomain, W: BareValueDomain, E: ElementEmission>
     ElementTransition<Bare<W>, E> for Indexed<I, V>
 {
-    type Pipeline<'a> = IndexedToBarePipeline<'a, I, V, W, E>;
+    type Pipeline<'a> = IndexedValuePipeline<'a, I, V, W, E>;
 
     fn apply<'a, C: Arity>(
         values: C::Container<'a, Self::Element<'a>>,
@@ -116,7 +114,7 @@ impl<I: IndexDomain, V: ValueType, W: BareValueType, E: ElementEmission>
     }
 }
 
-impl<V: BareValueType, W: BareValueType, E: ElementEmission> ElementTransition<Bare<W>, E>
+impl<V: BareValueDomain, W: BareValueDomain, E: ElementEmission> ElementTransition<Bare<W>, E>
     for Bare<V>
 {
     type Pipeline<'a> = BarePipeline<'a, V, W, E>;
@@ -137,8 +135,8 @@ fn expand_indexed_source<'a, P, C, V, W, O>(
 where
     P: IndexDomain,
     C: IndexDomain,
-    V: ValueType,
-    W: ValueType,
+    V: ValueDomain,
+    W: ValueDomain,
     O: OrderState,
     Expanding<O>: ElementEmission,
 {
@@ -182,7 +180,7 @@ where
     fragment
 }
 
-impl<P: IndexDomain, C: IndexDomain, V: ValueType, W: ValueType>
+impl<P: IndexDomain, C: IndexDomain, V: ValueDomain, W: ValueDomain>
     ElementTransition<Indexed<ExpandedIndex<P, C>, W>, Expanding<Ordered>> for Indexed<P, V>
 {
     type Pipeline<'a>
@@ -204,7 +202,7 @@ impl<P: IndexDomain, C: IndexDomain, V: ValueType, W: ValueType>
     }
 }
 
-impl<P: IndexDomain, C: IndexDomain, V: ValueType, W: ValueType>
+impl<P: IndexDomain, C: IndexDomain, V: ValueDomain, W: ValueDomain>
     ElementTransition<Indexed<ExpandedIndex<P, C>, W>, Expanding<Unordered>> for Indexed<P, V>
 {
     type Pipeline<'a>

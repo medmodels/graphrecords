@@ -5,8 +5,10 @@ use crate::{
     explain::ExplainFormatter,
     index::GroupKey,
     operands::{GroupOperand, KeyFailureChange, Partition},
-    operations::{Apply, Drop, GroupKernel, Operation, OperationContext, Prepare},
+    operations::{Apply, GroupKernel, Operation, OperationContext, Prepare, policy::Drop},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
+    traits::OnKeyError,
 };
 use graphrecords_core::GraphRecord;
 use std::{
@@ -280,5 +282,20 @@ impl<I: Apply<DropKeyErrorsWithCause<E>>, E: Error + 'static> KeyErrorPolicyWith
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, DropKeyErrorsWithCause::new()))
+    }
+}
+
+operation_manifest! {
+    DropKeyErrors as "on_key_error_drop" {
+        method: OnKeyError::on_key_error;
+        policy: Drop;
+        scope: group;
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <O: Lane>;
+            input: O;
+            output: GroupOperand<M, K, O>;
+        }
     }
 }

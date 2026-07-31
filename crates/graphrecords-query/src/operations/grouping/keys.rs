@@ -7,6 +7,7 @@ use crate::{
     operands::{ElementsOperand, OperandHandle, Partition},
     operations::{Apply, GroupKernel, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Keys,
 };
 use graphrecords_core::GraphRecord;
@@ -14,6 +15,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
 #[explain(label = "Keys")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct KeysOperation;
 
 impl Prepare for KeysOperation {
@@ -69,5 +71,19 @@ impl<O: Apply<KeysOperation>> Keys for O {
 
     fn keys(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), KeysOperation))
+    }
+}
+
+operation_manifest! {
+    KeysOperation {
+        method: Keys::keys;
+        scope: group;
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <S: ElementShape, C: Arity>;
+            input: OperandHandle<S, C>;
+            output: ElementsOperand<K, Unordered>;
+        }
     }
 }

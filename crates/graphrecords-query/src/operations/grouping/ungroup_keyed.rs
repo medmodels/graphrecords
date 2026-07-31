@@ -1,13 +1,14 @@
 use super::reject_key_failures;
 use crate::{
-    Bare, BareValueType, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed,
-    Labeled, Multiple, Operand, QueryResult, Single, Unordered, ValueType,
+    Bare, BareValueDomain, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed,
+    Labeled, Multiple, Operand, QueryResult, Single, Unordered, ValueDomain,
     error::grouping::MissingGroupAggregate,
     execution::EvaluationCache,
     index::GroupKey,
     operands::{OperandHandle, Partition},
     operations::{Apply, GroupKernel, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::UngroupKeyed,
 };
 use graphrecords_core::GraphRecord;
@@ -15,9 +16,10 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
 #[explain(label = "UngroupKeyed")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct UngroupKeyedOperation;
 
-fn single_estimate(input: &Estimate) -> Estimate {
+fn bucket_element_estimate(input: &Estimate) -> Estimate {
     Estimate {
         elements: input.elements,
         distinct: input.elements,
@@ -41,7 +43,7 @@ impl Prepare for UngroupKeyedOperation {
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
+impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueDomain>
     GroupKernel<M, K, OperandHandle<Indexed<I, V>, Single>> for UngroupKeyedOperation
 {
     type Output = OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
@@ -77,11 +79,11 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        single_estimate(&input)
+        bucket_element_estimate(&input)
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, V: BareValueType>
+impl<M: IndexDomain, K: GroupKey, V: BareValueDomain>
     GroupKernel<M, K, OperandHandle<Bare<V>, Single>> for UngroupKeyedOperation
 {
     type Output = OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
@@ -117,11 +119,11 @@ impl<M: IndexDomain, K: GroupKey, V: BareValueType>
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        single_estimate(&input)
+        bucket_element_estimate(&input)
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
+impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueDomain>
     GroupKernel<M, K, OperandHandle<Indexed<I, V>, Definite>> for UngroupKeyedOperation
 {
     type Output = OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
@@ -152,11 +154,11 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        single_estimate(&input)
+        bucket_element_estimate(&input)
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, V: BareValueType>
+impl<M: IndexDomain, K: GroupKey, V: BareValueDomain>
     GroupKernel<M, K, OperandHandle<Bare<V>, Definite>> for UngroupKeyedOperation
 {
     type Output = OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
@@ -187,7 +189,7 @@ impl<M: IndexDomain, K: GroupKey, V: BareValueType>
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
-        single_estimate(&input)
+        bucket_element_estimate(&input)
     }
 }
 
@@ -196,5 +198,37 @@ impl<O: Apply<UngroupKeyedOperation>> UngroupKeyed for O {
 
     fn ungroup_keyed(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), UngroupKeyedOperation))
+    }
+}
+
+operation_manifest! {
+    UngroupKeyedOperation {
+        method: UngroupKeyed::ungroup_keyed;
+        scope: group;
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: OperandHandle<Indexed<I, V>, Single>;
+            output: OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <V: BareValueDomain>;
+            input: OperandHandle<Bare<V>, Single>;
+            output: OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: OperandHandle<Indexed<I, V>, Definite>;
+            output: OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <V: BareValueDomain>;
+            input: OperandHandle<Bare<V>, Definite>;
+            output: OperandHandle<Indexed<K, V>, Multiple<Unordered>>;
+        }
     }
 }

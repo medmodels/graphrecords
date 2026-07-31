@@ -1,10 +1,11 @@
 use crate::{
-    BoxedIterator, EdgeDirection, EntityReference, ExpandedChild, ExpandedIndex, Explain,
-    IndexDomain, Indexed, Operand, QueryResult, Unit, Unordered,
+    EdgeDirection, EntityReference, ExpandedChild, ExpandedIndex, Explain, IndexDomain, Indexed,
+    Operand, QueryResult, Unit, Unordered,
     element::{Expanding, Pipeline},
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::ViaEdges,
 };
 use graphrecords_core::{
@@ -12,27 +13,6 @@ use graphrecords_core::{
     graphrecord::{EdgeIndex, NodeIndex},
 };
 use graphrecords_utils::aliases::GrHashSet;
-
-fn edges_for_node<'a>(
-    graphrecord: &'a GraphRecord,
-    node: &'a NodeIndex,
-    direction: EdgeDirection,
-) -> BoxedIterator<'a, &'a EdgeIndex> {
-    match direction {
-        EdgeDirection::Outgoing => {
-            Box::new(graphrecord.outgoing_edges(node).expect("Node must exist"))
-        }
-        EdgeDirection::Incoming => {
-            Box::new(graphrecord.incoming_edges(node).expect("Node must exist"))
-        }
-        EdgeDirection::Both => Box::new(
-            graphrecord
-                .outgoing_edges(node)
-                .expect("Node must exist")
-                .chain(graphrecord.incoming_edges(node).expect("Node must exist")),
-        ),
-    }
-}
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -64,7 +44,7 @@ impl ElementKernel<Indexed<NodeIndex, Unit>> for ViaEdgesOperation {
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<NodeIndex, Unit>, Self>> {
         Ok(Pipeline::keyed(move |parent_index, ()| {
-            let edges: GrHashSet<_> = edges_for_node(graphrecord, parent_index, prepared).collect();
+            let edges: GrHashSet<_> = prepared.edges_for_node(graphrecord, parent_index).collect();
 
             Ok(edges
                 .into_iter()
@@ -83,7 +63,7 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<NodeIndex>>> for V
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<NodeIndex>>, Self>> {
         Ok(Pipeline::unkeyed(move |node| {
-            let edges: GrHashSet<_> = edges_for_node(graphrecord, node, prepared).collect();
+            let edges: GrHashSet<_> = prepared.edges_for_node(graphrecord, node).collect();
 
             Ok(edges
                 .into_iter()
@@ -101,5 +81,27 @@ impl<O: Apply<ViaEdgesOperation>> ViaEdges for O {
             self.clone(),
             ViaEdgesOperation { direction },
         ))
+    }
+}
+
+operation_manifest! {
+    ViaEdgesOperation {
+        method: ViaEdges::via_edges;
+        scope: element;
+
+        kernel {
+            parameters: <>;
+            field: direction: EdgeDirection;
+            input: Indexed<NodeIndex, Unit>;
+            output: Indexed<ExpandedIndex<NodeIndex, EdgeIndex>, EntityReference<EdgeIndex>>;
+            emission: Expanding<Unordered>;
+        }
+        kernel {
+            parameters: <I: IndexDomain>;
+            field: direction: EdgeDirection;
+            input: Indexed<I, EntityReference<NodeIndex>>;
+            output: Indexed<ExpandedIndex<I, EdgeIndex>, EntityReference<EdgeIndex>>;
+            emission: Expanding<Unordered>;
+        }
     }
 }

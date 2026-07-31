@@ -1,10 +1,11 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, Multiple, Operand, OrderState, QueryResult,
+    Bare, BareValueDomain, EvaluateOperand, Explain, Multiple, Operand, OrderState, QueryResult,
     capabilities::ValueEquivalence,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{Apply, BareStream, LaneKernel, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Unique,
 };
 use graphrecords_core::GraphRecord;
@@ -28,7 +29,7 @@ impl Prepare for UniqueOperation {
     }
 }
 
-impl<V: ValueEquivalence + BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
     for UniqueOperation
 {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
@@ -62,5 +63,21 @@ impl<O: Apply<UniqueOperation>> Unique for O {
 
     fn unique(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), UniqueOperation))
+    }
+}
+
+operation_manifest! {
+    UniqueOperation {
+        method: Unique::unique;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                V: ValueEquivalence + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Bare<V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Multiple<O>>;
+        }
     }
 }

@@ -1,7 +1,7 @@
-use crate::{AttributeName, FailureKindValue, IndexDomain, IndexValue, Scalar, ValueType};
+use crate::{AttributeName, FailureKindValue, IndexDomain, IndexValue, Mask, Scalar, ValueDomain};
 use std::cmp::Ordering;
 
-pub trait ValueEquality: ValueType {
+pub trait ValueEquality: ValueDomain {
     fn equal<'a>(value: &Self::Value<'a>, argument: &Self::Value<'a>) -> bool;
 }
 
@@ -30,6 +30,12 @@ impl ValueEquality for AttributeName {
 impl ValueOrdering for AttributeName {
     fn ordering<'a>(value: &Self::Value<'a>, argument: &Self::Value<'a>) -> Option<Ordering> {
         value.partial_cmp(argument)
+    }
+}
+
+impl ValueEquality for Mask {
+    fn equal<'a>(value: &Self::Value<'a>, argument: &Self::Value<'a>) -> bool {
+        value == argument
     }
 }
 

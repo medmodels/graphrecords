@@ -1,6 +1,6 @@
 use super::{ValueEquivalence, ValueOrdering, incomparable_with_first};
 use crate::{
-    AttributeName, Failure, IndexDomain, IndexValue, Mask, QueryResult, Scalar,
+    AttributeName, Failure, IndexDomain, IndexValue, Mask, QueryResult, Scalar, ValueDomain,
     error::aggregation::InvalidMedianValue,
 };
 use chrono::TimeDelta;
@@ -25,6 +25,12 @@ pub trait ValueMedian: ValueOrdering {
 }
 
 pub trait ValueMode: ValueEquivalence {}
+
+pub trait ValueScalar: ValueDomain {
+    fn into_scalar(label: &'static str, value: Self::Value<'_>) -> QueryResult<GraphRecordValue>;
+
+    fn from_scalar<'a>(role: &Self::Value<'_>, value: GraphRecordValue) -> Self::Value<'a>;
+}
 
 fn validate_graphrecord_median_value(
     label: &'static str,
@@ -121,6 +127,16 @@ impl ValueMedian for Scalar {
     }
 }
 
+impl ValueScalar for Scalar {
+    fn into_scalar(_label: &'static str, value: Self::Value<'_>) -> QueryResult<GraphRecordValue> {
+        Ok(value)
+    }
+
+    fn from_scalar<'a>(_role: &Self::Value<'_>, value: GraphRecordValue) -> Self::Value<'a> {
+        value
+    }
+}
+
 impl ValueMode for Scalar {}
 
 impl ValueMode for Mask {}
@@ -147,6 +163,16 @@ impl ValueMedian for IndexValue<GraphRecordValue> {
         upper: Option<Self::Value<'a>>,
     ) -> QueryResult<Self::Value<'a>> {
         Ok(median_graphrecord_value(lower, upper))
+    }
+}
+
+impl ValueScalar for IndexValue<GraphRecordValue> {
+    fn into_scalar(_label: &'static str, value: Self::Value<'_>) -> QueryResult<GraphRecordValue> {
+        Ok(value)
+    }
+
+    fn from_scalar<'a>(_role: &Self::Value<'_>, value: GraphRecordValue) -> Self::Value<'a> {
+        value
     }
 }
 

@@ -11,9 +11,10 @@ mod sign;
 mod square_root;
 
 use crate::{
-    QueryResult, ValueType,
+    QueryResult, ValueDomain,
     element::{BarePipeline, IndexedValuePipeline, Pipeline, Preserving},
     index::IndexDomain,
+    registry::OperationManifest,
 };
 pub use absolute::AbsoluteOperation;
 pub use ceil::CeilOperation;
@@ -27,28 +28,40 @@ pub use round::RoundOperation;
 pub use sign::SignOperation;
 pub use square_root::SquareRootOperation;
 
-type NumericFunction<'a, V> =
-    fn(&'static str, <V as ValueType>::Value<'a>) -> QueryResult<<V as ValueType>::Value<'a>>;
+pub(super) fn operation_manifests() -> Vec<OperationManifest> {
+    vec![
+        absolute::operation_manifest(),
+        ceil::operation_manifest(),
+        clip::operation_manifest(),
+        cube_root::operation_manifest(),
+        exponential::operation_manifest(),
+        floor::operation_manifest(),
+        logarithm::operation_manifest(),
+        negate::operation_manifest(),
+        round::operation_manifest(),
+        sign::operation_manifest(),
+        square_root::operation_manifest(),
+    ]
+}
 
-fn numeric_indexed<'a, I, V>(
+fn numeric_indexed<'a, I, V, F>(
     label: &'static str,
-    operation: NumericFunction<'a, V>,
+    operation: F,
 ) -> IndexedValuePipeline<'a, I, V, V, Preserving>
 where
     I: IndexDomain,
-    V: ValueType,
+    V: ValueDomain,
+    F: Fn(&'static str, V::Value<'a>) -> QueryResult<V::Value<'a>> + 'a,
 {
     Pipeline::keyed(move |index, item: QueryResult<_>| {
         item.and_then(|value| operation(label, value).map_err(|failure| failure.at::<I>(&index)))
     })
 }
 
-fn numeric_bare<'a, V>(
-    label: &'static str,
-    operation: NumericFunction<'a, V>,
-) -> BarePipeline<'a, V, V, Preserving>
+fn numeric_bare<'a, V, F>(label: &'static str, operation: F) -> BarePipeline<'a, V, V, Preserving>
 where
-    V: ValueType,
+    V: ValueDomain,
+    F: Fn(&'static str, V::Value<'a>) -> QueryResult<V::Value<'a>> + 'a,
 {
     Pipeline::new(move |item: QueryResult<_>| item.and_then(|value| operation(label, value)))
 }

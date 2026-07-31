@@ -4,11 +4,9 @@ pub mod connector;
 pub mod datatypes;
 mod graph;
 mod group_mapping;
-pub mod overview;
 #[cfg(feature = "plugins")]
 pub mod plugins;
 mod polars;
-pub mod querying;
 pub mod schema;
 
 pub use self::{
@@ -24,7 +22,6 @@ use crate::{
     errors::{GraphRecordError, GraphRecordResult, SchemaError},
     graphrecord::{
         attributes::{EdgeAttributesMut, NodeAttributesMut},
-        overview::{DEFAULT_TRUNCATE_DETAILS, GroupOverview, Overview},
         polars::DataFramesExport,
     },
 };
@@ -35,9 +32,6 @@ use graphrecords_utils::aliases::GrHashMap;
 use graphrecords_utils::aliases::GrHashSet;
 use group_mapping::GroupMapping;
 use polars::{dataframe_to_edges, dataframe_to_nodes};
-use querying::{
-    ReturnOperand, Selection, edges::EdgeOperand, nodes::NodeOperand, wrapper::Wrapper,
-};
 use schema::{GroupSchema, Schema, SchemaType};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -45,7 +39,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::{
     collections::{HashMap, hash_map::Entry},
-    fmt::{Display, Formatter},
     mem,
 };
 #[cfg(feature = "serde")]
@@ -155,16 +148,6 @@ pub struct GraphRecord {
 
     #[cfg(feature = "plugins")]
     plugins: Arc<GrHashMap<PluginName, Box<dyn Plugin>>>,
-}
-
-impl Display for GraphRecord {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let overview = Overview::new(self, Some(DEFAULT_TRUNCATE_DETAILS))
-            .map_err(|_| std::fmt::Error)?
-            .to_string();
-
-        write!(f, "{overview}")
-    }
 }
 
 impl GraphRecord {
@@ -1275,34 +1258,6 @@ impl GraphRecord {
     fn clear_impl(&mut self) {
         self.graph.clear();
         self.group_mapping.clear();
-    }
-
-    pub fn query_nodes<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&Wrapper<NodeOperand>) -> R,
-        R: ReturnOperand<'a>,
-    {
-        Selection::new_node(self, query)
-    }
-
-    pub fn query_edges<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&Wrapper<EdgeOperand>) -> R,
-        R: ReturnOperand<'a>,
-    {
-        Selection::new_edge(self, query)
-    }
-
-    pub fn overview(&self, truncate_details: Option<usize>) -> GraphRecordResult<Overview> {
-        Overview::new(self, truncate_details)
-    }
-
-    pub fn group_overview(
-        &self,
-        group: &Group,
-        truncate_details: Option<usize>,
-    ) -> GraphRecordResult<GroupOverview> {
-        GroupOverview::new(self, Some(group), truncate_details)
     }
 }
 

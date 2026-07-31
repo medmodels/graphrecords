@@ -1,9 +1,9 @@
 use crate::{
-    Failure, IndexValue, QueryResult, Scalar, ValueType, error::arithmetic::DivisionByZero,
+    Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::arithmetic::DivisionByZero,
 };
 use graphrecords_core::graphrecord::GraphRecordValue;
 
-pub trait ValueDivide: ValueType {
+pub trait ValueDivide: ValueDomain {
     fn divide<'a>(
         label: &'static str,
         value: Self::Value<'a>,

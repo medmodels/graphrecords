@@ -5,6 +5,7 @@ use crate::{
     index::IndicesInGroup,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::InGroup,
 };
 use graphrecords_core::{GraphRecord, graphrecord::Group};
@@ -12,6 +13,7 @@ use graphrecords_core::{GraphRecord, graphrecord::Group};
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "InGroup")]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct InGroupOperation {
     #[explain(label)]
     group: Group,
@@ -90,5 +92,28 @@ impl<O: Apply<InGroupOperation>> InGroup for O {
             self.clone(),
             InGroupOperation { group },
         ))
+    }
+}
+
+operation_manifest! {
+    InGroupOperation {
+        method: InGroup::in_group;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndicesInGroup>;
+            field: group: Group;
+            input: Indexed<I, Unit>;
+            output: Indexed<I, Mask>;
+            emission: Preserving;
+        }
+
+        kernel {
+            parameters: <E: IndicesInGroup, I: IndexDomain>;
+            field: group: Group;
+            input: Indexed<I, EntityReference<E>>;
+            output: Indexed<I, Mask>;
+            emission: Preserving;
+        }
     }
 }

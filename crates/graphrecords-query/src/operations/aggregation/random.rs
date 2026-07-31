@@ -1,12 +1,13 @@
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
-    OrderState, QueryResult, Single, ValueType,
+    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    OrderState, QueryResult, Single, ValueDomain,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Random,
 };
 use graphrecords_core::GraphRecord;
@@ -33,7 +34,7 @@ impl Prepare for RandomOperation {
 impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for RandomOperation
 where
     I: IndexDomain,
-    V: ValueType,
+    V: ValueDomain,
     O: OrderState,
 {
     type Output = OperandHandle<Indexed<I, V>, Single>;
@@ -53,7 +54,7 @@ where
 
 impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for RandomOperation
 where
-    V: BareValueType,
+    V: BareValueDomain,
     O: OrderState,
 {
     type Output = OperandHandle<Bare<V>, Single>;
@@ -76,5 +77,31 @@ impl<O: Apply<RandomOperation>> Random for O {
 
     fn random(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), RandomOperation))
+    }
+}
+
+operation_manifest! {
+    RandomOperation {
+        method: Random::random;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueDomain,
+                O: OrderState,
+            >;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: OperandHandle<Indexed<I, V>, Single>;
+        }
+
+        kernel {
+            parameters: <
+                V: BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Bare<V>, Multiple<O>);
+            output: OperandHandle<Bare<V>, Single>;
+        }
     }
 }

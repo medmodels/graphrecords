@@ -1,13 +1,14 @@
 use super::reject_key_failures;
 use crate::{
-    Bare, BareValueType, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, QueryResult, Unordered, ValueType,
+    Bare, BareValueDomain, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed,
+    Labeled, Multiple, Operand, QueryResult, Single, Unordered, ValueDomain,
     error::grouping::UnresolvedBucketFailures,
     execution::EvaluationCache,
     index::GroupKey,
     operands::{CheckedIndexedLaneBuilder, OperandHandle, Partition, PartitionArity},
     operations::{Apply, GroupKernel, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Ungroup,
 };
 use graphrecords_core::GraphRecord;
@@ -15,6 +16,7 @@ use graphrecords_core::GraphRecord;
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Group)]
 #[explain(label = "Ungroup")]
+#[plan(optimizer_hints(empty = if_any))]
 pub struct UngroupOperation;
 
 fn ungroup_estimate(input: &Estimate) -> Estimate {
@@ -51,7 +53,7 @@ impl Prepare for UngroupOperation {
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType, C: PartitionArity<Indexed<I, V>>>
+impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueDomain, C: PartitionArity<Indexed<I, V>>>
     GroupKernel<M, K, OperandHandle<Indexed<I, V>, C>> for UngroupOperation
 {
     type Output = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
@@ -94,7 +96,7 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType, C: PartitionArit
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, V: BareValueType, C: PartitionArity<Bare<V>>>
+impl<M: IndexDomain, K: GroupKey, V: BareValueDomain, C: PartitionArity<Bare<V>>>
     GroupKernel<M, K, OperandHandle<Bare<V>, C>> for UngroupOperation
 {
     type Output = OperandHandle<Bare<V>, Multiple<Unordered>>;
@@ -138,5 +140,49 @@ impl<O: Apply<UngroupOperation>> Ungroup for O {
 
     fn ungroup(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), UngroupOperation))
+    }
+}
+
+operation_manifest! {
+    UngroupOperation {
+        method: Ungroup::ungroup;
+        scope: group;
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <I: IndexDomain, V: ValueDomain, O: OrderState>;
+            input: OperandHandle<Indexed<I, V>, Multiple<O>>;
+            output: OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: OperandHandle<Indexed<I, V>, Single>;
+            output: OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: OperandHandle<Indexed<I, V>, Definite>;
+            output: OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <V: BareValueDomain, O: OrderState>;
+            input: OperandHandle<Bare<V>, Multiple<O>>;
+            output: OperandHandle<Bare<V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <V: BareValueDomain>;
+            input: OperandHandle<Bare<V>, Single>;
+            output: OperandHandle<Bare<V>, Multiple<Unordered>>;
+        }
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <V: BareValueDomain>;
+            input: OperandHandle<Bare<V>, Definite>;
+            output: OperandHandle<Bare<V>, Multiple<Unordered>>;
+        }
     }
 }

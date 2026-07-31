@@ -4,8 +4,8 @@ pub use crate::{
         DefiniteEdgeOperand, DefiniteNodeOperand, EdgeOperand, EdgesOperand, NodeOperand,
         NodesOperand,
     },
-    operations::{Drop, Raise, Replace},
+    operations::policy,
     optimizer::Optimizer,
     selection::Selection,
-    traits::{Replace as _, *},
+    traits::*,
 };

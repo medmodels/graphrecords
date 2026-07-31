@@ -6,6 +6,7 @@ use crate::{
     index::EntityAttributes,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::Attributes,
 };
 use graphrecords_core::GraphRecord;
@@ -75,5 +76,26 @@ impl<O: Apply<AttributesOperation>> Attributes for O {
 
     fn attributes(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), AttributesOperation))
+    }
+}
+
+operation_manifest! {
+    AttributesOperation {
+        method: Attributes::attributes;
+        scope: element;
+
+        kernel {
+            parameters: <I: EntityAttributes>;
+            input: Indexed<I, Unit>;
+            output: Indexed<ExpandedIndex<I, AttributeName>, AttributeName>;
+            emission: Expanding<Unordered>;
+        }
+
+        kernel {
+            parameters: <E: EntityAttributes, I: IndexDomain>;
+            input: Indexed<I, EntityReference<E>>;
+            output: Indexed<ExpandedIndex<I, AttributeName>, AttributeName>;
+            emission: Expanding<Unordered>;
+        }
     }
 }

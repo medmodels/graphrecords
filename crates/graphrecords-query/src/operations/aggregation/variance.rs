@@ -1,6 +1,7 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
-    OrderState, QueryResult, Scalar,
+    Bare, BareValueDomain, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Multiple, Operand, OrderState, QueryResult,
+    capabilities::ValueScalar,
     error::aggregation::InvalidVarianceValue,
     execution::EvaluationCache,
     operands::BareValueOperand,
@@ -8,6 +9,7 @@ use crate::{
         Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Variance,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
@@ -43,19 +45,24 @@ fn update_state(
     (count, mean, squared_deviation)
 }
 
-impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Scalar>, Multiple<O>>
-    for VarianceOperation
+impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for VarianceOperation
+where
+    I: IndexDomain,
+    V: ValueScalar + BareValueDomain,
+    O: OrderState,
 {
     type Output = BareValueOperand;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        mut values: KeyedStream<'a, I, Scalar, Multiple<O>>,
+        mut values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let variance = values
             .try_fold((0, 0.0, 0.0), |state, (index, value)| {
-                let value = match value? {
+                let value = V::into_scalar(Self::LABEL, value?)
+                    .map_err(|failure| failure.at::<I>(&index))?;
+                let value = match value {
                     GraphRecordValue::Int(value) => value as f64,
                     GraphRecordValue::Float(value) => value,
                     value => {
@@ -81,17 +88,22 @@ impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, Scalar>, Multiple<O>>
     }
 }
 
-impl<O: OrderState> LaneKernel<Bare<Scalar>, Multiple<O>> for VarianceOperation {
+impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for VarianceOperation
+where
+    V: ValueScalar + BareValueDomain,
+    O: OrderState,
+{
     type Output = BareValueOperand;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        mut values: BareStream<'a, Scalar, Multiple<O>>,
+        mut values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let variance = values
             .try_fold((0, 0.0, 0.0), |state, value| {
-                let value = match value? {
+                let value = V::into_scalar(Self::LABEL, value?)?;
+                let value = match value {
                     GraphRecordValue::Int(value) => value as f64,
                     GraphRecordValue::Float(value) => value,
                     value => {
@@ -118,5 +130,31 @@ impl<O: Apply<VarianceOperation>> Variance for O {
 
     fn var(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), VarianceOperation))
+    }
+}
+
+operation_manifest! {
+    VarianceOperation {
+        method: Variance::var;
+        scope: lane;
+
+        kernel {
+            parameters: <
+                I: IndexDomain,
+                V: ValueScalar + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Indexed<I, V>, Multiple<O>);
+            output: BareValueOperand;
+        }
+
+        kernel {
+            parameters: <
+                V: ValueScalar + BareValueDomain,
+                O: OrderState,
+            >;
+            input: (Bare<V>, Multiple<O>);
+            output: BareValueOperand;
+        }
     }
 }

@@ -5,8 +5,10 @@ use crate::{
     explain::ExplainFormatter,
     index::GroupKey,
     operands::{GroupOperand, KeyFailureChange, Partition},
-    operations::{Apply, GroupKernel, Operation, OperationContext, Prepare, Raise},
+    operations::{Apply, GroupKernel, Operation, OperationContext, Prepare, policy::Raise},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
+    traits::OnKeyError,
 };
 use graphrecords_core::GraphRecord;
 use std::{
@@ -280,5 +282,20 @@ impl<I: Apply<RaiseKeyErrorsWithCause<E>>, E: Error + 'static> KeyErrorPolicyWit
 
     fn build(&self, input: I) -> Self::Output {
         Self::Output::new(OperationContext::new(input, RaiseKeyErrorsWithCause::new()))
+    }
+}
+
+operation_manifest! {
+    RaiseKeyErrors as "on_key_error_raise" {
+        method: OnKeyError::on_key_error;
+        policy: Raise;
+        scope: group;
+
+        kernel {
+            group: <M: IndexDomain, K: GroupKey>;
+            parameters: <O: Lane>;
+            input: O;
+            output: GroupOperand<M, K, O>;
+        }
     }
 }

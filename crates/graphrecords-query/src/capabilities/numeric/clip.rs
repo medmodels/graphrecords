@@ -1,5 +1,5 @@
 use crate::{
-    AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueType,
+    AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
     error::{
         comparison::IncomparableValues,
         numeric::{InvalidClipBounds, NonNumericValue},
@@ -13,7 +13,7 @@ use std::{
     fmt::{Debug, Display},
 };
 
-pub trait ValueClip: ValueType {
+pub trait ValueClip: ValueDomain {
     fn clip<'a>(
         label: &'static str,
         value: Self::Value<'a>,

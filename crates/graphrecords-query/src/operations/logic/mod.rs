@@ -7,11 +7,21 @@ use crate::{
     IndexDomain, Mask,
     element::{BarePipeline, IndexedValuePipeline, Pipeline, Retention},
     operations::{ArgumentSource, Keyed, Unaligned},
+    registry::OperationManifest,
 };
 pub use and::AndOperation;
 pub use exclusive_or::ExclusiveOrOperation;
 pub use not::NotOperation;
 pub use or::OrOperation;
+
+pub(super) fn operation_manifests() -> Vec<OperationManifest> {
+    vec![
+        and::operation_manifest(),
+        exclusive_or::operation_manifest(),
+        not::operation_manifest(),
+        or::operation_manifest(),
+    ]
+}
 
 fn combine_masks_indexed<'a, I, M>(
     prepared: M::Prepared<'a>,
@@ -20,7 +30,7 @@ fn combine_masks_indexed<'a, I, M>(
 ) -> IndexedValuePipeline<'a, I, Mask, Mask, M::Retention>
 where
     I: IndexDomain,
-    M: ArgumentSource<Keyed<I>, Value<'a> = bool>,
+    M: ArgumentSource<Keyed<I>, Mask>,
     M::Prepared<'a>: 'a,
 {
     Pipeline::keyed(move |index, left| match left {
@@ -41,7 +51,7 @@ fn combine_masks_bare<'a, M>(
     operation: fn(bool, bool) -> bool,
 ) -> BarePipeline<'a, Mask, Mask, M::Retention>
 where
-    M: ArgumentSource<Unaligned, Value<'a> = bool>,
+    M: ArgumentSource<Unaligned, Mask>,
     M::Prepared<'a>: 'a,
 {
     Pipeline::new(move |left| match left {

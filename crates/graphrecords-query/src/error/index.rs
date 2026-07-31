@@ -2,7 +2,6 @@ use crate::{Diagnostic, IndexDomain};
 use std::{
     error::Error,
     fmt::{self, Debug, Display, Formatter},
-    marker::PhantomData,
 };
 
 pub struct DuplicateIndex<I: IndexDomain> {
@@ -99,18 +98,14 @@ impl<C: IndexDomain> Diagnostic for DuplicateExpandedChildIndex<C> {
     }
 }
 
-pub struct NoChildIndex<P: IndexDomain, C: IndexDomain> {
+pub struct NoChildIndex<P: IndexDomain> {
     parent: P::Owned,
-    child_domain: PhantomData<fn() -> C>,
 }
 
-impl<P: IndexDomain, C: IndexDomain> NoChildIndex<P, C> {
+impl<P: IndexDomain> NoChildIndex<P> {
     #[must_use]
     pub const fn new(parent: P::Owned) -> Self {
-        Self {
-            parent,
-            child_domain: PhantomData,
-        }
+        Self { parent }
     }
 
     #[must_use]
@@ -119,7 +114,7 @@ impl<P: IndexDomain, C: IndexDomain> NoChildIndex<P, C> {
     }
 }
 
-impl<P: IndexDomain, C: IndexDomain> Debug for NoChildIndex<P, C> {
+impl<P: IndexDomain> Debug for NoChildIndex<P> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("NoChildIndex")
@@ -128,7 +123,7 @@ impl<P: IndexDomain, C: IndexDomain> Debug for NoChildIndex<P, C> {
     }
 }
 
-impl<P: IndexDomain, C: IndexDomain> Display for NoChildIndex<P, C> {
+impl<P: IndexDomain> Display for NoChildIndex<P> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -138,9 +133,9 @@ impl<P: IndexDomain, C: IndexDomain> Display for NoChildIndex<P, C> {
     }
 }
 
-impl<P: IndexDomain, C: IndexDomain> Error for NoChildIndex<P, C> {}
+impl<P: IndexDomain> Error for NoChildIndex<P> {}
 
-impl<P: IndexDomain, C: IndexDomain> Diagnostic for NoChildIndex<P, C> {
+impl<P: IndexDomain> Diagnostic for NoChildIndex<P> {
     fn name() -> &'static str {
         "NoChildIndex"
     }

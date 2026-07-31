@@ -5,6 +5,7 @@ use crate::{
     index::EntityAttributes,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::HasAttribute,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
@@ -12,7 +13,7 @@ use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "HasAttribute")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct HasAttributeOperation {
     #[explain(label)]
     attribute: GraphRecordAttribute,
@@ -76,5 +77,28 @@ impl<O: Apply<HasAttributeOperation>> HasAttribute for O {
             self.clone(),
             HasAttributeOperation { attribute },
         ))
+    }
+}
+
+operation_manifest! {
+    HasAttributeOperation {
+        method: HasAttribute::has_attribute;
+        scope: element;
+
+        kernel {
+            parameters: <E: EntityAttributes>;
+            field: attribute: GraphRecordAttribute;
+            input: Indexed<E, Unit>;
+            output: Indexed<E, Mask>;
+            emission: Preserving;
+        }
+
+        kernel {
+            parameters: <E: EntityAttributes, I: IndexDomain>;
+            field: attribute: GraphRecordAttribute;
+            input: Indexed<I, EntityReference<E>>;
+            output: Indexed<I, Mask>;
+            emission: Preserving;
+        }
     }
 }

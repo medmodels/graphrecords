@@ -14,6 +14,7 @@ mod membership;
 mod numeric;
 mod on_missing;
 mod ordering;
+pub mod policy;
 mod string_operations;
 mod structure;
 mod traversal;
@@ -27,6 +28,7 @@ use crate::{
         EmptyRule, Estimate, Estimated, MatchInputs, OperationInputs, OptimizePlan, OptimizerHints,
         PlanInputs, PlanNode, Session, Stats, Transformed,
     },
+    registry::OperationManifest,
     sealed::Sealed,
 };
 pub use aggregation::{
@@ -35,9 +37,10 @@ pub use aggregation::{
     SumOperation, UniqueCountOperation, VarianceOperation,
 };
 pub use argument::{
-    AlignableArity, Alignment, ArgumentSource, EnumerableArity, IndexedElementContainer,
-    IndexedElementSource, Keyed, Lookup, Prepare, PreparedArity, PreparedIndexedMultiple, SetArity,
-    SetSource, Unaligned,
+    AlignableArity, Alignment, Argument, ArgumentPlan, ArgumentSource, EnumerableArity,
+    IndexedElementContainer, IndexedElementSource, IntoArgument, Keyed, Lookup, Prepare,
+    PreparedArgument, PreparedArity, PreparedIndexedMultiple, SetArity, SetSource, SourceDomain,
+    Unaligned,
 };
 pub use arithmetic::{
     AddOperation, DivideOperation, ModuloOperation, MultiplyOperation, PowerOperation,
@@ -50,15 +53,14 @@ pub use comparison::{
 };
 pub use conversion::{
     CastOperation, DiscardIndexOperation, DiscardValueOperation, EnumerateOperation,
-    ExpandToOperation, ExpandToSource, ParentResolution, TransitionOperation,
+    ExpandToOperation, TransitionOperation,
 };
 pub use errors::{
-    Drop, DropErrorsIn, DropErrorsOf, DropErrorsWithCause, ErrorKindNameOperation,
-    ErrorKindOperation, ErrorPolicy, ErrorPolicyIn, ErrorPolicyOf, ErrorPolicyWithCause,
-    ErrorsOperation, HasErrorCauseOperation, InErrorGroupOperation, IsErrorKindOperation, Raise,
-    RaiseErrorsIn, RaiseErrorsOf, RaiseErrorsWithCause, RaiseWhen, RaiseWhenErrorsIn,
-    RaiseWhenErrorsOf, RaiseWhenErrorsWithCause, Replace, ReplaceErrorsIn, ReplaceErrorsOf,
-    ReplaceErrorsWithCause,
+    DropErrorsIn, DropErrorsOf, DropErrorsWithCause, ErrorKindNameOperation, ErrorKindOperation,
+    ErrorPolicy, ErrorPolicyIn, ErrorPolicyOf, ErrorPolicyWithCause, ErrorsOperation,
+    HasErrorCauseOperation, InErrorGroupOperation, IsErrorKindOperation, RaiseErrorsIn,
+    RaiseErrorsOf, RaiseErrorsWithCause, RaiseWhenErrorsIn, RaiseWhenErrorsOf,
+    RaiseWhenErrorsWithCause, ReplaceErrorsIn, ReplaceErrorsOf, ReplaceErrorsWithCause,
 };
 use graphrecords_core::GraphRecord;
 pub use graphrecords_macros::Operation;
@@ -68,9 +70,9 @@ pub use grouping::{
     DropBucketErrors, DropBucketErrorsIn, DropBucketErrorsOf, DropBucketErrorsWithCause,
     DropKeyErrors, DropKeyErrorsIn, DropKeyErrorsOf, DropKeyErrorsWithCause, GroupByOperation,
     HavingOperation, KeyErrorPolicy, KeyErrorPolicyIn, KeyErrorPolicyOf, KeyErrorPolicyWithCause,
-    KeyErrorsOperation, KeyOperand, KeysOperation, RaiseBucketErrors, RaiseBucketErrorsIn,
-    RaiseBucketErrorsOf, RaiseBucketErrorsWithCause, RaiseKeyErrors, RaiseKeyErrorsIn,
-    RaiseKeyErrorsOf, RaiseKeyErrorsWithCause, UngroupKeyedOperation, UngroupOperation,
+    KeyErrorsOperation, KeysOperation, RaiseBucketErrors, RaiseBucketErrorsIn, RaiseBucketErrorsOf,
+    RaiseBucketErrorsWithCause, RaiseKeyErrors, RaiseKeyErrorsIn, RaiseKeyErrorsOf,
+    RaiseKeyErrorsWithCause, UngroupKeyedOperation, UngroupOperation,
 };
 pub use indexing::{
     ChildIndexOperation, IndexOperation, ParentIndexOperation, ResolveOperation, SelectOperation,
@@ -262,4 +264,25 @@ impl<I: Apply<P>, P: Operation> OptimizePlan for OperationContext<I, P> {
 
         Transformed::changed(Self::Output::new(Self { input, operation }))
     }
+}
+
+pub(crate) fn operation_manifests() -> Vec<OperationManifest> {
+    aggregation::operation_manifests()
+        .into_iter()
+        .chain(arithmetic::operation_manifests())
+        .chain(comparison::operation_manifests())
+        .chain(conversion::operation_manifests())
+        .chain(errors::operation_manifests())
+        .chain(grouping::operation_manifests())
+        .chain(indexing::operation_manifests())
+        .chain(is_type::operation_manifests())
+        .chain(logic::operation_manifests())
+        .chain(membership::operation_manifests())
+        .chain(numeric::operation_manifests())
+        .chain(ordering::operation_manifests())
+        .chain(string_operations::operation_manifests())
+        .chain(structure::operation_manifests())
+        .chain(traversal::operation_manifests())
+        .chain(uniqueness::operation_manifests())
+        .collect()
 }

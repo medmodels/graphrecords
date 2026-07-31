@@ -1,5 +1,5 @@
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
     capabilities::ValueEquality,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
@@ -9,6 +9,7 @@ use crate::{
     optimizer::{
         Estimate, Estimated, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
     },
+    registry::operation_manifest,
     traits::IsIn,
 };
 use graphrecords_core::GraphRecord;
@@ -43,9 +44,13 @@ fn membership_estimate<A: Estimated>(
     input: Estimate,
     stats: &Stats,
 ) -> Estimate {
+    membership_estimate_from(input, &operation.argument.estimate(stats))
+}
+
+fn membership_estimate_from(input: Estimate, set: &Estimate) -> Estimate {
     let selectivity = input
         .distinct
-        .zip(operation.argument.estimate(stats).elements)
+        .zip(set.elements)
         .map(|(distinct, size)| (size as f64 / distinct.max(1) as f64).min(1.0));
 
     Estimate {
@@ -58,7 +63,7 @@ impl<I, V, A> ElementKernel<Indexed<I, V>> for IsInOperation<A>
 where
     I: IndexDomain,
     V: ValueEquality,
-    for<'a> A: SetSource<Value<'a> = V::Value<'a>>,
+    A: SetSource<V>,
     for<'a> V::Value<'a>: Eq + Hash,
 {
     type Emission = Preserving;
@@ -82,8 +87,8 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for IsInOperation<A>
 where
-    V: ValueEquality + BareValueType,
-    for<'a> A: SetSource<Value<'a> = V::Value<'a>>,
+    V: ValueEquality + BareValueDomain,
+    A: SetSource<V>,
     for<'a> V::Value<'a>: Eq + Hash,
 {
     type Emission = Preserving;
@@ -117,5 +122,28 @@ where
             self.clone(),
             IsInOperation { argument },
         ))
+    }
+}
+
+operation_manifest! {
+    IsInOperation<A> {
+        method: IsIn<A>::is_in;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueEquality>;
+            argument: A: SetSource<V>;
+            input: Indexed<I, V>;
+            output: Indexed<I, Mask>;
+            emission: Preserving;
+        }
+
+        kernel {
+            parameters: <V: ValueEquality + BareValueDomain>;
+            argument: A: SetSource<V>;
+            input: Bare<V>;
+            output: Bare<Mask>;
+            emission: Preserving;
+        }
     }
 }

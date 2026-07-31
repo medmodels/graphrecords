@@ -1,5 +1,5 @@
-mod drop;
-mod raise;
+pub(super) mod drop;
+pub(super) mod raise;
 
 use crate::{
     Diagnostic, ErrorGroup, Operand,
@@ -44,13 +44,13 @@ impl<O: Operand> OnBucketError for O {
 }
 
 impl<O: Operand, A> OnBucketErrorOf<A> for O {
-    type Output<D>
+    type ReturnOperand<D>
         = A::Output
     where
         D: Diagnostic,
         A: BucketErrorPolicyOf<Self, D>;
 
-    fn on_bucket_error_of<D>(&self, policy: A) -> Self::Output<D>
+    fn on_bucket_error_of<D>(&self, policy: A) -> Self::ReturnOperand<D>
     where
         D: Diagnostic,
         A: BucketErrorPolicyOf<Self, D>,
@@ -60,13 +60,13 @@ impl<O: Operand, A> OnBucketErrorOf<A> for O {
 }
 
 impl<O: Operand, A> OnBucketErrorIn<A> for O {
-    type Output<G>
+    type ReturnOperand<G>
         = A::Output
     where
         G: ErrorGroup,
         A: BucketErrorPolicyIn<Self, G>;
 
-    fn on_bucket_error_in<G>(&self, policy: A) -> Self::Output<G>
+    fn on_bucket_error_in<G>(&self, policy: A) -> Self::ReturnOperand<G>
     where
         G: ErrorGroup,
         A: BucketErrorPolicyIn<Self, G>,
@@ -76,13 +76,13 @@ impl<O: Operand, A> OnBucketErrorIn<A> for O {
 }
 
 impl<O: Operand, A> OnBucketErrorWithCause<A> for O {
-    type Output<C>
+    type ReturnOperand<C>
         = A::Output
     where
         C: Error + 'static,
         A: BucketErrorPolicyWithCause<Self, C>;
 
-    fn on_bucket_error_with_cause<C>(&self, policy: A) -> Self::Output<C>
+    fn on_bucket_error_with_cause<C>(&self, policy: A) -> Self::ReturnOperand<C>
     where
         C: Error + 'static,
         A: BucketErrorPolicyWithCause<Self, C>,

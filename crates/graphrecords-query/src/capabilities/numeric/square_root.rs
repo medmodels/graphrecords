@@ -1,10 +1,10 @@
 use crate::{
-    Failure, IndexValue, QueryResult, Scalar, ValueType,
+    Failure, IndexValue, QueryResult, Scalar, ValueDomain,
     error::numeric::{NegativeSquareRoot, NonNumericValue},
 };
 use graphrecords_core::graphrecord::{GraphRecordValue, datatypes::Sqrt};
 
-pub trait ValueSquareRoot: ValueType {
+pub trait ValueSquareRoot: ValueDomain {
     fn square_root<'a>(label: &'static str, value: Self::Value<'a>)
     -> QueryResult<Self::Value<'a>>;
 }

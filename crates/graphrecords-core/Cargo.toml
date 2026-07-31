@@ -12,14 +12,11 @@ graphrecords-utils = { workspace = true }
 
 polars = { workspace = true }
 chrono = { workspace = true }
-rayon = { workspace = true }
 parking_lot = { workspace = true }
 
 rand = "0.9.1"
 ron = "0.8.1"
 roaring = "0.10.6"
-itertools = "0.13.0"
-tabled = { version = "0.21.0", default-features = false, features = ["std"] }
 
 serde = { workspace = true, optional = true }
 typetag = { workspace = true, optional = true }

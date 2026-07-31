@@ -7,6 +7,7 @@ use crate::{
     index::EntityAttributes,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::operation_manifest,
     traits::Attribute,
 };
 use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
@@ -14,7 +15,7 @@ use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Attribute")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct AttributeOperation {
     #[explain(label)]
     attribute: GraphRecordAttribute,
@@ -124,5 +125,28 @@ impl<O: Apply<AttributeOperation>> Attribute for O {
             self.clone(),
             AttributeOperation { attribute },
         ))
+    }
+}
+
+operation_manifest! {
+    AttributeOperation {
+        method: Attribute::attribute;
+        scope: element;
+
+        kernel {
+            parameters: <I: EntityAttributes>;
+            field: attribute: GraphRecordAttribute;
+            input: Indexed<I, Unit>;
+            output: Indexed<I, Scalar>;
+            emission: Preserving;
+        }
+
+        kernel {
+            parameters: <E: EntityAttributes, I: IndexDomain>;
+            field: attribute: GraphRecordAttribute;
+            input: Indexed<I, EntityReference<E>>;
+            output: Indexed<I, Scalar>;
+            emission: Preserving;
+        }
     }
 }

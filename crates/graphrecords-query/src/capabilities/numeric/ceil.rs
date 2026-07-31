@@ -1,7 +1,9 @@
-use crate::{Failure, IndexValue, QueryResult, Scalar, ValueType, error::numeric::NonNumericValue};
+use crate::{
+    Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::numeric::NonNumericValue,
+};
 use graphrecords_core::graphrecord::{GraphRecordValue, datatypes::Ceil};
 
-pub trait ValueCeil: ValueType {
+pub trait ValueCeil: ValueDomain {
     fn ceil<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
 }
 

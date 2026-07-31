@@ -9,19 +9,19 @@ use crate::{
 };
 use std::error::Error;
 
-pub trait Errors: Operand {
+pub trait Errors {
     type ReturnOperand;
 
     fn errors(&self) -> Self::ReturnOperand;
 }
 
-pub trait ErrorKind: Operand {
+pub trait ErrorKind {
     type ReturnOperand;
 
     fn kind(&self) -> Self::ReturnOperand;
 }
 
-pub trait IsErrorKind: Operand {
+pub trait IsErrorKind {
     type ReturnOperand<D>
     where
         D: Diagnostic,
@@ -33,7 +33,7 @@ pub trait IsErrorKind: Operand {
         Self: Apply<IsErrorKindOperation<D>>;
 }
 
-pub trait InErrorGroup: Operand {
+pub trait InErrorGroup {
     type ReturnOperand<G>
     where
         G: ErrorGroup,
@@ -45,7 +45,7 @@ pub trait InErrorGroup: Operand {
         Self: Apply<InErrorGroupOperation<G>>;
 }
 
-pub trait HasErrorCause: Operand {
+pub trait HasErrorCause {
     type ReturnOperand<C>
     where
         C: Error + 'static,
@@ -57,7 +57,7 @@ pub trait HasErrorCause: Operand {
         Self: Apply<HasErrorCauseOperation<C>>;
 }
 
-pub trait ErrorKindName: Operand {
+pub trait ErrorKindName {
     type ReturnOperand;
 
     fn name(&self) -> Self::ReturnOperand;
@@ -68,48 +68,48 @@ pub trait OnError: Operand {
 }
 
 pub trait OnErrorOf<A>: Operand {
-    type Output<D>
+    type ReturnOperand<D>
     where
         D: Diagnostic,
         A: ErrorPolicyOf<Self, D>;
 
-    fn on_error_of<D>(&self, policy: A) -> Self::Output<D>
+    fn on_error_of<D>(&self, policy: A) -> Self::ReturnOperand<D>
     where
         D: Diagnostic,
         A: ErrorPolicyOf<Self, D>;
 }
 
 pub trait OnErrorIn<A>: Operand {
-    type Output<G>
+    type ReturnOperand<G>
     where
         G: ErrorGroup,
         A: ErrorPolicyIn<Self, G>;
 
-    fn on_error_in<G>(&self, policy: A) -> Self::Output<G>
+    fn on_error_in<G>(&self, policy: A) -> Self::ReturnOperand<G>
     where
         G: ErrorGroup,
         A: ErrorPolicyIn<Self, G>;
 }
 
 pub trait OnErrorWithCause<A>: Operand {
-    type Output<C>
+    type ReturnOperand<C>
     where
         C: Error + 'static,
         A: ErrorPolicyWithCause<Self, C>;
 
-    fn on_error_with_cause<C>(&self, policy: A) -> Self::Output<C>
+    fn on_error_with_cause<C>(&self, policy: A) -> Self::ReturnOperand<C>
     where
         C: Error + 'static,
         A: ErrorPolicyWithCause<Self, C>;
 }
 
-pub trait BucketErrors: Operand {
+pub trait BucketErrors {
     type ReturnOperand;
 
     fn bucket_errors(&self) -> Self::ReturnOperand;
 }
 
-pub trait KeyErrors: Operand {
+pub trait KeyErrors {
     type ReturnOperand;
 
     fn key_errors(&self) -> Self::ReturnOperand;
@@ -120,36 +120,36 @@ pub trait OnBucketError: Operand {
 }
 
 pub trait OnBucketErrorOf<A>: Operand {
-    type Output<D>
+    type ReturnOperand<D>
     where
         D: Diagnostic,
         A: BucketErrorPolicyOf<Self, D>;
 
-    fn on_bucket_error_of<D>(&self, policy: A) -> Self::Output<D>
+    fn on_bucket_error_of<D>(&self, policy: A) -> Self::ReturnOperand<D>
     where
         D: Diagnostic,
         A: BucketErrorPolicyOf<Self, D>;
 }
 
 pub trait OnBucketErrorIn<A>: Operand {
-    type Output<G>
+    type ReturnOperand<G>
     where
         G: ErrorGroup,
         A: BucketErrorPolicyIn<Self, G>;
 
-    fn on_bucket_error_in<G>(&self, policy: A) -> Self::Output<G>
+    fn on_bucket_error_in<G>(&self, policy: A) -> Self::ReturnOperand<G>
     where
         G: ErrorGroup,
         A: BucketErrorPolicyIn<Self, G>;
 }
 
 pub trait OnBucketErrorWithCause<A>: Operand {
-    type Output<C>
+    type ReturnOperand<C>
     where
         C: Error + 'static,
         A: BucketErrorPolicyWithCause<Self, C>;
 
-    fn on_bucket_error_with_cause<C>(&self, policy: A) -> Self::Output<C>
+    fn on_bucket_error_with_cause<C>(&self, policy: A) -> Self::ReturnOperand<C>
     where
         C: Error + 'static,
         A: BucketErrorPolicyWithCause<Self, C>;
@@ -160,36 +160,36 @@ pub trait OnKeyError: Operand {
 }
 
 pub trait OnKeyErrorOf<A>: Operand {
-    type Output<D>
+    type ReturnOperand<D>
     where
         D: Diagnostic,
         A: KeyErrorPolicyOf<Self, D>;
 
-    fn on_key_error_of<D>(&self, policy: A) -> Self::Output<D>
+    fn on_key_error_of<D>(&self, policy: A) -> Self::ReturnOperand<D>
     where
         D: Diagnostic,
         A: KeyErrorPolicyOf<Self, D>;
 }
 
 pub trait OnKeyErrorIn<A>: Operand {
-    type Output<G>
+    type ReturnOperand<G>
     where
         G: ErrorGroup,
         A: KeyErrorPolicyIn<Self, G>;
 
-    fn on_key_error_in<G>(&self, policy: A) -> Self::Output<G>
+    fn on_key_error_in<G>(&self, policy: A) -> Self::ReturnOperand<G>
     where
         G: ErrorGroup,
         A: KeyErrorPolicyIn<Self, G>;
 }
 
 pub trait OnKeyErrorWithCause<A>: Operand {
-    type Output<C>
+    type ReturnOperand<C>
     where
         C: Error + 'static,
         A: KeyErrorPolicyWithCause<Self, C>;
 
-    fn on_key_error_with_cause<C>(&self, policy: A) -> Self::Output<C>
+    fn on_key_error_with_cause<C>(&self, policy: A) -> Self::ReturnOperand<C>
     where
         C: Error + 'static,
         A: KeyErrorPolicyWithCause<Self, C>;

@@ -7,6 +7,7 @@ use crate::{
         Count, CountKind, Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
         Stats,
     },
+    registry::operation_manifest,
     traits::{Select, SourceNode, TargetNode, ViaSourceNode, ViaTargetNode},
 };
 use graphrecords_core::{
@@ -148,5 +149,59 @@ where
 
     fn target_node(&self) -> Self::ReturnOperand {
         self.via_target_node().select()
+    }
+}
+
+pub(super) mod via_source_node {
+    use super::{
+        EdgeIndex, EndpointOperation, EntityReference, Indexed, NodeIndex, Preserving, Unit,
+        ViaSourceNode, operation_manifest,
+    };
+
+    operation_manifest! {
+        EndpointOperation {
+            method: ViaSourceNode::via_source_node;
+            scope: element;
+
+            kernel {
+                parameters: <>;
+                input: Indexed<EdgeIndex, Unit>;
+                output: Indexed<EdgeIndex, EntityReference<NodeIndex>>;
+                emission: Preserving;
+            }
+            kernel {
+                parameters: <I: IndexDomain>;
+                input: Indexed<I, EntityReference<EdgeIndex>>;
+                output: Indexed<I, EntityReference<NodeIndex>>;
+                emission: Preserving;
+            }
+        }
+    }
+}
+
+pub(super) mod via_target_node {
+    use super::{
+        EdgeIndex, EndpointOperation, EntityReference, Indexed, NodeIndex, Preserving, Unit,
+        ViaTargetNode, operation_manifest,
+    };
+
+    operation_manifest! {
+        EndpointOperation {
+            method: ViaTargetNode::via_target_node;
+            scope: element;
+
+            kernel {
+                parameters: <>;
+                input: Indexed<EdgeIndex, Unit>;
+                output: Indexed<EdgeIndex, EntityReference<NodeIndex>>;
+                emission: Preserving;
+            }
+            kernel {
+                parameters: <I: IndexDomain>;
+                input: Indexed<I, EntityReference<EdgeIndex>>;
+                output: Indexed<I, EntityReference<NodeIndex>>;
+                emission: Preserving;
+            }
+        }
     }
 }

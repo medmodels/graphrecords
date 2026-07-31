@@ -1,9 +1,10 @@
 use crate::{
-    Explain, IndexDomain, Indexed, Operand, QueryResult, Unit, ValueType,
+    Explain, IndexDomain, Indexed, Operand, QueryResult, Unit, ValueDomain,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    registry::operation_manifest,
     traits::DiscardValue,
 };
 use graphrecords_core::GraphRecord;
@@ -30,7 +31,7 @@ impl Prepare for DiscardValueOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for DiscardValueOperation {
+impl<I: IndexDomain, V: ValueDomain> ElementKernel<Indexed<I, V>> for DiscardValueOperation {
     type Emission = Preserving;
     type OutShape = Indexed<I, Unit>;
 
@@ -49,5 +50,19 @@ impl<O: Apply<DiscardValueOperation>> DiscardValue for O {
 
     fn discard_value(&self) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(self.clone(), DiscardValueOperation))
+    }
+}
+
+operation_manifest! {
+    DiscardValueOperation {
+        method: DiscardValue::discard_value;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueDomain>;
+            input: Indexed<I, V>;
+            output: Indexed<I, Unit>;
+            emission: Preserving;
+        }
     }
 }

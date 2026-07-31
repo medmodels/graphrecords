@@ -1,6 +1,6 @@
 use super::{string_replace_bare, string_replace_indexed};
 use crate::{
-    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::StringValue,
     element::Retention,
     execution::EvaluationCache,
@@ -9,6 +9,7 @@ use crate::{
         Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
     traits::ReplaceAll,
 };
 use graphrecords_core::GraphRecord;
@@ -46,8 +47,10 @@ impl<I, V, A, B> ElementKernel<Indexed<I, V>> for ReplaceAllOperation<A, B>
 where
     I: IndexDomain,
     V: StringValue,
-    for<'a> A: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
-    for<'a> B: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
+    A: ArgumentSource<Keyed<I>>,
+    A::ValueDomain: StringValue,
+    B: ArgumentSource<Keyed<I>>,
+    B::ValueDomain: StringValue,
 {
     type Emission = <A::Retention as Retention>::Then<B::Retention>;
     type OutShape = Indexed<I, V>;
@@ -70,9 +73,11 @@ where
 
 impl<V, A, B> ElementKernel<Bare<V>> for ReplaceAllOperation<A, B>
 where
-    V: StringValue + BareValueType,
-    for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
-    for<'a> B: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
+    V: StringValue + BareValueDomain,
+    A: ArgumentSource<Unaligned>,
+    A::ValueDomain: StringValue,
+    B: ArgumentSource<Unaligned>,
+    B::ValueDomain: StringValue,
 {
     type Emission = <A::Retention as Retention>::Then<B::Retention>;
     type OutShape = Bare<V>;
@@ -105,5 +110,29 @@ where
             self.clone(),
             ReplaceAllOperation { old, new },
         ))
+    }
+}
+
+operation_manifest! {
+    ReplaceAllOperation<A, B> {
+        method: ReplaceAll<A, B>::replace_all;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: StringValue>;
+            argument: A: ArgumentSource<Keyed<I>> where A::ValueDomain: StringValue;
+            argument: B: ArgumentSource<Keyed<I>> where B::ValueDomain: StringValue;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: ArgumentRetention;
+        }
+        kernel {
+            parameters: <V: StringValue + BareValueDomain>;
+            argument: A: ArgumentSource<Unaligned> where A::ValueDomain: StringValue;
+            argument: B: ArgumentSource<Unaligned> where B::ValueDomain: StringValue;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: ArgumentRetention;
+        }
     }
 }

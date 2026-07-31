@@ -1,6 +1,6 @@
-use crate::{IndexDomain, Operand};
+use crate::IndexDomain;
 
-pub trait GroupBy<K>: Operand {
+pub trait GroupBy<K> {
     type ReturnOperand;
 
     fn group_by(&self, key: K) -> Self::ReturnOperand;

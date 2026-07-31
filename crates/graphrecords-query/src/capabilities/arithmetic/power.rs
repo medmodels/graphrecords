@@ -1,7 +1,7 @@
-use crate::{AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueType};
+use crate::{AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain};
 use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex, datatypes::Pow};
 
-pub trait ValuePower: ValueType {
+pub trait ValuePower: ValueDomain {
     fn power<'a>(
         label: &'static str,
         value: Self::Value<'a>,
