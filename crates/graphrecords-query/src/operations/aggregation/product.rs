@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple, Operand, OrderState,
-    QueryResult, Single,
+    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple,
+    Operand, OrderState, QueryResult, Single,
     capabilities::ValueMultiply,
     execution::EvaluationCache,
     operands::OperandHandle,
@@ -33,7 +33,7 @@ impl Prepare for ProductOperation {
 impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for ProductOperation
 where
     I: IndexDomain,
-    V: ValueMultiply,
+    V: ValueMultiply + BareValueType,
     O: OrderState,
 {
     type Output = OperandHandle<Bare<V>, Single>;
@@ -64,7 +64,7 @@ where
 
 impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for ProductOperation
 where
-    V: ValueMultiply,
+    V: ValueMultiply + BareValueType,
     O: OrderState,
 {
     type Output = OperandHandle<Bare<V>, Single>;

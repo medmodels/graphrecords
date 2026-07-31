@@ -1,6 +1,6 @@
 use crate::{
-    Bare, Diagnostic, ErrorGroup, Explain, Failure, FailureKind, FailureKindValue, FailureValue,
-    IndexDomain, Indexed, Mask, Operand, QueryResult, Scalar, ValueType,
+    Bare, BareValueType, Diagnostic, ErrorGroup, Explain, Failure, FailureKind, FailureKindValue,
+    FailureValue, IndexDomain, Indexed, Mask, Operand, QueryResult, Scalar, ValueType,
     element::{Dropping, Pipeline, Preserving},
     execution::EvaluationCache,
     explain::ExplainFormatter,
@@ -47,7 +47,7 @@ impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for ErrorsOperat
     }
 }
 
-impl<V: ValueType> ElementKernel<Bare<V>> for ErrorsOperation {
+impl<V: BareValueType> ElementKernel<Bare<V>> for ErrorsOperation {
     type Emission = Dropping;
     type OutShape = Bare<FailureValue>;
 

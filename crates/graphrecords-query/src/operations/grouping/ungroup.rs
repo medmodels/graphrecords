@@ -1,7 +1,7 @@
 use super::reject_key_failures;
 use crate::{
-    Bare, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
-    QueryResult, Unordered, ValueType,
+    Bare, BareValueType, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Multiple, Operand, QueryResult, Unordered, ValueType,
     error::grouping::UnresolvedBucketFailures,
     execution::EvaluationCache,
     index::GroupKey,
@@ -94,7 +94,7 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType, C: PartitionArit
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, V: ValueType, C: PartitionArity<Bare<V>>>
+impl<M: IndexDomain, K: GroupKey, V: BareValueType, C: PartitionArity<Bare<V>>>
     GroupKernel<M, K, OperandHandle<Bare<V>, C>> for UngroupOperation
 {
     type Output = OperandHandle<Bare<V>, Multiple<Unordered>>;

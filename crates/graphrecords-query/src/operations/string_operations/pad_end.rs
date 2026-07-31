@@ -1,7 +1,7 @@
 use super::{padding_character, string_pad_bare, string_pad_indexed};
 use crate::{
-    Bare, Explain, External, Failure, IndexDomain, Indexed, Labeled, Operand, Position,
-    QueryResult,
+    Bare, BareValueType, Explain, External, Failure, IndexDomain, Indexed, Labeled, Operand,
+    Position, QueryResult,
     capabilities::StringValue,
     element::Retention,
     error::string::StringPaddingOverflow,
@@ -92,7 +92,7 @@ where
 
 impl<V, W, C> ElementKernel<Bare<V>> for PadEndOperation<W, C>
 where
-    V: StringValue,
+    V: StringValue + BareValueType,
     for<'a> W: ArgumentSource<Unaligned, Value<'a> = Position>,
     for<'a> C: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {

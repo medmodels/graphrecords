@@ -7,5 +7,5 @@ pub use crate::{
     operations::{Drop, Raise, Replace},
     optimizer::Optimizer,
     selection::Selection,
-    traits::*,
+    traits::{Replace as _, *},
 };

@@ -1,7 +1,7 @@
 use super::reject_key_failures;
 use crate::{
-    Arity, Bare, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
-    Operand, QueryResult, Single, ValueType,
+    Arity, Bare, BareValueType, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed,
+    Labeled, Operand, QueryResult, Single, ValueType,
     error::grouping::MissingGroupAggregate,
     execution::EvaluationCache,
     index::GroupKey,
@@ -142,7 +142,7 @@ where
     M: IndexDomain,
     K: GroupKey,
     I: IndexDomain,
-    V: ValueType,
+    V: BareValueType,
     for<'a> A: KeyOperand<I, Key = K>
         + IndexedElementSource<I, Value<'a> = <A as ArgumentSource<Keyed<I>>>::Value<'a>>,
 {
@@ -232,7 +232,7 @@ where
     M: IndexDomain,
     K: GroupKey,
     I: IndexDomain,
-    V: ValueType,
+    V: BareValueType,
     for<'a> A: KeyOperand<I, Key = K>
         + IndexedElementSource<I, Value<'a> = <A as ArgumentSource<Keyed<I>>>::Value<'a>>,
 {

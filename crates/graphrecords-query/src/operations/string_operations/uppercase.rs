@@ -1,6 +1,6 @@
 use super::{string_map_bare, string_map_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::StringValue,
     element::Preserving,
     execution::EvaluationCache,
@@ -52,7 +52,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for UppercaseOperation
 where
-    V: StringValue,
+    V: StringValue + BareValueType,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;

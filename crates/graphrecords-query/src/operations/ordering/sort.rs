@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
-    OrderState, Ordered, QueryResult, ValueType,
+    Bare, BareValueType, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Multiple, Operand, OrderState, Ordered, QueryResult, ValueType,
     capabilities::{EnsureSortable, ValueOrdering},
     error::{
         comparison::{IncomparableValues, IncomparableValuesAt},
@@ -111,7 +111,7 @@ fn sort_bare<'a, V, O>(
     values: BareStream<'a, V, Multiple<O>>,
 ) -> QueryResult<<OperandHandle<Bare<V>, Multiple<Ordered>> as EvaluateOperand>::ReturnValue<'a>>
 where
-    V: ValueType,
+    V: BareValueType,
     O: OrderState,
     for<'b> V::Value<'b>: EnsureSortable,
     V::Owned: Debug + Display + Send + Sync,
@@ -164,7 +164,7 @@ where
 
 impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for SortOperation
 where
-    V: ValueOrdering,
+    V: ValueOrdering + BareValueType,
     O: OrderState,
     for<'a> V::Value<'a>: EnsureSortable,
     V::Owned: Debug + Display + Send + Sync,

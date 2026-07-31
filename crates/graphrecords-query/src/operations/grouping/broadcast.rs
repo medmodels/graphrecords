@@ -1,6 +1,6 @@
 use crate::{
-    Bare, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple,
-    Operand, QueryResult, Single, Unordered, ValueType,
+    Bare, BareValueType, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed,
+    Labeled, Multiple, Operand, QueryResult, Single, Unordered, ValueType,
     error::grouping::MissingGroupAggregate,
     execution::EvaluationCache,
     index::GroupKey,
@@ -79,8 +79,8 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, V: ValueType> GroupKernel<M, K, OperandHandle<Bare<V>, Single>>
-    for BroadcastOperation
+impl<M: IndexDomain, K: GroupKey, V: BareValueType>
+    GroupKernel<M, K, OperandHandle<Bare<V>, Single>> for BroadcastOperation
 {
     type Output = OperandHandle<Indexed<M, V>, Multiple<Unordered>>;
 
@@ -170,8 +170,8 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueType>
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, V: ValueType> GroupKernel<M, K, OperandHandle<Bare<V>, Definite>>
-    for BroadcastOperation
+impl<M: IndexDomain, K: GroupKey, V: BareValueType>
+    GroupKernel<M, K, OperandHandle<Bare<V>, Definite>> for BroadcastOperation
 {
     type Output = OperandHandle<Indexed<M, V>, Multiple<Unordered>>;
 

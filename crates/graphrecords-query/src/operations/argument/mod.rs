@@ -2,8 +2,8 @@ mod collection;
 mod constant;
 
 use crate::{
-    Arity, Bare, Definite, Diagnostic, ElementShape, EvaluateOperand, Explain, Failure,
-    IndexDomain, Indexed, Multiple, OrderState, QueryResult, Single, ValueType,
+    Arity, Bare, BareValueType, Definite, Diagnostic, ElementShape, EvaluateOperand, Explain,
+    Failure, IndexDomain, Indexed, Multiple, OrderState, QueryResult, Single, ValueType,
     element::{ElementEmission, Preserving, Retention},
     error::{
         argument::{Absent, ArgumentAbsent},
@@ -528,7 +528,7 @@ where
     }
 }
 
-impl<V: ValueType, O: OrderState> PreparedArity<Bare<V>> for Multiple<O> {
+impl<V: BareValueType, O: OrderState> PreparedArity<Bare<V>> for Multiple<O> {
     type Prepared<'a>
         = Arc<Vec<QueryResult<V::Value<'a>>>>
     where
@@ -546,7 +546,7 @@ impl<V: ValueType, O: OrderState> PreparedArity<Bare<V>> for Multiple<O> {
 
 impl<V, O> SetArity<Bare<V>> for Multiple<O>
 where
-    V: ValueType,
+    V: BareValueType,
     O: OrderState,
     for<'a> V::Value<'a>: Eq + Hash,
 {
@@ -563,7 +563,7 @@ where
     }
 }
 
-impl<V: ValueType> PreparedArity<Bare<V>> for Single {
+impl<V: BareValueType> PreparedArity<Bare<V>> for Single {
     type Prepared<'a>
         = Option<QueryResult<V::Value<'a>>>
     where
@@ -579,7 +579,7 @@ impl<V: ValueType> PreparedArity<Bare<V>> for Single {
     }
 }
 
-impl<A: Alignment, V: ValueType> AlignableArity<Bare<V>, A> for Single {
+impl<A: Alignment, V: BareValueType> AlignableArity<Bare<V>, A> for Single {
     type OwnedValue = V::Owned;
     type Retention = Preserving;
     type Value<'a>
@@ -607,7 +607,7 @@ impl<A: Alignment, V: ValueType> AlignableArity<Bare<V>, A> for Single {
 
 impl<V> SetArity<Bare<V>> for Single
 where
-    V: ValueType,
+    V: BareValueType,
     for<'a> V::Value<'a>: Eq + Hash,
 {
     type Value<'a>
@@ -626,7 +626,7 @@ where
     }
 }
 
-impl<V: ValueType> PreparedArity<Bare<V>> for Definite {
+impl<V: BareValueType> PreparedArity<Bare<V>> for Definite {
     type Prepared<'a>
         = QueryResult<V::Value<'a>>
     where
@@ -642,7 +642,7 @@ impl<V: ValueType> PreparedArity<Bare<V>> for Definite {
     }
 }
 
-impl<A: Alignment, V: ValueType> AlignableArity<Bare<V>, A> for Definite {
+impl<A: Alignment, V: BareValueType> AlignableArity<Bare<V>, A> for Definite {
     type OwnedValue = V::Owned;
     type Retention = Preserving;
     type Value<'a>
@@ -667,7 +667,7 @@ impl<A: Alignment, V: ValueType> AlignableArity<Bare<V>, A> for Definite {
 
 impl<V> SetArity<Bare<V>> for Definite
 where
-    V: ValueType,
+    V: BareValueType,
     for<'a> V::Value<'a>: Eq + Hash,
 {
     type Value<'a>

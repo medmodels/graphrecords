@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
-    OrderState, QueryResult, Single,
+    Bare, BareValueType, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Multiple, Operand, OrderState, QueryResult, Single,
     capabilities::ValueOrdering,
     error::comparison::{IncomparableValues, IncomparableValuesAt},
     execution::EvaluationCache,
@@ -38,7 +38,7 @@ impl Prepare for MaximumOperation {
 impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for MaximumOperation
 where
     I: IndexDomain,
-    V: ValueOrdering,
+    V: ValueOrdering + BareValueType,
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {
@@ -85,7 +85,7 @@ where
 
 impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for MaximumOperation
 where
-    V: ValueOrdering,
+    V: ValueOrdering + BareValueType,
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {

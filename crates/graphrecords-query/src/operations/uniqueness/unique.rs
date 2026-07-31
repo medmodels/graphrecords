@@ -1,5 +1,5 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, Multiple, Operand, OrderState, QueryResult,
+    Bare, BareValueType, EvaluateOperand, Explain, Multiple, Operand, OrderState, QueryResult,
     capabilities::ValueEquivalence,
     execution::EvaluationCache,
     operands::OperandHandle,
@@ -28,7 +28,9 @@ impl Prepare for UniqueOperation {
     }
 }
 
-impl<V: ValueEquivalence, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for UniqueOperation {
+impl<V: ValueEquivalence + BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+    for UniqueOperation
+{
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
 
     fn execute<'a>(

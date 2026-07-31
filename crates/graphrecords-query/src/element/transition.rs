@@ -1,6 +1,6 @@
 use crate::{
-    ExpandedChild, ExpandedIndex, ExpandedIndexReference, Failure, IndexDomain, QueryResult,
-    ValueType,
+    BareValueType, ExpandedChild, ExpandedIndex, ExpandedIndexReference, Failure, IndexDomain,
+    QueryResult, ValueType,
     element::{
         Arity, Bare, ElementEmission, ElementShape, Expanding, Indexed, OrderState, Ordered,
         Retention, Unordered,
@@ -103,8 +103,8 @@ impl<I: IndexDomain, V: ValueType, W: ValueType, E: Retention> ElementTransition
     }
 }
 
-impl<I: IndexDomain, V: ValueType, W: ValueType, E: ElementEmission> ElementTransition<Bare<W>, E>
-    for Indexed<I, V>
+impl<I: IndexDomain, V: ValueType, W: BareValueType, E: ElementEmission>
+    ElementTransition<Bare<W>, E> for Indexed<I, V>
 {
     type Pipeline<'a> = IndexedToBarePipeline<'a, I, V, W, E>;
 
@@ -116,7 +116,9 @@ impl<I: IndexDomain, V: ValueType, W: ValueType, E: ElementEmission> ElementTran
     }
 }
 
-impl<V: ValueType, W: ValueType, E: ElementEmission> ElementTransition<Bare<W>, E> for Bare<V> {
+impl<V: BareValueType, W: BareValueType, E: ElementEmission> ElementTransition<Bare<W>, E>
+    for Bare<V>
+{
     type Pipeline<'a> = BarePipeline<'a, V, W, E>;
 
     fn apply<'a, C: Arity>(

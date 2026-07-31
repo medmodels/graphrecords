@@ -1,6 +1,6 @@
 use crate::{
-    Bare, Definite, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Single, ValueType,
+    Bare, BareValueType, Definite, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple,
+    Operand, OrderState, QueryResult, Single, ValueType,
     execution::EvaluationCache,
     operands::DefiniteBareValueOperand,
     operations::{
@@ -48,7 +48,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Mult
     }
 }
 
-impl<V: ValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for CountOperation {
+impl<V: BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -87,7 +87,7 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Single> for CountOp
     }
 }
 
-impl<V: ValueType> LaneKernel<Bare<V>, Single> for CountOperation {
+impl<V: BareValueType> LaneKernel<Bare<V>, Single> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(
@@ -124,7 +124,7 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Definite> for Count
     }
 }
 
-impl<V: ValueType> LaneKernel<Bare<V>, Definite> for CountOperation {
+impl<V: BareValueType> LaneKernel<Bare<V>, Definite> for CountOperation {
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(

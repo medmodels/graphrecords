@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
-    QueryResult,
+    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    OrderState, QueryResult,
     capabilities::ValueEquivalence,
     execution::EvaluationCache,
     operands::DefiniteBareValueOperand,
@@ -58,7 +58,9 @@ impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V
     }
 }
 
-impl<V: ValueEquivalence, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for UniqueCountOperation {
+impl<V: ValueEquivalence + BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+    for UniqueCountOperation
+{
     type Output = DefiniteBareValueOperand;
 
     fn execute<'a>(

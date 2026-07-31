@@ -1,6 +1,6 @@
 use crate::{
-    Bare, Definite, Diagnostic, ErrorGroup, EvaluateOperand, Explain, Failure, IndexDomain,
-    Indexed, Labeled, Multiple, Operand, OrderState, QueryResult, Single, ValueType,
+    Bare, BareValueType, Definite, Diagnostic, ErrorGroup, EvaluateOperand, Explain, Failure,
+    IndexDomain, Indexed, Labeled, Multiple, Operand, OrderState, QueryResult, Single, ValueType,
     element::Preserving,
     execution::EvaluationCache,
     explain::ExplainFormatter,
@@ -399,7 +399,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Mult
     }
 }
 
-impl<V: ValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for Raise {
+impl<V: BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for Raise {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
 
     fn execute<'a>(
@@ -436,7 +436,7 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Single> for Raise {
     }
 }
 
-impl<V: ValueType> LaneKernel<Bare<V>, Single> for Raise {
+impl<V: BareValueType> LaneKernel<Bare<V>, Single> for Raise {
     type Output = OperandHandle<Bare<V>, Single>;
 
     fn execute<'a>(
@@ -473,7 +473,7 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Definite> for Raise
     }
 }
 
-impl<V: ValueType> LaneKernel<Bare<V>, Definite> for Raise {
+impl<V: BareValueType> LaneKernel<Bare<V>, Definite> for Raise {
     type Output = OperandHandle<Bare<V>, Definite>;
 
     fn execute<'a>(
@@ -517,7 +517,7 @@ where
 
 impl<V, O, C> LaneKernel<Bare<V>, Multiple<O>> for RaiseWhen<C>
 where
-    V: ValueType,
+    V: BareValueType,
     O: OrderState,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
@@ -567,7 +567,7 @@ where
 
 impl<V, C> LaneKernel<Bare<V>, Single> for RaiseWhen<C>
 where
-    V: ValueType,
+    V: BareValueType,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Bare<V>, Single>;
@@ -616,7 +616,7 @@ where
 
 impl<V, C> LaneKernel<Bare<V>, Definite> for RaiseWhen<C>
 where
-    V: ValueType,
+    V: BareValueType,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
     type Output = OperandHandle<Bare<V>, Definite>;
@@ -663,7 +663,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState, D: Diagnostic>
     }
 }
 
-impl<V: ValueType, O: OrderState, D: Diagnostic> LaneKernel<Bare<V>, Multiple<O>>
+impl<V: BareValueType, O: OrderState, D: Diagnostic> LaneKernel<Bare<V>, Multiple<O>>
     for RaiseErrorsOf<D>
 {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
@@ -709,7 +709,7 @@ impl<I: IndexDomain, V: ValueType, D: Diagnostic> LaneKernel<Indexed<I, V>, Sing
     }
 }
 
-impl<V: ValueType, D: Diagnostic> LaneKernel<Bare<V>, Single> for RaiseErrorsOf<D> {
+impl<V: BareValueType, D: Diagnostic> LaneKernel<Bare<V>, Single> for RaiseErrorsOf<D> {
     type Output = OperandHandle<Bare<V>, Single>;
 
     fn execute<'a>(
@@ -749,7 +749,7 @@ impl<I: IndexDomain, V: ValueType, D: Diagnostic> LaneKernel<Indexed<I, V>, Defi
     }
 }
 
-impl<V: ValueType, D: Diagnostic> LaneKernel<Bare<V>, Definite> for RaiseErrorsOf<D> {
+impl<V: BareValueType, D: Diagnostic> LaneKernel<Bare<V>, Definite> for RaiseErrorsOf<D> {
     type Output = OperandHandle<Bare<V>, Definite>;
 
     fn execute<'a>(
@@ -793,7 +793,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState, G: ErrorGroup>
     }
 }
 
-impl<V: ValueType, O: OrderState, G: ErrorGroup> LaneKernel<Bare<V>, Multiple<O>>
+impl<V: BareValueType, O: OrderState, G: ErrorGroup> LaneKernel<Bare<V>, Multiple<O>>
     for RaiseErrorsIn<G>
 {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
@@ -839,7 +839,7 @@ impl<I: IndexDomain, V: ValueType, G: ErrorGroup> LaneKernel<Indexed<I, V>, Sing
     }
 }
 
-impl<V: ValueType, G: ErrorGroup> LaneKernel<Bare<V>, Single> for RaiseErrorsIn<G> {
+impl<V: BareValueType, G: ErrorGroup> LaneKernel<Bare<V>, Single> for RaiseErrorsIn<G> {
     type Output = OperandHandle<Bare<V>, Single>;
 
     fn execute<'a>(
@@ -879,7 +879,7 @@ impl<I: IndexDomain, V: ValueType, G: ErrorGroup> LaneKernel<Indexed<I, V>, Defi
     }
 }
 
-impl<V: ValueType, G: ErrorGroup> LaneKernel<Bare<V>, Definite> for RaiseErrorsIn<G> {
+impl<V: BareValueType, G: ErrorGroup> LaneKernel<Bare<V>, Definite> for RaiseErrorsIn<G> {
     type Output = OperandHandle<Bare<V>, Definite>;
 
     fn execute<'a>(
@@ -923,7 +923,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState, E: Error + 'static>
     }
 }
 
-impl<V: ValueType, O: OrderState, E: Error + 'static> LaneKernel<Bare<V>, Multiple<O>>
+impl<V: BareValueType, O: OrderState, E: Error + 'static> LaneKernel<Bare<V>, Multiple<O>>
     for RaiseErrorsWithCause<E>
 {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
@@ -969,7 +969,7 @@ impl<I: IndexDomain, V: ValueType, E: Error + 'static> LaneKernel<Indexed<I, V>,
     }
 }
 
-impl<V: ValueType, E: Error + 'static> LaneKernel<Bare<V>, Single> for RaiseErrorsWithCause<E> {
+impl<V: BareValueType, E: Error + 'static> LaneKernel<Bare<V>, Single> for RaiseErrorsWithCause<E> {
     type Output = OperandHandle<Bare<V>, Single>;
 
     fn execute<'a>(
@@ -1009,7 +1009,9 @@ impl<I: IndexDomain, V: ValueType, E: Error + 'static> LaneKernel<Indexed<I, V>,
     }
 }
 
-impl<V: ValueType, E: Error + 'static> LaneKernel<Bare<V>, Definite> for RaiseErrorsWithCause<E> {
+impl<V: BareValueType, E: Error + 'static> LaneKernel<Bare<V>, Definite>
+    for RaiseErrorsWithCause<E>
+{
     type Output = OperandHandle<Bare<V>, Definite>;
 
     fn execute<'a>(
@@ -1061,7 +1063,7 @@ where
 
 impl<V, O, D, C> LaneKernel<Bare<V>, Multiple<O>> for RaiseWhenErrorsOf<D, C>
 where
-    V: ValueType,
+    V: BareValueType,
     O: OrderState,
     D: Diagnostic,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
@@ -1113,7 +1115,7 @@ where
 
 impl<V, D, C> LaneKernel<Bare<V>, Single> for RaiseWhenErrorsOf<D, C>
 where
-    V: ValueType,
+    V: BareValueType,
     D: Diagnostic,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
@@ -1168,7 +1170,7 @@ where
 
 impl<V, D, C> LaneKernel<Bare<V>, Definite> for RaiseWhenErrorsOf<D, C>
 where
-    V: ValueType,
+    V: BareValueType,
     D: Diagnostic,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
@@ -1224,7 +1226,7 @@ where
 
 impl<V, O, G, C> LaneKernel<Bare<V>, Multiple<O>> for RaiseWhenErrorsIn<G, C>
 where
-    V: ValueType,
+    V: BareValueType,
     O: OrderState,
     G: ErrorGroup,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
@@ -1276,7 +1278,7 @@ where
 
 impl<V, G, C> LaneKernel<Bare<V>, Single> for RaiseWhenErrorsIn<G, C>
 where
-    V: ValueType,
+    V: BareValueType,
     G: ErrorGroup,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
@@ -1331,7 +1333,7 @@ where
 
 impl<V, G, C> LaneKernel<Bare<V>, Definite> for RaiseWhenErrorsIn<G, C>
 where
-    V: ValueType,
+    V: BareValueType,
     G: ErrorGroup,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
@@ -1387,7 +1389,7 @@ where
 
 impl<V, O, E, C> LaneKernel<Bare<V>, Multiple<O>> for RaiseWhenErrorsWithCause<E, C>
 where
-    V: ValueType,
+    V: BareValueType,
     O: OrderState,
     E: Error + 'static,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
@@ -1447,7 +1449,7 @@ where
 
 impl<V, E, C> LaneKernel<Bare<V>, Single> for RaiseWhenErrorsWithCause<E, C>
 where
-    V: ValueType,
+    V: BareValueType,
     E: Error + 'static,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {
@@ -1506,7 +1508,7 @@ where
 
 impl<V, E, C> LaneKernel<Bare<V>, Definite> for RaiseWhenErrorsWithCause<E, C>
 where
-    V: ValueType,
+    V: BareValueType,
     E: Error + 'static,
     for<'a> C: ArgumentSource<Unaligned, Retention = Preserving, Value<'a> = bool>,
 {

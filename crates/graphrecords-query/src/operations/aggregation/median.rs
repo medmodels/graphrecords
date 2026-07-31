@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
-    OrderState, QueryResult, Single,
+    Bare, BareValueType, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Multiple, Operand, OrderState, QueryResult, Single,
     capabilities::ValueMedian,
     error::comparison::{IncomparableValues, IncomparableValuesAt},
     execution::EvaluationCache,
@@ -65,7 +65,7 @@ where
 impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for MedianOperation
 where
     I: IndexDomain,
-    V: ValueMedian,
+    V: ValueMedian + BareValueType,
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {
@@ -132,7 +132,7 @@ where
 
 impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for MedianOperation
 where
-    V: ValueMedian,
+    V: ValueMedian + BareValueType,
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {

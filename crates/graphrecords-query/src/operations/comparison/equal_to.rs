@@ -1,6 +1,6 @@
 use super::{equality_bare, equality_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
     capabilities::ValueEquality,
     execution::EvaluationCache,
     operations::{
@@ -64,7 +64,7 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for EqualToOperation<A>
 where
-    V: ValueEquality,
+    V: ValueEquality + BareValueType,
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;

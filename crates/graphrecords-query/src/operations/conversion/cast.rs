@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::ValueCast,
     cast::CastTarget,
     element::{Pipeline, Preserving},
@@ -61,7 +61,7 @@ where
 
 impl<V, T> ElementKernel<Bare<V>> for CastOperation<T>
 where
-    V: ValueCast<T>,
+    V: ValueCast<T> + BareValueType,
     T: CastTarget,
 {
     type Emission = Preserving;

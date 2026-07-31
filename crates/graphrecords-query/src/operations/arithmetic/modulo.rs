@@ -1,6 +1,6 @@
 use super::{arithmetic_bare, arithmetic_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::ValueModulo,
     execution::EvaluationCache,
     operations::{
@@ -63,7 +63,7 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for ModuloOperation<A>
 where
-    V: ValueModulo,
+    V: ValueModulo + BareValueType,
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;

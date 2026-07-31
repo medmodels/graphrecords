@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
     element::{Dropping, Pipeline, Retention},
     execution::EvaluationCache,
     operations::{
@@ -76,7 +76,7 @@ where
 
 impl<V, M> ElementKernel<Bare<V>> for FilterOperation<M>
 where
-    V: ValueType,
+    V: BareValueType,
     for<'a> M: ArgumentSource<Unaligned, Value<'a> = bool>,
 {
     type Emission = Dropping;

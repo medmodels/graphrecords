@@ -1,6 +1,6 @@
 use crate::{
-    Bare, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
-    ValueType,
+    Bare, BareValueType, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Labeled, Operand,
+    QueryResult, ValueType,
     element::{Pipeline, Retention},
     execution::EvaluationCache,
     explain::ExplainFormatter,
@@ -239,7 +239,7 @@ where
 
 impl<V, R> ElementKernel<Bare<V>> for Replace<R>
 where
-    V: ValueType,
+    V: BareValueType,
     for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = R::Retention;
@@ -299,7 +299,7 @@ where
 
 impl<V, D, R> ElementKernel<Bare<V>> for ReplaceErrorsOf<D, R>
 where
-    V: ValueType,
+    V: BareValueType,
     D: Diagnostic,
     for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
@@ -360,7 +360,7 @@ where
 
 impl<V, G, R> ElementKernel<Bare<V>> for ReplaceErrorsIn<G, R>
 where
-    V: ValueType,
+    V: BareValueType,
     G: ErrorGroup,
     for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
@@ -421,7 +421,7 @@ where
 
 impl<V, C, R> ElementKernel<Bare<V>> for ReplaceErrorsWithCause<C, R>
 where
-    V: ValueType,
+    V: BareValueType,
     C: Error + 'static,
     for<'a> R: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {

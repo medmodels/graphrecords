@@ -10,8 +10,9 @@ mod ungroup;
 mod ungroup_keyed;
 
 use crate::{
-    Arity, AttributeName, Bare, Definite, ElementShape, Failure, FailureKind, IndexDomain, Indexed,
-    Multiple, OrderState, Position, Positional, QueryResult, Single, ValueType,
+    Arity, AttributeName, Bare, BareValueType, Definite, ElementShape, Failure, FailureKind,
+    IndexDomain, Indexed, Multiple, OrderState, Position, Positional, QueryResult, Single,
+    ValueType,
     capabilities::GroupingValue,
     error::grouping::UnresolvedGroupKeyFailures,
     index::GroupKey,
@@ -128,7 +129,7 @@ where
 impl<I, V, C> KeyOperand<I> for OperandHandle<Bare<V>, C>
 where
     I: IndexDomain,
-    V: GroupingValue,
+    V: GroupingValue + BareValueType,
     C: Arity,
     for<'a> Self: ArgumentSource<Keyed<I>, Value<'a> = V::Value<'a>>,
 {
@@ -175,7 +176,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> BucketFailureArity<Indexed<I, 
     }
 }
 
-impl<V: ValueType, O: OrderState> BucketFailureArity<Bare<V>> for Multiple<O> {
+impl<V: BareValueType, O: OrderState> BucketFailureArity<Bare<V>> for Multiple<O> {
     fn bucket_failure<'payload, 'a>(
         payload: &'payload QueryResult<Self::Container<'a, <Bare<V> as ElementShape>::Element<'a>>>,
     ) -> Option<&'payload Failure>
@@ -202,7 +203,7 @@ impl<I: IndexDomain, V: ValueType> BucketFailureArity<Indexed<I, V>> for Single 
     }
 }
 
-impl<V: ValueType> BucketFailureArity<Bare<V>> for Single {
+impl<V: BareValueType> BucketFailureArity<Bare<V>> for Single {
     fn bucket_failure<'payload, 'a>(
         payload: &'payload QueryResult<Self::Container<'a, <Bare<V> as ElementShape>::Element<'a>>>,
     ) -> Option<&'payload Failure>
@@ -232,7 +233,7 @@ impl<I: IndexDomain, V: ValueType> BucketFailureArity<Indexed<I, V>> for Definit
     }
 }
 
-impl<V: ValueType> BucketFailureArity<Bare<V>> for Definite {
+impl<V: BareValueType> BucketFailureArity<Bare<V>> for Definite {
     fn bucket_failure<'payload, 'a>(
         payload: &'payload QueryResult<Self::Container<'a, <Bare<V> as ElementShape>::Element<'a>>>,
     ) -> Option<&'payload Failure>

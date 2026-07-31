@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::ValueClip,
     element::{Pipeline, Retention},
     execution::EvaluationCache,
@@ -85,7 +85,7 @@ where
 
 impl<V, L, U> ElementKernel<Bare<V>> for ClipOperation<L, U>
 where
-    V: ValueClip,
+    V: ValueClip + BareValueType,
     for<'a> L: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
     for<'a> U: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {

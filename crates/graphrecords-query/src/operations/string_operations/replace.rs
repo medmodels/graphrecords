@@ -1,6 +1,6 @@
 use super::{string_replace_bare, string_replace_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::StringValue,
     element::Retention,
     execution::EvaluationCache,
@@ -70,7 +70,7 @@ where
 
 impl<V, A, B> ElementKernel<Bare<V>> for ReplaceOperation<A, B>
 where
-    V: StringValue,
+    V: StringValue + BareValueType,
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
     for<'a> B: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {

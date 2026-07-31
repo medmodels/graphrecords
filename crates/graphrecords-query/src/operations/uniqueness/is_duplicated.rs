@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Mask, Multiple, Operand, OrderState,
-    QueryResult,
+    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Mask, Multiple, Operand,
+    OrderState, QueryResult,
     capabilities::ValueEquivalence,
     execution::EvaluationCache,
     operands::OperandHandle,
@@ -73,7 +73,7 @@ impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V
     }
 }
 
-impl<V: ValueEquivalence, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+impl<V: ValueEquivalence + BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
     for IsDuplicatedOperation
 {
     type Output = OperandHandle<Bare<Mask>, Multiple<O>>;

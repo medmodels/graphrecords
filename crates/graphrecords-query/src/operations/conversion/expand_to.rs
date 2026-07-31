@@ -1,7 +1,7 @@
 use crate::{
-    Arity, AttributeName, Bare, ExpandedIndex, ExpandedIndexReference, Explain, FailureKind,
-    IndexDomain, IndexValue, Indexed, Labeled, Mask, Operand, Position, Positional, QueryResult,
-    Scalar, ValueType,
+    Arity, AttributeName, Bare, BareValueType, ExpandedIndex, ExpandedIndexReference, Explain,
+    FailureKind, IndexDomain, IndexValue, Indexed, Labeled, Mask, Operand, Position, Positional,
+    QueryResult, Scalar, ValueType,
     element::{ElementEmission, Pipeline, Retention},
     execution::EvaluationCache,
     operands::OperandHandle,
@@ -149,7 +149,7 @@ where
 impl<P, V, A> ExpandToSource<P> for OperandHandle<Bare<V>, A>
 where
     P: IndexDomain,
-    V: ValueType,
+    V: BareValueType,
     A: Arity,
     for<'a> Self: ArgumentSource<Keyed<P>, Value<'a> = V::Value<'a>>,
 {

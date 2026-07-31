@@ -1,6 +1,6 @@
 use super::{string_map_bare, string_map_indexed};
 use crate::{
-    Bare, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueType, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::StringValue,
     element::Preserving,
     error::string::InvalidStringSlice,
@@ -74,7 +74,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for SliceOperation
 where
-    V: StringValue,
+    V: StringValue + BareValueType,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;

@@ -1,6 +1,6 @@
 use super::{ordering_bare, ordering_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
     capabilities::ValueOrdering,
     execution::EvaluationCache,
     operations::{
@@ -72,7 +72,7 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for LessThanOperation<A>
 where
-    V: ValueOrdering,
+    V: ValueOrdering + BareValueType,
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
     V::Owned: Debug + Display + Send + Sync,
 {

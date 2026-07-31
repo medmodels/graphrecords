@@ -1,6 +1,7 @@
 use super::{string_argument_map_bare, string_argument_map_indexed};
 use crate::{
-    Bare, Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    Bare, BareValueType, Explain, Failure, IndexDomain, Indexed, Labeled, Mask, Operand,
+    QueryResult,
     capabilities::StringValue,
     error::string::InvalidRegexPattern,
     execution::EvaluationCache,
@@ -76,7 +77,7 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for MatchesOperation<A>
 where
-    V: StringValue,
+    V: StringValue + BareValueType,
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;

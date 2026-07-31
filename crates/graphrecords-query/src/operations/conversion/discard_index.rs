@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Operand, QueryResult, ValueType,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Operand, QueryResult,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
     operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
@@ -26,7 +26,7 @@ impl Prepare for DiscardIndexOperation {
     }
 }
 
-impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for DiscardIndexOperation {
+impl<I: IndexDomain, V: BareValueType> ElementKernel<Indexed<I, V>> for DiscardIndexOperation {
     type Emission = Preserving;
     type OutShape = Bare<V>;
 

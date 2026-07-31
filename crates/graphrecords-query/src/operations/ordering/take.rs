@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, Ordered, QueryResult,
-    ValueType,
+    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    Ordered, QueryResult, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -53,7 +53,7 @@ impl<I: IndexDomain, V: ValueType> LaneKernel<Indexed<I, V>, Multiple<Ordered>> 
     }
 }
 
-impl<V: ValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for TakeOperation {
+impl<V: BareValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for TakeOperation {
     type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(

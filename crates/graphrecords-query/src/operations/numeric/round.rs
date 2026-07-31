@@ -1,6 +1,6 @@
 use super::{numeric_bare, numeric_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::ValueRound,
     element::Preserving,
     execution::EvaluationCache,
@@ -50,7 +50,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for RoundOperation
 where
-    V: ValueRound,
+    V: ValueRound + BareValueType,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;

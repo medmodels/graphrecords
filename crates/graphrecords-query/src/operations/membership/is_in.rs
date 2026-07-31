@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
     capabilities::ValueEquality,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
@@ -82,7 +82,7 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for IsInOperation<A>
 where
-    V: ValueEquality,
+    V: ValueEquality + BareValueType,
     for<'a> A: SetSource<Value<'a> = V::Value<'a>>,
     for<'a> V::Value<'a>: Eq + Hash,
 {

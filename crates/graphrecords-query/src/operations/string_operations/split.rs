@@ -1,6 +1,6 @@
 use crate::{
-    Bare, ExpandedChild, ExpandedIndex, Explain, Failure, IndexDomain, Indexed, Labeled, Operand,
-    Ordered, Positional, QueryResult,
+    Bare, BareValueType, ExpandedChild, ExpandedIndex, Explain, Failure, IndexDomain, Indexed,
+    Labeled, Operand, Ordered, Positional, QueryResult,
     capabilities::StringValue,
     element::{Expanding, Pipeline, Retention},
     error::string::EmptySplitDelimiter,
@@ -83,7 +83,7 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for SplitOperation<A>
 where
-    V: StringValue,
+    V: StringValue + BareValueType,
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = Expanding<Ordered>;

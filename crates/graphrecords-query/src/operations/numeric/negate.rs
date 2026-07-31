@@ -1,6 +1,6 @@
 use super::{numeric_bare, numeric_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
     capabilities::ValueNegate,
     element::Preserving,
     execution::EvaluationCache,
@@ -50,7 +50,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for NegateOperation
 where
-    V: ValueNegate,
+    V: ValueNegate + BareValueType,
 {
     type Emission = Preserving;
     type OutShape = Bare<V>;

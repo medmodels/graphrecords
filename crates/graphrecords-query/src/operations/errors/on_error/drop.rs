@@ -1,5 +1,6 @@
 use crate::{
-    Bare, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Operand, QueryResult, ValueType,
+    Bare, BareValueType, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Operand,
+    QueryResult, ValueType,
     element::{Dropping, Pipeline},
     execution::EvaluationCache,
     explain::ExplainFormatter,
@@ -166,7 +167,7 @@ impl<I: IndexDomain, V: ValueType> ElementKernel<Indexed<I, V>> for Drop {
     }
 }
 
-impl<V: ValueType> ElementKernel<Bare<V>> for Drop {
+impl<V: BareValueType> ElementKernel<Bare<V>> for Drop {
     type Emission = Dropping;
     type OutShape = Bare<V>;
 
@@ -193,7 +194,7 @@ impl<I: IndexDomain, V: ValueType, D: Diagnostic> ElementKernel<Indexed<I, V>> f
     }
 }
 
-impl<V: ValueType, D: Diagnostic> ElementKernel<Bare<V>> for DropErrorsOf<D> {
+impl<V: BareValueType, D: Diagnostic> ElementKernel<Bare<V>> for DropErrorsOf<D> {
     type Emission = Dropping;
     type OutShape = Bare<V>;
 
@@ -223,7 +224,7 @@ impl<I: IndexDomain, V: ValueType, G: ErrorGroup> ElementKernel<Indexed<I, V>> f
     }
 }
 
-impl<V: ValueType, G: ErrorGroup> ElementKernel<Bare<V>> for DropErrorsIn<G> {
+impl<V: BareValueType, G: ErrorGroup> ElementKernel<Bare<V>> for DropErrorsIn<G> {
     type Emission = Dropping;
     type OutShape = Bare<V>;
 
@@ -255,7 +256,7 @@ impl<I: IndexDomain, V: ValueType, C: Error + 'static> ElementKernel<Indexed<I, 
     }
 }
 
-impl<V: ValueType, C: Error + 'static> ElementKernel<Bare<V>> for DropErrorsWithCause<C> {
+impl<V: BareValueType, C: Error + 'static> ElementKernel<Bare<V>> for DropErrorsWithCause<C> {
     type Emission = Dropping;
     type OutShape = Bare<V>;
 

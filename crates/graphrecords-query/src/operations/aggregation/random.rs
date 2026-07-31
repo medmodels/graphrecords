@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
-    QueryResult, Single, ValueType,
+    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    OrderState, QueryResult, Single, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -53,7 +53,7 @@ where
 
 impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for RandomOperation
 where
-    V: ValueType,
+    V: BareValueType,
     O: OrderState,
 {
     type Output = OperandHandle<Bare<V>, Single>;

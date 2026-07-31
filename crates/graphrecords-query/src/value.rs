@@ -14,6 +14,8 @@ pub trait ValueType: 'static {
     fn from_owned(owned: &Self::Owned) -> Self::Value<'_>;
 }
 
+pub trait BareValueType: ValueType {}
+
 pub trait ReturnValueType: ValueType {}
 
 pub struct Scalar;
@@ -118,6 +120,14 @@ impl ValueType for FailureKindValue {
         *owned
     }
 }
+
+impl BareValueType for Scalar {}
+impl BareValueType for Mask {}
+impl BareValueType for AttributeName {}
+impl<I: IndexDomain> BareValueType for IndexValue<I> {}
+impl<E: EntityDomain> BareValueType for EntityReference<E> {}
+impl BareValueType for FailureValue {}
+impl BareValueType for FailureKindValue {}
 
 impl ReturnValueType for Scalar {}
 impl ReturnValueType for Mask {}

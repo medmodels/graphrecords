@@ -1,6 +1,7 @@
 use super::{string_map_bare, string_map_indexed};
 use crate::{
-    Bare, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult, Scalar,
+    Bare, BareValueType, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Scalar,
     capabilities::StringValue,
     element::Preserving,
     error::string::StringLengthOverflow,
@@ -62,7 +63,7 @@ where
 
 impl<V> ElementKernel<Bare<V>> for LengthOperation
 where
-    V: StringValue,
+    V: StringValue + BareValueType,
 {
     type Emission = Preserving;
     type OutShape = Bare<Scalar>;

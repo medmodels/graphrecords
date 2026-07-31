@@ -1,6 +1,6 @@
 use super::{string_argument_map_bare, string_argument_map_indexed};
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
     capabilities::StringValue,
     execution::EvaluationCache,
     operations::{
@@ -66,7 +66,7 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for EndsWithOperation<A>
 where
-    V: StringValue,
+    V: StringValue + BareValueType,
     for<'a> A: ArgumentSource<Unaligned, Value<'a> = V::Value<'a>>,
 {
     type Emission = A::Retention;

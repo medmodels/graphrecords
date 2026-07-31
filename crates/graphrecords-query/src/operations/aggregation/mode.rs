@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState,
-    QueryResult,
+    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    OrderState, QueryResult,
     capabilities::ValueMode,
     execution::EvaluationCache,
     operands::OperandHandle,
@@ -64,8 +64,8 @@ fn modal_values<'a, V: ValueMode>(
         .collect()
 }
 
-impl<I: IndexDomain, V: ValueMode, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
-    for ModeOperation
+impl<I: IndexDomain, V: ValueMode + BareValueType, O: OrderState>
+    LaneKernel<Indexed<I, V>, Multiple<O>> for ModeOperation
 {
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
 
@@ -80,7 +80,9 @@ impl<I: IndexDomain, V: ValueMode, O: OrderState> LaneKernel<Indexed<I, V>, Mult
     }
 }
 
-impl<V: ValueMode, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for ModeOperation {
+impl<V: ValueMode + BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+    for ModeOperation
+{
     type Output = OperandHandle<Bare<V>, Multiple<O>>;
 
     fn execute<'a>(

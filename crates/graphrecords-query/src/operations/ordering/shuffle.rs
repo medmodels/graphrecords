@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, OrderState, Ordered,
-    QueryResult, ValueType,
+    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    OrderState, Ordered, QueryResult, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -51,7 +51,7 @@ impl<I: IndexDomain, V: ValueType, O: OrderState> LaneKernel<Indexed<I, V>, Mult
     }
 }
 
-impl<V: ValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for ShuffleOperation {
+impl<V: BareValueType, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for ShuffleOperation {
     type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(

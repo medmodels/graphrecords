@@ -34,8 +34,8 @@ pub use operations::{EdgeDirection, MaybeAbsent, PreparedIndexedMultiple};
 pub use selection::{QueryEdges, QueryNodes};
 pub use traits::*;
 pub use value::{
-    AttributeName, EntityReference, FailureKindValue, FailureValue, IndexValue, Mask,
-    ReturnValueType, Scalar, Unit, ValueType,
+    AttributeName, BareValueType, EntityReference, FailureKindValue, FailureValue, IndexValue,
+    Mask, ReturnValueType, Scalar, Unit, ValueType,
 };
 
 mod sealed {

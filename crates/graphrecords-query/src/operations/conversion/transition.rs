@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
+    Bare, BareValueType, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult, ValueType,
     capabilities::ValueTransition,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
@@ -85,8 +85,8 @@ where
 
 impl<S, T> ElementKernel<Bare<S>> for TransitionOperation<T>
 where
-    S: ValueTransition<T>,
-    T: ValueType,
+    S: ValueTransition<T> + BareValueType,
+    T: BareValueType,
 {
     type Emission = Preserving;
     type OutShape = Bare<T>;

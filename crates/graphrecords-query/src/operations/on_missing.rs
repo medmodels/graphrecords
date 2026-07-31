@@ -1,6 +1,6 @@
 use crate::{
-    Arity, Bare, Explain, IndexDomain, Indexed, Multiple, OrderState, QueryResult, Single,
-    ValueType,
+    Arity, Bare, BareValueType, Explain, IndexDomain, Indexed, Multiple, OrderState, QueryResult,
+    Single, ValueType,
     element::{Dropping, ElementEmission, Retention},
     execution::EvaluationCache,
     explain::ExplainFormatter,
@@ -112,7 +112,7 @@ impl<A: Alignment, I: IndexDomain, V: ValueType> MaybeAbsent<A>
     for OperandHandle<Indexed<I, V>, Single>
 {
 }
-impl<A: Alignment, V: ValueType> MaybeAbsent<A> for OperandHandle<Bare<V>, Single> {}
+impl<A: Alignment, V: BareValueType> MaybeAbsent<A> for OperandHandle<Bare<V>, Single> {}
 
 pub struct WithMissing<A: Alignment, S: MaybeAbsent<A>, P> {
     inner: S,

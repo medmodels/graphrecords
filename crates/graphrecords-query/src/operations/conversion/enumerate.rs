@@ -1,6 +1,6 @@
 use crate::{
-    Bare, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand, Ordered, Positional,
-    QueryResult, ValueType,
+    Bare, BareValueType, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    Ordered, Positional, QueryResult, ValueType,
     execution::EvaluationCache,
     operands::OperandHandle,
     operations::{
@@ -28,7 +28,7 @@ impl Prepare for EnumerateOperation {
     }
 }
 
-impl<V: ValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for EnumerateOperation {
+impl<V: BareValueType> LaneKernel<Bare<V>, Multiple<Ordered>> for EnumerateOperation {
     type Output = OperandHandle<Indexed<Positional, V>, Multiple<Ordered>>;
 
     fn execute<'a>(
