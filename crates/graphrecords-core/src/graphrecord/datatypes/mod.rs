@@ -89,12 +89,15 @@ impl PartialEq for DataType {
                     | (Self::Float, Self::Float)
                     | (Self::Bool, Self::Bool)
                     | (Self::DateTime, Self::DateTime)
+                    | (Self::Duration, Self::Duration)
                     | (Self::Null, Self::Null)
                     | (Self::Any, Self::Any)
             ),
         }
     }
 }
+
+impl Eq for DataType {}
 
 // TODO: Add tests for Duration
 impl Display for DataType {
@@ -308,86 +311,102 @@ mod test {
 
     #[test]
     fn test_partial_eq() {
-        assert!(DataType::String == DataType::String);
-        assert!(DataType::Int == DataType::Int);
-        assert!(DataType::Float == DataType::Float);
-        assert!(DataType::Bool == DataType::Bool);
-        assert!(DataType::DateTime == DataType::DateTime);
-        assert!(DataType::Null == DataType::Null);
-        assert!(DataType::Any == DataType::Any);
+        assert_eq!(DataType::String, DataType::String);
+        assert_eq!(DataType::Int, DataType::Int);
+        assert_eq!(DataType::Float, DataType::Float);
+        assert_eq!(DataType::Bool, DataType::Bool);
+        assert_eq!(DataType::DateTime, DataType::DateTime);
+        assert_eq!(DataType::Duration, DataType::Duration);
+        assert_eq!(DataType::Null, DataType::Null);
+        assert_eq!(DataType::Any, DataType::Any);
 
-        assert!(
+        assert_eq!(
+            DataType::Union((Box::new(DataType::String), Box::new(DataType::Int))),
             DataType::Union((Box::new(DataType::String), Box::new(DataType::Int)))
-                == DataType::Union((Box::new(DataType::String), Box::new(DataType::Int)))
         );
-        assert!(
-            DataType::Union((Box::new(DataType::String), Box::new(DataType::Int)))
-                == DataType::Union((Box::new(DataType::Int), Box::new(DataType::String)))
+        assert_eq!(
+            DataType::Union((Box::new(DataType::String), Box::new(DataType::Int))),
+            DataType::Union((Box::new(DataType::Int), Box::new(DataType::String)))
         );
 
-        assert!(
+        assert_eq!(
+            DataType::Option(Box::new(DataType::String)),
             DataType::Option(Box::new(DataType::String))
-                == DataType::Option(Box::new(DataType::String))
         );
 
-        assert!(DataType::String != DataType::Int);
-        assert!(DataType::String != DataType::Float);
-        assert!(DataType::String != DataType::Bool);
-        assert!(DataType::String != DataType::DateTime);
-        assert!(DataType::String != DataType::Null);
-        assert!(DataType::String != DataType::Any);
+        assert_ne!(DataType::String, DataType::Int);
+        assert_ne!(DataType::String, DataType::Float);
+        assert_ne!(DataType::String, DataType::Bool);
+        assert_ne!(DataType::String, DataType::DateTime);
+        assert_ne!(DataType::String, DataType::Duration);
+        assert_ne!(DataType::String, DataType::Null);
+        assert_ne!(DataType::String, DataType::Any);
 
-        assert!(DataType::Int != DataType::String);
-        assert!(DataType::Int != DataType::Float);
-        assert!(DataType::Int != DataType::Bool);
-        assert!(DataType::Int != DataType::DateTime);
-        assert!(DataType::Int != DataType::Null);
-        assert!(DataType::Int != DataType::Any);
+        assert_ne!(DataType::Int, DataType::String);
+        assert_ne!(DataType::Int, DataType::Float);
+        assert_ne!(DataType::Int, DataType::Bool);
+        assert_ne!(DataType::Int, DataType::DateTime);
+        assert_ne!(DataType::Int, DataType::Duration);
+        assert_ne!(DataType::Int, DataType::Null);
+        assert_ne!(DataType::Int, DataType::Any);
 
-        assert!(DataType::Float != DataType::String);
-        assert!(DataType::Float != DataType::Int);
-        assert!(DataType::Float != DataType::Bool);
-        assert!(DataType::Float != DataType::DateTime);
-        assert!(DataType::Float != DataType::Null);
-        assert!(DataType::Float != DataType::Any);
+        assert_ne!(DataType::Float, DataType::String);
+        assert_ne!(DataType::Float, DataType::Int);
+        assert_ne!(DataType::Float, DataType::Bool);
+        assert_ne!(DataType::Float, DataType::DateTime);
+        assert_ne!(DataType::Float, DataType::Duration);
+        assert_ne!(DataType::Float, DataType::Null);
+        assert_ne!(DataType::Float, DataType::Any);
 
-        assert!(DataType::Bool != DataType::String);
-        assert!(DataType::Bool != DataType::Int);
-        assert!(DataType::Bool != DataType::Float);
-        assert!(DataType::Bool != DataType::DateTime);
-        assert!(DataType::Bool != DataType::Null);
-        assert!(DataType::Bool != DataType::Any);
+        assert_ne!(DataType::Bool, DataType::String);
+        assert_ne!(DataType::Bool, DataType::Int);
+        assert_ne!(DataType::Bool, DataType::Float);
+        assert_ne!(DataType::Bool, DataType::DateTime);
+        assert_ne!(DataType::Bool, DataType::Duration);
+        assert_ne!(DataType::Bool, DataType::Null);
+        assert_ne!(DataType::Bool, DataType::Any);
 
-        assert!(DataType::DateTime != DataType::String);
-        assert!(DataType::DateTime != DataType::Int);
-        assert!(DataType::DateTime != DataType::Float);
-        assert!(DataType::DateTime != DataType::Bool);
-        assert!(DataType::DateTime != DataType::Null);
-        assert!(DataType::DateTime != DataType::Any);
+        assert_ne!(DataType::DateTime, DataType::String);
+        assert_ne!(DataType::DateTime, DataType::Int);
+        assert_ne!(DataType::DateTime, DataType::Float);
+        assert_ne!(DataType::DateTime, DataType::Bool);
+        assert_ne!(DataType::DateTime, DataType::Duration);
+        assert_ne!(DataType::DateTime, DataType::Null);
+        assert_ne!(DataType::DateTime, DataType::Any);
 
-        assert!(DataType::Null != DataType::String);
-        assert!(DataType::Null != DataType::Int);
-        assert!(DataType::Null != DataType::Float);
-        assert!(DataType::Null != DataType::Bool);
-        assert!(DataType::Null != DataType::DateTime);
-        assert!(DataType::Null != DataType::Any);
+        assert_ne!(DataType::Duration, DataType::String);
+        assert_ne!(DataType::Duration, DataType::Int);
+        assert_ne!(DataType::Duration, DataType::Float);
+        assert_ne!(DataType::Duration, DataType::Bool);
+        assert_ne!(DataType::Duration, DataType::DateTime);
+        assert_ne!(DataType::Duration, DataType::Null);
+        assert_ne!(DataType::Duration, DataType::Any);
 
-        assert!(DataType::Any != DataType::String);
-        assert!(DataType::Any != DataType::Int);
-        assert!(DataType::Any != DataType::Float);
-        assert!(DataType::Any != DataType::Bool);
-        assert!(DataType::Any != DataType::DateTime);
-        assert!(DataType::Any != DataType::Null);
+        assert_ne!(DataType::Null, DataType::String);
+        assert_ne!(DataType::Null, DataType::Int);
+        assert_ne!(DataType::Null, DataType::Float);
+        assert_ne!(DataType::Null, DataType::Bool);
+        assert_ne!(DataType::Null, DataType::DateTime);
+        assert_ne!(DataType::Null, DataType::Duration);
+        assert_ne!(DataType::Null, DataType::Any);
+
+        assert_ne!(DataType::Any, DataType::String);
+        assert_ne!(DataType::Any, DataType::Int);
+        assert_ne!(DataType::Any, DataType::Float);
+        assert_ne!(DataType::Any, DataType::Bool);
+        assert_ne!(DataType::Any, DataType::DateTime);
+        assert_ne!(DataType::Any, DataType::Duration);
+        assert_ne!(DataType::Any, DataType::Null);
 
         // If all the basic datatypes have been tested, it should be safe to assume that the
         // Union and Option variants will work as expected.
-        assert!(
-            DataType::Union((Box::new(DataType::String), Box::new(DataType::Int)))
-                != DataType::Union((Box::new(DataType::Int), Box::new(DataType::Float)))
+        assert_ne!(
+            DataType::Union((Box::new(DataType::String), Box::new(DataType::Int))),
+            DataType::Union((Box::new(DataType::Int), Box::new(DataType::Float)))
         );
-        assert!(
-            DataType::Option(Box::new(DataType::String))
-                != DataType::Option(Box::new(DataType::Int))
+        assert_ne!(
+            DataType::Option(Box::new(DataType::String)),
+            DataType::Option(Box::new(DataType::Int))
         );
     }
 

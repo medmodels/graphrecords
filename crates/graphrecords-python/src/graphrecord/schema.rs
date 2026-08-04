@@ -6,7 +6,7 @@ use super::{
     traits::{DeepFrom, DeepInto},
 };
 use graphrecords_core::{
-    errors::GraphError,
+    errors::SchemaError,
     graphrecord::{
         EdgeIndex, Group,
         schema::{AttributeDataType, AttributeType, GroupSchema, Schema, SchemaType},
@@ -72,7 +72,7 @@ impl From<AttributeDataType> for PyAttributeDataType {
 }
 
 impl TryFrom<PyAttributeDataType> for AttributeDataType {
-    type Error = GraphError;
+    type Error = SchemaError;
 
     fn try_from(value: PyAttributeDataType) -> Result<Self, Self::Error> {
         Self::new(value.data_type.into(), value.attribute_type.into())
@@ -146,13 +146,13 @@ impl PyGroupSchema {
         let nodes = nodes
             .into_iter()
             .map(|(k, v)| Ok((k.into(), v.try_into()?)))
-            .collect::<Result<HashMap<_, _>, GraphError>>()
+            .collect::<Result<HashMap<_, _>, SchemaError>>()
             .map_err(PyGraphRecordError::from)?
             .into();
         let edges = edges
             .into_iter()
             .map(|(k, v)| Ok((k.into(), v.try_into()?)))
-            .collect::<Result<HashMap<_, _>, GraphError>>()
+            .collect::<Result<HashMap<_, _>, SchemaError>>()
             .map_err(PyGraphRecordError::from)?
             .into();
 

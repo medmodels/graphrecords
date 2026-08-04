@@ -1,0 +1,163 @@
+use crate::{
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    capabilities::ValueClip,
+    element::{Pipeline, Retention},
+    execution::EvaluationCache,
+    operations::{
+        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
+        Prepare, Unaligned,
+    },
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
+    registry::{describe::ArgumentRetention, operation_manifest},
+    traits::Clip,
+};
+use graphrecords_core::GraphRecord;
+
+#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[operation(scope = Element)]
+#[explain(label = "Clip")]
+#[plan(optimizer_hints(empty = if_all))]
+pub struct ClipOperation<L, U> {
+    #[argument]
+    lower: L,
+    #[argument]
+    upper: U,
+}
+
+impl<L: Prepare, U: Prepare> Prepare for ClipOperation<L, U> {
+    type Prepared<'a>
+        = (L::Prepared<'a>, U::Prepared<'a>)
+    where
+        Self: 'a;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache<'a>,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok((
+            self.lower.prepare(graphrecord, cache)?,
+            self.upper.prepare(graphrecord, cache)?,
+        ))
+    }
+}
+
+impl<I, V, L, U> ElementKernel<Indexed<I, V>> for ClipOperation<L, U>
+where
+    I: IndexDomain,
+    V: ValueClip,
+    L: ArgumentSource<Keyed<I>, V>,
+    U: ArgumentSource<Keyed<I>, V>,
+{
+    type Emission = <L::Retention as Retention>::Then<U::Retention>;
+    type OutShape = Indexed<I, V>;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
+        Ok(Pipeline::keyed(move |index, item| {
+            let value = match item {
+                Ok(value) => value,
+                Err(failure) => {
+                    return Self::Emission::keep(Err(failure));
+                }
+            };
+
+            let lower = L::resolve(&prepared.0, &index, Self::LABEL);
+
+            L::Retention::and_then(lower, |lower| {
+                let upper = U::resolve(&prepared.1, &index, Self::LABEL);
+
+                U::Retention::map_step(upper, |upper| {
+                    upper.and_then(|upper| {
+                        V::clip(Self::LABEL, value, lower, upper)
+                            .map_err(|failure| failure.at::<I>(&index))
+                    })
+                })
+            })
+        }))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.with_unknown_distinct()
+    }
+}
+
+impl<V, L, U> ElementKernel<Bare<V>> for ClipOperation<L, U>
+where
+    V: ValueClip + BareValueDomain,
+    L: ArgumentSource<Unaligned, V>,
+    U: ArgumentSource<Unaligned, V>,
+{
+    type Emission = <L::Retention as Retention>::Then<U::Retention>;
+    type OutShape = Bare<V>;
+
+    fn pipeline<'a>(
+        _graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
+        Ok(Pipeline::new(move |item| {
+            let value = match item {
+                Ok(value) => value,
+                Err(failure) => {
+                    return Self::Emission::keep(Err(failure));
+                }
+            };
+
+            let lower = L::resolve(&prepared.0, &(), Self::LABEL);
+
+            L::Retention::and_then(lower, |lower| {
+                let upper = U::resolve(&prepared.1, &(), Self::LABEL);
+
+                U::Retention::map_step(upper, |upper| {
+                    upper.and_then(|upper| V::clip(Self::LABEL, value, lower, upper))
+                })
+            })
+        }))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        input.with_unknown_distinct()
+    }
+}
+
+impl<O, L, U> Clip<L, U> for O
+where
+    ClipOperation<L, U>: Operation,
+    O: Apply<ClipOperation<L, U>>,
+{
+    type ReturnOperand = O::Output;
+
+    fn clip(&self, lower: L, upper: U) -> Self::ReturnOperand {
+        Self::ReturnOperand::new(OperationContext::new(
+            self.clone(),
+            ClipOperation { lower, upper },
+        ))
+    }
+}
+
+operation_manifest! {
+    ClipOperation<L, U> {
+        method: Clip<L, U>::clip;
+        scope: element;
+
+        kernel {
+            parameters: <I: IndexDomain, V: ValueClip>;
+            argument: L: ArgumentSource<Keyed<I>, V>;
+            argument: U: ArgumentSource<Keyed<I>, V>;
+            input: Indexed<I, V>;
+            output: Indexed<I, V>;
+            emission: ArgumentRetention;
+        }
+
+        kernel {
+            parameters: <V: ValueClip + BareValueDomain>;
+            argument: L: ArgumentSource<Unaligned, V>;
+            argument: U: ArgumentSource<Unaligned, V>;
+            input: Bare<V>;
+            output: Bare<V>;
+            emission: ArgumentRetention;
+        }
+    }
+}

@@ -10,11 +10,14 @@ readme = "../../README.md"
 [dependencies]
 graphrecords-core = { workspace = true }
 graphrecords-utils = { workspace = true }
+graphrecords-query = { workspace = true }
+graphrecords-overview = { workspace = true }
 
 [features]
 plugins = ["graphrecords-core/plugins"]
 serde = ["graphrecords-core/serde"]
 connectors = ["graphrecords-core/connectors"]
+dynamic = ["graphrecords-query/dynamic"]
 
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
-use super::{Attributes, EdgeIndex, GraphRecord, Group, NodeIndex};
+use super::{AttributeMap, EdgeIndex, GraphRecord, Group, NodeIndex};
 use crate::{
-    errors::GraphError,
+    errors::SchemaError,
     graphrecord::{GraphRecordAttribute, datatypes::DataType},
 };
 use graphrecords_utils::aliases::GrHashMap;
@@ -69,7 +69,7 @@ impl DataType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct AttributeDataType {
     data_type: DataType,
@@ -77,7 +77,7 @@ pub struct AttributeDataType {
 }
 
 impl AttributeDataType {
-    fn validate(data_type: &DataType, attribute_type: AttributeType) -> Result<(), GraphError> {
+    fn validate(data_type: &DataType, attribute_type: AttributeType) -> Result<(), SchemaError> {
         match (attribute_type, data_type) {
             (AttributeType::Categorical | AttributeType::Unstructured, _)
             | (AttributeType::Continuous, DataType::Int | DataType::Float | DataType::Null)
@@ -91,17 +91,13 @@ impl AttributeDataType {
                 Self::validate(second_datatype, attribute_type)
             }
 
-            (AttributeType::Continuous, _) => Err(GraphError::SchemaError(
-                "Continuous attribute must be of (sub-)type Int or Float.".to_string(),
-            )),
+            (AttributeType::Continuous, _) => Err(SchemaError::ContinuousAttributeNotNumeric),
 
-            (AttributeType::Temporal, _) => Err(GraphError::SchemaError(
-                "Temporal attribute must be of (sub-)type DateTime or Duration.".to_string(),
-            )),
+            (AttributeType::Temporal, _) => Err(SchemaError::TemporalAttributeNotTemporal),
         }
     }
 
-    pub fn new(data_type: DataType, attribute_type: AttributeType) -> Result<Self, GraphError> {
+    pub fn new(data_type: DataType, attribute_type: AttributeType) -> Result<Self, SchemaError> {
         Self::validate(&data_type, attribute_type)?;
 
         Ok(Self {
@@ -164,52 +160,64 @@ enum AttributeSchemaKind<'a> {
 }
 
 impl AttributeSchemaKind<'_> {
-    fn error_message(&self, key: &GraphRecordAttribute, data_type: &DataType) -> String {
+    fn attribute_missing_error(
+        &self,
+        attribute: &GraphRecordAttribute,
+        data_type: &DataType,
+    ) -> SchemaError {
         match self {
-            Self::Node(index) => {
-                format!("Attribute {key} of type {data_type} not found on node with index {index}")
-            }
-            Self::Edge(index) => {
-                format!("Attribute {key} of type {data_type} not found on edge with index {index}")
-            }
+            Self::Node(node_index) => SchemaError::NodeAttributeMissing {
+                node_index: (*node_index).clone(),
+                attribute: attribute.clone(),
+                data_type: data_type.clone(),
+            },
+            Self::Edge(edge_index) => SchemaError::EdgeAttributeMissing {
+                edge_index: **edge_index,
+                attribute: attribute.clone(),
+                data_type: data_type.clone(),
+            },
         }
     }
 
-    fn error_message_expected(
+    fn data_type_mismatch_error(
         &self,
-        key: &GraphRecordAttribute,
+        attribute: &GraphRecordAttribute,
         data_type: &DataType,
         expected_data_type: &DataType,
-    ) -> String {
+    ) -> SchemaError {
         match self {
-            Self::Node(index) => format!(
-                "Attribute {key} of node with index {index} is of type {data_type}. Expected {expected_data_type}."
-            ),
-            Self::Edge(index) => format!(
-                "Attribute {key} of edge with index {index} is of type {data_type}. Expected {expected_data_type}."
-            ),
+            Self::Node(node_index) => SchemaError::NodeAttributeDataTypeMismatch {
+                node_index: (*node_index).clone(),
+                attribute: attribute.clone(),
+                data_type: data_type.clone(),
+                expected_data_type: expected_data_type.clone(),
+            },
+            Self::Edge(edge_index) => SchemaError::EdgeAttributeDataTypeMismatch {
+                edge_index: **edge_index,
+                attribute: attribute.clone(),
+                data_type: data_type.clone(),
+                expected_data_type: expected_data_type.clone(),
+            },
         }
     }
 
-    fn error_message_too_many(&self, attributes: &[String]) -> String {
+    fn attributes_not_in_schema_error(&self, attributes: Vec<GraphRecordAttribute>) -> SchemaError {
         match self {
-            Self::Node(index) => format!(
-                "Attributes [{}] of node with index {} do not exist in schema.",
-                attributes.join(", "),
-                index
-            ),
-            Self::Edge(index) => format!(
-                "Attributes [{}] of edge with index {} do not exist in schema.",
-                attributes.join(", "),
-                index
-            ),
+            Self::Node(node_index) => SchemaError::NodeAttributesNotInSchema {
+                node_index: (*node_index).clone(),
+                attributes,
+            },
+            Self::Edge(edge_index) => SchemaError::EdgeAttributesNotInSchema {
+                edge_index: **edge_index,
+                attributes,
+            },
         }
     }
 }
 
 type AttributeSchemaMapping = HashMap<GraphRecordAttribute, AttributeDataType>;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct AttributeSchema(AttributeSchemaMapping);
 
@@ -238,9 +246,9 @@ impl AttributeSchema {
 
     fn validate(
         &self,
-        attributes: &Attributes,
+        attributes: &AttributeMap,
         kind: &AttributeSchemaKind,
-    ) -> Result<(), GraphError> {
+    ) -> Result<(), SchemaError> {
         let mut matched_count = 0;
         let mut attributes_not_in_schema = Vec::new();
 
@@ -250,17 +258,17 @@ impl AttributeSchema {
                     let data_type = DataType::from(value);
 
                     if !schema.data_type.evaluate(&data_type) {
-                        return Err(GraphError::SchemaError(kind.error_message_expected(
+                        return Err(kind.data_type_mismatch_error(
                             key,
                             &data_type,
                             &schema.data_type,
-                        )));
+                        ));
                     }
 
                     matched_count += 1;
                 }
                 None => {
-                    attributes_not_in_schema.push(key.to_string());
+                    attributes_not_in_schema.push(key.clone());
                 }
             }
         }
@@ -269,23 +277,19 @@ impl AttributeSchema {
             for (key, schema) in &self.0 {
                 if !attributes.contains_key(key) && !matches!(schema.data_type, DataType::Option(_))
                 {
-                    return Err(GraphError::SchemaError(
-                        kind.error_message(key, &schema.data_type),
-                    ));
+                    return Err(kind.attribute_missing_error(key, &schema.data_type));
                 }
             }
         }
 
         if !attributes_not_in_schema.is_empty() {
-            return Err(GraphError::SchemaError(
-                kind.error_message_too_many(&attributes_not_in_schema),
-            ));
+            return Err(kind.attributes_not_in_schema_error(attributes_not_in_schema));
         }
 
         Ok(())
     }
 
-    fn update(&mut self, attributes: &Attributes, empty: bool) {
+    fn update(&mut self, attributes: &AttributeMap, empty: bool) {
         for (attribute, data_type) in &mut self.0 {
             if !attributes.contains_key(attribute) {
                 data_type.data_type = data_type.data_type.merge(&DataType::Null);
@@ -316,7 +320,7 @@ impl AttributeSchema {
     }
 
     #[must_use]
-    pub fn infer(attributes: impl IntoIterator<Item = impl Borrow<Attributes>>) -> Self {
+    pub fn infer(attributes: impl IntoIterator<Item = impl Borrow<AttributeMap>>) -> Self {
         let mut schema = Self::default();
 
         let mut empty = true;
@@ -331,7 +335,7 @@ impl AttributeSchema {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GroupSchema {
     nodes: AttributeSchema,
@@ -357,8 +361,8 @@ impl GroupSchema {
     pub fn validate_node(
         &self,
         index: &NodeIndex,
-        attributes: &Attributes,
-    ) -> Result<(), GraphError> {
+        attributes: &AttributeMap,
+    ) -> Result<(), SchemaError> {
         self.nodes
             .validate(attributes, &AttributeSchemaKind::Node(index))
     }
@@ -366,16 +370,16 @@ impl GroupSchema {
     pub fn validate_edge(
         &self,
         index: &EdgeIndex,
-        attributes: &Attributes,
-    ) -> Result<(), GraphError> {
+        attributes: &AttributeMap,
+    ) -> Result<(), SchemaError> {
         self.edges
             .validate(attributes, &AttributeSchemaKind::Edge(index))
     }
 
     #[must_use]
     pub fn infer(
-        nodes: impl IntoIterator<Item = impl Borrow<Attributes>>,
-        edges: impl IntoIterator<Item = impl Borrow<Attributes>>,
+        nodes: impl IntoIterator<Item = impl Borrow<AttributeMap>>,
+        edges: impl IntoIterator<Item = impl Borrow<AttributeMap>>,
     ) -> Self {
         Self {
             nodes: AttributeSchema::infer(nodes),
@@ -383,11 +387,11 @@ impl GroupSchema {
         }
     }
 
-    pub(crate) fn update_node(&mut self, attributes: &Attributes, empty: bool) {
+    pub(crate) fn update_node(&mut self, attributes: &AttributeMap, empty: bool) {
         self.nodes.update(attributes, empty);
     }
 
-    pub(crate) fn update_edge(&mut self, attributes: &Attributes, empty: bool) {
+    pub(crate) fn update_edge(&mut self, attributes: &AttributeMap, empty: bool) {
         self.edges.update(attributes, empty);
     }
 }
@@ -400,7 +404,7 @@ pub enum SchemaType {
     Provided,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Schema {
     groups: HashMap<Group, GroupSchema>,
@@ -517,10 +521,12 @@ impl Schema {
         &self.groups
     }
 
-    pub fn group(&self, group: &Group) -> Result<&GroupSchema, GraphError> {
+    pub fn group(&self, group: &Group) -> Result<&GroupSchema, SchemaError> {
         self.groups
             .get(group)
-            .ok_or_else(|| GraphError::SchemaError(format!("Group {group} not found in schema.")))
+            .ok_or_else(|| SchemaError::GroupNotInSchema {
+                group: group.clone(),
+            })
     }
 
     #[must_use]
@@ -536,14 +542,17 @@ impl Schema {
     pub fn validate_node<'a>(
         &self,
         index: &'a NodeIndex,
-        attributes: &'a Attributes,
+        attributes: &'a AttributeMap,
         group: Option<&'a Group>,
-    ) -> Result<(), GraphError> {
+    ) -> Result<(), SchemaError> {
         match group {
             Some(group) => {
-                let schema = self.groups.get(group).ok_or_else(|| {
-                    GraphError::SchemaError(format!("Group {group} not found in schema."))
-                })?;
+                let schema =
+                    self.groups
+                        .get(group)
+                        .ok_or_else(|| SchemaError::GroupNotInSchema {
+                            group: group.clone(),
+                        })?;
 
                 schema.validate_node(index, attributes)
             }
@@ -554,14 +563,17 @@ impl Schema {
     pub fn validate_edge<'a>(
         &self,
         index: &'a EdgeIndex,
-        attributes: &'a Attributes,
+        attributes: &'a AttributeMap,
         group: Option<&'a Group>,
-    ) -> Result<(), GraphError> {
+    ) -> Result<(), SchemaError> {
         match group {
             Some(group) => {
-                let schema = self.groups.get(group).ok_or_else(|| {
-                    GraphError::SchemaError(format!("Group {group} not found in schema."))
-                })?;
+                let schema =
+                    self.groups
+                        .get(group)
+                        .ok_or_else(|| SchemaError::GroupNotInSchema {
+                            group: group.clone(),
+                        })?;
 
                 schema.validate_edge(index, attributes)
             }
@@ -571,7 +583,7 @@ impl Schema {
 
     pub(crate) fn update_node(
         &mut self,
-        attributes: &Attributes,
+        attributes: &AttributeMap,
         group: Option<&Group>,
         empty: bool,
     ) {
@@ -588,7 +600,7 @@ impl Schema {
 
     pub(crate) fn update_edge(
         &mut self,
-        attributes: &Attributes,
+        attributes: &AttributeMap,
         group: Option<&Group>,
         empty: bool,
     ) {
@@ -609,7 +621,7 @@ impl Schema {
         data_type: DataType,
         attribute_type: AttributeType,
         group: Option<&Group>,
-    ) -> Result<(), GraphError> {
+    ) -> Result<(), SchemaError> {
         let attribute_data_type = AttributeDataType::new(data_type, attribute_type)?;
 
         match group {
@@ -637,7 +649,7 @@ impl Schema {
         data_type: DataType,
         attribute_type: AttributeType,
         group: Option<&Group>,
-    ) -> Result<(), GraphError> {
+    ) -> Result<(), SchemaError> {
         let attribute_data_type = AttributeDataType::new(data_type, attribute_type)?;
 
         match group {
@@ -665,7 +677,7 @@ impl Schema {
         data_type: DataType,
         attribute_type: AttributeType,
         group: Option<&Group>,
-    ) -> Result<(), GraphError> {
+    ) -> Result<(), SchemaError> {
         let attribute_data_type = AttributeDataType::new(data_type, attribute_type)?;
 
         match group {
@@ -697,7 +709,7 @@ impl Schema {
         data_type: DataType,
         attribute_type: AttributeType,
         group: Option<&Group>,
-    ) -> Result<(), GraphError> {
+    ) -> Result<(), SchemaError> {
         let attribute_data_type = AttributeDataType::new(data_type, attribute_type)?;
 
         match group {
@@ -757,11 +769,9 @@ impl Schema {
         }
     }
 
-    pub fn add_group(&mut self, group: Group, schema: GroupSchema) -> Result<(), GraphError> {
+    pub fn add_group(&mut self, group: Group, schema: GroupSchema) -> Result<(), SchemaError> {
         if self.groups.contains_key(&group) {
-            return Err(GraphError::SchemaError(format!(
-                "Group {group} already exists in schema."
-            )));
+            return Err(SchemaError::GroupAlreadyInSchema { group });
         }
 
         self.groups.insert(group, schema);
@@ -788,7 +798,7 @@ mod test {
     use crate::{
         GraphRecord,
         graphrecord::{
-            Attributes, Schema, SchemaType,
+            AttributeMap, Schema, SchemaType,
             datatypes::DataType,
             schema::{AttributeSchema, AttributeSchemaKind, AttributeType},
         },
@@ -1121,62 +1131,6 @@ mod test {
     }
 
     #[test]
-    fn test_attribute_schema_kind_error_message() {
-        let index = 0;
-        let key = "key";
-        let data_type = DataType::Int;
-
-        assert_eq!(
-            AttributeSchemaKind::Node(&(index.into())).error_message(&(key.into()), &data_type),
-            "Attribute key of type Int not found on node with index 0"
-        );
-        assert_eq!(
-            AttributeSchemaKind::Edge(&(index as u32)).error_message(&(key.into()), &data_type),
-            "Attribute key of type Int not found on edge with index 0"
-        );
-    }
-
-    #[test]
-    fn test_attribute_schema_kind_error_message_expected() {
-        let index = 0;
-        let key = "key";
-        let data_type = DataType::Int;
-        let expected_data_type = DataType::Float;
-
-        assert_eq!(
-            AttributeSchemaKind::Node(&(index.into())).error_message_expected(
-                &(key.into()),
-                &data_type,
-                &expected_data_type
-            ),
-            "Attribute key of node with index 0 is of type Int. Expected Float."
-        );
-        assert_eq!(
-            AttributeSchemaKind::Edge(&(index as u32)).error_message_expected(
-                &(key.into()),
-                &data_type,
-                &expected_data_type
-            ),
-            "Attribute key of edge with index 0 is of type Int. Expected Float."
-        );
-    }
-
-    #[test]
-    fn test_attribute_schema_kind_error_message_too_many() {
-        let index = 0;
-        let attributes = vec!["key1".to_string(), "key2".to_string()];
-
-        assert_eq!(
-            AttributeSchemaKind::Node(&(index.into())).error_message_too_many(&attributes),
-            "Attributes [key1, key2] of node with index 0 do not exist in schema."
-        );
-        assert_eq!(
-            AttributeSchemaKind::Edge(&(index as u32)).error_message_too_many(&attributes),
-            "Attributes [key1, key2] of edge with index 0 do not exist in schema."
-        );
-    }
-
-    #[test]
     fn test_attribute_schema_deref() {
         let schema = AttributeSchema::new(
             vec![
@@ -1224,7 +1178,7 @@ mod test {
             .collect(),
         );
 
-        let attributes: Attributes = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
             .into_iter()
             .collect();
 
@@ -1234,17 +1188,22 @@ mod test {
                 .is_ok()
         );
 
-        let attributes: Attributes = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
             .into_iter()
             .collect();
 
         assert!(
             attribute_schema
                 .validate(&attributes, &AttributeSchemaKind::Node(&0.into()))
-                .is_err_and(|error| { matches!(error, crate::errors::GraphError::SchemaError(_)) })
+                .is_err_and(|error| {
+                    matches!(
+                        error,
+                        crate::errors::SchemaError::NodeAttributeDataTypeMismatch { .. }
+                    )
+                })
         );
 
-        let attributes: Attributes = vec![
+        let attributes: AttributeMap = vec![
             ("key1".into(), 0.into()),
             ("key2".into(), 0.0.into()),
             ("key3".into(), 0.0.into()),
@@ -1255,14 +1214,19 @@ mod test {
         assert!(
             attribute_schema
                 .validate(&attributes, &AttributeSchemaKind::Node(&0.into()))
-                .is_err_and(|error| { matches!(error, crate::errors::GraphError::SchemaError(_)) })
+                .is_err_and(|error| {
+                    matches!(
+                        error,
+                        crate::errors::SchemaError::NodeAttributesNotInSchema { .. }
+                    )
+                })
         );
     }
 
     #[test]
     fn test_attribute_schema_update() {
         let mut schema = AttributeSchema::default();
-        let attributes: Attributes =
+        let attributes: AttributeMap =
             vec![("key1".into(), 0.into()), ("key2".into(), "test".into())]
                 .into_iter()
                 .collect();
@@ -1279,7 +1243,7 @@ mod test {
             &DataType::String
         );
 
-        let new_attributes: Attributes =
+        let new_attributes: AttributeMap =
             vec![("key1".into(), 0.5.into()), ("key3".into(), true.into())]
                 .into_iter()
                 .collect();
@@ -1303,14 +1267,15 @@ mod test {
 
     #[test]
     fn test_attribute_schema_infer() {
-        let attributes1: Attributes =
+        let attributes1: AttributeMap =
             vec![("key1".into(), 0.into()), ("key2".into(), "test".into())]
                 .into_iter()
                 .collect();
 
-        let attributes2: Attributes = vec![("key1".into(), 1.into()), ("key3".into(), true.into())]
-            .into_iter()
-            .collect();
+        let attributes2: AttributeMap =
+            vec![("key1".into(), 1.into()), ("key3".into(), true.into())]
+                .into_iter()
+                .collect();
 
         let schema = AttributeSchema::infer(vec![&attributes1, &attributes2]);
 
@@ -1398,20 +1363,25 @@ mod test {
 
         let group_schema = GroupSchema::new(nodes, AttributeSchema::default());
 
-        let attributes: Attributes = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
             .into_iter()
             .collect();
 
         assert!(group_schema.validate_node(&0.into(), &attributes).is_ok());
 
-        let attributes: Attributes = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
             .into_iter()
             .collect();
 
         assert!(
             group_schema
                 .validate_node(&0.into(), &attributes)
-                .is_err_and(|error| { matches!(error, crate::errors::GraphError::SchemaError(_)) })
+                .is_err_and(|error| {
+                    matches!(
+                        error,
+                        crate::errors::SchemaError::NodeAttributeDataTypeMismatch { .. }
+                    )
+                })
         );
     }
 
@@ -1436,36 +1406,41 @@ mod test {
 
         let group_schema = GroupSchema::new(AttributeSchema::default(), edges);
 
-        let attributes: Attributes = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.into()), ("key2".into(), 0.0.into())]
             .into_iter()
             .collect();
 
         assert!(group_schema.validate_edge(&0, &attributes).is_ok());
 
-        let attributes: Attributes = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
+        let attributes: AttributeMap = vec![("key1".into(), 0.0.into()), ("key2".into(), 0.into())]
             .into_iter()
             .collect();
 
         assert!(
             group_schema
                 .validate_edge(&0, &attributes)
-                .is_err_and(|error| { matches!(error, crate::errors::GraphError::SchemaError(_)) })
+                .is_err_and(|error| {
+                    matches!(
+                        error,
+                        crate::errors::SchemaError::EdgeAttributeDataTypeMismatch { .. }
+                    )
+                })
         );
     }
 
     #[test]
     fn test_group_schema_infer() {
-        let node_attributes1: Attributes =
+        let node_attributes1: AttributeMap =
             vec![("key1".into(), 0.into()), ("key2".into(), "test".into())]
                 .into_iter()
                 .collect();
 
-        let node_attributes2: Attributes =
+        let node_attributes2: AttributeMap =
             vec![("key1".into(), 1.into()), ("key3".into(), true.into())]
                 .into_iter()
                 .collect();
 
-        let edge_attributes: Attributes =
+        let edge_attributes: AttributeMap =
             vec![("key4".into(), 0.5.into()), ("key5".into(), "edge".into())]
                 .into_iter()
                 .collect();
@@ -1524,7 +1499,8 @@ mod test {
     #[test]
     fn test_group_schema_update_node() {
         let mut group_schema = GroupSchema::default();
-        let attributes = Attributes::from([("key1".into(), 0.into()), ("key2".into(), 0.0.into())]);
+        let attributes =
+            AttributeMap::from([("key1".into(), 0.into()), ("key2".into(), 0.0.into())]);
 
         group_schema.update_node(&attributes, true);
 
@@ -1551,7 +1527,7 @@ mod test {
     fn test_group_schema_update_edge() {
         let mut group_schema = GroupSchema::default();
         let attributes =
-            Attributes::from([("key3".into(), true.into()), ("key4".into(), "test".into())]);
+            AttributeMap::from([("key3".into(), true.into()), ("key4".into(), "test".into())]);
 
         group_schema.update_edge(&attributes, true);
 
@@ -1578,16 +1554,16 @@ mod test {
     fn test_schema_infer() {
         let mut graphrecord = GraphRecord::new();
         graphrecord
-            .add_node(0.into(), Attributes::from([("key1".into(), 0.into())]))
+            .add_node(0.into(), AttributeMap::from([("key1".into(), 0.into())]))
             .unwrap();
         graphrecord
-            .add_node(1.into(), Attributes::from([("key2".into(), 0.0.into())]))
+            .add_node(1.into(), AttributeMap::from([("key2".into(), 0.0.into())]))
             .unwrap();
         graphrecord
             .add_edge(
                 0.into(),
                 1.into(),
-                Attributes::from([("key3".into(), true.into())]),
+                AttributeMap::from([("key3".into(), true.into())]),
             )
             .unwrap();
 
@@ -1659,10 +1635,10 @@ mod test {
             )
             .unwrap();
 
-        let attributes = Attributes::from([("key1".into(), 0.into())]);
+        let attributes = AttributeMap::from([("key1".into(), 0.into())]);
         assert!(schema.validate_node(&0.into(), &attributes, None).is_ok());
 
-        let invalid_attributes = Attributes::from([("key1".into(), "invalid".into())]);
+        let invalid_attributes = AttributeMap::from([("key1".into(), "invalid".into())]);
         assert!(
             schema
                 .validate_node(&0.into(), &invalid_attributes, None)
@@ -1685,10 +1661,10 @@ mod test {
             )
             .unwrap();
 
-        let attributes = Attributes::from([("key1".into(), true.into())]);
+        let attributes = AttributeMap::from([("key1".into(), true.into())]);
         assert!(schema.validate_edge(&0, &attributes, None).is_ok());
 
-        let invalid_attributes = Attributes::from([("key1".into(), 0.into())]);
+        let invalid_attributes = AttributeMap::from([("key1".into(), 0.into())]);
         assert!(schema.validate_edge(&0, &invalid_attributes, None).is_err());
     }
 
@@ -1698,7 +1674,8 @@ mod test {
             HashMap::new(),
             GroupSchema::new(AttributeSchema::default(), AttributeSchema::default()),
         );
-        let attributes = Attributes::from([("key1".into(), 0.into()), ("key2".into(), 0.0.into())]);
+        let attributes =
+            AttributeMap::from([("key1".into(), 0.into()), ("key2".into(), 0.0.into())]);
 
         schema.update_node(&attributes, None, true);
 
@@ -1730,7 +1707,7 @@ mod test {
             GroupSchema::new(AttributeSchema::default(), AttributeSchema::default()),
         );
         let attributes =
-            Attributes::from([("key3".into(), true.into()), ("key4".into(), "test".into())]);
+            AttributeMap::from([("key3".into(), true.into()), ("key4".into(), "test".into())]);
 
         schema.update_edge(&attributes, None, true);
 
@@ -2103,7 +2080,12 @@ mod test {
         assert!(
             schema
                 .add_group("group1".into(), GroupSchema::default())
-                .is_err_and(|error| { matches!(error, crate::errors::GraphError::SchemaError(_)) })
+                .is_err_and(|error| {
+                    matches!(
+                        error,
+                        crate::errors::SchemaError::GroupAlreadyInSchema { .. }
+                    )
+                })
         );
     }
 

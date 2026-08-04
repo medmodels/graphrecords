@@ -10,3 +10,4 @@ pub mod graphrecord;
 pub mod prelude;
 #[cfg(feature = "pyo3-bindings")]
 pub mod pyo3_bindings;
+pub mod querying;

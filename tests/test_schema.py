@@ -164,7 +164,7 @@ class TestGroupSchema(unittest.TestCase):
 
         with pytest.raises(
             ValueError,
-            match=r"Attribute key1 of node with index 0 is of type Float. Expected Int.",
+            match=r'Attribute `"key1"` of node with index `"0"` is of type `Float`. Expected `Int`.',
         ):
             group_schema.validate_node("0", {"key1": 0.0, "key2": 0.0})
 
@@ -181,7 +181,7 @@ class TestGroupSchema(unittest.TestCase):
 
         with pytest.raises(
             ValueError,
-            match=r"Attribute key1 of edge with index 0 is of type Float. Expected Int.",
+            match=r'Attribute `"key1"` of edge with index `0` is of type `Float`. Expected `Int`.',
         ):
             group_schema.validate_edge(0, {"key1": 0.0, "key2": 0.0})
 
@@ -239,7 +239,9 @@ class TestSchema(unittest.TestCase):
             "test": (gr.String(), gr.AttributeType.Unstructured)
         }
 
-        with pytest.raises(ValueError, match=r"Group invalid not found in schema."):
+        with pytest.raises(
+            ValueError, match=r'Group `"invalid"` is not defined in the schema'
+        ):
             schema.group("invalid")
 
     def test_default(self) -> None:
@@ -279,7 +281,7 @@ class TestSchema(unittest.TestCase):
 
         with pytest.raises(
             ValueError,
-            match=r"Attribute key1 of node with index 0 is of type String. Expected Int.",
+            match=r'Attribute `"key1"` of node with index `"0"` is of type `String`. Expected `Int`.',
         ):
             schema.validate_node("0", {"key1": "invalid"})
 
@@ -292,7 +294,7 @@ class TestSchema(unittest.TestCase):
 
         with pytest.raises(
             ValueError,
-            match=r"Attribute key1 of edge with index 0 is of type Int. Expected Bool.",
+            match=r'Attribute `"key1"` of edge with index `0` is of type `Int`. Expected `Bool`.',
         ):
             schema.validate_edge(0, {"key1": 0})
 
@@ -427,7 +429,9 @@ class TestSchema(unittest.TestCase):
             "group1"
         ).edges
 
-        with pytest.raises(ValueError, match=r"Group group1 already exists in schema."):
+        with pytest.raises(
+            ValueError, match=r'Group `"group1"` already exists in the schema'
+        ):
             schema.add_group("group1", gr.GroupSchema())
 
     def test_remove_group(self) -> None:

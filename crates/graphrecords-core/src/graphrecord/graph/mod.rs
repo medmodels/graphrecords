@@ -2,7 +2,7 @@ mod edge;
 mod node;
 
 use super::{GraphRecordAttribute, GraphRecordValue, group_mapping::GroupMapping};
-use crate::errors::GraphError;
+use crate::errors::GraphRecordError;
 use edge::Edge;
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use node::Node;
@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 pub type NodeIndex = GraphRecordAttribute;
 pub type EdgeIndex = u32;
-pub type Attributes = HashMap<GraphRecordAttribute, GraphRecordValue>;
+pub type AttributeMap = HashMap<GraphRecordAttribute, GraphRecordValue>;
 
 #[derive(Default, Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -58,12 +58,10 @@ impl Graph {
     pub fn add_node(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
-    ) -> Result<(), GraphError> {
+        attributes: AttributeMap,
+    ) -> Result<(), GraphRecordError> {
         if self.nodes.contains_key(&node_index) {
-            return Err(GraphError::AssertionError(format!(
-                "Node with index {node_index} already exists"
-            )));
+            return Err(GraphRecordError::NodeAlreadyExists { node_index });
         }
 
         let node = Node::new(attributes);
@@ -77,10 +75,13 @@ impl Graph {
         &mut self,
         node_index: &NodeIndex,
         group_mapping: &mut GroupMapping,
-    ) -> Result<Attributes, GraphError> {
-        let node = self.nodes.remove(node_index).ok_or_else(|| {
-            GraphError::IndexError(format!("Cannot find node with index {node_index}"))
-        })?;
+    ) -> Result<AttributeMap, GraphRecordError> {
+        let node = self
+            .nodes
+            .remove(node_index)
+            .ok_or_else(|| GraphRecordError::NodeNotFound {
+                node_index: node_index.clone(),
+            })?;
 
         group_mapping.remove_node(node_index);
 
@@ -127,18 +128,18 @@ impl Graph {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
-    ) -> Result<EdgeIndex, GraphError> {
+        attributes: AttributeMap,
+    ) -> Result<EdgeIndex, GraphRecordError> {
         if !self.nodes.contains_key(&source_node_index) {
-            return Err(GraphError::IndexError(format!(
-                "Cannot find node with index {source_node_index}"
-            )));
+            return Err(GraphRecordError::NodeNotFound {
+                node_index: source_node_index,
+            });
         }
 
         if !self.nodes.contains_key(&target_node_index) {
-            return Err(GraphError::IndexError(format!(
-                "Cannot find node with index {target_node_index}"
-            )));
+            return Err(GraphRecordError::NodeNotFound {
+                node_index: target_node_index,
+            });
         }
 
         let edge_index = self.edge_index_counter;
@@ -164,10 +165,16 @@ impl Graph {
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> Result<Attributes, GraphError> {
-        let edge = self.edges.remove(edge_index).ok_or_else(|| {
-            GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
-        })?;
+    pub fn remove_edge(
+        &mut self,
+        edge_index: &EdgeIndex,
+    ) -> Result<AttributeMap, GraphRecordError> {
+        let edge = self
+            .edges
+            .remove(edge_index)
+            .ok_or(GraphRecordError::EdgeNotFound {
+                edge_index: *edge_index,
+            })?;
 
         self.nodes
             .get_mut(&edge.target_node_index)
@@ -184,12 +191,15 @@ impl Graph {
         Ok(edge.attributes)
     }
 
-    pub fn node_attributes(&self, node_index: &NodeIndex) -> Result<&Attributes, GraphError> {
+    pub fn node_attributes(
+        &self,
+        node_index: &NodeIndex,
+    ) -> Result<&AttributeMap, GraphRecordError> {
         Ok(&self
             .nodes
             .get(node_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            .ok_or_else(|| GraphRecordError::NodeNotFound {
+                node_index: node_index.clone(),
             })?
             .attributes)
     }
@@ -197,21 +207,21 @@ impl Graph {
     pub fn node_attributes_mut(
         &mut self,
         node_index: &NodeIndex,
-    ) -> Result<&mut Attributes, GraphError> {
+    ) -> Result<&mut AttributeMap, GraphRecordError> {
         Ok(&mut self
             .nodes
             .get_mut(node_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            .ok_or_else(|| GraphRecordError::NodeNotFound {
+                node_index: node_index.clone(),
             })?
             .attributes)
     }
 
-    pub fn nodes_attributes(&self) -> impl Iterator<Item = &Attributes> {
+    pub fn nodes_attributes(&self) -> impl Iterator<Item = &AttributeMap> {
         self.nodes.values().map(|node| &node.attributes)
     }
 
-    pub fn nodes_attributes_mut(&mut self) -> impl Iterator<Item = &mut Attributes> {
+    pub fn nodes_attributes_mut(&mut self) -> impl Iterator<Item = &mut AttributeMap> {
         self.nodes.iter_mut().map(|(_, node)| &mut node.attributes)
     }
 
@@ -219,13 +229,28 @@ impl Graph {
         self.nodes.keys()
     }
 
+    pub fn resolve_node_index(
+        &self,
+        node_index: &NodeIndex,
+    ) -> Result<&NodeIndex, GraphRecordError> {
+        self.nodes
+            .get_key_value(node_index)
+            .map(|(stored_index, _node)| stored_index)
+            .ok_or_else(|| GraphRecordError::NodeNotFound {
+                node_index: node_index.clone(),
+            })
+    }
+
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub fn edge_attributes(&self, edge_index: &EdgeIndex) -> Result<&Attributes, GraphError> {
+    pub fn edge_attributes(
+        &self,
+        edge_index: &EdgeIndex,
+    ) -> Result<&AttributeMap, GraphRecordError> {
         Ok(&self
             .edges
             .get(edge_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
+            .ok_or(GraphRecordError::EdgeNotFound {
+                edge_index: *edge_index,
             })?
             .attributes)
     }
@@ -234,21 +259,21 @@ impl Graph {
     pub fn edge_attributes_mut(
         &mut self,
         edge_index: &EdgeIndex,
-    ) -> Result<&mut Attributes, GraphError> {
+    ) -> Result<&mut AttributeMap, GraphRecordError> {
         Ok(&mut self
             .edges
             .get_mut(edge_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
+            .ok_or(GraphRecordError::EdgeNotFound {
+                edge_index: *edge_index,
             })?
             .attributes)
     }
 
-    pub fn edges_attributes(&self) -> impl Iterator<Item = &Attributes> {
+    pub fn edges_attributes(&self) -> impl Iterator<Item = &AttributeMap> {
         self.edges.values().map(|edge| &edge.attributes)
     }
 
-    pub fn edges_attributes_mut(&mut self) -> impl Iterator<Item = &mut Attributes> {
+    pub fn edges_attributes_mut(&mut self) -> impl Iterator<Item = &mut AttributeMap> {
         self.edges.values_mut().map(|edge| &mut edge.attributes)
     }
 
@@ -256,10 +281,13 @@ impl Graph {
     pub fn edge_endpoints(
         &self,
         edge_index: &EdgeIndex,
-    ) -> Result<(&NodeIndex, &NodeIndex), GraphError> {
-        let edge = self.edges.get(edge_index).ok_or_else(|| {
-            GraphError::IndexError(format!("Cannot find edge with index {edge_index}"))
-        })?;
+    ) -> Result<(&NodeIndex, &NodeIndex), GraphRecordError> {
+        let edge = self
+            .edges
+            .get(edge_index)
+            .ok_or(GraphRecordError::EdgeNotFound {
+                edge_index: *edge_index,
+            })?;
 
         Ok((&edge.source_node_index, &edge.target_node_index))
     }
@@ -267,12 +295,12 @@ impl Graph {
     pub fn outgoing_edges(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphError> {
+    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphRecordError> {
         Ok(self
             .nodes
             .get(node_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            .ok_or_else(|| GraphRecordError::NodeNotFound {
+                node_index: node_index.clone(),
             })?
             .outgoing_edge_indices
             .iter())
@@ -281,12 +309,12 @@ impl Graph {
     pub fn incoming_edges(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphError> {
+    ) -> Result<impl Iterator<Item = &EdgeIndex> + use<'_>, GraphRecordError> {
         Ok(self
             .nodes
             .get(node_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            .ok_or_else(|| GraphRecordError::NodeNotFound {
+                node_index: node_index.clone(),
             })?
             .incoming_edge_indices
             .iter())
@@ -294,6 +322,19 @@ impl Graph {
 
     pub fn edge_indices(&self) -> impl Iterator<Item = &EdgeIndex> {
         self.edges.keys()
+    }
+
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn resolve_edge_index(
+        &self,
+        edge_index: &EdgeIndex,
+    ) -> Result<&EdgeIndex, GraphRecordError> {
+        self.edges
+            .get_key_value(edge_index)
+            .map(|(stored_index, _edge)| stored_index)
+            .ok_or(GraphRecordError::EdgeNotFound {
+                edge_index: *edge_index,
+            })
     }
 
     pub fn edges_connecting<'a, SN, TN>(
@@ -383,12 +424,12 @@ impl Graph {
     pub fn outgoing_neighbors(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphRecordError> {
         Ok(self
             .nodes
             .get(node_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            .ok_or_else(|| GraphRecordError::NodeNotFound {
+                node_index: node_index.clone(),
             })?
             .outgoing_edge_indices
             .iter()
@@ -405,12 +446,12 @@ impl Graph {
     pub fn incoming_neighbors(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphRecordError> {
         Ok(self
             .nodes
             .get(node_index)
-            .ok_or_else(|| {
-                GraphError::IndexError(format!("Cannot find node with index {node_index}"))
+            .ok_or_else(|| GraphRecordError::NodeNotFound {
+                node_index: node_index.clone(),
             })?
             .incoming_edge_indices
             .iter()
@@ -426,10 +467,13 @@ impl Graph {
     pub fn neighbors(
         &self,
         node_index: &NodeIndex,
-    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphError> {
-        let node = self.nodes.get(node_index).ok_or_else(|| {
-            GraphError::IndexError(format!("Cannot find node with index {node_index}"))
-        })?;
+    ) -> Result<impl Iterator<Item = &NodeIndex> + use<'_>, GraphRecordError> {
+        let node = self
+            .nodes
+            .get(node_index)
+            .ok_or_else(|| GraphRecordError::NodeNotFound {
+                node_index: node_index.clone(),
+            })?;
 
         Ok(node
             .outgoing_edge_indices
@@ -455,11 +499,11 @@ impl Graph {
 
 #[cfg(test)]
 mod test {
-    use super::{Attributes, Graph, NodeIndex};
-    use crate::{errors::GraphError, graphrecord::group_mapping::GroupMapping};
+    use super::{AttributeMap, Graph, NodeIndex};
+    use crate::{errors::GraphRecordError, graphrecord::group_mapping::GroupMapping};
     use std::collections::HashMap;
 
-    fn create_nodes() -> Vec<(NodeIndex, Attributes)> {
+    fn create_nodes() -> Vec<(NodeIndex, AttributeMap)> {
         vec![
             (
                 "0".into(),
@@ -480,7 +524,7 @@ mod test {
         ]
     }
 
-    fn create_edges() -> Vec<(NodeIndex, NodeIndex, Attributes)> {
+    fn create_edges() -> Vec<(NodeIndex, NodeIndex, AttributeMap)> {
         vec![
             (
                 "0".into(),
@@ -581,7 +625,7 @@ mod test {
         assert!(
             graph
                 .add_node("0".into(), HashMap::new())
-                .is_err_and(|e| matches!(e, GraphError::AssertionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::NodeAlreadyExists { .. }))
         );
     }
 
@@ -624,7 +668,7 @@ mod test {
         assert!(
             graph
                 .remove_node(&"50".into(), &mut GroupMapping::default())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
         );
     }
 
@@ -659,14 +703,14 @@ mod test {
         assert!(
             graph
                 .add_edge("0".into(), "50".into(), HashMap::new())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
         );
 
         // Adding an edge from a non-existing node should fail
         assert!(
             graph
                 .add_edge("50".into(), "0".into(), HashMap::new())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
         );
     }
 
@@ -689,7 +733,7 @@ mod test {
         assert!(
             graph
                 .remove_edge(&50)
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
         );
     }
 
@@ -711,7 +755,7 @@ mod test {
         assert!(
             graph
                 .node_attributes(&"50".into())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
         );
     }
 
@@ -738,7 +782,7 @@ mod test {
         assert!(
             graph
                 .node_attributes_mut(&"50".into())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
         );
     }
 
@@ -807,7 +851,7 @@ mod test {
         assert!(
             graph
                 .edge_attributes(&50)
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
         );
     }
 
@@ -834,7 +878,7 @@ mod test {
         assert!(
             graph
                 .edge_attributes_mut(&50)
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
         );
     }
 
@@ -895,7 +939,7 @@ mod test {
         assert!(
             graph
                 .edge_endpoints(&50)
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
         );
     }
 
@@ -990,7 +1034,7 @@ mod test {
         assert!(
             graph
                 .outgoing_neighbors(&"50".into())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
         );
     }
 
@@ -1012,7 +1056,7 @@ mod test {
         assert!(
             graph
                 .neighbors(&"50".into())
-                .is_err_and(|e| matches!(e, GraphError::IndexError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
         );
     }
 }

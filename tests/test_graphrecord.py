@@ -64,30 +64,28 @@ from graphrecords.plugins import (
     PreSetSchemaContext,
 )
 from graphrecords.querying import (
+    BareAttributeOperand,
+    BareEdgeIndexOperand,
+    BareEdgeIndicesOperand,
+    BareNodeIndexOperand,
+    BareNodeIndicesOperand,
     EdgeAttributesTreeOperand,
-    EdgeIndexOperand,
-    EdgeIndicesOperand,
-    EdgeMultipleAttributesWithIndexOperand,
-    EdgeMultipleValuesWithIndexOperand,
+    EdgeDirection,
     EdgeOperand,
-    EdgeSingleAttributeWithIndexOperand,
-    EdgeSingleValueWithIndexOperand,
+    EdgesOperand,
+    EdgeValueOperand,
+    EdgeValuesOperand,
     NodeAttributesTreeOperand,
-    NodeIndexOperand,
-    NodeIndicesOperand,
-    NodeMultipleAttributesWithIndexOperand,
-    NodeMultipleValuesWithIndexOperand,
     NodeOperand,
-    NodeSingleAttributeWithIndexOperand,
-    NodeSingleValueWithIndexOperand,
-    QueryReturnOperand,
+    NodesOperand,
+    NodeValueOperand,
+    NodeValuesOperand,
+    QueryError,
 )
 from graphrecords.schema import AttributeType, GroupSchema, Schema, SchemaType
 from graphrecords.types import (
     AttributesInput,
     NodeIndex,
-    is_edge_index_list,
-    is_node_index_list,
 )
 
 
@@ -668,10 +666,8 @@ class TestGraphRecord(unittest.TestCase):
             "1": [1, 2],
         }
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
-
-            return node.index()
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
         edges = graphrecord.outgoing_edges(query)
 
@@ -680,19 +676,19 @@ class TestGraphRecord(unittest.TestCase):
             "1": [1, 2],
         }
 
-        def query2(node: NodeOperand) -> NodeIndexOperand:
-            node.index().equal_to("0")
+        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
+            indices = nodes.index()
 
-            return node.index().max()
+            return indices.filter(indices.equal_to("0")).max()
 
         edges = graphrecord.outgoing_edges(query2)
+
         assert sorted(edges) == [0, 3]
 
-        def query3(node: NodeOperand) -> NodeIndexOperand:
-            max_index = node.index().max()
-            max_index.equal_to("non-found")
+        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
+            maximum_index = nodes.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.equal_to("non-found"))
 
         edges = graphrecord.outgoing_edges(query3)
 
@@ -720,28 +716,26 @@ class TestGraphRecord(unittest.TestCase):
 
         assert edges == {"1": [0], "2": [2]}
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["1", "2"])
-
-            return node.index()
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["1", "2"]))
 
         edges = graphrecord.incoming_edges(query)
 
         assert edges == {"1": [0], "2": [2]}
 
-        def query2(node: NodeOperand) -> NodeIndexOperand:
-            node.index().equal_to("0")
+        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
+            indices = nodes.index()
 
-            return node.index().max()
+            return indices.filter(indices.equal_to("0")).max()
 
         edges = graphrecord.incoming_edges(query2)
+
         assert edges == [1]
 
-        def query3(node: NodeOperand) -> NodeIndexOperand:
-            max_index = node.index().max()
-            max_index.equal_to("non-found")
+        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
+            maximum_index = nodes.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.equal_to("non-found"))
 
         edges = graphrecord.incoming_edges(query3)
 
@@ -769,29 +763,26 @@ class TestGraphRecord(unittest.TestCase):
 
         assert endpoints == {0: ("0", "1"), 1: ("1", "0")}
 
-        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().is_in([0, 1])
-
-            return edge.index()
+        def query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().is_in([0, 1]))
 
         endpoints = graphrecord.edge_endpoints(query)
 
         assert endpoints == {0: ("0", "1"), 1: ("1", "0")}
 
-        def query2(edge: EdgeOperand) -> EdgeIndexOperand:
-            edge.index().equal_to(0)
+        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            indices = edges.index()
 
-            return edge.index().max()
+            return indices.filter(indices.equal_to(0)).max()
 
         endpoints = graphrecord.edge_endpoints(query2)
 
         assert endpoints == ("0", "1")
 
-        def query3(edge: EdgeOperand) -> EdgeIndexOperand:
-            max_index = edge.index().max()
-            max_index.greater_than(10)
+        def query3(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            maximum_index = edges.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.greater_than(10))
 
         with pytest.raises(IndexError, match="The query returned no results"):
             graphrecord.edge_endpoints(query3)
@@ -810,95 +801,70 @@ class TestGraphRecord(unittest.TestCase):
     def test_edges_connecting(self) -> None:
         graphrecord = create_graphrecord()
 
-        edges = graphrecord.edges_connecting("0", "1")
+        assert graphrecord.edges_connecting("0", "1") == [0]
+        assert graphrecord.edges_connecting(["0", "1"], "1") == [0]
 
-        assert edges == [0]
+        def query1(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
-        edges = graphrecord.edges_connecting(["0", "1"], "1")
+        assert graphrecord.edges_connecting(query1, "1") == [0]
 
-        assert edges == [0]
+        def query1_single(nodes: NodesOperand) -> BareNodeIndexOperand:
+            indices = nodes.index()
 
-        def query1(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
+            return indices.filter(indices.equal_to("0")).max()
 
-            return node.index()
+        assert graphrecord.edges_connecting(query1_single, "1") == [0]
 
-        edges = graphrecord.edges_connecting(query1, "1")
+        def query1_not_found(nodes: NodesOperand) -> BareNodeIndexOperand:
+            maximum_index = nodes.index().max()
 
-        assert edges == [0]
+            return maximum_index.filter(maximum_index.equal_to("non-found"))
 
-        def query1_single(node: NodeOperand) -> NodeIndexOperand:
-            node.index().equal_to("0")
-
-            return node.index().max()
-
-        edges = graphrecord.edges_connecting(query1_single, "1")
-
-        assert edges == [0]
-
-        def query1_not_found(node: NodeOperand) -> NodeIndexOperand:
-            max_index = node.index().max()
-            max_index.equal_to("non-found")
-
-            return max_index
-
-        edges = graphrecord.edges_connecting(query1_not_found, "1")
-
-        assert edges == []
+        assert graphrecord.edges_connecting(query1_not_found, "1") == []
 
         edges = graphrecord.edges_connecting("0", ["1", "3"])
 
         assert sorted([0, 3]) == sorted(edges)
 
-        def query2(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["1", "3"])
-
-            return node.index()
+        def query2(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["1", "3"]))
 
         edges = graphrecord.edges_connecting("0", query2)
 
         assert sorted([0, 3]) == sorted(edges)
 
-        def query2_single(node: NodeOperand) -> NodeIndexOperand:
-            node.index().equal_to("1")
+        def query2_single(nodes: NodesOperand) -> BareNodeIndexOperand:
+            indices = nodes.index()
 
-            return node.index().max()
+            return indices.filter(indices.equal_to("1")).max()
 
-        edges = graphrecord.edges_connecting("0", query2_single)
+        assert graphrecord.edges_connecting("0", query2_single) == [0]
 
-        assert edges == [0]
+        def query2_not_found(nodes: NodesOperand) -> BareNodeIndexOperand:
+            maximum_index = nodes.index().max()
 
-        def query2_not_found(node: NodeOperand) -> NodeIndexOperand:
-            max_index = node.index().max()
-            max_index.equal_to("non-found")
+            return maximum_index.filter(maximum_index.equal_to("non-found"))
 
-            return max_index
-
-        edges = graphrecord.edges_connecting("0", query2_not_found)
-
-        assert edges == []
+        assert graphrecord.edges_connecting("0", query2_not_found) == []
 
         edges = graphrecord.edges_connecting(["0", "1"], ["1", "2", "3"])
 
         assert sorted([0, 2, 3]) == sorted(edges)
 
-        def query3(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
+        def query3(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
-            return node.index()
-
-        def query4(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["1", "2", "3"])
-
-            return node.index()
+        def query4(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["1", "2", "3"]))
 
         edges = graphrecord.edges_connecting(query3, query4)
 
         assert sorted([0, 2, 3]) == sorted(edges)
 
-        edges = graphrecord.edges_connecting("0", "1", directed=EdgesDirection.INCOMING)
-
-        assert edges == [1]
+        assert graphrecord.edges_connecting(
+            "0", "1", directed=EdgesDirection.INCOMING
+        ) == [1]
 
         edges = graphrecord.edges_connecting(
             "0", "1", directed=EdgesDirection.UNDIRECTED
@@ -923,12 +889,8 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord = create_graphrecord()
 
-        assert graphrecord.node_count() == 4
-
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
-
-            return node.index()
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
         attributes = graphrecord.remove_nodes(query)
 
@@ -937,23 +899,20 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord = create_graphrecord()
 
-        assert graphrecord.node_count() == 4
+        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
+            indices = nodes.index()
 
-        def query2(node: NodeOperand) -> NodeIndexOperand:
-            node.index().equal_to("0")
-
-            return node.index().max()
+            return indices.filter(indices.equal_to("0")).max()
 
         attributes = graphrecord.remove_nodes(query2)
 
         assert graphrecord.node_count() == 3
         assert attributes == create_nodes()[0][1]
 
-        def query3(node: NodeOperand) -> NodeIndexOperand:
-            max_index = node.index().max()
-            max_index.equal_to("non-found")
+        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
+            maximum_index = nodes.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.equal_to("non-found"))
 
         attributes = graphrecord.remove_nodes(query3)
 
@@ -1317,35 +1276,31 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord = create_graphrecord()
 
-        assert graphrecord.edge_count() == 4
-
-        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().is_in([0, 1])
-
-            return edge.index()
+        def query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().is_in([0, 1]))
 
         attributes = graphrecord.remove_edges(query)
 
         assert graphrecord.edge_count() == 2
         assert attributes == {0: create_edges()[0][2], 1: create_edges()[1][2]}
 
-        def query2(edge: EdgeOperand) -> EdgeIndexOperand:
-            edge.index().equal_to(2)
+        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            indices = edges.index()
 
-            return edge.index().max()
+            return indices.filter(indices.equal_to(2)).max()
 
         attributes = graphrecord.remove_edges(query2)
 
         assert graphrecord.edge_count() == 1
         assert attributes == create_edges()[2][2]
 
-        def query3(edge: EdgeOperand) -> EdgeIndexOperand:
-            max_index = edge.index().max()
-            max_index.equal_to(10)
+        def query3(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            maximum_index = edges.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.equal_to(10))
 
         attributes = graphrecord.remove_edges(query3)
+
         assert graphrecord.edge_count() == 1
         assert attributes == {}
 
@@ -1696,21 +1651,13 @@ class TestGraphRecord(unittest.TestCase):
         assert sorted(["0", "1"]) == sorted(nodes_and_edges["nodes"])
         assert sorted([0, 1]) == sorted(nodes_and_edges["edges"])
 
-        def query1(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
+        def query1(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
-            return node.index()
+        def query2(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().is_in([0, 1]))
 
-        def query2(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().is_in([0, 1])
-
-            return edge.index()
-
-        graphrecord.add_group(
-            "3",
-            query1,
-            query2,
-        )
+        graphrecord.add_group("3", query1, query2)
 
         assert graphrecord.group_count() == 4
         nodes_and_edges = graphrecord.group("3")
@@ -1720,38 +1667,29 @@ class TestGraphRecord(unittest.TestCase):
     def test_invalid_add_group(self) -> None:
         graphrecord = create_graphrecord()
 
-        # Adding a group with a non-existing node should fail
         with pytest.raises(IndexError):
             graphrecord.add_group("0", "50")
 
-        # Adding a group with a non-existing edge should fail
         with pytest.raises(IndexError):
             graphrecord.add_group("0", edges=[50])
 
-        # Adding an already existing group should fail
         with pytest.raises(IndexError):
             graphrecord.add_group("0", ["0", "50"])
 
         graphrecord.add_group("0", "0")
 
-        # Adding an already existing group should fail
         with pytest.raises(AssertionError):
             graphrecord.add_group("0")
 
-        # Adding a node to a group that already is in the group should fail
         with pytest.raises(AssertionError):
             graphrecord.add_group("0", "0")
 
-        # Adding a node to a group that already is in the group should fail
         with pytest.raises(AssertionError):
             graphrecord.add_group("0", ["1", "0"])
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().equal_to("0")
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().equal_to("0"))
 
-            return node.index()
-
-        # Adding a node to a group that already is in the group should fail
         with pytest.raises(AssertionError):
             graphrecord.add_group("0", query)
 
@@ -1760,7 +1698,9 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.freeze_schema()
 
-        with pytest.raises(ValueError, match="Group 2 is not defined in the schema"):
+        with pytest.raises(
+            ValueError, match='Group `"2"` is not defined in the schema'
+        ):
             graphrecord.add_group("2")
 
         graphrecord.remove_groups("0")
@@ -1810,30 +1750,27 @@ class TestGraphRecord(unittest.TestCase):
 
         assert sorted(["0", "1", "2"]) == sorted(graphrecord.nodes_in_group("0"))
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().equal_to("3")
-
-            return node.index()
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().equal_to("3"))
 
         graphrecord.add_nodes_to_group("0", query)
 
         assert sorted(["0", "1", "2", "3"]) == sorted(graphrecord.nodes_in_group("0"))
 
-        def query2(node: NodeOperand) -> NodeIndexOperand:
-            node.index().equal_to("0")
+        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
+            indices = nodes.index()
 
-            return node.index().max()
+            return indices.filter(indices.equal_to("0")).max()
 
         graphrecord.add_group("1")
         graphrecord.add_nodes_to_group("1", query2)
 
         assert graphrecord.nodes_in_group("1") == ["0"]
 
-        def query3(node: NodeOperand) -> NodeIndexOperand:
-            max_index = node.index().max()
-            max_index.greater_than(10)
+        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
+            maximum_index = nodes.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.equal_to("non-found"))
 
         graphrecord.add_nodes_to_group("1", query3)
 
@@ -1852,28 +1789,21 @@ class TestGraphRecord(unittest.TestCase):
 
         graphrecord.add_group("0", ["0"])
 
-        # Adding a non-existing node to a group should fail
         with pytest.raises(IndexError):
             graphrecord.add_nodes_to_group("0", "50")
 
-        # Adding a non-existing node to a group should fail
         with pytest.raises(IndexError):
             graphrecord.add_nodes_to_group("0", ["1", "50"])
 
-        # Adding a node to a group that already is in the group should fail
         with pytest.raises(AssertionError):
             graphrecord.add_nodes_to_group("0", "0")
 
-        # Adding a node to a group that already is in the group should fail
         with pytest.raises(AssertionError):
             graphrecord.add_nodes_to_group("0", ["1", "0"])
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().equal_to("0")
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().equal_to("0"))
 
-            return node.index()
-
-        # Adding a node to a group that already is in the group should fail
         with pytest.raises(AssertionError):
             graphrecord.add_nodes_to_group("0", query)
 
@@ -1924,10 +1854,8 @@ class TestGraphRecord(unittest.TestCase):
         graphrecord.add_group("0")
         graphrecord.add_group("1")
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
-
-            return node.index()
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
         graphrecord.add_nodes_to_group(["0", "1"], query)
 
@@ -1963,10 +1891,8 @@ class TestGraphRecord(unittest.TestCase):
         graphrecord.add_group("0")
         graphrecord.add_group("1")
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
-
-            return node.index()
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
         graphrecord.add_nodes_to_group(["0", "1"], query)
 
@@ -1975,94 +1901,72 @@ class TestGraphRecord(unittest.TestCase):
 
     def test_add_edges_to_group(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0")
 
         assert graphrecord.edges_in_group("0") == []
 
         graphrecord.add_edges_to_group("0", 0)
-
         assert graphrecord.edges_in_group("0") == [0]
 
         graphrecord.add_edges_to_group("0", [1, 2])
-
         assert sorted([0, 1, 2]) == sorted(graphrecord.edges_in_group("0"))
 
-        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().equal_to(3)
-
-            return edge.index()
+        def query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().equal_to(3))
 
         graphrecord.add_edges_to_group("0", query)
-
         assert sorted([0, 1, 2, 3]) == sorted(graphrecord.edges_in_group("0"))
 
-        def query2(edge: EdgeOperand) -> EdgeIndexOperand:
-            edge.index().equal_to(0)
+        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            indices = edges.index()
 
-            return edge.index().max()
+            return indices.filter(indices.equal_to(0)).max()
 
         graphrecord.add_group("1")
         graphrecord.add_edges_to_group("1", query2)
-
         assert graphrecord.edges_in_group("1") == [0]
 
-        def query3(edge: EdgeOperand) -> EdgeIndexOperand:
-            max_index = edge.index().max()
-            max_index.greater_than(10)
+        def query3(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            maximum_index = edges.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.greater_than(10))
 
         graphrecord.add_edges_to_group("1", query3)
         assert graphrecord.edges_in_group("1") == [0]
 
         graphrecord = GraphRecord()
         graphrecord.add_nodes(create_nodes())
-
         graphrecord.add_edges(("0", "1", {"test": "test"}), group="0")
-
         graphrecord.freeze_schema()
-
         graphrecord.add_edges(("0", "1", {"test": "test"}), group="0")
 
         assert len(graphrecord.edges_in_group("0")) == 2
 
     def test_invalid_add_edges_to_group(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0", edges=[0])
 
-        # Adding a non-existing edge to a group should fail
         with pytest.raises(IndexError):
             graphrecord.add_edges_to_group("0", 50)
 
-        # Adding a non-existing edge to a group should fail
         with pytest.raises(IndexError):
             graphrecord.add_edges_to_group("0", [1, 50])
 
-        # Adding an edge to a group that already is in the group should fail
         with pytest.raises(AssertionError):
             graphrecord.add_edges_to_group("0", 0)
 
-        # Adding an edge to a group that already is in the group should fail
         with pytest.raises(AssertionError):
             graphrecord.add_edges_to_group("0", [1, 0])
 
-        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().equal_to(0)
+        def query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().equal_to(0))
 
-            return edge.index()
-
-        # Adding an edge to a group that already is in the group should fail
         with pytest.raises(AssertionError):
             graphrecord.add_edges_to_group("0", query)
 
         graphrecord = GraphRecord()
-
         graphrecord.add_nodes(("0", {}))
-
         graphrecord.add_edges(("0", "0", {"test": "test"}), group="0")
-
         graphrecord.freeze_schema()
 
         with pytest.raises(AssertionError):
@@ -2098,14 +2002,11 @@ class TestGraphRecord(unittest.TestCase):
 
     def test_add_edges_to_multiple_groups_with_query(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0")
         graphrecord.add_group("1")
 
-        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().is_in([0, 1])
-
-            return edge.index()
+        def query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().is_in([0, 1]))
 
         graphrecord.add_edges_to_group(["0", "1"], query)
 
@@ -2137,14 +2038,11 @@ class TestGraphRecord(unittest.TestCase):
 
     def test_add_edges_to_groups_with_query(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0")
         graphrecord.add_group("1")
 
-        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().is_in([0, 1])
-
-            return edge.index()
+        def query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().is_in([0, 1]))
 
         graphrecord.add_edges_to_group(["0", "1"], query)
 
@@ -2153,84 +2051,60 @@ class TestGraphRecord(unittest.TestCase):
 
     def test_remove_nodes_from_group(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0", ["0", "1"])
 
-        assert sorted(["0", "1"]) == sorted(graphrecord.nodes_in_group("0"))
-
         graphrecord.remove_nodes_from_group("0", "1")
-
         assert graphrecord.nodes_in_group("0") == ["0"]
 
         graphrecord.add_nodes_to_group("0", "1")
-
-        assert sorted(["0", "1"]) == sorted(graphrecord.nodes_in_group("0"))
-
         graphrecord.remove_nodes_from_group("0", ["0", "1"])
-
         assert graphrecord.nodes_in_group("0") == []
 
         graphrecord.add_nodes_to_group("0", ["0", "1"])
 
-        assert sorted(["0", "1"]) == sorted(graphrecord.nodes_in_group("0"))
-
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
-
-            return node.index()
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
         graphrecord.remove_nodes_from_group("0", query)
-
         assert graphrecord.nodes_in_group("0") == []
 
         graphrecord.add_nodes_to_group("0", ["0", "1"])
 
-        def query2(node: NodeOperand) -> NodeIndexOperand:
-            node.index().equal_to("0")
+        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
+            indices = nodes.index()
 
-            return node.index().max()
+            return indices.filter(indices.equal_to("0")).max()
 
         graphrecord.remove_nodes_from_group("0", query2)
-
         assert graphrecord.nodes_in_group("0") == ["1"]
 
-        def query3(node: NodeOperand) -> NodeIndexOperand:
-            max_index = node.index().max()
-            max_index.greater_than(10)
+        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
+            maximum_index = nodes.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.equal_to("non-found"))
 
         graphrecord.remove_nodes_from_group("0", query3)
-
         assert graphrecord.nodes_in_group("0") == ["1"]
 
     def test_invalid_remove_nodes_from_group(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0", ["0", "1"])
 
-        # Removing a node from a non-existing group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_nodes_from_group("50", "0")
 
-        # Removing a node from a non-existing group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_nodes_from_group("50", ["0", "1"])
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().equal_to("0")
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().equal_to("0"))
 
-            return node.index()
-
-        # Removing a node from a non-existing group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_nodes_from_group("50", query)
 
-        # Removing a non-existing node from a group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_nodes_from_group("0", "50")
 
-        # Removing a non-existing node from a group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_nodes_from_group("0", ["0", "50"])
 
@@ -2282,14 +2156,11 @@ class TestGraphRecord(unittest.TestCase):
 
     def test_remove_nodes_from_groups_with_query(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0", ["0", "1"])
         graphrecord.add_group("1", ["0", "1"])
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
-
-            return node.index()
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
         graphrecord.remove_nodes_from_group(["0", "1"], query)
 
@@ -2298,83 +2169,59 @@ class TestGraphRecord(unittest.TestCase):
 
     def test_remove_edges_from_group(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0", edges=[0, 1])
 
-        assert sorted([0, 1]) == sorted(graphrecord.edges_in_group("0"))
-
         graphrecord.remove_edges_from_group("0", 1)
-
         assert graphrecord.edges_in_group("0") == [0]
 
         graphrecord.add_edges_to_group("0", 1)
-
-        assert sorted([0, 1]) == sorted(graphrecord.edges_in_group("0"))
-
         graphrecord.remove_edges_from_group("0", [0, 1])
-
         assert graphrecord.edges_in_group("0") == []
 
         graphrecord.add_edges_to_group("0", [0, 1])
 
-        assert sorted([0, 1]) == sorted(graphrecord.edges_in_group("0"))
-
-        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().is_in([0, 1])
-
-            return edge.index()
+        def query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().is_in([0, 1]))
 
         graphrecord.remove_edges_from_group("0", query)
-
         assert graphrecord.edges_in_group("0") == []
 
-        def query2(edge: EdgeOperand) -> EdgeIndexOperand:
-            edge.index().equal_to(0)
+        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            indices = edges.index()
 
-            return edge.index().max()
+            return indices.filter(indices.equal_to(0)).max()
 
         graphrecord.add_edges_to_group("0", [0, 1])
         graphrecord.remove_edges_from_group("0", query2)
-
         assert graphrecord.edges_in_group("0") == [1]
 
-        def query3(edge: EdgeOperand) -> EdgeIndexOperand:
-            max_index = edge.index().max()
-            max_index.greater_than(10)
+        def query3(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            maximum_index = edges.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.greater_than(10))
 
         graphrecord.remove_edges_from_group("0", query3)
-
         assert graphrecord.edges_in_group("0") == [1]
 
     def test_invalid_remove_edges_from_group(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0", edges=[0, 1])
 
-        # Removing an edge from a non-existing group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_edges_from_group("50", 0)
 
-        # Removing an edge from a non-existing group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_edges_from_group("50", [0, 1])
 
-        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().equal_to(0)
+        def query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().equal_to(0))
 
-            return edge.index()
-
-        # Removing an edge from a non-existing group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_edges_from_group("50", query)
 
-        # Removing a non-existing edge from a group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_edges_from_group("0", 50)
 
-        # Removing a non-existing edge from a group should fail
         with pytest.raises(IndexError):
             graphrecord.remove_edges_from_group("0", [0, 50])
 
@@ -2426,14 +2273,11 @@ class TestGraphRecord(unittest.TestCase):
 
     def test_remove_edges_from_groups_with_query(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0", edges=[0, 1])
         graphrecord.add_group("1", edges=[0, 1])
 
-        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().is_in([0, 1])
-
-            return edge.index()
+        def query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().is_in([0, 1]))
 
         graphrecord.remove_edges_from_group(["0", "1"], query)
 
@@ -2500,32 +2344,27 @@ class TestGraphRecord(unittest.TestCase):
 
     def test_groups_of_node(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0", ["0", "1"])
 
         assert graphrecord.groups_of_node("0") == ["0"]
-
         assert graphrecord.groups_of_node(["0", "1"]) == {"0": ["0"], "1": ["0"]}
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
-
-            return node.index()
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
         assert graphrecord.groups_of_node(query) == {"0": ["0"], "1": ["0"]}
 
-        def query2(node: NodeOperand) -> NodeIndexOperand:
-            node.index().equal_to("0")
+        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
+            indices = nodes.index()
 
-            return node.index().max()
+            return indices.filter(indices.equal_to("0")).max()
 
         assert graphrecord.groups_of_node(query2) == ["0"]
 
-        def query3(node: NodeOperand) -> NodeIndexOperand:
-            max_index = node.index().max()
-            max_index.greater_than(10)
+        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
+            maximum_index = nodes.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.equal_to("non-found"))
 
         assert graphrecord.groups_of_node(query3) == []
 
@@ -2542,32 +2381,27 @@ class TestGraphRecord(unittest.TestCase):
 
     def test_groups_of_edge(self) -> None:
         graphrecord = create_graphrecord()
-
         graphrecord.add_group("0", edges=[0, 1])
 
         assert graphrecord.groups_of_edge(0) == ["0"]
-
         assert graphrecord.groups_of_edge([0, 1]) == {0: ["0"], 1: ["0"]}
 
-        def query(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().is_in([0, 1])
-
-            return edge.index()
+        def query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().is_in([0, 1]))
 
         assert graphrecord.groups_of_edge(query) == {0: ["0"], 1: ["0"]}
 
-        def query2(edge: EdgeOperand) -> EdgeIndexOperand:
-            edge.index().equal_to(0)
+        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            indices = edges.index()
 
-            return edge.index().max()
+            return indices.filter(indices.equal_to(0)).max()
 
         assert graphrecord.groups_of_edge(query2) == ["0"]
 
-        def query3(edge: EdgeOperand) -> EdgeIndexOperand:
-            max_index = edge.index().max()
-            max_index.greater_than(10)
+        def query3(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            maximum_index = edges.index().max()
 
-            return max_index
+            return maximum_index.filter(maximum_index.greater_than(10))
 
         assert graphrecord.groups_of_edge(query3) == []
 
@@ -2638,68 +2472,52 @@ class TestGraphRecord(unittest.TestCase):
     def test_neighbors(self) -> None:
         graphrecord = create_graphrecord()
 
-        neighbors = graphrecord.neighbors("0")
-
-        assert sorted(["1", "3"]) == sorted(neighbors)
+        assert sorted(["1", "3"]) == sorted(graphrecord.neighbors("0"))
 
         neighbors = graphrecord.neighbors(["0", "1"])
-
         assert {key: sorted(value) for key, value in neighbors.items()} == {
             "0": sorted(["1", "3"]),
             "1": ["0", "2"],
         }
 
-        def query1(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
-
-            return node.index()
+        def query1(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
         neighbors = graphrecord.neighbors(query1)
-
         assert {key: sorted(value) for key, value in neighbors.items()} == {
             "0": sorted(["1", "3"]),
             "1": ["0", "2"],
         }
 
-        def query1_single(node: NodeOperand) -> NodeIndexOperand:
-            node.index().equal_to("0")
+        def query1_single(nodes: NodesOperand) -> BareNodeIndexOperand:
+            indices = nodes.index()
 
-            return node.index().max()
+            return indices.filter(indices.equal_to("0")).max()
 
-        neighbors = graphrecord.neighbors(query1_single)
+        assert sorted(graphrecord.neighbors(query1_single)) == ["1", "3"]
 
-        assert sorted(neighbors) == ["1", "3"]
+        def query1_not_found(nodes: NodesOperand) -> BareNodeIndexOperand:
+            maximum_index = nodes.index().max()
 
-        def query1_not_found(node: NodeOperand) -> NodeIndexOperand:
-            max_index = node.index().max()
-            max_index.equal_to("non-found")
+            return maximum_index.filter(maximum_index.equal_to("non-found"))
 
-            return max_index
-
-        neighbors = graphrecord.neighbors(query1_not_found)
-
-        assert neighbors == []
+        assert graphrecord.neighbors(query1_not_found) == []
 
         neighbors = graphrecord.neighbors("0", directed=EdgesDirection.UNDIRECTED)
-
         assert sorted(["1", "3"]) == sorted(neighbors)
 
         neighbors = graphrecord.neighbors(
             ["0", "1"], directed=EdgesDirection.UNDIRECTED
         )
-
         assert {key: sorted(value) for key, value in neighbors.items()} == {
             "0": sorted(["1", "3"]),
             "1": ["0", "2"],
         }
 
-        def query2(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
-
-            return node.index()
+        def query2(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
         neighbors = graphrecord.neighbors(query2, directed=EdgesDirection.UNDIRECTED)
-
         assert {key: sorted(value) for key, value in neighbors.items()} == {
             "0": sorted(["1", "3"]),
             "1": ["0", "2"],
@@ -2719,10 +2537,8 @@ class TestGraphRecord(unittest.TestCase):
     def test_neighbors_incoming_query(self) -> None:
         graphrecord = create_graphrecord()
 
-        def query(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "2"])
-
-            return node.index()
+        def query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "2"]))
 
         neighbors = graphrecord.neighbors(query, directed=EdgesDirection.INCOMING)
 
@@ -2789,138 +2605,153 @@ class TestGraphRecord(unittest.TestCase):
     def test_query_nodes(self) -> None:
         graphrecord = create_graphrecord()
 
-        def query1(node: NodeOperand) -> NodeIndicesOperand:
-            node.index().is_in(["0", "1"])
+        def query1(nodes: NodesOperand) -> NodesOperand:
+            return nodes.filter(nodes.index().is_in(["0", "1"]))
 
-            return node.index()
+        assert set(graphrecord.query_nodes(query1)) == {"0", "1"}
 
-        assert sorted(["0", "1"]) == sorted(graphrecord.query_nodes(query1))
+        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
+            indices = nodes.index()
 
-        def query2(node: NodeOperand) -> NodeIndexOperand:
-            node.index().equal_to("0")
-
-            return node.index().max()
+            return indices.filter(indices.equal_to("0")).max()
 
         assert graphrecord.query_nodes(query2) == "0"
 
-        def query3(node: NodeOperand) -> NodeMultipleValuesWithIndexOperand:
-            return node.attribute("lorem")
+        def query3(nodes: NodesOperand) -> NodeValuesOperand:
+            return nodes.filter(nodes.has_attribute("lorem")).attribute("lorem")
 
-        assert graphrecord.query_nodes(query3) == {"0": "ipsum"}
+        assert graphrecord.query_nodes(query3) == [("0", "ipsum")]
 
-        def query4(node: NodeOperand) -> NodeSingleValueWithIndexOperand:
-            return node.attribute("lorem").max()
+        def query4(nodes: NodesOperand) -> NodeValueOperand:
+            return query3(nodes).sort().last()
 
         assert graphrecord.query_nodes(query4) == ("0", "ipsum")
 
-        def query5(node: NodeOperand) -> NodeAttributesTreeOperand:
-            node.index().equal_to("0")
-            return node.attributes()
+        def query5(nodes: NodesOperand) -> NodeAttributesTreeOperand:
+            return nodes.filter(nodes.index().equal_to("0")).attributes()
 
-        actual = {k: sorted(v) for k, v in graphrecord.query_nodes(query5).items()}
+        assert set(graphrecord.query_nodes(query5)) == {
+            (("0", "dolor"), "dolor"),
+            (("0", "lorem"), "lorem"),
+        }
 
-        assert actual == {"0": ["dolor", "lorem"]}
+        def query6(nodes: NodesOperand) -> BareAttributeOperand:
+            return query5(nodes).max()
 
-        def query6(node: NodeOperand) -> NodeMultipleAttributesWithIndexOperand:
-            attributes_tree = query5(node)
-            return attributes_tree.max()
+        assert graphrecord.query_nodes(query6) == "lorem"
 
-        assert graphrecord.query_nodes(query6) == {"0": "lorem"}
-
-        def query7(node: NodeOperand) -> NodeSingleAttributeWithIndexOperand:
-            multiple_attributes = query6(node)
-            return multiple_attributes.max()
-
-        assert graphrecord.query_nodes(query7) == ("0", "lorem")
-
-        def query8(node: NodeOperand) -> EdgeIndexOperand:
-            node.index().equal_to("0")
-            return node.edges().index().max()
+        def query8(nodes: NodesOperand) -> BareEdgeIndexOperand:
+            return (
+                nodes.filter(nodes.index().equal_to("0"))
+                .edges(EdgeDirection.Both)
+                .index()
+                .discard_index()
+                .max()
+            )
 
         assert graphrecord.query_nodes(query8) == 3
 
-        def query9(node: NodeOperand) -> EdgeIndicesOperand:
-            node.index().equal_to("0")
-            return node.edges().index()
+        def query9(nodes: NodesOperand) -> BareEdgeIndicesOperand:
+            return (
+                nodes.filter(nodes.index().equal_to("0"))
+                .edges(EdgeDirection.Both)
+                .index()
+                .discard_index()
+            )
 
-        assert sorted(graphrecord.query_nodes(query9)) == [0, 1, 3]
-
-        def query10(node: NodeOperand) -> List[QueryReturnOperand]:
-            node.index().equal_to("0")
-            return [node.index(), node.edges().index()]
-
-        node_indices, edge_indices = graphrecord.query_nodes(query10)
-        assert node_indices == ["0"]
-        assert is_edge_index_list(edge_indices)
-        assert sorted(edge_indices) == [0, 1, 3]
+        assert set(graphrecord.query_nodes(query9)) == {0, 1, 3}
 
     def test_query_edges(self) -> None:
         graphrecord = create_graphrecord()
 
-        def query1(edge: EdgeOperand) -> EdgeIndicesOperand:
-            edge.index().is_in([0, 1])
+        def query1(edges: EdgesOperand) -> EdgesOperand:
+            return edges.filter(edges.index().is_in([0, 1]))
 
-            return edge.index()
+        assert set(graphrecord.query_edges(query1)) == {0, 1}
 
-        assert sorted(graphrecord.query_edges(query1)) == [0, 1]
+        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
+            indices = edges.index()
 
-        def query2(edge: EdgeOperand) -> EdgeIndexOperand:
-            edge.index().equal_to(0)
-
-            return edge.index().max()
+            return indices.filter(indices.equal_to(0)).max()
 
         assert graphrecord.query_edges(query2) == 0
 
-        def query3(edge: EdgeOperand) -> EdgeMultipleValuesWithIndexOperand:
-            return edge.attribute("eiusmod")
+        def query3(edges: EdgesOperand) -> EdgeValuesOperand:
+            return edges.filter(edges.has_attribute("eiusmod")).attribute("eiusmod")
 
-        assert graphrecord.query_edges(query3) == {0: "tempor", 1: "tempor"}
+        assert sorted(graphrecord.query_edges(query3)) == [
+            (0, "tempor"),
+            (1, "tempor"),
+        ]
 
-        def query4(edge: EdgeOperand) -> EdgeSingleValueWithIndexOperand:
-            edge.index().equal_to(0)
-            return edge.attribute("eiusmod").max()
+        def query4(edges: EdgesOperand) -> EdgeValueOperand:
+            return (
+                edges.filter(edges.index().equal_to(0))
+                .attribute("eiusmod")
+                .sort()
+                .first()
+            )
 
         assert graphrecord.query_edges(query4) == (0, "tempor")
 
-        def query5(edge: EdgeOperand) -> EdgeAttributesTreeOperand:
-            edge.index().equal_to(0)
-            return edge.attributes()
+        def query5(edges: EdgesOperand) -> EdgeAttributesTreeOperand:
+            return edges.filter(edges.index().equal_to(0)).attributes()
 
-        actual = {k: sorted(v) for k, v in graphrecord.query_edges(query5).items()}
+        assert set(graphrecord.query_edges(query5)) == {
+            ((0, "eiusmod"), "eiusmod"),
+            ((0, "sed"), "sed"),
+        }
 
-        assert actual == {0: ["eiusmod", "sed"]}
+        def query6(edges: EdgesOperand) -> BareAttributeOperand:
+            return query5(edges).max()
 
-        def query6(edge: EdgeOperand) -> EdgeMultipleAttributesWithIndexOperand:
-            attributes_tree = query5(edge)
-            return attributes_tree.max()
+        assert graphrecord.query_edges(query6) == "sed"
 
-        assert graphrecord.query_edges(query6) == {0: "sed"}
-
-        def query7(edge: EdgeOperand) -> EdgeSingleAttributeWithIndexOperand:
-            multiple_attributes = query6(edge)
-            return multiple_attributes.max()
-
-        assert graphrecord.query_edges(query7) == (0, "sed")
-
-        def query8(edge: EdgeOperand) -> NodeIndexOperand:
-            edge.index().equal_to(0)
-            return edge.source_node().index().max()
+        def query8(edges: EdgesOperand) -> BareNodeIndexOperand:
+            return (
+                edges.filter(edges.index().equal_to(0))
+                .via_source_node()
+                .index()
+                .discard_index()
+                .max()
+            )
 
         assert graphrecord.query_edges(query8) == "0"
 
-        def query9(edge: EdgeOperand) -> NodeIndicesOperand:
-            return edge.source_node().index()
+        def query9(edges: EdgesOperand) -> BareNodeIndicesOperand:
+            return edges.via_source_node().index().discard_index()
 
-        assert sorted(graphrecord.query_edges(query9)) == ["0", "0", "1", "1"]
+        source_indices = graphrecord.query_edges(query9)
 
-        def query10(edge: EdgeOperand) -> List[QueryReturnOperand]:
-            edge.index().equal_to(0)
-            return [edge.index(), edge.source_node().index()]
+        assert source_indices.count("0") == 2
+        assert source_indices.count("1") == 2
 
-        edge_indices, node_indices = graphrecord.query_edges(query10)
-        assert edge_indices == [0]
-        assert is_node_index_list(node_indices)
-        assert sorted(node_indices) == ["0"]
+    def test_query_argument_errors(self) -> None:
+        graphrecord = create_graphrecord()
+
+        def node_query(nodes: NodesOperand) -> NodeOperand:
+            return nodes.attribute("missing").discard_value().shuffle().first()
+
+        with pytest.raises(QueryError, match="no attribute"):
+            graphrecord.outgoing_edges(node_query)
+
+        def nodes_query(nodes: NodesOperand) -> NodesOperand:
+            return nodes.attribute("missing").discard_value()
+
+        with pytest.raises(QueryError, match="no attribute"):
+            graphrecord.outgoing_edges(nodes_query)
+
+        def edges_query(edges: EdgesOperand) -> EdgesOperand:
+            return edges.attribute("missing").discard_value()
+
+        with pytest.raises(QueryError, match="no attribute"):
+            graphrecord.edge_endpoints(edges_query)
+
+        def edge_query(edges: EdgesOperand) -> EdgeOperand:
+            return edges.attribute("missing").discard_value().shuffle().first()
+
+        with pytest.raises(QueryError, match="no attribute"):
+            graphrecord.edge_endpoints(edge_query)
 
 
 class TestGraphRecordPlugins(unittest.TestCase):

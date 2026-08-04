@@ -4,12 +4,10 @@ import pytest
 
 from graphrecords import GraphRecord
 from graphrecords.querying import (
-    EdgeIndexOperand,
-    EdgeIndicesOperand,
-    EdgeOperand,
-    NodeIndexOperand,
-    NodeIndicesOperand,
-    NodeOperand,
+    BareEdgeIndexOperand,
+    BareNodeIndexOperand,
+    EdgesOperand,
+    NodesOperand,
 )
 
 
@@ -30,66 +28,48 @@ def create_graphrecord() -> GraphRecord:
     )
 
 
-def node_greater_than_or_equal_two(node: NodeOperand) -> NodeIndicesOperand:
-    node.index().greater_than_or_equal_to(2)
-
-    return node.index()
+def node_greater_than_or_equal_two(nodes: NodesOperand) -> NodesOperand:
+    return nodes.filter(nodes.index().greater_than_or_equal_to(2))
 
 
-def node_max(node: NodeOperand) -> NodeIndexOperand:
-    node.index().greater_than(2)
-
-    return node.index().max()
-
-
-def node_max_greater_than_3(node: NodeOperand) -> NodeIndexOperand:
-    max_index = node.index().max()
-    max_index.greater_than(3)
-
-    return max_index
+def node_max(nodes: NodesOperand) -> BareNodeIndexOperand:
+    indices = nodes.index()
+    return indices.filter(indices.greater_than(2)).max()
 
 
-def node_greater_than_three(node: NodeOperand) -> NodeIndicesOperand:
-    node.index().greater_than(3)
-
-    return node.index()
-
-
-def node_less_than_two(node: NodeOperand) -> NodeIndicesOperand:
-    node.index().less_than(2)
-
-    return node.index()
+def node_max_greater_than_3(nodes: NodesOperand) -> BareNodeIndexOperand:
+    maximum = nodes.index().max()
+    return maximum.filter(maximum.greater_than(3))
 
 
-def edge_greater_than_or_equal_two(edge: EdgeOperand) -> EdgeIndicesOperand:
-    edge.index().greater_than_or_equal_to(2)
-
-    return edge.index()
+def node_greater_than_three(nodes: NodesOperand) -> NodesOperand:
+    return nodes.filter(nodes.index().greater_than(3))
 
 
-def edge_greater_than_three(edge: EdgeOperand) -> EdgeIndicesOperand:
-    edge.index().greater_than(3)
-
-    return edge.index()
+def node_less_than_two(nodes: NodesOperand) -> NodesOperand:
+    return nodes.filter(nodes.index().less_than(2))
 
 
-def edge_less_than_two(edge: EdgeOperand) -> EdgeIndicesOperand:
-    edge.index().less_than(2)
-
-    return edge.index()
+def edge_greater_than_or_equal_two(edges: EdgesOperand) -> EdgesOperand:
+    return edges.filter(edges.index().greater_than_or_equal_to(2))
 
 
-def edge_max(edge: EdgeOperand) -> EdgeIndexOperand:
-    edge.index().greater_than(2)
-
-    return edge.index().max()
+def edge_greater_than_three(edges: EdgesOperand) -> EdgesOperand:
+    return edges.filter(edges.index().greater_than(3))
 
 
-def edge_max_greater_than_3(edge: EdgeOperand) -> EdgeIndexOperand:
-    max_index = edge.index().max()
-    max_index.greater_than(3)
+def edge_less_than_two(edges: EdgesOperand) -> EdgesOperand:
+    return edges.filter(edges.index().less_than(2))
 
-    return max_index
+
+def edge_max(edges: EdgesOperand) -> BareEdgeIndexOperand:
+    indices = edges.index()
+    return indices.filter(indices.greater_than(2)).max()
+
+
+def edge_max_greater_than_3(edges: EdgesOperand) -> BareEdgeIndexOperand:
+    maximum = edges.index().max()
+    return maximum.filter(maximum.greater_than(3))
 
 
 class TestIndexers(unittest.TestCase):

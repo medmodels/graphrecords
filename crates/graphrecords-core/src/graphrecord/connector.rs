@@ -1,10 +1,7 @@
 use crate::{GraphRecord, errors::GraphRecordResult};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt::Display,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 pub trait Connector {
     fn initialize(&self, graphrecord: &mut GraphRecord) -> GraphRecordResult<()>;
@@ -43,12 +40,6 @@ impl GraphRecord {
 pub struct ConnectedGraphRecord<C: Connector> {
     graphrecord: GraphRecord,
     connector: C,
-}
-
-impl<C: Connector> Display for ConnectedGraphRecord<C> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.graphrecord, f)
-    }
 }
 
 impl<C: Connector> Deref for ConnectedGraphRecord<C> {

@@ -1,7 +1,7 @@
 use crate::{
     GraphRecord,
-    errors::{GraphRecordError, GraphRecordResult},
-    graphrecord::{Attributes, GraphRecordAttribute, GraphRecordValue, NodeIndex},
+    errors::{ConversionError, GraphRecordError, GraphRecordResult},
+    graphrecord::{AttributeMap, GraphRecordAttribute, GraphRecordValue, NodeIndex},
     prelude::{EdgeIndex, Group},
 };
 use chrono::{DateTime, TimeDelta};
@@ -35,20 +35,16 @@ impl<'a> TryFrom<AnyValue<'a>> for GraphRecordValue {
                     }
                     polars::prelude::TimeUnit::Microseconds => Self::DateTime(
                         DateTime::from_timestamp_micros(value)
-                            .ok_or_else(|| {
-                                GraphRecordError::ConversionError(format!(
-                                    "Cannot convert {value}ms into GraphRecordValue"
-                                ))
-                            })?
+                            .ok_or(GraphRecordError::Conversion(
+                                ConversionError::TimestampOutOfRange { timestamp: value },
+                            ))?
                             .naive_utc(),
                     ),
                     polars::prelude::TimeUnit::Milliseconds => Self::DateTime(
                         DateTime::from_timestamp_millis(value)
-                            .ok_or_else(|| {
-                                GraphRecordError::ConversionError(format!(
-                                    "Cannot convert {value}ms into GraphRecordValue"
-                                ))
-                            })?
+                            .ok_or(GraphRecordError::Conversion(
+                                ConversionError::TimestampOutOfRange { timestamp: value },
+                            ))?
                             .naive_utc(),
                     ),
                 })
@@ -65,9 +61,11 @@ impl<'a> TryFrom<AnyValue<'a>> for GraphRecordValue {
                 }
             }),
             AnyValue::Null => Ok(Self::Null),
-            _ => Err(GraphRecordError::ConversionError(format!(
-                "Cannot convert {value} into GraphRecordValue"
-            ))),
+            _ => Err(GraphRecordError::Conversion(
+                ConversionError::UnsupportedPolarsValue {
+                    value: value.to_string(),
+                },
+            )),
         }
     }
 }
@@ -86,9 +84,11 @@ impl<'a> TryFrom<AnyValue<'a>> for GraphRecordAttribute {
             AnyValue::UInt8(value) => Ok(Self::Int(value.into())),
             AnyValue::UInt16(value) => Ok(Self::Int(value.into())),
             AnyValue::UInt32(value) => Ok(Self::Int(value.into())),
-            _ => Err(GraphRecordError::ConversionError(format!(
-                "Cannot convert {value} into GraphRecordAttribute"
-            ))),
+            _ => Err(GraphRecordError::Conversion(
+                ConversionError::UnsupportedPolarsAttribute {
+                    value: value.to_string(),
+                },
+            )),
         }
     }
 }
@@ -127,7 +127,7 @@ impl From<GraphRecordAttribute> for AnyValue<'_> {
 pub fn dataframe_to_nodes(
     mut nodes: DataFrame,
     index_column_name: &str,
-) -> GraphRecordResult<Vec<(NodeIndex, Attributes)>> {
+) -> GraphRecordResult<Vec<(NodeIndex, AttributeMap)>> {
     if nodes.max_n_chunks() > 1 {
         nodes.rechunk_mut();
     }
@@ -141,9 +141,9 @@ pub fn dataframe_to_nodes(
     let index = nodes
         .column(index_column_name)
         .map_err(|_| {
-            GraphRecordError::ConversionError(format!(
-                "Cannot find column with name {index_column_name} in dataframe"
-            ))
+            GraphRecordError::Conversion(ConversionError::ColumnNotFound {
+                column_name: index_column_name.to_string(),
+            })
         })?
         .as_materialized_series()
         .iter();
@@ -181,7 +181,7 @@ pub fn dataframe_to_edges(
     mut edges: DataFrame,
     source_index_column_name: &str,
     target_index_column_name: &str,
-) -> GraphRecordResult<Vec<(NodeIndex, NodeIndex, Attributes)>> {
+) -> GraphRecordResult<Vec<(NodeIndex, NodeIndex, AttributeMap)>> {
     if edges.max_n_chunks() > 1 {
         edges.rechunk_mut();
     }
@@ -195,18 +195,18 @@ pub fn dataframe_to_edges(
     let source_index = edges
         .column(source_index_column_name)
         .map_err(|_| {
-            GraphRecordError::ConversionError(format!(
-                "Cannot find column with name {source_index_column_name} in dataframe"
-            ))
+            GraphRecordError::Conversion(ConversionError::ColumnNotFound {
+                column_name: source_index_column_name.to_string(),
+            })
         })?
         .as_materialized_series()
         .iter();
     let target_index = edges
         .column(target_index_column_name)
         .map_err(|_| {
-            GraphRecordError::ConversionError(format!(
-                "Cannot find column with name {target_index_column_name} in dataframe"
-            ))
+            GraphRecordError::Conversion(ConversionError::ColumnNotFound {
+                column_name: target_index_column_name.to_string(),
+            })
         })?
         .as_materialized_series()
         .iter();
@@ -282,8 +282,10 @@ impl DataFramesGroupExport {
         let node_index_attribute = GraphRecordAttribute::String("node_index".into());
 
         if node_columns.contains_key(&node_index_attribute) {
-            return Err(GraphRecordError::ConversionError(
-                "Node attribute name 'node_index' is reserved".into(),
+            return Err(GraphRecordError::Conversion(
+                ConversionError::ReservedAttributeName {
+                    attribute: node_index_attribute,
+                },
             ));
         }
 
@@ -310,13 +312,20 @@ impl DataFramesGroupExport {
 
         let node_columns: Vec<_> = node_columns
             .into_iter()
-            .map(|(attribute_name, values)| Column::new(attribute_name.to_string().into(), values))
+            .map(|(attribute_name, values)| {
+                let column_name = match attribute_name {
+                    GraphRecordAttribute::String(value) => value,
+                    GraphRecordAttribute::Int(value) => value.to_string(),
+                };
+
+                Column::new(column_name.into(), values)
+            })
             .collect();
 
         let node_dataframe = DataFrame::new_infer_height(node_columns).map_err(|_| {
-            GraphRecordError::ConversionError(format!(
-                "Failed to create node DataFrame for group {group_string}"
-            ))
+            GraphRecordError::Conversion(ConversionError::NodeDataFrameCreation {
+                group: group_string.clone(),
+            })
         })?;
 
         let edge_indices: Box<dyn Iterator<Item = &EdgeIndex>> = match group {
@@ -350,18 +359,24 @@ impl DataFramesGroupExport {
         let target_node_index_attribute = GraphRecordAttribute::String("target_node_index".into());
 
         if edge_columns.contains_key(&edge_index_attribute) {
-            return Err(GraphRecordError::ConversionError(
-                "Edge attribute name 'edge_index' is reserved".into(),
+            return Err(GraphRecordError::Conversion(
+                ConversionError::ReservedAttributeName {
+                    attribute: edge_index_attribute,
+                },
             ));
         }
         if edge_columns.contains_key(&source_node_index_attribute) {
-            return Err(GraphRecordError::ConversionError(
-                "Edge attribute name 'source_node_index' is reserved".into(),
+            return Err(GraphRecordError::Conversion(
+                ConversionError::ReservedAttributeName {
+                    attribute: source_node_index_attribute,
+                },
             ));
         }
         if edge_columns.contains_key(&target_node_index_attribute) {
-            return Err(GraphRecordError::ConversionError(
-                "Edge attribute name 'target_node_index' is reserved".into(),
+            return Err(GraphRecordError::Conversion(
+                ConversionError::ReservedAttributeName {
+                    attribute: target_node_index_attribute,
+                },
             ));
         }
 
@@ -401,13 +416,20 @@ impl DataFramesGroupExport {
 
         let edge_columns: Vec<_> = edge_columns
             .into_iter()
-            .map(|(attribute_name, values)| Column::new(attribute_name.to_string().into(), values))
+            .map(|(attribute_name, values)| {
+                let column_name = match attribute_name {
+                    GraphRecordAttribute::String(value) => value,
+                    GraphRecordAttribute::Int(value) => value.to_string(),
+                };
+
+                Column::new(column_name.into(), values)
+            })
             .collect();
 
         let edge_dataframe = DataFrame::new_infer_height(edge_columns).map_err(|_| {
-            GraphRecordError::ConversionError(format!(
-                "Failed to create edge DataFrame for group {group_string}"
-            ))
+            GraphRecordError::Conversion(ConversionError::EdgeDataFrameCreation {
+                group: group_string.clone(),
+            })
         })?;
 
         Ok(Self {
@@ -591,7 +613,7 @@ mod test {
         // Providing the wrong index column name should fail
         assert!(
             dataframe_to_nodes(nodes_dataframe, "wrong_column")
-                .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::Conversion(_)))
         );
     }
 
@@ -631,13 +653,13 @@ mod test {
         // Providing the wrong source index column name should fail
         assert!(
             dataframe_to_edges(edges_dataframe.clone(), "wrong_column", "target")
-                .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::Conversion(_)))
         );
 
         // Providing the wrong target index column name should fail
         assert!(
             dataframe_to_edges(edges_dataframe, "source", "wrong_column")
-                .is_err_and(|e| matches!(e, GraphRecordError::ConversionError(_)))
+                .is_err_and(|e| matches!(e, GraphRecordError::Conversion(_)))
         );
     }
 }

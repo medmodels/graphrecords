@@ -1,7 +1,7 @@
 use super::{Lut, traits::DeepFrom};
 use crate::{conversion_lut::ConversionLut, graphrecord::errors::PyGraphRecordError};
 use chrono::{NaiveDateTime, TimeDelta};
-use graphrecords_core::{errors::GraphRecordError, graphrecord::GraphRecordValue};
+use graphrecords_core::graphrecord::GraphRecordValue;
 use pyo3::{
     Borrowed, Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
     types::{PyAnyMethods, PyBool, PyDateTime, PyDelta, PyFloat, PyInt, PyString},
@@ -93,10 +93,8 @@ pub(crate) fn convert_pyobject_to_graphrecordvalue(
 
     fn throw_error(ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
         Err(
-            PyGraphRecordError::from(GraphRecordError::ConversionError(format!(
-                "Failed to convert {ob} into GraphRecordValue",
-            )))
-            .into(),
+            PyGraphRecordError::Conversion(format!("Failed to convert {ob} into GraphRecordValue"))
+                .into(),
         )
     }
 

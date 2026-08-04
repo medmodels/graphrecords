@@ -29,7 +29,7 @@ use super::{
 use crate::{
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{EdgeDataFrameInput, GraphRecord, NodeDataFrameInput},
-    prelude::{Attributes, EdgeIndex, GraphRecordAttribute, Group, NodeIndex, Schema},
+    prelude::{AttributeMap, EdgeIndex, GraphRecordAttribute, Group, NodeIndex, Schema},
 };
 use graphrecords_utils::aliases::GrHashMap;
 use std::sync::Arc;
@@ -60,9 +60,7 @@ impl GraphRecord {
         plugin: Box<dyn Plugin>,
     ) -> GraphRecordResult<()> {
         if self.plugins.contains_key(&name) {
-            return Err(GraphRecordError::KeyError(format!(
-                "Plugin with name '{name}' already exists"
-            )));
+            return Err(GraphRecordError::PluginAlreadyExists { name });
         }
 
         plugin.initialize(self)?;
@@ -78,9 +76,9 @@ impl GraphRecord {
         let plugin = {
             let plugins = Arc::make_mut(&mut self.plugins);
 
-            plugins.remove(name).ok_or_else(|| {
-                GraphRecordError::KeyError(format!("Plugin with name '{name}' does not exist"))
-            })?
+            plugins
+                .remove(name)
+                .ok_or_else(|| GraphRecordError::PluginNotFound { name: name.clone() })?
         };
 
         plugin.finalize(self)?;
@@ -160,7 +158,7 @@ impl GraphRecord {
     pub fn add_node(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
     ) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
 
@@ -188,7 +186,7 @@ impl GraphRecord {
     pub fn add_node_bypass_plugins(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
     ) -> GraphRecordResult<()> {
         self.add_node_impl(node_index, attributes)
     }
@@ -197,7 +195,7 @@ impl GraphRecord {
     pub fn add_node_with_group(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         group: Group,
     ) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
@@ -231,7 +229,7 @@ impl GraphRecord {
     pub fn add_node_with_group_bypass_plugins(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         group: Group,
     ) -> GraphRecordResult<()> {
         self.add_node_with_group_impl(node_index, attributes, group)
@@ -240,7 +238,7 @@ impl GraphRecord {
     pub fn add_node_with_groups(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
@@ -277,13 +275,13 @@ impl GraphRecord {
     pub fn add_node_with_groups_bypass_plugins(
         &mut self,
         node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<()> {
         self.add_node_with_groups_impl(node_index, attributes, groups)
     }
 
-    pub fn remove_node(&mut self, node_index: &NodeIndex) -> GraphRecordResult<Attributes> {
+    pub fn remove_node(&mut self, node_index: &NodeIndex) -> GraphRecordResult<AttributeMap> {
         let plugins = self.plugins.clone();
 
         let pre_context = PreRemoveNodeContext {
@@ -311,11 +309,11 @@ impl GraphRecord {
     pub fn remove_node_bypass_plugins(
         &mut self,
         node_index: &NodeIndex,
-    ) -> GraphRecordResult<Attributes> {
+    ) -> GraphRecordResult<AttributeMap> {
         self.remove_node_impl(node_index)
     }
 
-    pub fn add_nodes(&mut self, nodes: Vec<(NodeIndex, Attributes)>) -> GraphRecordResult<()> {
+    pub fn add_nodes(&mut self, nodes: Vec<(NodeIndex, AttributeMap)>) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
 
         let pre_context = PreAddNodesContext { nodes };
@@ -340,7 +338,7 @@ impl GraphRecord {
 
     pub fn add_nodes_bypass_plugins(
         &mut self,
-        nodes: Vec<(NodeIndex, Attributes)>,
+        nodes: Vec<(NodeIndex, AttributeMap)>,
     ) -> GraphRecordResult<()> {
         self.add_nodes_impl(nodes)
     }
@@ -348,7 +346,7 @@ impl GraphRecord {
     #[allow(clippy::needless_pass_by_value)]
     pub fn add_nodes_with_group(
         &mut self,
-        nodes: Vec<(NodeIndex, Attributes)>,
+        nodes: Vec<(NodeIndex, AttributeMap)>,
         group: Group,
     ) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
@@ -376,7 +374,7 @@ impl GraphRecord {
 
     pub fn add_nodes_with_group_bypass_plugins(
         &mut self,
-        nodes: Vec<(NodeIndex, Attributes)>,
+        nodes: Vec<(NodeIndex, AttributeMap)>,
         group: Group,
     ) -> GraphRecordResult<()> {
         self.add_nodes_with_group_impl(nodes, group)
@@ -384,7 +382,7 @@ impl GraphRecord {
 
     pub fn add_nodes_with_groups(
         &mut self,
-        nodes: Vec<(NodeIndex, Attributes)>,
+        nodes: Vec<(NodeIndex, AttributeMap)>,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<()> {
         let plugins = self.plugins.clone();
@@ -415,7 +413,7 @@ impl GraphRecord {
 
     pub fn add_nodes_with_groups_bypass_plugins(
         &mut self,
-        nodes: Vec<(NodeIndex, Attributes)>,
+        nodes: Vec<(NodeIndex, AttributeMap)>,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<()> {
         self.add_nodes_with_groups_impl(nodes, groups)
@@ -545,7 +543,7 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
     ) -> GraphRecordResult<EdgeIndex> {
         let plugins = self.plugins.clone();
 
@@ -579,7 +577,7 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
     ) -> GraphRecordResult<EdgeIndex> {
         self.add_edge_impl(source_node_index, target_node_index, attributes)
     }
@@ -589,7 +587,7 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         group: Group,
     ) -> GraphRecordResult<EdgeIndex> {
         let plugins = self.plugins.clone();
@@ -626,7 +624,7 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         group: Group,
     ) -> GraphRecordResult<EdgeIndex> {
         self.add_edge_with_group_impl(source_node_index, target_node_index, attributes, group)
@@ -636,7 +634,7 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<EdgeIndex> {
         let plugins = self.plugins.clone();
@@ -676,13 +674,13 @@ impl GraphRecord {
         &mut self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
-        attributes: Attributes,
+        attributes: AttributeMap,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<EdgeIndex> {
         self.add_edge_with_groups_impl(source_node_index, target_node_index, attributes, groups)
     }
 
-    pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<Attributes> {
+    pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<AttributeMap> {
         let plugins = self.plugins.clone();
 
         let pre_context = PreRemoveEdgeContext {
@@ -710,13 +708,13 @@ impl GraphRecord {
     pub fn remove_edge_bypass_plugins(
         &mut self,
         edge_index: &EdgeIndex,
-    ) -> GraphRecordResult<Attributes> {
+    ) -> GraphRecordResult<AttributeMap> {
         self.remove_edge_impl(edge_index)
     }
 
     pub fn add_edges(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         let plugins = self.plugins.clone();
 
@@ -742,14 +740,14 @@ impl GraphRecord {
 
     pub fn add_edges_bypass_plugins(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         self.add_edges_impl(edges)
     }
 
     pub fn add_edges_with_group(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
         group: &Group,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         let plugins = self.plugins.clone();
@@ -779,7 +777,7 @@ impl GraphRecord {
 
     pub fn add_edges_with_group_bypass_plugins(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
         group: &Group,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         self.add_edges_with_group_impl(edges, group)
@@ -787,7 +785,7 @@ impl GraphRecord {
 
     pub fn add_edges_with_groups(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         let plugins = self.plugins.clone();
@@ -819,7 +817,7 @@ impl GraphRecord {
 
     pub fn add_edges_with_groups_bypass_plugins(
         &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, Attributes)>,
+        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
         groups: impl AsRef<[Group]>,
     ) -> GraphRecordResult<Vec<EdgeIndex>> {
         self.add_edges_with_groups_impl(edges, groups)

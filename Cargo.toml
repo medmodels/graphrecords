@@ -19,7 +19,7 @@ description = "High-performance graph-based data records"
 hashbrown = { version = "0.16.1", features = ["serde", "rayon"] }
 serde = { version = "1.0.203", features = ["derive", "rc"] }
 polars = { version = "0.53.0", features = ["polars-io", "dtype-full"] }
-chrono = { version = "0.4.38", features = ["serde"] }
+chrono = { version = "0.4.41", features = ["serde"] }
 pyo3 = { version = "0.27", features = ["chrono"] }
 parking_lot = { version = "0.12.5", features = ["serde"] }
 rayon = "1.10.0"
@@ -31,8 +31,14 @@ graphrecords = { version = "0.4.1", path = "crates/graphrecords" }
 graphrecords-core = { version = "0.4.1", path = "crates/graphrecords-core" }
 graphrecords-utils = { version = "0.4.1", path = "crates/graphrecords-utils" }
 graphrecords-python = { version = "0.4.1", path = "crates/graphrecords-python" }
+graphrecords-query = { version = "0.4.1", path = "crates/graphrecords-query" }
+graphrecords-overview = { version = "0.4.1", path = "crates/graphrecords-overview" }
+graphrecords-macros = { version = "0.4.1", path = "crates/graphrecords-macros" }
 py-graphrecords = { version = "0.4.1", path = "crates/py-graphrecords" }
 graphrecords-pyo3-interop = { version = "0.4.1", path = "crates/graphrecords-pyo3-interop" }
+
+[profile.release]
+strip = "symbols"
 
 [workspace.lints.clippy]
 pedantic = { level = "deny", priority = -1 }

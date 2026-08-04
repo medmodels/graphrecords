@@ -51,4 +51,11 @@ jobs:
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Run Rust tests
-        run: cargo hack test --feature-powerset -p graphrecords -p graphrecords-core -p graphrecords-utils
+        run: >
+          cargo hack test --feature-powerset
+          -p graphrecords
+          -p graphrecords-core
+          -p graphrecords-macros
+          -p graphrecords-overview
+          -p graphrecords-query
+          -p graphrecords-utils

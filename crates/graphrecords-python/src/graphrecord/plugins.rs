@@ -55,11 +55,15 @@ macro_rules! impl_pre_hook {
                     let result = self
                         .0
                         .call_method1(py, stringify!($method), (graphrecord, py_context))
-                        .map_err(|err| GraphRecordError::ConversionError(format!("{}", err)))?;
+                        .map_err(|err| GraphRecordError::PluginFailure {
+                            message: err.to_string(),
+                        })?;
 
                     Ok(result
                         .extract::<$py_context_type>(py)
-                        .map_err(|err| GraphRecordError::ConversionError(format!("{}", err)))?
+                        .map_err(|err| GraphRecordError::PluginFailure {
+                            message: err.to_string(),
+                        })?
                         .extract(py))
                 })
             })
@@ -74,7 +78,9 @@ macro_rules! impl_post_hook {
                 PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                     self.0
                         .call_method1(py, stringify!($method), (graphrecord,))
-                        .map_err(|err| GraphRecordError::ConversionError(format!("{}", err)))?;
+                        .map_err(|err| GraphRecordError::PluginFailure {
+                            message: err.to_string(),
+                        })?;
 
                     Ok(())
                 })
@@ -93,7 +99,9 @@ macro_rules! impl_post_hook {
 
                     self.0
                         .call_method1(py, stringify!($method), (graphrecord, py_context))
-                        .map_err(|err| GraphRecordError::ConversionError(format!("{}", err)))?;
+                        .map_err(|err| GraphRecordError::PluginFailure {
+                            message: err.to_string(),
+                        })?;
 
                     Ok(())
                 })
@@ -4786,7 +4794,9 @@ impl Plugin for PyPlugin {
             PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                 self.0
                     .call_method1(py, "initialize", (graphrecord,))
-                    .map_err(|err| GraphRecordError::ConversionError(format!("{err}")))?;
+                    .map_err(|err| GraphRecordError::PluginFailure {
+                        message: err.to_string(),
+                    })?;
 
                 Ok(())
             })
@@ -4798,7 +4808,9 @@ impl Plugin for PyPlugin {
             PyGraphRecord::scope_mut(py, graphrecord, |py, graphrecord| {
                 self.0
                     .call_method1(py, "finalize", (graphrecord,))
-                    .map_err(|err| GraphRecordError::ConversionError(format!("{err}")))?;
+                    .map_err(|err| GraphRecordError::PluginFailure {
+                        message: err.to_string(),
+                    })?;
 
                 Ok(())
             })

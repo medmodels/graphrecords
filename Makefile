@@ -56,7 +56,7 @@ build-dev: install-dev
 
 test: install-tests
 	$(UV_LOC) run pytest -vv -W error
-	cargo hack test --feature-powerset -p graphrecords -p graphrecords-core -p graphrecords-utils
+	cargo hack test --feature-powerset -p graphrecords -p graphrecords-core -p graphrecords-macros -p graphrecords-overview -p graphrecords-query -p graphrecords-utils
 
 test-python-coverage: install-tests
 	$(UV_LOC) run tests/coverage_report.py table

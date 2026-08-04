@@ -7,7 +7,6 @@ pub mod datatype;
 pub mod errors;
 pub mod overview;
 pub mod plugins;
-pub mod querying;
 pub mod schema;
 pub mod traits;
 pub mod value;
@@ -18,20 +17,22 @@ use crate::{
         overview::{PyGroupOverview, PyOverview},
         plugins::PyPlugin,
     },
+    querying::PyOperand,
 };
 use attribute::PyGraphRecordAttribute;
 use borrowed::BorrowedGraphRecord;
 use connector::PyConnector;
 use errors::PyGraphRecordError;
 use graphrecords_core::{
-    errors::GraphRecordError,
+    errors::{ConversionError, GraphRecordError},
     graphrecord::{
-        Attributes, EdgeDataFrameInput, EdgeIndex, GraphRecord, GraphRecordAttribute,
+        AttributeMap, EdgeDataFrameInput, EdgeIndex, GraphRecord, GraphRecordAttribute,
         GraphRecordValue, Group, NodeDataFrameInput, connector::ConnectedGraphRecord,
         plugins::Plugin,
     },
     prelude::NodeIndex,
 };
+use graphrecords_overview::{GroupOverviewable, Overviewable};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use pyo3::{
     exceptions::PyRuntimeError,
@@ -39,7 +40,6 @@ use pyo3::{
     types::{PyBytes, PyDict, PyFunction},
 };
 use pyo3_polars::PyDataFrame;
-use querying::{PyReturnOperand, edges::PyEdgeOperand, nodes::PyNodeOperand};
 use schema::PySchema;
 use std::{
     collections::HashMap,
@@ -245,9 +245,7 @@ impl PyGraphRecord {
 
     pub fn _to_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let bytes = bincode::serialize(&*self.inner()?)
-            .map_err(|_| {
-                GraphRecordError::ConversionError("Could not serialize GraphRecord".into())
-            })
+            .map_err(|_| GraphRecordError::Conversion(ConversionError::BinarySerialization))
             .map_err(PyGraphRecordError::from)?;
 
         Ok(PyBytes::new(py, &bytes))
@@ -256,9 +254,7 @@ impl PyGraphRecord {
     #[staticmethod]
     pub fn _from_bytes(data: &Bound<'_, PyBytes>) -> PyResult<Self> {
         let graphrecord: GraphRecord = bincode::deserialize(data.as_bytes())
-            .map_err(|_| {
-                GraphRecordError::ConversionError("Could not deserialize GraphRecord".into())
-            })
+            .map_err(|_| GraphRecordError::Conversion(ConversionError::BinaryDeserialization))
             .map_err(PyGraphRecordError::from)?;
 
         Ok(graphrecord.into())
@@ -704,7 +700,7 @@ impl PyGraphRecord {
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        let attributes: Attributes = attributes.deep_into();
+        let attributes: AttributeMap = attributes.deep_into();
 
         for node_index in node_indices {
             let mut current_attributes = graphrecord
@@ -951,7 +947,7 @@ impl PyGraphRecord {
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        let attributes: Attributes = attributes.deep_into();
+        let attributes: AttributeMap = attributes.deep_into();
 
         for edge_index in edge_indices {
             let mut current_attributes = graphrecord
@@ -1688,56 +1684,16 @@ impl PyGraphRecord {
         }
     }
 
-    /// # Panics
-    ///
-    /// Panics if the python typing was not followed.
-    pub fn query_nodes(
-        &self,
-        py: Python<'_>,
-        query: &Bound<'_, PyFunction>,
-    ) -> PyResult<Py<PyAny>> {
+    pub fn query_nodes(&self, query: &Bound<'_, PyFunction>) -> PyResult<Py<PyAny>> {
         let graphrecord = self.inner()?;
 
-        let result = graphrecord
-            .query_nodes(|nodes| {
-                let result = query
-                    .call1((PyNodeOperand::from(nodes.clone()),))
-                    .expect("Call should succeed");
-
-                result
-                    .extract::<PyReturnOperand>()
-                    .expect("Extraction must succeed")
-            })
-            .evaluate()
-            .map_err(PyGraphRecordError::from)?;
-
-        Ok(result.into_pyobject(py)?.unbind())
+        PyOperand::query_nodes(&graphrecord, query)
     }
 
-    /// # Panics
-    ///
-    /// Panics if the python typing was not followed.
-    pub fn query_edges(
-        &self,
-        py: Python<'_>,
-        query: &Bound<'_, PyFunction>,
-    ) -> PyResult<Py<PyAny>> {
+    pub fn query_edges(&self, query: &Bound<'_, PyFunction>) -> PyResult<Py<PyAny>> {
         let graphrecord = self.inner()?;
 
-        let result = graphrecord
-            .query_edges(|edges| {
-                let result = query
-                    .call1((PyEdgeOperand::from(edges.clone()),))
-                    .expect("Call should succeed");
-
-                result
-                    .extract::<PyReturnOperand>()
-                    .expect("Extraction must succeed")
-            })
-            .evaluate()
-            .map_err(PyGraphRecordError::from)?;
-
-        Ok(result.into_pyobject(py)?.unbind())
+        PyOperand::query_edges(&graphrecord, query)
     }
 
     #[allow(clippy::should_implement_trait)]
