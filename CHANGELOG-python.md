@@ -2,6 +2,24 @@
 
 All notable changes to the Python package will be documented in this file.
 
+## [0.5.0] - 2026-08-10
+
+### Breaking Changes
+
+- query engine typing inconsistencies (#77)
+- complete query engine rework (#70)
+
+### Bug Fixes
+
+- query engine typing inconsistencies (#77)
+- Missing type in QueryResult (#65)
+- align EdgeIndexer __delitem__ no-match query behavior with NodeIndexer (#61)
+
+### Refactoring
+
+- complete query engine rework (#70)
+- Pick changes from #57 (#63)
+
 ## [0.4.1] - 2026-04-07
 
 ### Features
