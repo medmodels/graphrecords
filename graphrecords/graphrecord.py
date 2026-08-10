@@ -79,12 +79,9 @@ if TYPE_CHECKING:
     from graphrecords.connectors import ConnectedGraphRecord, Connector
     from graphrecords.querying import (
         EdgeQuery,
-        EdgesOperand,
         EdgesQuery,
         NodeQuery,
-        NodesOperand,
         NodesQuery,
-        Operand,
     )
 
     ConnectorType = TypeVar("ConnectorType", bound=Connector)
@@ -1612,21 +1609,20 @@ class GraphRecord:
     @overload
     def _query_node_indices(self, query: NodesQuery) -> List[NodeIndex]: ...
 
-    def _query_node_indices(
-        self, query: Callable[[NodesOperand], Operand[Any, Any, Any]]
-    ) -> object:
-        result = self.query_nodes(query)
-
-        if isinstance(result, list):
-            indices = []
-            for index in result:
-                if isinstance(index, QueryError):
-                    raise index
-                indices.append(index)
-            return indices
+    def _query_node_indices(self, query: Any) -> object:
+        result: Union[
+            List[Union[NodeIndex, QueryError]], NodeIndex, QueryError, None
+        ] = self.query_nodes(query)
 
         if isinstance(result, QueryError):
             raise result
+
+        if not isinstance(result, list):
+            return result
+
+        for index in result:
+            if isinstance(index, QueryError):
+                raise index
 
         return result
 
@@ -1636,21 +1632,20 @@ class GraphRecord:
     @overload
     def _query_edge_indices(self, query: EdgesQuery) -> List[EdgeIndex]: ...
 
-    def _query_edge_indices(
-        self, query: Callable[[EdgesOperand], Operand[Any, Any, Any]]
-    ) -> object:
-        result = self.query_edges(query)
-
-        if isinstance(result, list):
-            indices = []
-            for index in result:
-                if isinstance(index, QueryError):
-                    raise index
-                indices.append(index)
-            return indices
+    def _query_edge_indices(self, query: Any) -> object:
+        result: Union[
+            List[Union[EdgeIndex, QueryError]], EdgeIndex, QueryError, None
+        ] = self.query_edges(query)
 
         if isinstance(result, QueryError):
             raise result
+
+        if not isinstance(result, list):
+            return result
+
+        for index in result:
+            if isinstance(index, QueryError):
+                raise index
 
         return result
 

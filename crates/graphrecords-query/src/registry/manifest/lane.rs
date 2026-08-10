@@ -179,7 +179,9 @@ macro_rules! operation_lane_entry {
         $crate::registry::OperationManifestEntry::lane::<$shape, $arity, $output>(
             vec![
                 $($crate::registry::ArgumentPattern::field::<$field_type>(),)*
-                $crate::registry::manifest_entry_argument_pattern!($alignment, $value),
+                $crate::registry::manifest_entry_argument_pattern!(
+                    $alignment, $value; retention $retention
+                ),
             ],
             #[cfg(feature = "dynamic")]
             $crate::dynamic::operation_lane_applier!(

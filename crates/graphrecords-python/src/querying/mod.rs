@@ -534,6 +534,11 @@ impl PyOperand {
         self.invoke("via_target_node", &[])
     }
 
+    #[getter]
+    fn group_depth(&self) -> usize {
+        self.operand().descriptor().group_depth()
+    }
+
     fn group_by(&self, key: &Bound<'_, PyAny>) -> PyResult<Self> {
         self.invoke("group_by", &[Self::scalar_argument(key)?])
     }

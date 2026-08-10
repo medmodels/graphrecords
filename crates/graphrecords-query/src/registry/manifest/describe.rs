@@ -4,7 +4,8 @@ use super::{
         CapabilityIdentifier, CapabilitySet, DomainDescriptor, EmissionKind, EmissionSpec,
         IndexDescriptor, IndexDescriptorTemplate, IndexPattern, LaneShapeDescriptorTemplate,
         OperandDescriptorTemplate, OrderDescriptor, OrderDescriptorTemplate, OrderPattern,
-        ShapePattern, StatePattern, ValueDescriptor, ValueDescriptorTemplate, ValuePattern,
+        RetentionDescriptor, RetentionPattern, ShapePattern, StatePattern, ValueDescriptor,
+        ValueDescriptorTemplate, ValuePattern,
     },
     witness::{
         AbsoluteCapability, AddCapability, BareValueCapability, CastBoolCapability,
@@ -509,15 +510,31 @@ pub trait DescribeAlignment: Alignment {
     fn alignment_descriptor() -> AlignmentDescriptor;
 }
 
-impl<I: IndexDomain> DescribeAlignment for Keyed<I> {
+impl<I: IndexDomain + DescribeIndex> DescribeAlignment for Keyed<I> {
     fn alignment_descriptor() -> AlignmentDescriptor {
-        AlignmentDescriptor::Keyed
+        AlignmentDescriptor::Keyed(I::index_pattern())
     }
 }
 
 impl DescribeAlignment for Unaligned {
     fn alignment_descriptor() -> AlignmentDescriptor {
         AlignmentDescriptor::Unaligned
+    }
+}
+
+pub trait DescribeRetention: Retention {
+    fn retention_pattern() -> RetentionPattern;
+}
+
+impl DescribeRetention for Preserving {
+    fn retention_pattern() -> RetentionPattern {
+        RetentionPattern::Fixed(RetentionDescriptor::Preserving)
+    }
+}
+
+impl DescribeRetention for Dropping {
+    fn retention_pattern() -> RetentionPattern {
+        RetentionPattern::Fixed(RetentionDescriptor::Dropping)
     }
 }
 

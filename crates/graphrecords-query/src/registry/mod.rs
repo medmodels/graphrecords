@@ -36,7 +36,7 @@ pub(crate) use manifest::{
 };
 pub use pattern::{
     AlignmentDescriptor, ArgumentPattern, ArityPattern, Bindings, CapabilitySet, IndexPattern,
-    OrderPattern, ShapePattern, StatePattern, ValuePattern, VariableIdentifier,
+    OrderPattern, RetentionPattern, ShapePattern, StatePattern, ValuePattern, VariableIdentifier,
 };
 pub use template::{
     ArityDescriptorTemplate, IndexDescriptorTemplate, LaneShapeDescriptorTemplate,
