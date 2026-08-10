@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Set, Tuple
+from typing import Dict, Optional, Set, Tuple, Union
 
 import polars as pl
 import pytest
@@ -41,7 +41,6 @@ from graphrecords.querying import (
     Scalar,
     ScalarValue,
     Single,
-    Ungrouped,
     Unit,
     Unordered,
     ValueIndex,
@@ -122,7 +121,7 @@ class TestNodeOperand(unittest.TestCase):
     def test_node_operand_attribute(self) -> None:
         def query(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.filter(nodes.in_group("patient")).attribute("age")
 
         assert sorted(self.graphrecord.query_nodes(query)) == [
@@ -136,7 +135,7 @@ class TestNodeOperand(unittest.TestCase):
     def test_node_operand_has_attribute(self) -> None:
         def query(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.has_attribute("age")
 
         result = dict(self.graphrecord.query_nodes(query))
@@ -159,7 +158,7 @@ class TestNodeOperand(unittest.TestCase):
     def test_node_operand_cache(self) -> None:
         def query(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             ages = nodes.filter(nodes.in_group("patient")).attribute("age").cache()
 
             return ages.equal_to(ages)
@@ -175,7 +174,7 @@ class TestNodeOperand(unittest.TestCase):
     def test_node_operand_attributes_index_sum(self) -> None:
         def query(
             nodes: NodesOperand,
-        ) -> Operand[Bare[IndexValue[AttributeNameIndex]], Single, Ungrouped]:
+        ) -> Operand[Bare[IndexValue[AttributeNameIndex]], Single]:
             return (
                 nodes.filter(nodes.index().equal_to("pat_1"))
                 .attributes()
@@ -206,14 +205,17 @@ class TestNodeGroupOperand(unittest.TestCase):
         ) -> Operand[
             Bare[Scalar],
             Single,
-            Grouped[NodeIndex, ValueIndex, Ungrouped],
+            Grouped[NodeIndex, ValueIndex],
         ]:
             return nodes.group_by(nodes.attribute("gender")).attribute("age").mean()
 
-        buckets, key_failures = self.graphrecord.query_nodes(query)
-        result = {key: (set(members), value) for key, members, value in buckets}
+        group_result = self.graphrecord.query_nodes(query)
+        result = {
+            bucket.key: (set(bucket.members), bucket.payload)
+            for bucket in group_result.buckets()
+        }
 
-        assert key_failures == []
+        assert group_result.key_failures() == []
         assert result["F"][0] == {"pat_2", "pat_3"}
         assert result["F"][1] == 59
         assert result["M"][0] == {"pat_1", "pat_4", "pat_5"}
@@ -225,7 +227,7 @@ class TestNodeGroupOperand(unittest.TestCase):
         ) -> Operand[
             Bare[Scalar],
             Single,
-            Grouped[NodeIndex, ValueIndex, Ungrouped],
+            Grouped[NodeIndex, ValueIndex],
         ]:
             return (
                 nodes.group_by(nodes.attribute("gender"))
@@ -234,17 +236,17 @@ class TestNodeGroupOperand(unittest.TestCase):
                 .cache()
             )
 
-        buckets, key_failures = self.graphrecord.query_nodes(query)
-        result = {key: value for key, _, value in buckets}
+        group_result = self.graphrecord.query_nodes(query)
+        result = {bucket.key: bucket.payload for bucket in group_result.buckets()}
 
-        assert key_failures == []
+        assert group_result.key_failures() == []
         assert result["F"] == 59
         assert result["M"] == pytest.approx(32.666666666666664)
 
     def test_group_operand_nested_lifting(self) -> None:
         def element_in_nested_group(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("gender"))
                 .group_by(nodes.attribute("age"))
@@ -256,7 +258,7 @@ class TestNodeGroupOperand(unittest.TestCase):
 
         def lane_in_nested_group(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Scalar], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("gender"))
                 .group_by(nodes.attribute("age"))
@@ -268,7 +270,7 @@ class TestNodeGroupOperand(unittest.TestCase):
 
         def inner_keys(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("gender"))
                 .group_by(nodes.attribute("age"))
@@ -305,7 +307,7 @@ class TestNodeGroupOperand(unittest.TestCase):
         ) -> Operand[
             Indexed[NodeIndex, Scalar],
             Multiple[Unordered],
-            Grouped[NodeIndex, ValueIndex, Ungrouped],
+            Grouped[NodeIndex, ValueIndex],
         ]:
             return (
                 nodes.group_by(nodes.attribute("kind"))
@@ -313,11 +315,61 @@ class TestNodeGroupOperand(unittest.TestCase):
                 .pad_start(nodes.attribute("width"), ".")
             )
 
-        buckets, key_failures = graphrecord.query_nodes(query)
-        result = {key: payload for key, _, payload in buckets}
+        group_result = graphrecord.query_nodes(query)
+        result = {bucket.key: bucket.payload for bucket in group_result.buckets()}
 
-        assert key_failures == []
+        assert group_result.key_failures() == []
         assert result == {False: [("n2", "...Beta")], True: [("n1", "...Alpha")]}
+
+    def test_group_operand_key_failure(self) -> None:
+        graphrecord = GraphRecord.from_tuples(
+            [
+                ("n1", {"name": "Alpha", "kind": "first"}),
+                ("n2", {"name": "Beta"}),
+            ]
+        )
+
+        def query(
+            nodes: NodesOperand,
+        ) -> Operand[
+            Indexed[NodeIndex, Scalar],
+            Multiple[Unordered],
+            Grouped[NodeIndex, ValueIndex],
+        ]:
+            return nodes.group_by(nodes.attribute("kind")).attribute("name")
+
+        group_result = graphrecord.query_nodes(query)
+        members = [failure.member for failure in group_result.key_failures()]
+
+        assert members == ["n2"]
+        assert [bucket.key for bucket in group_result.buckets()] == ["first"]
+
+    def test_group_result_repr(self) -> None:
+        graphrecord = GraphRecord.from_tuples(
+            [
+                ("n1", {"name": "Alpha", "kind": "first"}),
+                ("n2", {"name": "Beta"}),
+            ]
+        )
+
+        def query(
+            nodes: NodesOperand,
+        ) -> Operand[
+            Indexed[NodeIndex, Scalar],
+            Multiple[Unordered],
+            Grouped[NodeIndex, ValueIndex],
+        ]:
+            return nodes.group_by(nodes.attribute("kind")).attribute("name")
+
+        group_result = graphrecord.query_nodes(query)
+
+        assert repr(group_result.buckets()[0]) == (
+            "GroupBucket(key='first', members=['n1'], payload=[('n1', 'Alpha')])"
+        )
+        assert repr(group_result.key_failures()[0]).startswith(
+            "GroupKeyFailure(member='n2', error=MissingAttributeError("
+        )
+        assert repr(group_result).startswith("GroupResult(buckets=[GroupBucket(")
 
 
 class TestStringOperand(unittest.TestCase):
@@ -330,9 +382,11 @@ class TestStringOperand(unittest.TestCase):
         def query(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, Positional], Scalar],
-            Multiple[Ordered],
-            Ungrouped,
+            Indexed[
+                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
+                Scalar,
+            ],
+            Multiple[Unordered],
         ]:
             return nodes.attribute("name").split("a")
 
@@ -390,62 +444,62 @@ class TestScalarOperand(unittest.TestCase):
     def test_string_operations(self) -> None:
         def trim(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").trim()
 
         def trim_start(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").trim_start()
 
         def trim_end(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").trim_end()
 
         def lowercase(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").lowercase()
 
         def uppercase(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").uppercase()
 
         def reverse(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").reverse()
 
         def length(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").length()
 
         def slice_(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").slice(1, 4)
 
         def replace(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").replace("a", "_")
 
         def replace_all(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").replace_all("a", "_")
 
         def pad_start(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").trim().pad_start(7, ".")
 
         def pad_end(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").trim().pad_end(7, ".")
 
         assert dict(self.graphrecord.query_nodes(trim))["n1"] == "Alpha"
@@ -464,32 +518,32 @@ class TestScalarOperand(unittest.TestCase):
     def test_string_predicates(self) -> None:
         def starts_with(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("text").starts_with("B")
 
         def ends_with(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("text").ends_with("a")
 
         def contains(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("text").contains("mm")
 
         def matches(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("text").matches("^B.*")
 
         def strip_prefix(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").strip_prefix("B")
 
         def strip_suffix(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").strip_suffix("a")
 
         assert dict(self.graphrecord.query_nodes(starts_with)) == {
@@ -510,32 +564,32 @@ class TestScalarOperand(unittest.TestCase):
     def test_arithmetic_operations(self) -> None:
         def add(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").add(2)
 
         def subtract(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").subtract(1)
 
         def multiply(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").multiply(2)
 
         def divide(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").divide(2)
 
         def power(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").power(2)
 
         def modulo(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").modulo(2)
 
         assert dict(self.graphrecord.query_nodes(add))["n1"] == 0.5
@@ -548,32 +602,32 @@ class TestScalarOperand(unittest.TestCase):
     def test_comparison_operations(self) -> None:
         def equal_to(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number").equal_to(2.25)
 
         def not_equal_to(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number").not_equal_to(2.25)
 
         def greater_than(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number").greater_than(0)
 
         def greater_than_or_equal_to(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number").greater_than_or_equal_to(2.25)
 
         def less_than(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number").less_than(0)
 
         def less_than_or_equal_to(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number").less_than_or_equal_to(-1.5)
 
         assert dict(self.graphrecord.query_nodes(equal_to)) == {
@@ -592,52 +646,52 @@ class TestScalarOperand(unittest.TestCase):
     def test_numeric_operations(self) -> None:
         def absolute(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").abs()
 
         def negate(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").neg()
 
         def sign(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").sign()
 
         def ceil(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").ceil()
 
         def cube_root(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").cbrt()
 
         def exponential(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").exp()
 
         def floor(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").floor()
 
         def logarithm(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").abs().log()
 
         def round_(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").round()
 
         def square_root(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").abs().sqrt()
 
         assert dict(self.graphrecord.query_nodes(absolute))["n1"] == 1.5
@@ -662,37 +716,37 @@ class TestScalarOperand(unittest.TestCase):
     def test_type_inspection(self) -> None:
         def is_bool(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("flag").is_bool()
 
         def is_datetime(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("moment").is_datetime()
 
         def is_duration(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("duration").is_duration()
 
         def is_float(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number").is_float()
 
         def is_null(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("nothing").is_null()
 
         def is_int(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("integer").is_int()
 
         def is_string(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("text").is_string()
 
         assert dict(self.graphrecord.query_nodes(is_bool)) == {
@@ -734,62 +788,62 @@ class TestScalarOperand(unittest.TestCase):
     def test_aggregations(self) -> None:
         def maximum(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Single]:
             return nodes.attribute("number").max()
 
         def minimum(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Single]:
             return nodes.attribute("number").min()
 
         def median(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Single]:
             return nodes.attribute("number").median()
 
         def product(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Single]:
             return nodes.attribute("integer").product()
 
         def mode(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Bare[Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").mode()
 
         def unique_count(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Definite]:
             return nodes.attribute("number").n_unique()
 
         def random(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Single, Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Single]:
             return nodes.attribute("number").random()
 
         def count(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Definite]:
             return nodes.attribute("number").count()
 
         def sum_(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Single]:
             return nodes.attribute("number").sum()
 
         def mean(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Single]:
             return nodes.attribute("number").mean()
 
         def standard_deviation(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Single]:
             return nodes.attribute("number").std()
 
         def variance(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Single]:
             return nodes.attribute("number").var()
 
         assert self.graphrecord.query_nodes(maximum) == 2.25
@@ -814,57 +868,57 @@ class TestScalarOperand(unittest.TestCase):
     def test_ordering_and_uniqueness(self) -> None:
         def first(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Single, Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Single]:
             return nodes.attribute("integer").sort().first()
 
         def last(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Single, Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Single]:
             return nodes.attribute("integer").sort().last()
 
         def reverse_order(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
             return nodes.attribute("integer").sort().reverse_order()
 
         def take(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
             return nodes.attribute("integer").sort().take(2)
 
         def shuffle(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
             return nodes.attribute("integer").shuffle()
 
         def unorder(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("integer").sort().unorder()
 
         def sort(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
             return nodes.attribute("number").sort()
 
         def sort_by(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
             return nodes.attribute("text").sort_by(nodes.attribute("integer").neg())
 
         def drop_duplicates(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
             return nodes.attribute("number").sort().drop_duplicates()
 
         def is_duplicated(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number").is_duplicated()
 
         def unique(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Bare[Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").discard_index().unique()
 
         assert self.graphrecord.query_nodes(first) == ("n1", 1)
@@ -909,22 +963,22 @@ class TestScalarOperand(unittest.TestCase):
     def test_membership_cast_and_clip(self) -> None:
         def is_in(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("integer").is_in([1, 3])
 
         def clip(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").clip(0, 2)
 
         def is_in_operand(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("integer").is_in(nodes.attribute("integer"))
 
         def cast(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("integer").cast(CastTarget.String)
 
         assert dict(self.graphrecord.query_nodes(is_in)) == {
@@ -951,7 +1005,7 @@ class TestScalarOperand(unittest.TestCase):
     def test_logic_and_filter(self) -> None:
         def and_(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return (
                 nodes.attribute("number")
                 .greater_than(0)
@@ -960,7 +1014,7 @@ class TestScalarOperand(unittest.TestCase):
 
         def or_(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return (
                 nodes.attribute("number")
                 .less_than(0)
@@ -969,7 +1023,7 @@ class TestScalarOperand(unittest.TestCase):
 
         def xor(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return (
                 nodes.attribute("flag")
                 .transition(ValueTarget.Mask)
@@ -978,7 +1032,7 @@ class TestScalarOperand(unittest.TestCase):
 
         def not_(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("flag").transition(ValueTarget.Mask).not_()
 
         def filter_(nodes: NodesOperand) -> NodesOperand:
@@ -986,12 +1040,12 @@ class TestScalarOperand(unittest.TestCase):
 
         def all_(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Mask], Definite, Ungrouped]:
+        ) -> Operand[Bare[Mask], Definite]:
             return nodes.attribute("integer").greater_than(0).all()
 
         def any_(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Mask], Definite, Ungrouped]:
+        ) -> Operand[Bare[Mask], Definite]:
             return nodes.attribute("number").less_than(0).any()
 
         assert dict(self.graphrecord.query_nodes(and_)) == {
@@ -1021,32 +1075,32 @@ class TestScalarOperand(unittest.TestCase):
     def test_operator_forms(self) -> None:
         def add(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number") + 2
 
         def negate(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return -nodes.attribute("number")
 
         def greater_than(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number") > 0
 
         def equal_to(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number") == 2.25
 
         def not_equal_to(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("number") != 2.25
 
         def conjunction(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return (nodes.attribute("number") > 0) & (nodes.attribute("integer") < 3)
 
         assert dict(self.graphrecord.query_nodes(add))["n1"] == 0.5
@@ -1067,7 +1121,7 @@ class TestScalarOperand(unittest.TestCase):
     def test_missing_argument_policies(self) -> None:
         def dropping(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             width = nodes.filter(nodes.index().equal_to("n1")).attribute("integer")
             return (
                 nodes.attribute("text").trim().pad_start(width.on_missing(Drop()), ".")
@@ -1075,7 +1129,7 @@ class TestScalarOperand(unittest.TestCase):
 
         def replacing(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             width = nodes.filter(nodes.index().equal_to("n1")).attribute("integer")
             return (
                 nodes.attribute("text")
@@ -1096,7 +1150,6 @@ class TestScalarOperand(unittest.TestCase):
         ) -> Operand[
             Indexed[NodeIndex, IndexValue[NodeIndex]],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return nodes.index()
 
@@ -1108,20 +1161,22 @@ class TestScalarOperand(unittest.TestCase):
 
         def enumerate_(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[Positional, Scalar], Multiple[Ordered], Ungrouped]:
+        ) -> Operand[Indexed[Positional, Scalar], Multiple[Ordered]]:
             return nodes.attribute("integer").sort().discard_index().enumerate()
 
         def transition(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.index().transition(ValueTarget.Value)
 
         def parent_index(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, Positional], IndexValue[NodeIndex]],
-            Multiple[Ordered],
-            Ungrouped,
+            Indexed[
+                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
+                IndexValue[NodeIndex],
+            ],
+            Multiple[Unordered],
         ]:
             return (
                 nodes.attribute("text")
@@ -1134,9 +1189,11 @@ class TestScalarOperand(unittest.TestCase):
         def child_index(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, Positional], IndexValue[Positional]],
-            Multiple[Ordered],
-            Ungrouped,
+            Indexed[
+                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
+                IndexValue[Positional],
+            ],
+            Multiple[Unordered],
         ]:
             return (
                 nodes.attribute("text").split("a").discard_value().index().child_index()
@@ -1145,9 +1202,11 @@ class TestScalarOperand(unittest.TestCase):
         def expand_to(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, Positional], Scalar],
-            Multiple[Ordered],
-            Ungrouped,
+            Indexed[
+                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
+                Scalar,
+            ],
+            Multiple[Unordered],
         ]:
             return (
                 nodes.attribute("text").split("a").expand_to(nodes.attribute("integer"))
@@ -1245,42 +1304,42 @@ class TestConversionOperand(unittest.TestCase):
     def test_cast_scalar_targets(self) -> None:
         def to_bool(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("integer").cast(CastTarget.Bool)
 
         def to_bool_from_bool(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("flag").cast(CastTarget.Bool)
 
         def to_int(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("number").cast(CastTarget.Int)
 
         def to_int_from_bool(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("flag").cast(CastTarget.Int)
 
         def to_float(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("integer").cast(CastTarget.Float)
 
         def to_string(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("flag").cast(CastTarget.String)
 
         def to_duration(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("integer").cast(CastTarget.Duration)
 
         def to_datetime(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("integer").cast(CastTarget.DateTime)
 
         assert dict(self.graphrecord.query_nodes(to_bool)) == {
@@ -1327,7 +1386,7 @@ class TestConversionOperand(unittest.TestCase):
     def test_cast_bare_receiver(self) -> None:
         def bare_cast(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Bare[Scalar], Multiple[Unordered]]:
             return nodes.attribute("integer").discard_index().cast(CastTarget.String)
 
         assert set(self.graphrecord.query_nodes(bare_cast)) == {"1", "2", "3"}
@@ -1335,27 +1394,27 @@ class TestConversionOperand(unittest.TestCase):
     def test_cast_failures(self) -> None:
         def unparsable_text(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Definite]:
             return nodes.attribute("text").cast(CastTarget.Int).errors().count()
 
         def datetime_to_bool(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Definite]:
             return nodes.attribute("moment").cast(CastTarget.Bool).errors().count()
 
         def null_to_int(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Definite]:
             return nodes.attribute("nothing").cast(CastTarget.Int).errors().count()
 
         def dropped(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").cast(CastTarget.Int).on_error(Drop())
 
         def raised(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("text").cast(CastTarget.Int).on_error(Raise())
 
         assert self.graphrecord.query_nodes(unparsable_text) == 3
@@ -1369,9 +1428,15 @@ class TestConversionOperand(unittest.TestCase):
         def to_string(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, AttributeNameIndex], AttributeName],
+            Indexed[
+                Expanded[
+                    NodeIndex,
+                    AttributeNameIndex,
+                    Tuple[Union[str, int], Optional[Union[str, int]]],
+                ],
+                AttributeName,
+            ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.filter(nodes.index().equal_to("n1"))
@@ -1381,7 +1446,7 @@ class TestConversionOperand(unittest.TestCase):
 
         def to_int_failures(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Definite]:
             return (
                 nodes.filter(nodes.index().equal_to("n1"))
                 .attributes()
@@ -1404,7 +1469,7 @@ class TestConversionOperand(unittest.TestCase):
     def test_discard_index_and_discard_value(self) -> None:
         def discard_index(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Bare[Scalar], Multiple[Unordered]]:
             return nodes.attribute("integer").discard_index()
 
         def discard_value(nodes: NodesOperand) -> NodesOperand:
@@ -1416,12 +1481,12 @@ class TestConversionOperand(unittest.TestCase):
     def test_enumerate_receivers(self) -> None:
         def indexed_receiver(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[Positional, Scalar], Multiple[Ordered], Ungrouped]:
+        ) -> Operand[Indexed[Positional, Scalar], Multiple[Ordered]]:
             return nodes.attribute("integer").sort().enumerate()
 
         def bare_receiver(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[Positional, Scalar], Multiple[Ordered], Ungrouped]:
+        ) -> Operand[Indexed[Positional, Scalar], Multiple[Ordered]]:
             return nodes.attribute("integer").sort().discard_index().enumerate()
 
         assert self.graphrecord.query_nodes(indexed_receiver) == [
@@ -1435,9 +1500,11 @@ class TestConversionOperand(unittest.TestCase):
         def scalar_template(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, Positional], Scalar],
-            Multiple[Ordered],
-            Ungrouped,
+            Indexed[
+                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
+                Scalar,
+            ],
+            Multiple[Unordered],
         ]:
             return (
                 nodes.attribute("text").split("a").expand_to(nodes.attribute("integer"))
@@ -1446,9 +1513,11 @@ class TestConversionOperand(unittest.TestCase):
         def mask_template(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, Positional], Mask],
-            Multiple[Ordered],
-            Ungrouped,
+            Indexed[
+                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
+                Mask,
+            ],
+            Multiple[Unordered],
         ]:
             return (
                 nodes.attribute("text")
@@ -1459,9 +1528,11 @@ class TestConversionOperand(unittest.TestCase):
         def literal_template(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, Positional], Scalar],
-            Multiple[Ordered],
-            Ungrouped,
+            Indexed[
+                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
+                Scalar,
+            ],
+            Multiple[Unordered],
         ]:
             return nodes.attribute("text").split("a").expand_to(0)
 
@@ -1497,9 +1568,12 @@ class TestConversionOperand(unittest.TestCase):
         def grouped(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, Positional], Scalar],
-            Multiple[Ordered],
-            Grouped[NodeIndex, ValueIndex, Ungrouped],
+            Indexed[
+                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
+                Scalar,
+            ],
+            Multiple[Unordered],
+            Grouped[NodeIndex, ValueIndex],
         ]:
             return (
                 nodes.group_by(nodes.attribute("flag"))
@@ -1508,12 +1582,12 @@ class TestConversionOperand(unittest.TestCase):
                 .expand_to(nodes.attribute("integer"))
             )
 
-        buckets, key_failures = self.graphrecord.query_nodes(grouped)
-        result = {key: payload for key, _, payload in buckets}
+        group_result = self.graphrecord.query_nodes(grouped)
+        result = {bucket.key: bucket.payload for bucket in group_result.buckets()}
         flagged = result[True]
         unflagged = result[False]
 
-        assert key_failures == []
+        assert group_result.key_failures() == []
         assert not isinstance(flagged, QueryError)
         assert not isinstance(unflagged, QueryError)
         assert sorted(flagged) == [
@@ -1528,17 +1602,17 @@ class TestConversionOperand(unittest.TestCase):
     def test_transition_targets(self) -> None:
         def scalar_to_mask(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return nodes.attribute("flag").transition(ValueTarget.Mask)
 
         def scalar_to_attribute_name(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, AttributeName], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, AttributeName], Multiple[Unordered]]:
             return nodes.attribute("text").transition(ValueTarget.AttributeName)
 
         def scalar_to_value_index(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return (
                 nodes.attribute("integer")
                 .transition(ValueTarget.ValueIndex)
@@ -1547,12 +1621,12 @@ class TestConversionOperand(unittest.TestCase):
 
         def node_index_to_scalar(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.index().transition(ValueTarget.Value)
 
         def mask_to_bool_index(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
             return (
                 nodes.has_attribute("integer")
                 .transition(ValueTarget.BoolIndex)
@@ -1604,12 +1678,30 @@ class TestComplexQuery(unittest.TestCase):
         ) -> Operand[
             Indexed[
                 Expanded[
-                    Expanded[Expanded[NodeIndex, NodeIndex], NodeIndex], NodeIndex
+                    Expanded[
+                        Expanded[
+                            NodeIndex,
+                            NodeIndex,
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                        ],
+                        NodeIndex,
+                        Tuple[
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                            Optional[Union[str, int]],
+                        ],
+                    ],
+                    NodeIndex,
+                    Tuple[
+                        Tuple[
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                            Optional[Union[str, int]],
+                        ],
+                        Optional[Union[str, int]],
+                    ],
                 ],
                 IndexValue[NodeIndex],
             ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.filter(nodes.index().equal_to("n1"))
@@ -1624,12 +1716,30 @@ class TestComplexQuery(unittest.TestCase):
         ) -> Operand[
             Indexed[
                 Expanded[
-                    Expanded[Expanded[NodeIndex, NodeIndex], NodeIndex], NodeIndex
+                    Expanded[
+                        Expanded[
+                            NodeIndex,
+                            NodeIndex,
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                        ],
+                        NodeIndex,
+                        Tuple[
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                            Optional[Union[str, int]],
+                        ],
+                    ],
+                    NodeIndex,
+                    Tuple[
+                        Tuple[
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                            Optional[Union[str, int]],
+                        ],
+                        Optional[Union[str, int]],
+                    ],
                 ],
                 IndexValue[NodeIndex],
             ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.filter(nodes.index().equal_to("n1"))
@@ -1646,12 +1756,30 @@ class TestComplexQuery(unittest.TestCase):
         ) -> Operand[
             Indexed[
                 Expanded[
-                    Expanded[Expanded[NodeIndex, NodeIndex], NodeIndex], NodeIndex
+                    Expanded[
+                        Expanded[
+                            NodeIndex,
+                            NodeIndex,
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                        ],
+                        NodeIndex,
+                        Tuple[
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                            Optional[Union[str, int]],
+                        ],
+                    ],
+                    NodeIndex,
+                    Tuple[
+                        Tuple[
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                            Optional[Union[str, int]],
+                        ],
+                        Optional[Union[str, int]],
+                    ],
                 ],
                 IndexValue[NodeIndex],
             ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.filter(nodes.index().equal_to("n1"))
@@ -1669,12 +1797,30 @@ class TestComplexQuery(unittest.TestCase):
         ) -> Operand[
             Indexed[
                 Expanded[
-                    Expanded[Expanded[NodeIndex, NodeIndex], NodeIndex], NodeIndex
+                    Expanded[
+                        Expanded[
+                            NodeIndex,
+                            NodeIndex,
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                        ],
+                        NodeIndex,
+                        Tuple[
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                            Optional[Union[str, int]],
+                        ],
+                    ],
+                    NodeIndex,
+                    Tuple[
+                        Tuple[
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                            Optional[Union[str, int]],
+                        ],
+                        Optional[Union[str, int]],
+                    ],
                 ],
                 IndexValue[NodeIndex],
             ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.filter(nodes.index().equal_to("n1"))
@@ -1693,12 +1839,30 @@ class TestComplexQuery(unittest.TestCase):
         ) -> Operand[
             Indexed[
                 Expanded[
-                    Expanded[Expanded[NodeIndex, NodeIndex], NodeIndex], NodeIndex
+                    Expanded[
+                        Expanded[
+                            NodeIndex,
+                            NodeIndex,
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                        ],
+                        NodeIndex,
+                        Tuple[
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                            Optional[Union[str, int]],
+                        ],
+                    ],
+                    NodeIndex,
+                    Tuple[
+                        Tuple[
+                            Tuple[Union[str, int], Optional[Union[str, int]]],
+                            Optional[Union[str, int]],
+                        ],
+                        Optional[Union[str, int]],
+                    ],
                 ],
                 IndexValue[NodeIndex],
             ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.filter(nodes.index().equal_to("n1"))
@@ -1725,11 +1889,19 @@ class TestComplexQuery(unittest.TestCase):
             nodes: NodesOperand,
         ) -> Operand[
             Indexed[
-                Expanded[Expanded[NodeIndex, EdgeIndex], EndpointRole],
+                Expanded[
+                    Expanded[
+                        NodeIndex, EdgeIndex, Tuple[Union[str, int], Optional[int]]
+                    ],
+                    EndpointRole,
+                    Tuple[
+                        Tuple[Union[str, int], Optional[int]],
+                        Optional[EdgeEndpointRole],
+                    ],
+                ],
                 IndexValue[NodeIndex],
             ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.filter(nodes.index().equal_to("n1"))
@@ -1746,7 +1918,7 @@ class TestComplexQuery(unittest.TestCase):
     def test_depth_three_grouping(self) -> None:
         def innermost_work_fully_unwound(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Scalar], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("tier"))
                 .group_by(nodes.attribute("flag"))
@@ -1760,7 +1932,7 @@ class TestComplexQuery(unittest.TestCase):
 
         def innermost_keys(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("tier"))
                 .group_by(nodes.attribute("flag"))
@@ -1772,7 +1944,7 @@ class TestComplexQuery(unittest.TestCase):
 
         def middle_keys(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("tier"))
                 .group_by(nodes.attribute("flag"))
@@ -1784,7 +1956,7 @@ class TestComplexQuery(unittest.TestCase):
 
         def outer_keys(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("tier"))
                 .group_by(nodes.attribute("flag"))
@@ -1796,7 +1968,7 @@ class TestComplexQuery(unittest.TestCase):
 
         def members_after_two_unwinds(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("tier"))
                 .group_by(nodes.attribute("flag"))
@@ -1830,13 +2002,9 @@ class TestComplexQuery(unittest.TestCase):
         ) -> Operand[
             Bare[Scalar],
             Single,
-            Grouped[
-                NodeIndex,
-                ValueIndex,
-                Grouped[
-                    NodeIndex, ValueIndex, Grouped[NodeIndex, ValueIndex, Ungrouped]
-                ],
-            ],
+            Grouped[NodeIndex, ValueIndex],
+            Grouped[NodeIndex, ValueIndex],
+            Grouped[NodeIndex, ValueIndex],
         ]:
             return (
                 nodes.group_by(nodes.attribute("tier"))
@@ -1846,28 +2014,33 @@ class TestComplexQuery(unittest.TestCase):
                 .sum()
             )
 
-        tier_buckets, tier_failures = self.graphrecord.query_nodes(per_level_totals)
+        group_result = self.graphrecord.query_nodes(per_level_totals)
         totals: Dict[Tuple[IndexPayload, IndexPayload, IndexPayload], ScalarValue] = {}
         flag_keys: Dict[IndexPayload, Set[IndexPayload]] = {}
 
-        assert tier_failures == []
+        assert group_result.key_failures() == []
 
-        for tier_key, _, tier_payload in tier_buckets:
+        for tier_bucket in group_result.buckets():
+            tier_payload = tier_bucket.payload
             assert not isinstance(tier_payload, QueryError)
-            flag_buckets, flag_failures = tier_payload
-            assert flag_failures == []
-            flag_keys[tier_key] = {key for key, _, _ in flag_buckets}
+            assert tier_payload.key_failures() == []
+            flag_keys[tier_bucket.key] = {
+                flag_bucket.key for flag_bucket in tier_payload.buckets()
+            }
 
-            for flag_key, _, flag_payload in flag_buckets:
+            for flag_bucket in tier_payload.buckets():
+                flag_payload = flag_bucket.payload
                 assert not isinstance(flag_payload, QueryError)
-                size_buckets, size_failures = flag_payload
-                assert size_failures == []
+                assert flag_payload.key_failures() == []
 
-                for size_key, _, size_payload in size_buckets:
+                for size_bucket in flag_payload.buckets():
+                    size_payload = size_bucket.payload
                     assert not isinstance(size_payload, QueryError)
-                    totals[tier_key, flag_key, size_key] = size_payload
+                    totals[tier_bucket.key, flag_bucket.key, size_bucket.key] = (
+                        size_payload
+                    )
 
-        assert {key for key, _, _ in tier_buckets} == {"a", "b"}
+        assert {bucket.key for bucket in group_result.buckets()} == {"a", "b"}
         assert flag_keys == {"a": {False, True}, "b": {True}}
         assert totals == {
             ("a", True, 1): 1,
@@ -1880,9 +2053,11 @@ class TestComplexQuery(unittest.TestCase):
         def split_at_depth(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, Positional], Scalar],
+            Indexed[
+                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
+                Scalar,
+            ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.group_by(nodes.attribute("tier"))
@@ -1909,7 +2084,6 @@ class TestComplexQuery(unittest.TestCase):
         ) -> Operand[
             Indexed[ValueIndex, Scalar],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             fragments = nodes.attribute("text").split("-")
             return fragments.group_by(fragments.length()).length().sum().ungroup_keyed()
@@ -1919,7 +2093,7 @@ class TestComplexQuery(unittest.TestCase):
     def test_multi_branch_filter(self) -> None:
         def branches(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             small = nodes.attribute("size").less_than(3)
             tier_b = nodes.attribute("tier").equal_to("b")
             unflagged = nodes.attribute("flag").transition(ValueTarget.Mask)
@@ -1930,7 +2104,7 @@ class TestComplexQuery(unittest.TestCase):
     def test_cross_lane_aggregate_argument(self) -> None:
         def above_mean(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             sizes = nodes.attribute("size")
             return nodes.filter(sizes.greater_than(sizes.mean())).attribute("size")
 
@@ -1945,7 +2119,8 @@ class TestComplexQuery(unittest.TestCase):
         ) -> Operand[
             Bare[Scalar],
             Single,
-            Grouped[NodeIndex, ValueIndex, Grouped[NodeIndex, ValueIndex, Ungrouped]],
+            Grouped[NodeIndex, ValueIndex],
+            Grouped[NodeIndex, ValueIndex],
         ]:
             sizes = nodes.attribute("size")
             reached = nodes.filter(sizes.greater_than(sizes.mean())).via_neighbors(
@@ -1961,7 +2136,7 @@ class TestComplexQuery(unittest.TestCase):
 
         def failure_path(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, FailureValue], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, FailureValue], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("tier"))
                 .group_by(nodes.attribute("flag"))
@@ -1971,18 +2146,18 @@ class TestComplexQuery(unittest.TestCase):
                 .ungroup()
             )
 
-        tier_buckets, tier_failures = self.graphrecord.query_nodes(combined)
-        tier_key, _, tier_payload = tier_buckets[0]
+        group_result = self.graphrecord.query_nodes(combined)
+        tier_bucket = group_result.buckets()[0]
+        tier_payload = tier_bucket.payload
 
-        assert tier_failures == []
-        assert len(tier_buckets) == 1
-        assert tier_key == "b"
+        assert group_result.key_failures() == []
+        assert len(group_result.buckets()) == 1
+        assert tier_bucket.key == "b"
         assert not isinstance(tier_payload, QueryError)
-
-        flag_buckets, flag_failures = tier_payload
-
-        assert flag_failures == []
-        assert [(key, payload) for key, _, payload in flag_buckets] == [(True, 4)]
+        assert tier_payload.key_failures() == []
+        assert [(bucket.key, bucket.payload) for bucket in tier_payload.buckets()] == [
+            (True, 4)
+        ]
         with pytest.raises(DuplicateIndexError, match="occurs more than once"):
             self.graphrecord.query_nodes(failure_path)
 
@@ -2007,17 +2182,17 @@ class TestTraversalOperand(unittest.TestCase):
 
         def source_node(
             edges: EdgesOperand,
-        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered]]:
             return edges.source_node()
 
         def target_node(
             edges: EdgesOperand,
-        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered]]:
             return edges.target_node()
 
         def nodes(
             edges: EdgesOperand,
-        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered]]:
             return edges.nodes()
 
         assert set(self.graphrecord.query_nodes(edges)) == {0, 1}
@@ -2030,9 +2205,11 @@ class TestTraversalOperand(unittest.TestCase):
         def via_edges(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, EdgeIndex], IndexValue[EdgeIndex]],
+            Indexed[
+                Expanded[NodeIndex, EdgeIndex, Tuple[Union[str, int], Optional[int]]],
+                IndexValue[EdgeIndex],
+            ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.filter(nodes.index().equal_to("n1"))
@@ -2043,9 +2220,15 @@ class TestTraversalOperand(unittest.TestCase):
         def via_neighbors(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, NodeIndex], IndexValue[NodeIndex]],
+            Indexed[
+                Expanded[
+                    NodeIndex,
+                    NodeIndex,
+                    Tuple[Union[str, int], Optional[Union[str, int]]],
+                ],
+                IndexValue[NodeIndex],
+            ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.filter(nodes.index().equal_to("n1"))
@@ -2056,9 +2239,13 @@ class TestTraversalOperand(unittest.TestCase):
         def via_nodes(
             edges: EdgesOperand,
         ) -> Operand[
-            Indexed[Expanded[EdgeIndex, EndpointRole], IndexValue[NodeIndex]],
+            Indexed[
+                Expanded[
+                    EdgeIndex, EndpointRole, Tuple[int, Optional[EdgeEndpointRole]]
+                ],
+                IndexValue[NodeIndex],
+            ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return edges.via_nodes().index()
 
@@ -2067,7 +2254,6 @@ class TestTraversalOperand(unittest.TestCase):
         ) -> Operand[
             Indexed[EdgeIndex, IndexValue[NodeIndex]],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return edges.via_source_node().index()
 
@@ -2076,16 +2262,17 @@ class TestTraversalOperand(unittest.TestCase):
         ) -> Operand[
             Indexed[EdgeIndex, IndexValue[NodeIndex]],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return edges.via_target_node().index()
 
         def expanded_index_equality(
             nodes: NodesOperand,
         ) -> Operand[
-            Indexed[Expanded[NodeIndex, EdgeIndex], Mask],
+            Indexed[
+                Expanded[NodeIndex, EdgeIndex, Tuple[Union[str, int], Optional[int]]],
+                Mask,
+            ],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             indices = nodes.via_edges(EdgeDirection.Outgoing).discard_value().index()
             return indices.equal_to(indices)
@@ -2128,7 +2315,6 @@ class TestErrorOperand(unittest.TestCase):
         ) -> Operand[
             Indexed[NodeIndex, FailureValue],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return nodes.attribute("missing").errors()
 
@@ -2137,13 +2323,12 @@ class TestErrorOperand(unittest.TestCase):
         ) -> Operand[
             Indexed[NodeIndex, FailureKindValue],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return nodes.attribute("missing").errors().kind()
 
         def names(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("missing").errors().kind().name()
 
         error_values = dict(self.graphrecord.query_nodes(errors))
@@ -2166,22 +2351,22 @@ class TestErrorOperand(unittest.TestCase):
     def test_error_policies(self) -> None:
         def drop(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("missing").on_error(Drop())
 
         def replace(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("missing").on_error(Replace(5))
 
         def raise_(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.attribute("missing").on_error(Raise())
 
         def raise_when(
             nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite, Ungrouped]:
+        ) -> Operand[Bare[Scalar], Definite]:
             return (
                 nodes.attribute("missing")
                 .on_error(Raise.when(condition=False))
@@ -2209,12 +2394,12 @@ class TestGroupOperand(unittest.TestCase):
     def test_group_structure(self) -> None:
         def keys(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
             return nodes.group_by(nodes.attribute("kind")).keys()
 
         def having(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered]]:
             grouped = nodes.group_by(nodes.attribute("kind"))
             retained_key = True
             return grouped.having(
@@ -2223,12 +2408,12 @@ class TestGroupOperand(unittest.TestCase):
 
         def ungroup(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return nodes.group_by(nodes.attribute("kind")).attribute("value").ungroup()
 
         def ungroup_keyed(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Scalar], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("kind"))
                 .attribute("value")
@@ -2251,7 +2436,7 @@ class TestGroupOperand(unittest.TestCase):
     def test_group_broadcast(self) -> None:
         def broadcast(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("kind"))
                 .attribute("value")
@@ -2261,7 +2446,7 @@ class TestGroupOperand(unittest.TestCase):
 
         def broadcast_via(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("kind"))
                 .attribute("value")
@@ -2279,7 +2464,6 @@ class TestGroupOperand(unittest.TestCase):
         ) -> Operand[
             Indexed[ValueIndex, FailureValue],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return (
                 nodes.group_by(nodes.attribute("kind"))
@@ -2290,7 +2474,7 @@ class TestGroupOperand(unittest.TestCase):
 
         def drop_bucket_errors(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("kind"))
                 .attribute("missing")
@@ -2301,7 +2485,7 @@ class TestGroupOperand(unittest.TestCase):
 
         def raise_bucket_errors(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("kind"))
                 .attribute("missing")
@@ -2315,20 +2499,19 @@ class TestGroupOperand(unittest.TestCase):
         ) -> Operand[
             Indexed[NodeIndex, FailureValue],
             Multiple[Unordered],
-            Ungrouped,
         ]:
             return nodes.group_by(nodes.attribute("missing")).key_errors()
 
         def drop_key_errors(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("missing")).on_key_error(Drop()).keys()
             )
 
         def raise_key_errors(
             nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered], Ungrouped]:
+        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
             return (
                 nodes.group_by(nodes.attribute("missing")).on_key_error(Raise()).keys()
             )
@@ -2341,6 +2524,30 @@ class TestGroupOperand(unittest.TestCase):
         assert self.graphrecord.query_nodes(drop_key_errors) == []
         with pytest.raises(MissingAttributeError, match="no attribute"):
             self.graphrecord.query_nodes(raise_key_errors)
+
+    def test_group_edges(self) -> None:
+        graphrecord = GraphRecord.from_tuples(
+            [("n1", {}), ("n2", {}), ("n3", {})],
+            [
+                ("n1", "n2", {"kind": "a", "value": 1}),
+                ("n1", "n3", {"kind": "a", "value": 2}),
+                ("n2", "n3", {"kind": "b", "value": 5}),
+            ],
+        )
+
+        def query(
+            edges: EdgesOperand,
+        ) -> Operand[Bare[Scalar], Single, Grouped[EdgeIndex, ValueIndex]]:
+            return edges.group_by(edges.attribute("kind")).attribute("value").sum()
+
+        group_result = graphrecord.query_edges(query)
+        result = {
+            bucket.key: (sorted(bucket.members), bucket.payload)
+            for bucket in group_result.buckets()
+        }
+
+        assert group_result.key_failures() == []
+        assert result == {"a": ([0, 1], 3), "b": ([2], 5)}
 
 
 class TestGraphRecordQuery(unittest.TestCase):

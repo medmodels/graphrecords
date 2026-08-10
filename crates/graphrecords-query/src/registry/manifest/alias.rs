@@ -106,11 +106,21 @@ macro_rules! manifest_witness_alias {
 }
 
 macro_rules! manifest_entry_argument_pattern {
+    ($alignment:ty, $value:ty; retention $retention:ty) => {
+        $crate::registry::ArgumentPattern::Value {
+            value: <$value as $crate::registry::describe::DescribeValue>::value_pattern(),
+            alignment: <$alignment as
+                            $crate::registry::describe::DescribeAlignment>::alignment_descriptor(),
+            retention: <$retention as
+                            $crate::registry::describe::DescribeRetention>::retention_pattern(),
+        }
+    };
     ($alignment:ty, $value:ty) => {
         $crate::registry::ArgumentPattern::Value {
             value: <$value as $crate::registry::describe::DescribeValue>::value_pattern(),
             alignment: <$alignment as
                             $crate::registry::describe::DescribeAlignment>::alignment_descriptor(),
+            retention: $crate::registry::RetentionPattern::Any,
         }
     };
     ($alignment:ty; $capability:ident) => {
@@ -119,6 +129,7 @@ macro_rules! manifest_entry_argument_pattern {
                             $crate::registry::describe::CapabilityMarkers>::argument_value_pattern(),
             alignment: <$alignment as
                             $crate::registry::describe::DescribeAlignment>::alignment_descriptor(),
+            retention: $crate::registry::RetentionPattern::Any,
         }
     };
     ($alignment:ty) => {
@@ -127,6 +138,7 @@ macro_rules! manifest_entry_argument_pattern {
                             $crate::registry::describe::CapabilityMarkers>::argument_value_pattern(),
             alignment: <$alignment as
                             $crate::registry::describe::DescribeAlignment>::alignment_descriptor(),
+            retention: $crate::registry::RetentionPattern::Any,
         }
     };
 }

@@ -86,10 +86,16 @@ pub enum StatePattern {
     Variable(VariableIdentifier, Box<Self>),
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Debug)]
 pub enum AlignmentDescriptor {
-    Keyed,
+    Keyed(IndexPattern),
     Unaligned,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum RetentionPattern {
+    Any,
+    Fixed(RetentionDescriptor),
 }
 
 #[derive(Clone, Debug)]
@@ -97,6 +103,7 @@ pub enum ArgumentPattern {
     Value {
         value: ValuePattern,
         alignment: AlignmentDescriptor,
+        retention: RetentionPattern,
     },
     Set(ValuePattern),
     Field(DomainDescriptor),
@@ -293,7 +300,12 @@ impl ShapePattern {
         bindings: &mut Bindings,
     ) -> bool {
         match self {
-            Self::Any => true,
+            Self::Any => match shape {
+                LaneShapeDescriptor::Indexed { .. } => true,
+                LaneShapeDescriptor::Bare { value } => {
+                    capabilities.value_has(CapabilityIdentifier::BareValue, value)
+                }
+            },
             Self::Indexed { index, value } => match shape {
                 LaneShapeDescriptor::Indexed {
                     index: index_descriptor,
@@ -407,21 +419,36 @@ impl StatePattern {
 }
 
 impl AlignmentDescriptor {
-    fn admits(self, argument: &ValueArgumentDescriptor) -> bool {
+    fn admits(
+        &self,
+        argument: &ValueArgumentDescriptor,
+        capabilities: &CapabilityRegistry,
+        bindings: &mut Bindings,
+    ) -> bool {
         if matches!(argument.value().role(), ValueRole::Unit) {
             return false;
         }
 
         match argument.missing() {
-            ArgumentMissingPolicy::None => self.admits_source(argument.source()),
-            ArgumentMissingPolicy::Drop => self.admits_lookup(argument.source()),
+            ArgumentMissingPolicy::None => {
+                self.admits_source(argument.source(), capabilities, bindings)
+            }
+            ArgumentMissingPolicy::Drop => {
+                self.admits_lookup(argument.source(), capabilities, bindings)
+            }
             ArgumentMissingPolicy::Replace(replacement) => {
-                self.admits_lookup(argument.source()) && self.admits_source(replacement)
+                self.admits_lookup(argument.source(), capabilities, bindings)
+                    && self.admits_source(replacement, capabilities, bindings)
             }
         }
     }
 
-    const fn admits_source(self, source: &ArgumentValueSource) -> bool {
+    fn admits_source(
+        &self,
+        source: &ArgumentValueSource,
+        capabilities: &CapabilityRegistry,
+        bindings: &mut Bindings,
+    ) -> bool {
         let ArgumentValueSource::Operand(operand) = source else {
             return true;
         };
@@ -429,37 +456,49 @@ impl AlignmentDescriptor {
             return false;
         };
 
-        matches!(
-            (self, shape, arity),
+        match (self, shape, arity) {
             (
-                Self::Keyed,
-                LaneShapeDescriptor::Indexed { .. },
-                ArityDescriptor::Multiple { .. }
-            ) | (
+                Self::Keyed(pattern),
+                LaneShapeDescriptor::Indexed { index, .. },
+                ArityDescriptor::Multiple { .. },
+            ) => pattern.matches(index, capabilities, bindings),
+            (
                 _,
                 LaneShapeDescriptor::Bare { .. },
-                ArityDescriptor::Single | ArityDescriptor::Definite
-            )
-        )
+                ArityDescriptor::Single | ArityDescriptor::Definite,
+            ) => true,
+            _ => false,
+        }
     }
 
-    const fn admits_lookup(self, source: &ArgumentValueSource) -> bool {
+    fn admits_lookup(
+        &self,
+        source: &ArgumentValueSource,
+        capabilities: &CapabilityRegistry,
+        bindings: &mut Bindings,
+    ) -> bool {
         let ArgumentValueSource::Operand(OperandDescriptor::Lane { shape, arity }) = source else {
             return false;
         };
 
-        matches!(
-            (self, shape, arity),
+        match (self, shape, arity) {
             (
-                Self::Keyed,
-                LaneShapeDescriptor::Indexed { .. },
-                ArityDescriptor::Multiple { .. }
-            ) | (
-                Self::Unaligned,
-                LaneShapeDescriptor::Bare { .. },
-                ArityDescriptor::Single
-            )
-        )
+                Self::Keyed(pattern),
+                LaneShapeDescriptor::Indexed { index, .. },
+                ArityDescriptor::Multiple { .. },
+            ) => pattern.matches(index, capabilities, bindings),
+            (Self::Unaligned, LaneShapeDescriptor::Bare { .. }, ArityDescriptor::Single) => true,
+            _ => false,
+        }
+    }
+}
+
+impl RetentionPattern {
+    fn matches(self, retention: RetentionDescriptor) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Fixed(required) => required == retention,
+        }
     }
 }
 
@@ -481,8 +520,16 @@ impl ArgumentPattern {
         bindings: &mut Bindings,
     ) -> bool {
         match (self, argument) {
-            (Self::Value { value, alignment }, ArgumentDescriptor::Value(descriptor)) => {
-                if !alignment.admits(descriptor)
+            (
+                Self::Value {
+                    value,
+                    alignment,
+                    retention,
+                },
+                ArgumentDescriptor::Value(descriptor),
+            ) => {
+                if !retention.matches(descriptor.retention())
+                    || !alignment.admits(descriptor, capabilities, bindings)
                     || !Self::matches_value(value, descriptor, capabilities, bindings)
                 {
                     return false;
@@ -494,6 +541,7 @@ impl ArgumentPattern {
             }
             (Self::Set(value), ArgumentDescriptor::Value(descriptor)) => {
                 matches!(descriptor.missing(), ArgumentMissingPolicy::None)
+                    && Self::admits_set_source(descriptor.source())
                     && value.matches(descriptor.value(), capabilities, bindings)
             }
             (Self::Field(pattern), ArgumentDescriptor::Field(field)) => pattern == field,
@@ -504,6 +552,15 @@ impl ArgumentPattern {
                 pattern.matches_into(operand, capabilities, bindings)
             }
             _ => false,
+        }
+    }
+
+    const fn admits_set_source(source: &ArgumentValueSource) -> bool {
+        match source {
+            ArgumentValueSource::Literal(_) => true,
+            ArgumentValueSource::Operand(operand) => {
+                matches!(operand, OperandDescriptor::Lane { .. })
+            }
         }
     }
 
