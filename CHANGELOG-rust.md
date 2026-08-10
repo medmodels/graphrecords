@@ -2,6 +2,23 @@
 
 All notable changes to the Rust crates will be documented in this file.
 
+## [0.5.0] - 2026-08-10
+
+### Breaking Changes
+
+- query engine typing inconsistencies (#77)
+- complete query engine rework (#70)
+- Pick changes from #57 (#63)
+
+### Bug Fixes
+
+- query engine typing inconsistencies (#77)
+
+### Refactoring
+
+- complete query engine rework (#70)
+- Pick changes from #57 (#63)
+
 ## [0.4.1] - 2026-04-07
 
 ### Features
