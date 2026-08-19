@@ -1,10 +1,10 @@
 use super::{ValueEquivalence, ValueOrdering, incomparable_with_first};
 use crate::{
-    AttributeName, Failure, IndexDomain, IndexValue, Mask, QueryResult, Scalar, ValueDomain,
+    Failure, IndexDomain, IndexValue, Mask, QueryResult, Scalar, ValueDomain,
     error::aggregation::InvalidMedianValue,
 };
 use chrono::TimeDelta;
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::{AttributeName, Value};
 
 const NANOSECONDS_PER_SECOND: i128 = 1_000_000_000;
 
@@ -27,21 +27,15 @@ pub trait ValueMedian: ValueOrdering {
 pub trait ValueMode: ValueEquivalence {}
 
 pub trait ValueScalar: ValueDomain {
-    fn into_scalar(label: &'static str, value: Self::Value<'_>) -> QueryResult<GraphRecordValue>;
+    fn into_scalar(label: &'static str, value: Self::Value<'_>) -> QueryResult<Value>;
 
-    fn from_scalar<'a>(role: &Self::Value<'_>, value: GraphRecordValue) -> Self::Value<'a>;
+    fn from_scalar<'a>(role: &Self::Value<'_>, value: Value) -> Self::Value<'a>;
 }
 
-fn validate_graphrecord_median_value(
-    label: &'static str,
-    value: &GraphRecordValue,
-) -> QueryResult<()> {
+fn validate_median_value(label: &'static str, value: &Value) -> QueryResult<()> {
     if matches!(
         value,
-        GraphRecordValue::Int(_)
-            | GraphRecordValue::Float(_)
-            | GraphRecordValue::DateTime(_)
-            | GraphRecordValue::Duration(_)
+        Value::Int(_) | Value::Float(_) | Value::DateTime(_) | Value::Duration(_)
     ) {
         Ok(())
     } else {
@@ -49,38 +43,33 @@ fn validate_graphrecord_median_value(
     }
 }
 
-fn median_graphrecord_value(
-    lower: GraphRecordValue,
-    upper: Option<GraphRecordValue>,
-) -> GraphRecordValue {
+fn median_value(lower: Value, upper: Option<Value>) -> Value {
     match (lower, upper) {
-        (GraphRecordValue::Int(value), None) => GraphRecordValue::Float(value as f64),
-        (GraphRecordValue::Float(value), None) => GraphRecordValue::Float(value),
-        (GraphRecordValue::DateTime(value), None) => GraphRecordValue::DateTime(value),
-        (GraphRecordValue::Duration(value), None) => GraphRecordValue::Duration(value),
-        (GraphRecordValue::Int(lower), Some(GraphRecordValue::Int(upper))) => {
-            GraphRecordValue::Float((lower as f64).midpoint(upper as f64))
+        (Value::Int(value), None) => Value::Float(value as f64),
+        (Value::Float(value), None) => Value::Float(value),
+        (Value::DateTime(value), None) => Value::DateTime(value),
+        (Value::Duration(value), None) => Value::Duration(value),
+        (Value::Int(lower), Some(Value::Int(upper))) => {
+            Value::Float((lower as f64).midpoint(upper as f64))
         }
-        (GraphRecordValue::Int(lower), Some(GraphRecordValue::Float(upper))) => {
-            GraphRecordValue::Float((lower as f64).midpoint(upper))
+        (Value::Int(lower), Some(Value::Float(upper))) => {
+            Value::Float((lower as f64).midpoint(upper))
         }
-        (GraphRecordValue::Float(lower), Some(GraphRecordValue::Int(upper))) => {
-            GraphRecordValue::Float(lower.midpoint(upper as f64))
+        (Value::Float(lower), Some(Value::Int(upper))) => {
+            Value::Float(lower.midpoint(upper as f64))
         }
-        (GraphRecordValue::Float(lower), Some(GraphRecordValue::Float(upper))) => {
-            GraphRecordValue::Float(lower.midpoint(upper))
-        }
-        (GraphRecordValue::DateTime(lower), Some(GraphRecordValue::DateTime(upper))) => {
+        (Value::Float(lower), Some(Value::Float(upper))) => Value::Float(lower.midpoint(upper)),
+        (Value::DateTime(lower), Some(Value::DateTime(upper))) => {
             let difference = upper.signed_duration_since(lower);
             let half = difference.checked_div(2).expect("two is a nonzero divisor");
 
-            GraphRecordValue::DateTime(
+            Value::DateTime(
                 lower
                     .checked_add_signed(half)
                     .expect("a datetime midpoint lies between its inputs"),
             )
         }
-        (GraphRecordValue::Duration(lower), Some(GraphRecordValue::Duration(upper))) => {
+        (Value::Duration(lower), Some(Value::Duration(upper))) => {
             let lower = i128::from(lower.num_seconds()) * NANOSECONDS_PER_SECOND
                 + i128::from(lower.subsec_nanos());
             let upper = i128::from(upper.num_seconds()) * NANOSECONDS_PER_SECOND
@@ -92,7 +81,7 @@ fn median_graphrecord_value(
             let seconds = midpoint.div_euclid(NANOSECONDS_PER_SECOND);
             let nanoseconds = midpoint.rem_euclid(NANOSECONDS_PER_SECOND);
 
-            GraphRecordValue::Duration(
+            Value::Duration(
                 TimeDelta::new(
                     i64::try_from(seconds).expect("a duration midpoint fits in i64 seconds"),
                     u32::try_from(nanoseconds).expect("subsecond nanoseconds fit in a u32"),
@@ -106,7 +95,7 @@ fn median_graphrecord_value(
 
 impl ValueMedian for Scalar {
     fn validate_median(label: &'static str, value: &Self::Value<'_>) -> QueryResult<()> {
-        validate_graphrecord_median_value(label, value)
+        validate_median_value(label, value)
     }
 
     fn find_incomparable_median_values<'a, 'b>(
@@ -123,16 +112,16 @@ impl ValueMedian for Scalar {
         lower: Self::Value<'a>,
         upper: Option<Self::Value<'a>>,
     ) -> QueryResult<Self::Value<'a>> {
-        Ok(median_graphrecord_value(lower, upper))
+        Ok(median_value(lower, upper))
     }
 }
 
 impl ValueScalar for Scalar {
-    fn into_scalar(_label: &'static str, value: Self::Value<'_>) -> QueryResult<GraphRecordValue> {
+    fn into_scalar(_label: &'static str, value: Self::Value<'_>) -> QueryResult<Value> {
         Ok(value)
     }
 
-    fn from_scalar<'a>(_role: &Self::Value<'_>, value: GraphRecordValue) -> Self::Value<'a> {
+    fn from_scalar<'a>(_role: &Self::Value<'_>, value: Value) -> Self::Value<'a> {
         value
     }
 }
@@ -143,9 +132,9 @@ impl ValueMode for Mask {}
 
 impl ValueMode for AttributeName {}
 
-impl ValueMedian for IndexValue<GraphRecordValue> {
+impl ValueMedian for IndexValue<Value> {
     fn validate_median(label: &'static str, value: &Self::Value<'_>) -> QueryResult<()> {
-        validate_graphrecord_median_value(label, value)
+        validate_median_value(label, value)
     }
 
     fn find_incomparable_median_values<'a, 'b>(
@@ -162,16 +151,16 @@ impl ValueMedian for IndexValue<GraphRecordValue> {
         lower: Self::Value<'a>,
         upper: Option<Self::Value<'a>>,
     ) -> QueryResult<Self::Value<'a>> {
-        Ok(median_graphrecord_value(lower, upper))
+        Ok(median_value(lower, upper))
     }
 }
 
-impl ValueScalar for IndexValue<GraphRecordValue> {
-    fn into_scalar(_label: &'static str, value: Self::Value<'_>) -> QueryResult<GraphRecordValue> {
+impl ValueScalar for IndexValue<Value> {
+    fn into_scalar(_label: &'static str, value: Self::Value<'_>) -> QueryResult<Value> {
         Ok(value)
     }
 
-    fn from_scalar<'a>(_role: &Self::Value<'_>, value: GraphRecordValue) -> Self::Value<'a> {
+    fn from_scalar<'a>(_role: &Self::Value<'_>, value: Value) -> Self::Value<'a> {
         value
     }
 }

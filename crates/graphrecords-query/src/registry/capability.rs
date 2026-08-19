@@ -1,7 +1,7 @@
 use super::descriptor::{DomainDescriptor, IndexDescriptor, ValueDescriptor, ValueRole};
 use crate::{
-    AttributeName, BareValueDomain, EdgeEndpointRole, EntityDomain, FailureKind, FailureKindValue,
-    FailureValue, IndexDomain, IndexValue, Mask, Positional, Scalar, ValueDomain,
+    BareValueDomain, EdgeEndpointRole, EntityDomain, FailureKind, FailureKindValue, FailureValue,
+    IndexDomain, IndexValue, Mask, Positional, Scalar, ValueDomain,
     capabilities::{
         EnsureSortable, GroupingValue, IntValue, StringValue, ValueAbsolute, ValueAdd, ValueCast,
         ValueCeil, ValueClip, ValueCubeRoot, ValueDivide, ValueEquality, ValueEquivalence,
@@ -15,7 +15,7 @@ use crate::{
     },
     index::{EntityAttributes, GroupKey, IndicesInGroup},
 };
-use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -107,7 +107,7 @@ impl CapabilityRegistry {
     pub fn builtins() -> Self {
         let mut registry = Self::default();
 
-        registry.register_index_domain::<GraphRecordValue>();
+        registry.register_index_domain::<Value>();
         registry.register_index_domain::<bool>();
         registry.register_index_domain::<AttributeName>();
         registry.register_index_domain::<FailureKind>();
@@ -128,7 +128,7 @@ impl CapabilityRegistry {
         registry.register_value_add_index::<NodeIndex>();
         registry.register_value_add_index::<AttributeName>();
         registry.register_value_add_index::<EdgeIndex>();
-        registry.register_value_add_index::<GraphRecordValue>();
+        registry.register_value_add_index::<Value>();
 
         registry.register_value_multiply_domain::<Scalar>();
         registry.register_value_multiply_domain::<AttributeName>();
@@ -136,10 +136,10 @@ impl CapabilityRegistry {
         registry.register_value_multiply_index::<NodeIndex>();
         registry.register_value_multiply_index::<AttributeName>();
         registry.register_value_multiply_index::<EdgeIndex>();
-        registry.register_value_multiply_index::<GraphRecordValue>();
+        registry.register_value_multiply_index::<Value>();
 
         registry.register_value_scalar_domain::<Scalar>();
-        registry.register_value_scalar_index::<GraphRecordValue>();
+        registry.register_value_scalar_index::<Value>();
 
         registry.register_value_equivalence_domain::<Scalar>();
         registry.register_value_equivalence_domain::<Mask>();
@@ -148,7 +148,7 @@ impl CapabilityRegistry {
         registry.register_value_equivalence_domain::<FailureKindValue>();
 
         registry.register_value_median_domain::<Scalar>();
-        registry.register_value_median_index::<GraphRecordValue>();
+        registry.register_value_median_index::<Value>();
 
         registry.register_value_mode_domain::<Scalar>();
         registry.register_value_mode_domain::<Mask>();
@@ -161,7 +161,7 @@ impl CapabilityRegistry {
         registry.register_value_ordering_index::<NodeIndex>();
         registry.register_value_ordering_index::<AttributeName>();
         registry.register_value_ordering_index::<EdgeIndex>();
-        registry.register_value_ordering_index::<GraphRecordValue>();
+        registry.register_value_ordering_index::<Value>();
         registry.register_value_ordering_index::<bool>();
         registry.register_value_ordering_indices();
 
@@ -176,7 +176,7 @@ impl CapabilityRegistry {
         registry.register_entity_domain::<EdgeIndex>();
         registry.register_entity_domain::<NodeIndex>();
 
-        registry.register_group_key::<GraphRecordValue>();
+        registry.register_group_key::<Value>();
         registry.register_group_key::<bool>();
         registry.register_group_key::<AttributeName>();
         registry.register_group_key::<FailureKind>();
@@ -191,7 +191,7 @@ impl CapabilityRegistry {
         registry.register_indices_in_group::<NodeIndex>();
         registry.register_indices_in_group::<EdgeIndex>();
 
-        registry.register_index_sortable::<GraphRecordValue>();
+        registry.register_index_sortable::<Value>();
         registry.register_index_sortable::<bool>();
         registry.register_index_sortable::<AttributeName>();
         registry.register_index_sortable::<Positional>();
@@ -202,34 +202,34 @@ impl CapabilityRegistry {
         registry.register_value_absolute_domain::<AttributeName>();
         registry.register_value_absolute_index::<NodeIndex>();
         registry.register_value_absolute_index::<AttributeName>();
-        registry.register_value_absolute_index::<GraphRecordValue>();
+        registry.register_value_absolute_index::<Value>();
 
         registry.register_value_cast_bool_domain::<Scalar>();
-        registry.register_value_cast_bool_index::<GraphRecordValue>();
+        registry.register_value_cast_bool_index::<Value>();
 
         registry.register_value_cast_date_time_domain::<Scalar>();
-        registry.register_value_cast_date_time_index::<GraphRecordValue>();
+        registry.register_value_cast_date_time_index::<Value>();
 
         registry.register_value_cast_duration_domain::<Scalar>();
-        registry.register_value_cast_duration_index::<GraphRecordValue>();
+        registry.register_value_cast_duration_index::<Value>();
 
         registry.register_value_cast_float_domain::<Scalar>();
-        registry.register_value_cast_float_index::<GraphRecordValue>();
+        registry.register_value_cast_float_index::<Value>();
 
         registry.register_value_cast_int_domain::<Scalar>();
         registry.register_value_cast_int_domain::<AttributeName>();
-        registry.register_value_cast_int_index::<GraphRecordValue>();
+        registry.register_value_cast_int_index::<Value>();
         registry.register_value_cast_int_index::<NodeIndex>();
         registry.register_value_cast_int_index::<AttributeName>();
 
         registry.register_value_cast_string_domain::<Scalar>();
         registry.register_value_cast_string_domain::<AttributeName>();
-        registry.register_value_cast_string_index::<GraphRecordValue>();
+        registry.register_value_cast_string_index::<Value>();
         registry.register_value_cast_string_index::<NodeIndex>();
         registry.register_value_cast_string_index::<AttributeName>();
 
         registry.register_value_ceil_domain::<Scalar>();
-        registry.register_value_ceil_index::<GraphRecordValue>();
+        registry.register_value_ceil_index::<Value>();
 
         registry.register_value_clip_domain::<Scalar>();
         registry.register_value_clip_domain::<AttributeName>();
@@ -237,13 +237,13 @@ impl CapabilityRegistry {
         registry.register_value_clip_index::<NodeIndex>();
         registry.register_value_clip_index::<AttributeName>();
         registry.register_value_clip_index::<EdgeIndex>();
-        registry.register_value_clip_index::<GraphRecordValue>();
+        registry.register_value_clip_index::<Value>();
 
         registry.register_value_cube_root_domain::<Scalar>();
-        registry.register_value_cube_root_index::<GraphRecordValue>();
+        registry.register_value_cube_root_index::<Value>();
 
         registry.register_value_divide_domain::<Scalar>();
-        registry.register_value_divide_index::<GraphRecordValue>();
+        registry.register_value_divide_index::<Value>();
 
         registry.register_value_equality_domain::<Scalar>();
         registry.register_value_equality_domain::<AttributeName>();
@@ -252,10 +252,10 @@ impl CapabilityRegistry {
         registry.register_value_equality_indices();
 
         registry.register_value_exponential_domain::<Scalar>();
-        registry.register_value_exponential_index::<GraphRecordValue>();
+        registry.register_value_exponential_index::<Value>();
 
         registry.register_value_floor_domain::<Scalar>();
-        registry.register_value_floor_index::<GraphRecordValue>();
+        registry.register_value_floor_index::<Value>();
 
         registry.register_value_grouping_domain::<Scalar>();
         registry.register_value_grouping_domain::<Mask>();
@@ -266,7 +266,7 @@ impl CapabilityRegistry {
 
         registry.register_value_int_domain::<Scalar>();
         registry.register_value_int_domain::<AttributeName>();
-        registry.register_value_int_index::<GraphRecordValue>();
+        registry.register_value_int_index::<Value>();
         registry.register_value_int_index::<NodeIndex>();
         registry.register_value_int_index::<AttributeName>();
         registry.register_value_int_index::<EdgeIndex>();
@@ -274,12 +274,12 @@ impl CapabilityRegistry {
 
         registry.register_value_kind_test_domain::<Scalar>();
         registry.register_value_kind_test_domain::<AttributeName>();
-        registry.register_value_kind_test_index::<GraphRecordValue>();
+        registry.register_value_kind_test_index::<Value>();
         registry.register_value_kind_test_index::<NodeIndex>();
         registry.register_value_kind_test_index::<AttributeName>();
 
         registry.register_value_logarithm_domain::<Scalar>();
-        registry.register_value_logarithm_index::<GraphRecordValue>();
+        registry.register_value_logarithm_index::<Value>();
 
         registry.register_value_modulo_domain::<Scalar>();
         registry.register_value_modulo_domain::<AttributeName>();
@@ -287,13 +287,13 @@ impl CapabilityRegistry {
         registry.register_value_modulo_index::<NodeIndex>();
         registry.register_value_modulo_index::<AttributeName>();
         registry.register_value_modulo_index::<EdgeIndex>();
-        registry.register_value_modulo_index::<GraphRecordValue>();
+        registry.register_value_modulo_index::<Value>();
 
         registry.register_value_negate_domain::<Scalar>();
         registry.register_value_negate_domain::<AttributeName>();
         registry.register_value_negate_index::<NodeIndex>();
         registry.register_value_negate_index::<AttributeName>();
-        registry.register_value_negate_index::<GraphRecordValue>();
+        registry.register_value_negate_index::<Value>();
 
         registry.register_value_power_domain::<Scalar>();
         registry.register_value_power_domain::<AttributeName>();
@@ -301,19 +301,19 @@ impl CapabilityRegistry {
         registry.register_value_power_index::<NodeIndex>();
         registry.register_value_power_index::<AttributeName>();
         registry.register_value_power_index::<EdgeIndex>();
-        registry.register_value_power_index::<GraphRecordValue>();
+        registry.register_value_power_index::<Value>();
 
         registry.register_value_round_domain::<Scalar>();
-        registry.register_value_round_index::<GraphRecordValue>();
+        registry.register_value_round_index::<Value>();
 
         registry.register_value_scalar_kind_test_domain::<Scalar>();
-        registry.register_value_scalar_kind_test_index::<GraphRecordValue>();
+        registry.register_value_scalar_kind_test_index::<Value>();
 
         registry.register_value_sign_domain::<Scalar>();
         registry.register_value_sign_domain::<AttributeName>();
         registry.register_value_sign_index::<NodeIndex>();
         registry.register_value_sign_index::<AttributeName>();
-        registry.register_value_sign_index::<GraphRecordValue>();
+        registry.register_value_sign_index::<Value>();
 
         registry.register_value_sortable_domain::<Scalar>();
         registry.register_value_sortable_domain::<Mask>();
@@ -321,11 +321,11 @@ impl CapabilityRegistry {
         registry.register_value_sortable_indices();
 
         registry.register_value_square_root_domain::<Scalar>();
-        registry.register_value_square_root_index::<GraphRecordValue>();
+        registry.register_value_square_root_index::<Value>();
 
         registry.register_value_string_domain::<Scalar>();
         registry.register_value_string_domain::<AttributeName>();
-        registry.register_value_string_index::<GraphRecordValue>();
+        registry.register_value_string_index::<Value>();
         registry.register_value_string_index::<NodeIndex>();
         registry.register_value_string_index::<AttributeName>();
 
@@ -335,7 +335,7 @@ impl CapabilityRegistry {
         registry.register_value_subtract_index::<NodeIndex>();
         registry.register_value_subtract_index::<AttributeName>();
         registry.register_value_subtract_index::<EdgeIndex>();
-        registry.register_value_subtract_index::<GraphRecordValue>();
+        registry.register_value_subtract_index::<Value>();
 
         registry
     }

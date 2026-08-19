@@ -248,7 +248,7 @@ impl Diagnostic for GraphRecordError {
 
     fn help(&self) -> Option<String> {
         match self {
-            Self::IncompatibleValueOperands { .. } | Self::IncompatibleAttributeOperands { .. } => {
+            Self::IncompatibleValueOperands { .. } | Self::IncompatibleIdentifierOperands { .. } => {
                 Some(
                     "narrow the values down first using is_string(), is_int(), is_float(), is_bool(), is_datetime() or is_duration()"
                         .to_string(),

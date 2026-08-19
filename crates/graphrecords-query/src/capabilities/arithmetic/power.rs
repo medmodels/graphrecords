@@ -1,5 +1,5 @@
-use crate::{AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain};
-use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex, datatypes::Pow};
+use crate::{Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value, datatypes::Pow};
 
 pub trait ValuePower: ValueDomain {
     fn power<'a>(
@@ -77,7 +77,7 @@ impl ValuePower for IndexValue<EdgeIndex> {
     }
 }
 
-impl ValuePower for IndexValue<GraphRecordValue> {
+impl ValuePower for IndexValue<Value> {
     fn power<'a>(
         label: &'static str,
         value: Self::Value<'a>,

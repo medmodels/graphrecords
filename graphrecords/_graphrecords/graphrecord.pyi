@@ -4,13 +4,12 @@ from graphrecords._graphrecords.overview import PyGroupOverview, PyOverview
 from graphrecords._graphrecords.querying import PyOperand
 from graphrecords._graphrecords.schema import PySchema
 from graphrecords.types import (
+    AttributeName,
     Attributes,
     AttributesInput,
     EdgeIndex,
     EdgeIndexInputList,
     EdgeTuple,
-    GraphRecordAttribute,
-    GraphRecordValue,
     Group,
     GroupInputList,
     NodeIndex,
@@ -20,6 +19,7 @@ from graphrecords.types import (
     PolarsDataFramesExport,
     PolarsEdgeDataFrameInput,
     PolarsNodeDataFrameInput,
+    Value,
     _PyConnector,
     _PyPlugin,
 )
@@ -100,11 +100,11 @@ class PyGraphRecord:
     def update_node_attribute(
         self,
         node_index: NodeIndexInputList,
-        attribute: GraphRecordAttribute,
-        value: GraphRecordValue,
+        attribute: AttributeName,
+        value: Value,
     ) -> None: ...
     def remove_node_attribute(
-        self, node_index: NodeIndexInputList, attribute: GraphRecordAttribute
+        self, node_index: NodeIndexInputList, attribute: AttributeName
     ) -> None: ...
     def add_nodes(
         self, nodes: Sequence[NodeTuple], bypass_plugins: bool = False
@@ -144,11 +144,11 @@ class PyGraphRecord:
     def update_edge_attribute(
         self,
         edge_index: EdgeIndexInputList,
-        attribute: GraphRecordAttribute,
-        value: GraphRecordValue,
+        attribute: AttributeName,
+        value: Value,
     ) -> None: ...
     def remove_edge_attribute(
-        self, edge_index: EdgeIndexInputList, attribute: GraphRecordAttribute
+        self, edge_index: EdgeIndexInputList, attribute: AttributeName
     ) -> None: ...
     def add_edges(
         self, edges: Sequence[EdgeTuple], bypass_plugins: bool = False

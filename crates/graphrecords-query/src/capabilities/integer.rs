@@ -1,28 +1,17 @@
 use crate::{
-    AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
+    Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
     error::numeric::{IntegerOverflow, NonIntegerValue},
 };
-use graphrecords_core::graphrecord::{
-    EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex,
-};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, Identifier, NodeIndex, Value};
 
 pub trait IntValue: ValueDomain {
     fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64>;
 }
 
-fn int_from_value(label: &'static str, value: GraphRecordValue) -> QueryResult<i64> {
+fn int_from_value(label: &'static str, value: Value) -> QueryResult<i64> {
     match value {
-        GraphRecordValue::Int(value) => Ok(value),
+        Value::Int(value) => Ok(value),
         value => Err(Failure::new(label, NonIntegerValue::new(value))),
-    }
-}
-
-fn int_from_attribute(label: &'static str, value: GraphRecordAttribute) -> QueryResult<i64> {
-    match value {
-        GraphRecordAttribute::Int(value) => Ok(value),
-        value @ GraphRecordAttribute::String(_) => {
-            Err(Failure::new(label, NonIntegerValue::new(value)))
-        }
     }
 }
 
@@ -32,7 +21,7 @@ impl IntValue for Scalar {
     }
 }
 
-impl IntValue for IndexValue<GraphRecordValue> {
+impl IntValue for IndexValue<Value> {
     fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
         int_from_value(label, value)
     }
@@ -40,19 +29,28 @@ impl IntValue for IndexValue<GraphRecordValue> {
 
 impl IntValue for AttributeName {
     fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
-        int_from_attribute(label, value)
+        match value.identifier() {
+            Identifier::Int(integer) => Ok(*integer),
+            Identifier::String(_) => Err(Failure::new(label, NonIntegerValue::new(value))),
+        }
     }
 }
 
 impl IntValue for IndexValue<NodeIndex> {
     fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
-        int_from_attribute(label, value)
+        match value.identifier() {
+            Identifier::Int(integer) => Ok(*integer),
+            Identifier::String(_) => Err(Failure::new(label, NonIntegerValue::new(value))),
+        }
     }
 }
 
 impl IntValue for IndexValue<AttributeName> {
     fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
-        int_from_attribute(label, value)
+        match value.identifier() {
+            Identifier::Int(integer) => Ok(*integer),
+            Identifier::String(_) => Err(Failure::new(label, NonIntegerValue::new(value))),
+        }
     }
 }
 

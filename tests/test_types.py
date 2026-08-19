@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import polars as pl
@@ -10,9 +10,8 @@ from graphrecords.types import (
     is_edge_index_list,
     is_edge_tuple,
     is_edge_tuple_list,
-    is_graphrecord_attribute,
-    is_graphrecord_value,
     is_group,
+    is_identifier,
     is_node_index,
     is_node_index_list,
     is_node_tuple,
@@ -25,25 +24,27 @@ from graphrecords.types import (
     is_polars_edge_dataframe_input_list,
     is_polars_node_dataframe_input,
     is_polars_node_dataframe_input_list,
+    is_value,
 )
 
 
 class TestTypeAssertions(unittest.TestCase):
-    def test_is_graphrecord_attribute(self) -> None:
-        assert is_graphrecord_attribute("test")
-        assert is_graphrecord_attribute(123)
-        assert not is_graphrecord_attribute(12.34)
-        assert not is_graphrecord_attribute(None)
+    def test_is_identifier(self) -> None:
+        assert is_identifier("test")
+        assert is_identifier(123)
+        assert not is_identifier(12.34)
+        assert not is_identifier(None)
 
-    def test_is_graphrecord_value(self) -> None:
-        assert is_graphrecord_value("test")
-        assert is_graphrecord_value(123)
-        assert is_graphrecord_value(12.34)
-        assert is_graphrecord_value(value=True)
-        assert is_graphrecord_value(datetime.now())
-        assert is_graphrecord_value(None)
-        assert not is_graphrecord_value([])
-        assert not is_graphrecord_value({})
+    def test_is_value(self) -> None:
+        assert is_value("test")
+        assert is_value(123)
+        assert is_value(12.34)
+        assert is_value(value=True)
+        assert is_value(datetime.now())
+        assert is_value(timedelta(days=1))
+        assert is_value(None)
+        assert not is_value([])
+        assert not is_value({})
 
     def test_is_node_index(self) -> None:
         assert is_node_index("node")

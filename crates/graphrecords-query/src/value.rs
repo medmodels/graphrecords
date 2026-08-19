@@ -1,5 +1,5 @@
 use crate::{EntityDomain, Failure, FailureKind, IndexDomain};
-use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue};
+use graphrecords_core::graphrecord::{AttributeName, Value};
 use std::marker::PhantomData;
 
 pub trait ValueDomain: 'static {
@@ -20,8 +20,6 @@ pub trait ReturnValueDomain: ValueDomain {}
 
 pub struct Scalar;
 pub struct Mask;
-#[derive(Clone)]
-pub struct AttributeName;
 pub struct Unit;
 pub struct IndexValue<I: IndexDomain>(PhantomData<I>);
 pub struct EntityReference<E: EntityDomain>(PhantomData<E>);
@@ -29,8 +27,8 @@ pub struct FailureValue;
 pub struct FailureKindValue;
 
 impl ValueDomain for Scalar {
-    type Owned = GraphRecordValue;
-    type Value<'a> = GraphRecordValue;
+    type Owned = Value;
+    type Value<'a> = Value;
 
     fn into_owned(value: Self::Value<'_>) -> Self::Owned {
         value
@@ -53,8 +51,8 @@ impl ValueDomain for Mask {
     }
 }
 impl ValueDomain for AttributeName {
-    type Owned = GraphRecordAttribute;
-    type Value<'a> = GraphRecordAttribute;
+    type Owned = Self;
+    type Value<'a> = Self;
 
     fn into_owned(value: Self::Value<'_>) -> Self::Owned {
         value

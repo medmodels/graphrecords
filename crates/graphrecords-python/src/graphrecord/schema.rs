@@ -1,6 +1,5 @@
 use super::{
-    PyAttributes, PyGraphRecord, PyGroup, PyNodeIndex,
-    attribute::PyGraphRecordAttribute,
+    PyAttributeName, PyAttributes, PyGraphRecord, PyGroup, PyNodeIndex,
     datatype::PyDataType,
     errors::PyGraphRecordError,
     traits::{DeepFrom, DeepInto},
@@ -140,8 +139,8 @@ impl DeepFrom<PyGroupSchema> for GroupSchema {
 impl PyGroupSchema {
     #[new]
     pub fn new(
-        nodes: HashMap<PyGraphRecordAttribute, PyAttributeDataType>,
-        edges: HashMap<PyGraphRecordAttribute, PyAttributeDataType>,
+        nodes: HashMap<PyAttributeName, PyAttributeDataType>,
+        edges: HashMap<PyAttributeName, PyAttributeDataType>,
     ) -> PyResult<Self> {
         let nodes = nodes
             .into_iter()
@@ -160,12 +159,12 @@ impl PyGroupSchema {
     }
 
     #[getter]
-    pub fn nodes(&self) -> HashMap<PyGraphRecordAttribute, PyAttributeDataType> {
+    pub fn nodes(&self) -> HashMap<PyAttributeName, PyAttributeDataType> {
         self.0.nodes().clone().deep_into()
     }
 
     #[getter]
-    pub fn edges(&self) -> HashMap<PyGraphRecordAttribute, PyAttributeDataType> {
+    pub fn edges(&self) -> HashMap<PyAttributeName, PyAttributeDataType> {
         self.0.edges().clone().deep_into()
     }
 
@@ -327,7 +326,7 @@ impl PySchema {
     #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
     pub fn set_node_attribute(
         &self,
-        attribute: PyGraphRecordAttribute,
+        attribute: PyAttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
         group: Option<PyGroup>,
@@ -347,7 +346,7 @@ impl PySchema {
     #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
     pub fn set_edge_attribute(
         &self,
-        attribute: PyGraphRecordAttribute,
+        attribute: PyAttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
         group: Option<PyGroup>,
@@ -367,7 +366,7 @@ impl PySchema {
     #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
     pub fn update_node_attribute(
         &self,
-        attribute: PyGraphRecordAttribute,
+        attribute: PyAttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
         group: Option<PyGroup>,
@@ -387,7 +386,7 @@ impl PySchema {
     #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
     pub fn update_edge_attribute(
         &self,
-        attribute: PyGraphRecordAttribute,
+        attribute: PyAttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
         group: Option<PyGroup>,
@@ -405,7 +404,7 @@ impl PySchema {
     }
 
     #[pyo3(signature = (attribute, group=None))]
-    pub fn remove_node_attribute(&self, attribute: PyGraphRecordAttribute, group: Option<PyGroup>) {
+    pub fn remove_node_attribute(&self, attribute: PyAttributeName, group: Option<PyGroup>) {
         self.0.write().remove_node_attribute(
             &attribute.into(),
             group.map(std::convert::Into::into).as_ref(),
@@ -413,7 +412,7 @@ impl PySchema {
     }
 
     #[pyo3(signature = (attribute, group=None))]
-    pub fn remove_edge_attribute(&self, attribute: PyGraphRecordAttribute, group: Option<PyGroup>) {
+    pub fn remove_edge_attribute(&self, attribute: PyAttributeName, group: Option<PyGroup>) {
         self.0.write().remove_edge_attribute(
             &attribute.into(),
             group.map(std::convert::Into::into).as_ref(),

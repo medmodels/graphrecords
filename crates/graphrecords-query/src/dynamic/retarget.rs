@@ -2,12 +2,12 @@ use super::{
     DynIndex, DynOperand, DynValue, OperationCapture, TRANSITION, operation_dynamic_element_apply,
 };
 use crate::{
-    AttributeName, Bare, FailureKind, FailureKindValue, IndexValue, Indexed, Mask, Positional,
-    QueryResult, Scalar, Transition,
+    Bare, FailureKind, FailureKindValue, IndexValue, Indexed, Mask, Positional, QueryResult,
+    Scalar, Transition,
     operations::TransitionOperation,
     registry::{ArgumentDescriptor, IndexDescriptor, LaneShapeDescriptor, ValueDescriptor},
 };
-use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
 
 macro_rules! dynamic_value_targets {
     ($($variant:ident : $value:ty = $descriptor:expr),+ $(,)?) => {
@@ -44,8 +44,8 @@ macro_rules! dynamic_value_targets {
 
 dynamic_value_targets!(
     Value: Scalar = ValueDescriptor::value::<Scalar>(),
-    ValueIndex: IndexValue<GraphRecordValue> =
-        ValueDescriptor::index(IndexDescriptor::domain::<GraphRecordValue>()),
+    ValueIndex: IndexValue<Value> =
+        ValueDescriptor::index(IndexDescriptor::domain::<Value>()),
     AttributeName: AttributeName = ValueDescriptor::value::<AttributeName>(),
     AttributeNameIndex: IndexValue<AttributeName> =
         ValueDescriptor::index(IndexDescriptor::domain::<AttributeName>()),
@@ -102,7 +102,7 @@ impl DynOperand {
 
         let operand = match (source, target) {
             (Some(DynValueTarget::Value), DynValueTarget::ValueIndex) => {
-                apply_retarget!(self, output, Scalar, IndexValue<GraphRecordValue>)
+                apply_retarget!(self, output, Scalar, IndexValue<Value>)
             }
             (Some(DynValueTarget::Value), DynValueTarget::AttributeName) => {
                 apply_retarget!(self, output, Scalar, AttributeName)
@@ -126,54 +126,34 @@ impl DynOperand {
                 apply_retarget!(self, output, Scalar, IndexValue<Positional>)
             }
             (Some(DynValueTarget::ValueIndex), DynValueTarget::Value) => {
-                apply_retarget!(self, output, IndexValue<GraphRecordValue>, Scalar)
+                apply_retarget!(self, output, IndexValue<Value>, Scalar)
             }
             (Some(DynValueTarget::ValueIndex), DynValueTarget::AttributeName) => {
-                apply_retarget!(self, output, IndexValue<GraphRecordValue>, AttributeName)
+                apply_retarget!(self, output, IndexValue<Value>, AttributeName)
             }
             (Some(DynValueTarget::ValueIndex), DynValueTarget::NodeIndex) => {
-                apply_retarget!(
-                    self,
-                    output,
-                    IndexValue<GraphRecordValue>,
-                    IndexValue<NodeIndex>
-                )
+                apply_retarget!(self, output, IndexValue<Value>, IndexValue<NodeIndex>)
             }
             (Some(DynValueTarget::ValueIndex), DynValueTarget::AttributeNameIndex) => {
-                apply_retarget!(
-                    self,
-                    output,
-                    IndexValue<GraphRecordValue>,
-                    IndexValue<AttributeName>
-                )
+                apply_retarget!(self, output, IndexValue<Value>, IndexValue<AttributeName>)
             }
             (Some(DynValueTarget::ValueIndex), DynValueTarget::Mask) => {
-                apply_retarget!(self, output, IndexValue<GraphRecordValue>, Mask)
+                apply_retarget!(self, output, IndexValue<Value>, Mask)
             }
             (Some(DynValueTarget::ValueIndex), DynValueTarget::BoolIndex) => {
-                apply_retarget!(self, output, IndexValue<GraphRecordValue>, IndexValue<bool>)
+                apply_retarget!(self, output, IndexValue<Value>, IndexValue<bool>)
             }
             (Some(DynValueTarget::ValueIndex), DynValueTarget::EdgeIndex) => {
-                apply_retarget!(
-                    self,
-                    output,
-                    IndexValue<GraphRecordValue>,
-                    IndexValue<EdgeIndex>
-                )
+                apply_retarget!(self, output, IndexValue<Value>, IndexValue<EdgeIndex>)
             }
             (Some(DynValueTarget::ValueIndex), DynValueTarget::PositionalIndex) => {
-                apply_retarget!(
-                    self,
-                    output,
-                    IndexValue<GraphRecordValue>,
-                    IndexValue<Positional>
-                )
+                apply_retarget!(self, output, IndexValue<Value>, IndexValue<Positional>)
             }
             (Some(DynValueTarget::AttributeName), DynValueTarget::Value) => {
                 apply_retarget!(self, output, AttributeName, Scalar)
             }
             (Some(DynValueTarget::AttributeName), DynValueTarget::ValueIndex) => {
-                apply_retarget!(self, output, AttributeName, IndexValue<GraphRecordValue>)
+                apply_retarget!(self, output, AttributeName, IndexValue<Value>)
             }
             (Some(DynValueTarget::AttributeName), DynValueTarget::NodeIndex) => {
                 apply_retarget!(self, output, AttributeName, IndexValue<NodeIndex>)
@@ -191,12 +171,7 @@ impl DynOperand {
                 apply_retarget!(self, output, IndexValue<NodeIndex>, Scalar)
             }
             (Some(DynValueTarget::NodeIndex), DynValueTarget::ValueIndex) => {
-                apply_retarget!(
-                    self,
-                    output,
-                    IndexValue<NodeIndex>,
-                    IndexValue<GraphRecordValue>
-                )
+                apply_retarget!(self, output, IndexValue<NodeIndex>, IndexValue<Value>)
             }
             (Some(DynValueTarget::NodeIndex), DynValueTarget::AttributeName) => {
                 apply_retarget!(self, output, IndexValue<NodeIndex>, AttributeName)
@@ -219,12 +194,7 @@ impl DynOperand {
                 apply_retarget!(self, output, IndexValue<AttributeName>, Scalar)
             }
             (Some(DynValueTarget::AttributeNameIndex), DynValueTarget::ValueIndex) => {
-                apply_retarget!(
-                    self,
-                    output,
-                    IndexValue<AttributeName>,
-                    IndexValue<GraphRecordValue>
-                )
+                apply_retarget!(self, output, IndexValue<AttributeName>, IndexValue<Value>)
             }
             (Some(DynValueTarget::AttributeNameIndex), DynValueTarget::AttributeName) => {
                 apply_retarget!(self, output, IndexValue<AttributeName>, AttributeName)
@@ -257,7 +227,7 @@ impl DynOperand {
                 apply_retarget!(self, output, Mask, Scalar)
             }
             (Some(DynValueTarget::Mask), DynValueTarget::ValueIndex) => {
-                apply_retarget!(self, output, Mask, IndexValue<GraphRecordValue>)
+                apply_retarget!(self, output, Mask, IndexValue<Value>)
             }
             (Some(DynValueTarget::Mask), DynValueTarget::BoolIndex) => {
                 apply_retarget!(self, output, Mask, IndexValue<bool>)
@@ -266,7 +236,7 @@ impl DynOperand {
                 apply_retarget!(self, output, IndexValue<bool>, Scalar)
             }
             (Some(DynValueTarget::BoolIndex), DynValueTarget::ValueIndex) => {
-                apply_retarget!(self, output, IndexValue<bool>, IndexValue<GraphRecordValue>)
+                apply_retarget!(self, output, IndexValue<bool>, IndexValue<Value>)
             }
             (Some(DynValueTarget::BoolIndex), DynValueTarget::Mask) => {
                 apply_retarget!(self, output, IndexValue<bool>, Mask)
@@ -275,12 +245,7 @@ impl DynOperand {
                 apply_retarget!(self, output, IndexValue<EdgeIndex>, Scalar)
             }
             (Some(DynValueTarget::EdgeIndex), DynValueTarget::ValueIndex) => {
-                apply_retarget!(
-                    self,
-                    output,
-                    IndexValue<EdgeIndex>,
-                    IndexValue<GraphRecordValue>
-                )
+                apply_retarget!(self, output, IndexValue<EdgeIndex>, IndexValue<Value>)
             }
             (Some(DynValueTarget::EdgeIndex), DynValueTarget::AttributeName) => {
                 apply_retarget!(self, output, IndexValue<EdgeIndex>, AttributeName)
@@ -303,12 +268,7 @@ impl DynOperand {
                 apply_retarget!(self, output, IndexValue<Positional>, Scalar)
             }
             (Some(DynValueTarget::PositionalIndex), DynValueTarget::ValueIndex) => {
-                apply_retarget!(
-                    self,
-                    output,
-                    IndexValue<Positional>,
-                    IndexValue<GraphRecordValue>
-                )
+                apply_retarget!(self, output, IndexValue<Positional>, IndexValue<Value>)
             }
             (Some(DynValueTarget::PositionalIndex), DynValueTarget::AttributeName) => {
                 apply_retarget!(self, output, IndexValue<Positional>, AttributeName)

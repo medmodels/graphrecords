@@ -1,5 +1,5 @@
 use crate::{ExpandedIndexOwned, ExpandedIndexReference, IndexDomain, Position};
-use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
 
 pub trait EnsureSortable: PartialOrd + Sized {
     fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
@@ -45,13 +45,19 @@ impl<T: EnsureSortable> EnsureSortable for &T {
     }
 }
 
-impl EnsureSortable for GraphRecordValue {
+impl EnsureSortable for Value {
     fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
         incomparable_with_first(values)
     }
 }
 
-impl EnsureSortable for GraphRecordAttribute {
+impl EnsureSortable for NodeIndex {
+    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
+        incomparable_with_first(values)
+    }
+}
+
+impl EnsureSortable for AttributeName {
     fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
         incomparable_with_first(values)
     }

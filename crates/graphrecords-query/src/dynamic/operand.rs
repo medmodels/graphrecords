@@ -612,7 +612,7 @@ mod test {
     };
     use graphrecords_core::{
         GraphRecord,
-        graphrecord::{AttributeMap, EdgeIndex, GraphRecordValue, NodeIndex},
+        graphrecord::{AttributeMap, EdgeIndex, NodeIndex, Value},
     };
     use std::collections::HashMap;
 
@@ -784,7 +784,7 @@ mod test {
         assert!(matches!(
             count.evaluate(&graphrecord).unwrap(),
             DynTerminal::Lane(DynTerminalLane::BareValue(DynTerminalArity::Definite(Ok(
-                DynValue::Scalar(GraphRecordValue::Int(4))
+                DynValue::Scalar(Value::Int(4))
             ))))
         ));
 

@@ -1,12 +1,13 @@
 use crate::{
-    graphrecord::{attribute::PyGraphRecordAttribute, value::PyGraphRecordValue},
+    graphrecord::{PyAttributeName, PyNodeIndex, value::PyValue},
     querying::{
         exception::FailureConversion, failure_kind::PyFailureKind,
         index_conversion::IndexConversion,
     },
 };
+use graphrecords_core::graphrecord::AttributeName;
 use graphrecords_query::{
-    AttributeName, FailureKindValue, Scalar,
+    FailureKindValue, Scalar,
     dynamic::{DynIndexOwned, DynValue},
     registry::{ValueDescriptor, ValueRole},
 };
@@ -23,12 +24,10 @@ impl ValueConversion for DynValue {
         match descriptor.role() {
             ValueRole::Value => {
                 if descriptor.domain().is::<Scalar>() {
-                    return Ok(Self::Scalar(object.extract::<PyGraphRecordValue>()?.into()));
+                    return Ok(Self::Scalar(object.extract::<PyValue>()?.into()));
                 }
                 if descriptor.domain().is::<AttributeName>() {
-                    return Ok(Self::Attribute(
-                        object.extract::<PyGraphRecordAttribute>()?.into(),
-                    ));
+                    return Ok(Self::Attribute(object.extract::<PyAttributeName>()?.into()));
                 }
                 if descriptor.domain().is::<FailureKindValue>() {
                     return Ok(Self::FailureKind(object.extract::<PyFailureKind>()?.into()));
@@ -51,18 +50,16 @@ impl ValueConversion for DynValue {
 
     fn to_python(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match self {
-            Self::Scalar(value) => Ok(PyGraphRecordValue::from(value.clone())
-                .into_pyobject(py)?
-                .unbind()),
-            Self::Attribute(attribute) => Ok(PyGraphRecordAttribute::from(attribute.clone())
+            Self::Scalar(value) => Ok(PyValue::from(value.clone()).into_pyobject(py)?.unbind()),
+            Self::Attribute(attribute) => Ok(PyAttributeName::from(attribute.clone())
                 .into_pyobject(py)?
                 .unbind()),
             Self::Index(index) => index.to_python(py),
             Self::EntityReference(reference) => {
                 match (reference.node_index(), reference.edge_index()) {
-                    (Some(index), None) => Ok(PyGraphRecordAttribute::from(index.clone())
-                        .into_pyobject(py)?
-                        .unbind()),
+                    (Some(index), None) => {
+                        Ok(PyNodeIndex::from(index.clone()).into_pyobject(py)?.unbind())
+                    }
                     (None, Some(index)) => Ok(index.into_pyobject(py)?.into_any().unbind()),
                     _ => {
                         panic!(

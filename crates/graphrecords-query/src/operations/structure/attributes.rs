@@ -1,6 +1,6 @@
 use crate::{
-    AttributeName, EntityReference, ExpandedChild, ExpandedIndex, Explain, IndexDomain, Indexed,
-    Operand, QueryResult, Unit, Unordered,
+    EntityReference, ExpandedChild, ExpandedIndex, Explain, IndexDomain, Indexed, Operand,
+    QueryResult, Unit, Unordered,
     element::{Expanding, Pipeline},
     execution::EvaluationCache,
     index::EntityAttributes,
@@ -9,7 +9,7 @@ use crate::{
     registry::operation_manifest,
     traits::Attributes,
 };
-use graphrecords_core::GraphRecord;
+use graphrecords_core::{GraphRecord, graphrecord::AttributeName};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]

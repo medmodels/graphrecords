@@ -5,7 +5,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     errors::GraphRecordError,
-    prelude::{AttributeType, GraphRecordAttribute, GraphRecordValue, Group, GroupSchema},
+    prelude::{AttributeName, AttributeType, Group, GroupSchema, Value},
 };
 use graphrecords_query::{
     Attribute, Filter, Index, IsIn, IsNull, Maximum, Mean, Minimum, OnErrorOf, QueryEdges,
@@ -23,7 +23,7 @@ use tabled::{
 #[derive(Debug, Clone)]
 pub struct NodeGroupOverview {
     pub count: usize,
-    pub attributes: GrHashMap<GraphRecordAttribute, AttributeOverview>,
+    pub attributes: GrHashMap<AttributeName, AttributeOverview>,
 
     truncate_details: Option<usize>,
 }
@@ -111,7 +111,7 @@ impl NodeGroupOverview {
                             data: AttributeOverviewData::Categorical {
                                 distinct_values: values
                                     .into_iter()
-                                    .sorted_by(GraphRecordValue::total_cmp)
+                                    .sorted_by(Value::total_cmp)
                                     .dedup()
                                     .collect(),
                             },
@@ -133,9 +133,9 @@ impl NodeGroupOverview {
                         AttributeOverview {
                             data_type,
                             data: AttributeOverviewData::Continuous {
-                                min: minimum.transpose()?.unwrap_or(GraphRecordValue::Null),
-                                mean: mean.transpose()?.unwrap_or(GraphRecordValue::Null),
-                                max: maximum.transpose()?.unwrap_or(GraphRecordValue::Null),
+                                min: minimum.transpose()?.unwrap_or(Value::Null),
+                                mean: mean.transpose()?.unwrap_or(Value::Null),
+                                max: maximum.transpose()?.unwrap_or(Value::Null),
                             },
                         }
                     }
@@ -155,8 +155,8 @@ impl NodeGroupOverview {
                         AttributeOverview {
                             data_type,
                             data: AttributeOverviewData::Temporal {
-                                min: minimum.transpose()?.unwrap_or(GraphRecordValue::Null),
-                                max: maximum.transpose()?.unwrap_or(GraphRecordValue::Null),
+                                min: minimum.transpose()?.unwrap_or(Value::Null),
+                                max: maximum.transpose()?.unwrap_or(Value::Null),
                             },
                         }
                     }
@@ -179,7 +179,7 @@ impl NodeGroupOverview {
                             data: AttributeOverviewData::Unstructured {
                                 distinct_count: values
                                     .into_iter()
-                                    .sorted_by(GraphRecordValue::total_cmp)
+                                    .sorted_by(Value::total_cmp)
                                     .dedup()
                                     .count(),
                             },
@@ -202,7 +202,7 @@ impl NodeGroupOverview {
 #[derive(Debug, Clone)]
 pub struct EdgeGroupOverview {
     pub count: usize,
-    pub attributes: GrHashMap<GraphRecordAttribute, AttributeOverview>,
+    pub attributes: GrHashMap<AttributeName, AttributeOverview>,
 
     truncate_details: Option<usize>,
 }
@@ -286,7 +286,7 @@ impl EdgeGroupOverview {
                             data: AttributeOverviewData::Categorical {
                                 distinct_values: values
                                     .into_iter()
-                                    .sorted_by(GraphRecordValue::total_cmp)
+                                    .sorted_by(Value::total_cmp)
                                     .dedup()
                                     .collect(),
                             },
@@ -308,9 +308,9 @@ impl EdgeGroupOverview {
                         AttributeOverview {
                             data_type,
                             data: AttributeOverviewData::Continuous {
-                                min: minimum.transpose()?.unwrap_or(GraphRecordValue::Null),
-                                mean: mean.transpose()?.unwrap_or(GraphRecordValue::Null),
-                                max: maximum.transpose()?.unwrap_or(GraphRecordValue::Null),
+                                min: minimum.transpose()?.unwrap_or(Value::Null),
+                                mean: mean.transpose()?.unwrap_or(Value::Null),
+                                max: maximum.transpose()?.unwrap_or(Value::Null),
                             },
                         }
                     }
@@ -330,8 +330,8 @@ impl EdgeGroupOverview {
                         AttributeOverview {
                             data_type,
                             data: AttributeOverviewData::Temporal {
-                                min: minimum.transpose()?.unwrap_or(GraphRecordValue::Null),
-                                max: maximum.transpose()?.unwrap_or(GraphRecordValue::Null),
+                                min: minimum.transpose()?.unwrap_or(Value::Null),
+                                max: maximum.transpose()?.unwrap_or(Value::Null),
                             },
                         }
                     }
@@ -354,7 +354,7 @@ impl EdgeGroupOverview {
                             data: AttributeOverviewData::Unstructured {
                                 distinct_count: values
                                     .into_iter()
-                                    .sorted_by(GraphRecordValue::total_cmp)
+                                    .sorted_by(Value::total_cmp)
                                     .dedup()
                                     .count(),
                             },

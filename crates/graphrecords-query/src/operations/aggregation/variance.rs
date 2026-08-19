@@ -12,7 +12,7 @@ use crate::{
     registry::operation_manifest,
     traits::Variance,
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
+use graphrecords_core::{GraphRecord, graphrecord::Value};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
@@ -63,8 +63,8 @@ where
                 let value = V::into_scalar(Self::LABEL, value?)
                     .map_err(|failure| failure.at::<I>(&index))?;
                 let value = match value {
-                    GraphRecordValue::Int(value) => value as f64,
-                    GraphRecordValue::Float(value) => value,
+                    Value::Int(value) => value as f64,
+                    Value::Float(value) => value,
                     value => {
                         return Err(Failure::new_at::<I, _>(
                             Self::LABEL,
@@ -77,7 +77,7 @@ where
                 Ok(update_state(state, value))
             })
             .map(|(count, _, squared_deviation)| {
-                (count > 1).then(|| GraphRecordValue::Float(squared_deviation / (count - 1) as f64))
+                (count > 1).then(|| Value::Float(squared_deviation / (count - 1) as f64))
             });
 
         Ok(variance.transpose())
@@ -104,8 +104,8 @@ where
             .try_fold((0, 0.0, 0.0), |state, value| {
                 let value = V::into_scalar(Self::LABEL, value?)?;
                 let value = match value {
-                    GraphRecordValue::Int(value) => value as f64,
-                    GraphRecordValue::Float(value) => value,
+                    Value::Int(value) => value as f64,
+                    Value::Float(value) => value,
                     value => {
                         return Err(Failure::new(Self::LABEL, InvalidVarianceValue::new(value)));
                     }
@@ -114,7 +114,7 @@ where
                 Ok(update_state(state, value))
             })
             .map(|(count, _, squared_deviation)| {
-                (count > 1).then(|| GraphRecordValue::Float(squared_deviation / (count - 1) as f64))
+                (count > 1).then(|| Value::Float(squared_deviation / (count - 1) as f64))
             });
 
         Ok(variance.transpose())

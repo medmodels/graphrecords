@@ -8,7 +8,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     errors::GraphRecordError,
-    graphrecord::{AttributeMap, EdgeIndex, GraphRecordAttribute, Group, NodeIndex},
+    graphrecord::{AttributeMap, AttributeName, EdgeIndex, Group, NodeIndex},
 };
 use graphrecords_utils::aliases::GrHashSet;
 
@@ -18,7 +18,7 @@ pub trait EntityAttributes: EntityDomain {
         index: &Self::Index<'a>,
     ) -> Result<&'a AttributeMap, GraphRecordError>;
 
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize;
+    fn attribute_cardinality(stats: &Stats, attribute: &AttributeName) -> usize;
 }
 
 impl EntityAttributes for NodeIndex {
@@ -29,7 +29,7 @@ impl EntityAttributes for NodeIndex {
         graphrecord.node_attributes(index)
     }
 
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize {
+    fn attribute_cardinality(stats: &Stats, attribute: &AttributeName) -> usize {
         stats.get::<NodeAttributeCardinality>(attribute)
     }
 }
@@ -42,7 +42,7 @@ impl EntityAttributes for EdgeIndex {
         graphrecord.edge_attributes(index)
     }
 
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize {
+    fn attribute_cardinality(stats: &Stats, attribute: &AttributeName) -> usize {
         stats.get::<EdgeAttributeCardinality>(attribute)
     }
 }

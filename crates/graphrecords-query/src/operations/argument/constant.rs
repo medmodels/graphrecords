@@ -1,6 +1,6 @@
 use crate::{
-    AttributeName, Explain, FailureKind, FailureKindValue, IndexValue, Mask, Position, QueryResult,
-    Scalar, ValueDomain,
+    Explain, FailureKind, FailureKindValue, IndexValue, Mask, Position, QueryResult, Scalar,
+    ValueDomain,
     element::Preserving,
     execution::EvaluationCache,
     explain::ExplainFormatter,
@@ -10,20 +10,20 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue},
+    graphrecord::{AttributeName, EdgeIndex, Value},
 };
 use std::{
     fmt::{self, Write},
     hash::{Hash, Hasher},
 };
 
-impl Explain for GraphRecordValue {
+impl Explain for Value {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         write!(formatter, "{self}")
     }
 }
 
-impl PlanIdentity for GraphRecordValue {
+impl PlanIdentity for Value {
     fn identity_eq(&self, other: &Self) -> bool {
         self == other
     }
@@ -33,9 +33,9 @@ impl PlanIdentity for GraphRecordValue {
     }
 }
 
-impl PlanInputs for GraphRecordValue {}
+impl PlanInputs for Value {}
 
-impl Prepare for GraphRecordValue {
+impl Prepare for Value {
     type Prepared<'a> = QueryResult<Self>;
 
     fn prepare<'a>(
@@ -47,17 +47,17 @@ impl Prepare for GraphRecordValue {
     }
 }
 
-impl Estimated for GraphRecordValue {
+impl Estimated for Value {
     fn estimate(&self, _stats: &Stats) -> Estimate {
         Estimate::singleton()
     }
 }
 
-impl SourceDomain for GraphRecordValue {
+impl SourceDomain for Value {
     type ValueDomain = Scalar;
 }
 
-impl<A, V> ArgumentSource<A, V> for GraphRecordValue
+impl<A, V> ArgumentSource<A, V> for Value
 where
     A: Alignment,
     for<'a> V: ValueDomain<Value<'a> = Self>,
@@ -136,13 +136,13 @@ where
     }
 }
 
-impl Explain for GraphRecordAttribute {
+impl Explain for AttributeName {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         write!(formatter, "{self}")
     }
 }
 
-impl PlanIdentity for GraphRecordAttribute {
+impl PlanIdentity for AttributeName {
     fn identity_eq(&self, other: &Self) -> bool {
         self == other
     }
@@ -152,9 +152,9 @@ impl PlanIdentity for GraphRecordAttribute {
     }
 }
 
-impl PlanInputs for GraphRecordAttribute {}
+impl PlanInputs for AttributeName {}
 
-impl Prepare for GraphRecordAttribute {
+impl Prepare for AttributeName {
     type Prepared<'a> = QueryResult<Self>;
 
     fn prepare<'a>(
@@ -166,17 +166,17 @@ impl Prepare for GraphRecordAttribute {
     }
 }
 
-impl Estimated for GraphRecordAttribute {
+impl Estimated for AttributeName {
     fn estimate(&self, _stats: &Stats) -> Estimate {
         Estimate::singleton()
     }
 }
 
-impl SourceDomain for GraphRecordAttribute {
-    type ValueDomain = AttributeName;
+impl SourceDomain for AttributeName {
+    type ValueDomain = Self;
 }
 
-impl<A, V> ArgumentSource<A, V> for GraphRecordAttribute
+impl<A, V> ArgumentSource<A, V> for AttributeName
 where
     A: Alignment,
     for<'a> V: ValueDomain<Value<'a> = Self>,

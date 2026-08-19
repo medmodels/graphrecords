@@ -1,7 +1,7 @@
 use crate::{
     Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::numeric::NonNumericValue,
 };
-use graphrecords_core::graphrecord::{GraphRecordValue, datatypes::Ceil};
+use graphrecords_core::graphrecord::{Value, datatypes::Ceil};
 
 pub trait ValueCeil: ValueDomain {
     fn ceil<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
@@ -10,16 +10,16 @@ pub trait ValueCeil: ValueDomain {
 impl ValueCeil for Scalar {
     fn ceil<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.ceil()),
+            Value::Int(_) | Value::Float(_) => Ok(value.ceil()),
             value => Err(Failure::new(label, NonNumericValue::new(value))),
         }
     }
 }
 
-impl ValueCeil for IndexValue<GraphRecordValue> {
+impl ValueCeil for IndexValue<Value> {
     fn ceil<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.ceil()),
+            Value::Int(_) | Value::Float(_) => Ok(value.ceil()),
             value => Err(Failure::new(label, NonNumericValue::new(value))),
         }
     }

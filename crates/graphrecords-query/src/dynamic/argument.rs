@@ -25,7 +25,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{GraphRecordAttribute, Group},
+    graphrecord::{AttributeName, Group},
 };
 use std::{
     fmt::{self, Display, Write},
@@ -91,7 +91,7 @@ pub enum DynInvokeArgument {
     Operand(DynOperand),
     CastTarget(DynCastTarget),
     ValueTarget(DynValueTarget),
-    Attribute(GraphRecordAttribute),
+    Attribute(AttributeName),
     Group(Group),
     Direction(EdgeDirection),
     Position(usize),
@@ -336,7 +336,7 @@ impl DynInvokeArgument {
                 DynCastTarget::String => ArgumentDescriptor::selector::<StringTarget>(),
             },
             Self::ValueTarget(target) => target.argument_descriptor(),
-            Self::Attribute(_) => ArgumentDescriptor::field::<GraphRecordAttribute>(),
+            Self::Attribute(_) => ArgumentDescriptor::field::<AttributeName>(),
             Self::Group(_) => ArgumentDescriptor::field::<Group>(),
             Self::Direction(_) => ArgumentDescriptor::field::<EdgeDirection>(),
             Self::Position(_) => ArgumentDescriptor::field::<usize>(),

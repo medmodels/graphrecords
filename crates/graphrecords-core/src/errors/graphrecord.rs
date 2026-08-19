@@ -1,5 +1,7 @@
 use super::{conversion::ConversionError, schema::SchemaError};
-use crate::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, Group, NodeIndex};
+use crate::graphrecord::{
+    AttributeName, EdgeIndex, Group, Identifier, NodeIndex, PluginName, Value,
+};
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -50,28 +52,28 @@ pub enum GraphRecordError {
     },
     NodeAttributeNotFound {
         node_index: NodeIndex,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
     },
     EdgeAttributeNotFound {
         edge_index: EdgeIndex,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
     },
     IncompatibleValueOperands {
         operation: ValueOperation,
-        left: GraphRecordValue,
-        right: GraphRecordValue,
+        left: Value,
+        right: Value,
     },
-    IncompatibleAttributeOperands {
+    IncompatibleIdentifierOperands {
         operation: ValueOperation,
-        left: GraphRecordAttribute,
-        right: GraphRecordAttribute,
+        left: Identifier,
+        right: Identifier,
     },
     InvalidTimestamp,
     PluginNotFound {
-        name: GraphRecordAttribute,
+        name: PluginName,
     },
     PluginAlreadyExists {
-        name: GraphRecordAttribute,
+        name: PluginName,
     },
     PluginFailure {
         message: String,
@@ -157,7 +159,7 @@ impl Display for GraphRecordError {
                 }
                 ValueOperation::Modulo => write!(f, "Cannot mod `{left}` with `{right}`"),
             },
-            Self::IncompatibleAttributeOperands {
+            Self::IncompatibleIdentifierOperands {
                 operation,
                 left,
                 right,
@@ -189,7 +191,7 @@ impl Display for GraphRecordError {
 #[cfg(test)]
 mod test {
     use super::{ConversionError, GraphRecordError, SchemaError, ValueOperation};
-    use crate::graphrecord::GraphRecordValue;
+    use crate::graphrecord::Value;
 
     #[test]
     fn test_display_entities() {
@@ -287,8 +289,8 @@ mod test {
     fn test_display_operands() {
         let error = |operation| GraphRecordError::IncompatibleValueOperands {
             operation,
-            left: GraphRecordValue::Int(1),
-            right: GraphRecordValue::Bool(true),
+            left: Value::Int(1),
+            right: Value::Bool(true),
         };
 
         assert_eq!(
@@ -317,7 +319,7 @@ mod test {
         );
         assert_eq!(
             "Cannot add `\"attribute\"` to `1`",
-            GraphRecordError::IncompatibleAttributeOperands {
+            GraphRecordError::IncompatibleIdentifierOperands {
                 operation: ValueOperation::Add,
                 left: 1.into(),
                 right: "attribute".into()
@@ -368,9 +370,9 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Cannot convert `true` into `GraphRecordAttribute`",
-            GraphRecordError::Conversion(ConversionError::ValueToAttribute {
-                value: GraphRecordValue::Bool(true)
+            "Cannot convert `true` into `Identifier`",
+            GraphRecordError::Conversion(ConversionError::ValueToIdentifier {
+                value: Value::Bool(true)
             })
             .to_string()
         );

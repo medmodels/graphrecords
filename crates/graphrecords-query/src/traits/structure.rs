@@ -1,9 +1,9 @@
-use graphrecords_core::{graphrecord::Group, prelude::GraphRecordAttribute};
+use graphrecords_core::{graphrecord::Group, prelude::AttributeName};
 
 pub trait Attribute {
     type ReturnOperand;
 
-    fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand;
+    fn attribute(&self, attribute: AttributeName) -> Self::ReturnOperand;
 }
 
 pub trait Attributes {
@@ -15,7 +15,7 @@ pub trait Attributes {
 pub trait HasAttribute {
     type ReturnOperand;
 
-    fn has_attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand;
+    fn has_attribute(&self, attribute: AttributeName) -> Self::ReturnOperand;
 }
 
 pub trait InGroup {

@@ -1,8 +1,8 @@
 use crate::{
-    AttributeName, EntityDomain, EntityReference, FailureKind, FailureKindValue, IndexDomain,
-    IndexValue, Mask, Scalar, ValueDomain, index::GroupKey,
+    EntityDomain, EntityReference, FailureKind, FailureKindValue, IndexDomain, IndexValue, Mask,
+    Scalar, ValueDomain, index::GroupKey,
 };
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::{AttributeName, Value};
 
 #[diagnostic::on_unimplemented(
     message = "`{Self}` values cannot be used as grouping keys",
@@ -15,7 +15,7 @@ pub trait GroupingValue: ValueDomain {
 }
 
 impl GroupingValue for Scalar {
-    type Key = GraphRecordValue;
+    type Key = Value;
 
     fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
         value.clone()

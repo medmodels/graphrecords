@@ -11,14 +11,14 @@ use crate::{
     registry::operation_manifest,
     traits::Length,
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
+use graphrecords_core::{GraphRecord, graphrecord::Value};
 
-pub(super) fn length_chars(label: &'static str, value: &str) -> QueryResult<GraphRecordValue> {
+pub(super) fn length_chars(label: &'static str, value: &str) -> QueryResult<Value> {
     let length = value.chars().count();
     let length = i64::try_from(length)
         .map_err(|_| Failure::new(label, StringLengthOverflow::new(length)))?;
 
-    Ok(GraphRecordValue::Int(length))
+    Ok(Value::Int(length))
 }
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]

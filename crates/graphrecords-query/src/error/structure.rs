@@ -1,5 +1,5 @@
 use crate::{Diagnostic, OwnedIndex};
-use graphrecords_core::graphrecord::GraphRecordAttribute;
+use graphrecords_core::graphrecord::AttributeName;
 use std::{
     error::Error,
     fmt::{self, Display, Formatter},
@@ -7,17 +7,17 @@ use std::{
 
 #[derive(Debug)]
 pub struct MissingAttribute {
-    attribute: GraphRecordAttribute,
+    attribute: AttributeName,
 }
 
 impl MissingAttribute {
     #[must_use]
-    pub const fn new(attribute: GraphRecordAttribute) -> Self {
+    pub const fn new(attribute: AttributeName) -> Self {
         Self { attribute }
     }
 
     #[must_use]
-    pub const fn attribute(&self) -> &GraphRecordAttribute {
+    pub const fn attribute(&self) -> &AttributeName {
         &self.attribute
     }
 }
@@ -45,18 +45,18 @@ impl Diagnostic for MissingAttribute {
 
 #[derive(Debug)]
 pub struct MissingTraversedAttribute<T: OwnedIndex> {
-    attribute: GraphRecordAttribute,
+    attribute: AttributeName,
     entity: T,
 }
 
 impl<T: OwnedIndex> MissingTraversedAttribute<T> {
     #[must_use]
-    pub const fn new(attribute: GraphRecordAttribute, entity: T) -> Self {
+    pub const fn new(attribute: AttributeName, entity: T) -> Self {
         Self { attribute, entity }
     }
 
     #[must_use]
-    pub const fn attribute(&self) -> &GraphRecordAttribute {
+    pub const fn attribute(&self) -> &AttributeName {
         &self.attribute
     }
 

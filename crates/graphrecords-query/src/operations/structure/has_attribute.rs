@@ -8,7 +8,7 @@ use crate::{
     registry::operation_manifest,
     traits::HasAttribute,
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
+use graphrecords_core::{GraphRecord, graphrecord::AttributeName};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -16,11 +16,11 @@ use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
 #[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct HasAttributeOperation {
     #[explain(label)]
-    attribute: GraphRecordAttribute,
+    attribute: AttributeName,
 }
 
 impl Prepare for HasAttributeOperation {
-    type Prepared<'a> = &'a GraphRecordAttribute;
+    type Prepared<'a> = &'a AttributeName;
 
     fn prepare<'a>(
         &'a self,
@@ -72,7 +72,7 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
 impl<O: Apply<HasAttributeOperation>> HasAttribute for O {
     type ReturnOperand = O::Output;
 
-    fn has_attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
+    fn has_attribute(&self, attribute: AttributeName) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(
             self.clone(),
             HasAttributeOperation { attribute },
@@ -87,7 +87,7 @@ operation_manifest! {
 
         kernel {
             parameters: <E: EntityAttributes>;
-            field: attribute: GraphRecordAttribute;
+            field: attribute: AttributeName;
             input: Indexed<E, Unit>;
             output: Indexed<E, Mask>;
             emission: Preserving;
@@ -95,7 +95,7 @@ operation_manifest! {
 
         kernel {
             parameters: <E: EntityAttributes, I: IndexDomain>;
-            field: attribute: GraphRecordAttribute;
+            field: attribute: AttributeName;
             input: Indexed<I, EntityReference<E>>;
             output: Indexed<I, Mask>;
             emission: Preserving;

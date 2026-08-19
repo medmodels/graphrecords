@@ -30,22 +30,20 @@ if TYPE_CHECKING:
     from graphrecords.schema import AttributeType
 
 
-#: A type alias for attributes of a GraphRecord.
-GraphRecordAttribute: TypeAlias = Union[str, int]
+#: A type alias for an identifier.
+Identifier: TypeAlias = Union[str, int]
 
-#: A type alias for a list of GraphRecord attributes.
-GraphRecordAttributeInputList: TypeAlias = Union[
-    List[str], List[int], List[GraphRecordAttribute]
-]
+#: A type alias for a list of identifiers.
+IdentifierInputList: TypeAlias = Union[List[str], List[int], List[Identifier]]
 
-#: A type alias for the value of a GraphRecord attribute.
-GraphRecordValue: TypeAlias = Union[str, int, float, bool, datetime, timedelta, None]
+#: A type alias for an attribute value.
+Value: TypeAlias = Union[str, int, float, bool, datetime, timedelta, None]
 
 #: A type alias for a node index.
-NodeIndex: TypeAlias = GraphRecordAttribute
+NodeIndex: TypeAlias = Identifier
 
 #: A type alias for a list of node indices.
-NodeIndexInputList: TypeAlias = GraphRecordAttributeInputList
+NodeIndexInputList: TypeAlias = IdentifierInputList
 
 #: A type alias for an edge index.
 EdgeIndex: TypeAlias = int
@@ -54,22 +52,28 @@ EdgeIndex: TypeAlias = int
 EdgeIndexInputList: TypeAlias = List[EdgeIndex]
 
 #: A type alias for a group.
-Group: TypeAlias = GraphRecordAttribute
+Group: TypeAlias = Identifier
 
 #: A type alias for a plugin name.
-PluginName: TypeAlias = GraphRecordAttribute
+PluginName: TypeAlias = Identifier
 
 #: A type alias for a list of groups.
-GroupInputList: TypeAlias = GraphRecordAttributeInputList
+GroupInputList: TypeAlias = IdentifierInputList
+
+#: A type alias for an attribute name.
+AttributeName: TypeAlias = Identifier
+
+#: A type alias for a list of attribute names.
+AttributeNameInputList: TypeAlias = IdentifierInputList
 
 #: A type alias for attributes.
-Attributes: TypeAlias = Dict[GraphRecordAttribute, GraphRecordValue]
+Attributes: TypeAlias = Dict[AttributeName, Value]
 
 #: A type alias for input attributes.
 AttributesInput: TypeAlias = Union[
-    Mapping[GraphRecordAttribute, GraphRecordValue],
-    Mapping[str, GraphRecordValue],
-    Mapping[int, GraphRecordValue],
+    Mapping[AttributeName, Value],
+    Mapping[str, Value],
+    Mapping[int, Value],
 ]
 
 #: A type alias for a node tuple.
@@ -136,24 +140,24 @@ class PyCategoricalAttributeOverview(TypedDict):
     """Dictionary for a categorical attribute overview."""
 
     attribute_type: Literal[PyAttributeType.Categorical]
-    distinct_values: List[GraphRecordValue]
+    distinct_values: List[Value]
 
 
 class PyContinuousAttributeOverview(TypedDict):
     """Dictionary for a continuous attribute overview."""
 
     attribute_type: Literal[PyAttributeType.Continuous]
-    min: GraphRecordValue
-    mean: GraphRecordValue
-    max: GraphRecordValue
+    min: Value
+    mean: Value
+    max: Value
 
 
 class PyTemporalAttributeOverview(TypedDict):
     """Dictionary for a temporal attribute overview."""
 
     attribute_type: Literal[PyAttributeType.Temporal]
-    min: GraphRecordValue
-    max: GraphRecordValue
+    min: Value
+    max: Value
 
 
 class PyUnstructuredAttributeOverview(TypedDict):
@@ -167,24 +171,24 @@ class CategoricalAttributeOverview(TypedDict):
     """Dictionary for a categorical attribute overview."""
 
     attribute_type: Literal[AttributeType.Categorical]
-    distinct_values: List[GraphRecordValue]
+    distinct_values: List[Value]
 
 
 class ContinuousAttributeOverview(TypedDict):
     """Dictionary for a continuous attribute overview."""
 
     attribute_type: Literal[AttributeType.Continuous]
-    min: GraphRecordValue
-    mean: GraphRecordValue
-    max: GraphRecordValue
+    min: Value
+    mean: Value
+    max: Value
 
 
 class TemporalAttributeOverview(TypedDict):
     """Dictionary for a temporal attribute overview."""
 
     attribute_type: Literal[AttributeType.Temporal]
-    min: GraphRecordValue
-    max: GraphRecordValue
+    min: Value
+    max: Value
 
 
 class UnstructuredAttributeOverview(TypedDict):
@@ -244,30 +248,30 @@ class _PyConnector(ABC):  # pyright: ignore[reportUnusedClass]
     def export(self, graphrecord: PyGraphRecord) -> Any: ...  # noqa: ANN401
 
 
-def is_graphrecord_attribute(value: object) -> TypeIs[GraphRecordAttribute]:
-    """Check if a value is a GraphRecord attribute.
+def is_identifier(value: object) -> TypeIs[Identifier]:
+    """Check if a value is a valid identifier.
 
     Args:
         value (object): The value to check.
 
     Returns:
-        TypeIs[GraphRecordAttribute]: True if the value is a GraphRecord attribute,
-            otherwise False.
+        TypeIs[Identifier]: True if the value is a valid identifier, otherwise False.
     """
     return isinstance(value, (str, int)) and not isinstance(value, bool)
 
 
-def is_graphrecord_value(value: object) -> TypeIs[GraphRecordValue]:
-    """Check if a value is a valid GraphRecord value.
+def is_value(value: object) -> TypeIs[Value]:
+    """Check if a value is a valid value.
 
     Args:
         value (object): The value to check.
 
     Returns:
-        TypeIs[GraphRecordValue]: True if the value is a valid GraphRecord value,
-            otherwise False.
+        TypeIs[Value]: True if the value is a valid value, otherwise False.
     """
-    return isinstance(value, (str, int, float, bool, datetime)) or value is None
+    return (
+        isinstance(value, (str, int, float, bool, datetime, timedelta)) or value is None
+    )
 
 
 def is_node_index(value: object) -> TypeIs[NodeIndex]:
@@ -279,7 +283,7 @@ def is_node_index(value: object) -> TypeIs[NodeIndex]:
     Returns:
         TypeIs[NodeIndex]: True if the value is a valid node index, otherwise False.
     """
-    return is_graphrecord_attribute(value)
+    return is_identifier(value)
 
 
 def is_node_index_list(value: object) -> TypeIs[NodeIndexInputList]:
@@ -329,7 +333,7 @@ def is_group(value: object) -> TypeIs[Group]:
     Returns:
         TypeIs[Group]: True if the value is a valid group, otherwise False.
     """
-    return is_graphrecord_attribute(value)
+    return is_identifier(value)
 
 
 def is_attributes(value: object) -> TypeIs[Attributes]:
@@ -357,7 +361,7 @@ def is_node_tuple(value: object) -> TypeIs[NodeTuple]:
     return (
         isinstance(value, tuple)
         and len(value) == 2
-        and is_graphrecord_attribute(value[0])
+        and is_identifier(value[0])
         and is_attributes(value[1])
     )
 
@@ -387,8 +391,8 @@ def is_edge_tuple(value: object) -> TypeIs[EdgeTuple]:
     return (
         isinstance(value, tuple)
         and len(value) == 3
-        and is_graphrecord_attribute(value[0])
-        and is_graphrecord_attribute(value[1])
+        and is_identifier(value[0])
+        and is_identifier(value[1])
         and is_attributes(value[2])
     )
 

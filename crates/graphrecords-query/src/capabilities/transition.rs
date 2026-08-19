@@ -1,10 +1,8 @@
 use crate::{
-    AttributeName, Failure, FailureKind, FailureKindValue, IndexValue, Mask, Position, Positional,
-    QueryResult, Scalar, ValueDomain, error::conversion::InvalidTransition,
+    Failure, FailureKind, FailureKindValue, IndexValue, Mask, Position, Positional, QueryResult,
+    Scalar, ValueDomain, error::conversion::InvalidTransition,
 };
-use graphrecords_core::graphrecord::{
-    EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex,
-};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, Identifier, NodeIndex, Value};
 
 pub trait ValueTransition<T: ValueDomain>: ValueDomain {
     fn transition<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<T::Value<'a>>;
@@ -14,44 +12,37 @@ const ATTRIBUTE_NAME_TARGET: &str = "AttributeName";
 const ATTRIBUTE_NAME_INDEX_TARGET: &str = "IndexValue<AttributeName>";
 const BOOL_INDEX_TARGET: &str = "IndexValue<bool>";
 const EDGE_INDEX_TARGET: &str = "IndexValue<EdgeIndex>";
-const GRAPHRECORD_VALUE_INDEX_TARGET: &str = "IndexValue<GraphRecordValue>";
+const VALUE_INDEX_TARGET: &str = "IndexValue<Value>";
 const MASK_TARGET: &str = "Mask";
 const NODE_INDEX_TARGET: &str = "IndexValue<NodeIndex>";
 const POSITIONAL_INDEX_TARGET: &str = "IndexValue<Positional>";
 const SCALAR_TARGET: &str = "Scalar";
 
-fn graphrecord_value_to_attribute(
+fn value_to_identifier(
     label: &'static str,
-    value: GraphRecordValue,
+    value: Value,
     target: &'static str,
-) -> QueryResult<GraphRecordAttribute> {
+) -> QueryResult<Identifier> {
     match value {
-        GraphRecordValue::String(value) => Ok(GraphRecordAttribute::String(value)),
-        GraphRecordValue::Int(value) => Ok(GraphRecordAttribute::Int(value)),
+        Value::String(value) => Ok(Identifier::String(value)),
+        Value::Int(value) => Ok(Identifier::Int(value)),
         value => Err(Failure::new(label, InvalidTransition::new(value, target))),
     }
 }
 
-fn graphrecord_value_to_bool(
-    label: &'static str,
-    value: GraphRecordValue,
-    target: &'static str,
-) -> QueryResult<bool> {
+fn value_to_bool(label: &'static str, value: Value, target: &'static str) -> QueryResult<bool> {
     match value {
-        GraphRecordValue::Bool(value) => Ok(value),
+        Value::Bool(value) => Ok(value),
         value => Err(Failure::new(label, InvalidTransition::new(value, target))),
     }
 }
 
-fn graphrecord_value_to_edge_index(
-    label: &'static str,
-    value: GraphRecordValue,
-) -> QueryResult<EdgeIndex> {
+fn value_to_edge_index(label: &'static str, value: Value) -> QueryResult<EdgeIndex> {
     match value {
-        GraphRecordValue::Int(value) => EdgeIndex::try_from(value).map_err(|_| {
+        Value::Int(value) => EdgeIndex::try_from(value).map_err(|_| {
             Failure::new(
                 label,
-                InvalidTransition::new(GraphRecordValue::Int(value), EDGE_INDEX_TARGET),
+                InvalidTransition::new(Value::Int(value), EDGE_INDEX_TARGET),
             )
         }),
         value => Err(Failure::new(
@@ -61,15 +52,12 @@ fn graphrecord_value_to_edge_index(
     }
 }
 
-fn graphrecord_value_to_position(
-    label: &'static str,
-    value: GraphRecordValue,
-) -> QueryResult<Position> {
+fn value_to_position(label: &'static str, value: Value) -> QueryResult<Position> {
     match value {
-        GraphRecordValue::Int(value) => Position::try_from(value).map_err(|_| {
+        Value::Int(value) => Position::try_from(value).map_err(|_| {
             Failure::new(
                 label,
-                InvalidTransition::new(GraphRecordValue::Int(value), POSITIONAL_INDEX_TARGET),
+                InvalidTransition::new(Value::Int(value), POSITIONAL_INDEX_TARGET),
             )
         }),
         value => Err(Failure::new(
@@ -79,46 +67,10 @@ fn graphrecord_value_to_position(
     }
 }
 
-fn attribute_to_graphrecord_value(value: GraphRecordAttribute) -> GraphRecordValue {
+fn identifier_to_value(value: Identifier) -> Value {
     match value {
-        GraphRecordAttribute::String(value) => GraphRecordValue::String(value),
-        GraphRecordAttribute::Int(value) => GraphRecordValue::Int(value),
-    }
-}
-
-fn attribute_to_edge_index(
-    label: &'static str,
-    value: GraphRecordAttribute,
-) -> QueryResult<EdgeIndex> {
-    match value {
-        GraphRecordAttribute::Int(value) => EdgeIndex::try_from(value).map_err(|_| {
-            Failure::new(
-                label,
-                InvalidTransition::new(GraphRecordAttribute::Int(value), EDGE_INDEX_TARGET),
-            )
-        }),
-        value @ GraphRecordAttribute::String(_) => Err(Failure::new(
-            label,
-            InvalidTransition::new(value, EDGE_INDEX_TARGET),
-        )),
-    }
-}
-
-fn attribute_to_position(
-    label: &'static str,
-    value: GraphRecordAttribute,
-) -> QueryResult<Position> {
-    match value {
-        GraphRecordAttribute::Int(value) => Position::try_from(value).map_err(|_| {
-            Failure::new(
-                label,
-                InvalidTransition::new(GraphRecordAttribute::Int(value), POSITIONAL_INDEX_TARGET),
-            )
-        }),
-        value @ GraphRecordAttribute::String(_) => Err(Failure::new(
-            label,
-            InvalidTransition::new(value, POSITIONAL_INDEX_TARGET),
-        )),
+        Identifier::String(value) => Value::String(value),
+        Identifier::Int(value) => Value::Int(value),
     }
 }
 
@@ -130,11 +82,11 @@ fn position_to_integer(
     i64::try_from(value).map_err(|_| Failure::new(label, InvalidTransition::new(value, target)))
 }
 
-impl ValueTransition<IndexValue<GraphRecordValue>> for Scalar {
+impl ValueTransition<IndexValue<Value>> for Scalar {
     fn transition<'a>(
         _label: &'static str,
         value: Self::Value<'a>,
-    ) -> QueryResult<<IndexValue<GraphRecordValue> as ValueDomain>::Value<'a>> {
+    ) -> QueryResult<<IndexValue<Value> as ValueDomain>::Value<'a>> {
         Ok(value)
     }
 }
@@ -144,7 +96,7 @@ impl ValueTransition<AttributeName> for Scalar {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<AttributeName as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_attribute(label, value, ATTRIBUTE_NAME_TARGET)
+        value_to_identifier(label, value, ATTRIBUTE_NAME_TARGET).map(AttributeName::from)
     }
 }
 
@@ -153,7 +105,7 @@ impl ValueTransition<IndexValue<NodeIndex>> for Scalar {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<NodeIndex> as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_attribute(label, value, NODE_INDEX_TARGET)
+        value_to_identifier(label, value, NODE_INDEX_TARGET).map(NodeIndex::from)
     }
 }
 
@@ -162,7 +114,7 @@ impl ValueTransition<IndexValue<AttributeName>> for Scalar {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<AttributeName> as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_attribute(label, value, ATTRIBUTE_NAME_INDEX_TARGET)
+        value_to_identifier(label, value, ATTRIBUTE_NAME_INDEX_TARGET).map(AttributeName::from)
     }
 }
 
@@ -171,7 +123,7 @@ impl ValueTransition<Mask> for Scalar {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<Mask as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_bool(label, value, MASK_TARGET)
+        value_to_bool(label, value, MASK_TARGET)
     }
 }
 
@@ -180,7 +132,7 @@ impl ValueTransition<IndexValue<bool>> for Scalar {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<bool> as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_bool(label, value, BOOL_INDEX_TARGET)
+        value_to_bool(label, value, BOOL_INDEX_TARGET)
     }
 }
 
@@ -189,7 +141,7 @@ impl ValueTransition<IndexValue<EdgeIndex>> for Scalar {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<EdgeIndex> as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_edge_index(label, value)
+        value_to_edge_index(label, value)
     }
 }
 
@@ -198,11 +150,11 @@ impl ValueTransition<IndexValue<Positional>> for Scalar {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<Positional> as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_position(label, value)
+        value_to_position(label, value)
     }
 }
 
-impl ValueTransition<Scalar> for IndexValue<GraphRecordValue> {
+impl ValueTransition<Scalar> for IndexValue<Value> {
     fn transition<'a>(
         _label: &'static str,
         value: Self::Value<'a>,
@@ -211,66 +163,66 @@ impl ValueTransition<Scalar> for IndexValue<GraphRecordValue> {
     }
 }
 
-impl ValueTransition<AttributeName> for IndexValue<GraphRecordValue> {
+impl ValueTransition<AttributeName> for IndexValue<Value> {
     fn transition<'a>(
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<AttributeName as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_attribute(label, value, ATTRIBUTE_NAME_TARGET)
+        value_to_identifier(label, value, ATTRIBUTE_NAME_TARGET).map(AttributeName::from)
     }
 }
 
-impl ValueTransition<IndexValue<NodeIndex>> for IndexValue<GraphRecordValue> {
+impl ValueTransition<IndexValue<NodeIndex>> for IndexValue<Value> {
     fn transition<'a>(
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<NodeIndex> as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_attribute(label, value, NODE_INDEX_TARGET)
+        value_to_identifier(label, value, NODE_INDEX_TARGET).map(NodeIndex::from)
     }
 }
 
-impl ValueTransition<IndexValue<AttributeName>> for IndexValue<GraphRecordValue> {
+impl ValueTransition<IndexValue<AttributeName>> for IndexValue<Value> {
     fn transition<'a>(
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<AttributeName> as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_attribute(label, value, ATTRIBUTE_NAME_INDEX_TARGET)
+        value_to_identifier(label, value, ATTRIBUTE_NAME_INDEX_TARGET).map(AttributeName::from)
     }
 }
 
-impl ValueTransition<Mask> for IndexValue<GraphRecordValue> {
+impl ValueTransition<Mask> for IndexValue<Value> {
     fn transition<'a>(
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<Mask as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_bool(label, value, MASK_TARGET)
+        value_to_bool(label, value, MASK_TARGET)
     }
 }
 
-impl ValueTransition<IndexValue<bool>> for IndexValue<GraphRecordValue> {
+impl ValueTransition<IndexValue<bool>> for IndexValue<Value> {
     fn transition<'a>(
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<bool> as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_bool(label, value, BOOL_INDEX_TARGET)
+        value_to_bool(label, value, BOOL_INDEX_TARGET)
     }
 }
 
-impl ValueTransition<IndexValue<EdgeIndex>> for IndexValue<GraphRecordValue> {
+impl ValueTransition<IndexValue<EdgeIndex>> for IndexValue<Value> {
     fn transition<'a>(
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<EdgeIndex> as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_edge_index(label, value)
+        value_to_edge_index(label, value)
     }
 }
 
-impl ValueTransition<IndexValue<Positional>> for IndexValue<GraphRecordValue> {
+impl ValueTransition<IndexValue<Positional>> for IndexValue<Value> {
     fn transition<'a>(
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<Positional> as ValueDomain>::Value<'a>> {
-        graphrecord_value_to_position(label, value)
+        value_to_position(label, value)
     }
 }
 
@@ -279,16 +231,16 @@ impl ValueTransition<Scalar> for AttributeName {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<Scalar as ValueDomain>::Value<'a>> {
-        Ok(attribute_to_graphrecord_value(value))
+        Ok(identifier_to_value(Identifier::from(value)))
     }
 }
 
-impl ValueTransition<IndexValue<GraphRecordValue>> for AttributeName {
+impl ValueTransition<IndexValue<Value>> for AttributeName {
     fn transition<'a>(
         _label: &'static str,
         value: Self::Value<'a>,
-    ) -> QueryResult<<IndexValue<GraphRecordValue> as ValueDomain>::Value<'a>> {
-        Ok(attribute_to_graphrecord_value(value))
+    ) -> QueryResult<<IndexValue<Value> as ValueDomain>::Value<'a>> {
+        Ok(identifier_to_value(Identifier::from(value)))
     }
 }
 
@@ -297,7 +249,7 @@ impl ValueTransition<IndexValue<NodeIndex>> for AttributeName {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<NodeIndex> as ValueDomain>::Value<'a>> {
-        Ok(value)
+        Ok(NodeIndex::from(Identifier::from(value)))
     }
 }
 
@@ -315,7 +267,14 @@ impl ValueTransition<IndexValue<EdgeIndex>> for AttributeName {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<EdgeIndex> as ValueDomain>::Value<'a>> {
-        attribute_to_edge_index(label, value)
+        match value.identifier() {
+            Identifier::Int(integer) => EdgeIndex::try_from(*integer)
+                .map_err(|_| Failure::new(label, InvalidTransition::new(value, EDGE_INDEX_TARGET))),
+            Identifier::String(_) => Err(Failure::new(
+                label,
+                InvalidTransition::new(value, EDGE_INDEX_TARGET),
+            )),
+        }
     }
 }
 
@@ -324,7 +283,18 @@ impl ValueTransition<IndexValue<Positional>> for AttributeName {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<Positional> as ValueDomain>::Value<'a>> {
-        attribute_to_position(label, value)
+        match value.identifier() {
+            Identifier::Int(integer) => Position::try_from(*integer).map_err(|_| {
+                Failure::new(
+                    label,
+                    InvalidTransition::new(value, POSITIONAL_INDEX_TARGET),
+                )
+            }),
+            Identifier::String(_) => Err(Failure::new(
+                label,
+                InvalidTransition::new(value, POSITIONAL_INDEX_TARGET),
+            )),
+        }
     }
 }
 
@@ -333,16 +303,16 @@ impl ValueTransition<Scalar> for IndexValue<NodeIndex> {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<Scalar as ValueDomain>::Value<'a>> {
-        Ok(attribute_to_graphrecord_value(value))
+        Ok(identifier_to_value(Identifier::from(value)))
     }
 }
 
-impl ValueTransition<IndexValue<GraphRecordValue>> for IndexValue<NodeIndex> {
+impl ValueTransition<IndexValue<Value>> for IndexValue<NodeIndex> {
     fn transition<'a>(
         _label: &'static str,
         value: Self::Value<'a>,
-    ) -> QueryResult<<IndexValue<GraphRecordValue> as ValueDomain>::Value<'a>> {
-        Ok(attribute_to_graphrecord_value(value))
+    ) -> QueryResult<<IndexValue<Value> as ValueDomain>::Value<'a>> {
+        Ok(identifier_to_value(Identifier::from(value)))
     }
 }
 
@@ -351,7 +321,7 @@ impl ValueTransition<AttributeName> for IndexValue<NodeIndex> {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<AttributeName as ValueDomain>::Value<'a>> {
-        Ok(value)
+        Ok(AttributeName::from(Identifier::from(value)))
     }
 }
 
@@ -360,7 +330,7 @@ impl ValueTransition<IndexValue<AttributeName>> for IndexValue<NodeIndex> {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<AttributeName> as ValueDomain>::Value<'a>> {
-        Ok(value)
+        Ok(AttributeName::from(Identifier::from(value)))
     }
 }
 
@@ -369,7 +339,14 @@ impl ValueTransition<IndexValue<EdgeIndex>> for IndexValue<NodeIndex> {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<EdgeIndex> as ValueDomain>::Value<'a>> {
-        attribute_to_edge_index(label, value)
+        match value.identifier() {
+            Identifier::Int(integer) => EdgeIndex::try_from(*integer)
+                .map_err(|_| Failure::new(label, InvalidTransition::new(value, EDGE_INDEX_TARGET))),
+            Identifier::String(_) => Err(Failure::new(
+                label,
+                InvalidTransition::new(value, EDGE_INDEX_TARGET),
+            )),
+        }
     }
 }
 
@@ -378,7 +355,18 @@ impl ValueTransition<IndexValue<Positional>> for IndexValue<NodeIndex> {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<Positional> as ValueDomain>::Value<'a>> {
-        attribute_to_position(label, value)
+        match value.identifier() {
+            Identifier::Int(integer) => Position::try_from(*integer).map_err(|_| {
+                Failure::new(
+                    label,
+                    InvalidTransition::new(value, POSITIONAL_INDEX_TARGET),
+                )
+            }),
+            Identifier::String(_) => Err(Failure::new(
+                label,
+                InvalidTransition::new(value, POSITIONAL_INDEX_TARGET),
+            )),
+        }
     }
 }
 
@@ -387,16 +375,16 @@ impl ValueTransition<Scalar> for IndexValue<AttributeName> {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<Scalar as ValueDomain>::Value<'a>> {
-        Ok(attribute_to_graphrecord_value(value))
+        Ok(identifier_to_value(Identifier::from(value)))
     }
 }
 
-impl ValueTransition<IndexValue<GraphRecordValue>> for IndexValue<AttributeName> {
+impl ValueTransition<IndexValue<Value>> for IndexValue<AttributeName> {
     fn transition<'a>(
         _label: &'static str,
         value: Self::Value<'a>,
-    ) -> QueryResult<<IndexValue<GraphRecordValue> as ValueDomain>::Value<'a>> {
-        Ok(attribute_to_graphrecord_value(value))
+    ) -> QueryResult<<IndexValue<Value> as ValueDomain>::Value<'a>> {
+        Ok(identifier_to_value(Identifier::from(value)))
     }
 }
 
@@ -414,7 +402,7 @@ impl ValueTransition<IndexValue<NodeIndex>> for IndexValue<AttributeName> {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<NodeIndex> as ValueDomain>::Value<'a>> {
-        Ok(value)
+        Ok(NodeIndex::from(Identifier::from(value)))
     }
 }
 
@@ -423,7 +411,14 @@ impl ValueTransition<IndexValue<EdgeIndex>> for IndexValue<AttributeName> {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<EdgeIndex> as ValueDomain>::Value<'a>> {
-        attribute_to_edge_index(label, value)
+        match value.identifier() {
+            Identifier::Int(integer) => EdgeIndex::try_from(*integer)
+                .map_err(|_| Failure::new(label, InvalidTransition::new(value, EDGE_INDEX_TARGET))),
+            Identifier::String(_) => Err(Failure::new(
+                label,
+                InvalidTransition::new(value, EDGE_INDEX_TARGET),
+            )),
+        }
     }
 }
 
@@ -432,7 +427,18 @@ impl ValueTransition<IndexValue<Positional>> for IndexValue<AttributeName> {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<Positional> as ValueDomain>::Value<'a>> {
-        attribute_to_position(label, value)
+        match value.identifier() {
+            Identifier::Int(integer) => Position::try_from(*integer).map_err(|_| {
+                Failure::new(
+                    label,
+                    InvalidTransition::new(value, POSITIONAL_INDEX_TARGET),
+                )
+            }),
+            Identifier::String(_) => Err(Failure::new(
+                label,
+                InvalidTransition::new(value, POSITIONAL_INDEX_TARGET),
+            )),
+        }
     }
 }
 
@@ -441,16 +447,16 @@ impl ValueTransition<Scalar> for Mask {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<Scalar as ValueDomain>::Value<'a>> {
-        Ok(GraphRecordValue::Bool(value))
+        Ok(Value::Bool(value))
     }
 }
 
-impl ValueTransition<IndexValue<GraphRecordValue>> for Mask {
+impl ValueTransition<IndexValue<Value>> for Mask {
     fn transition<'a>(
         _label: &'static str,
         value: Self::Value<'a>,
-    ) -> QueryResult<<IndexValue<GraphRecordValue> as ValueDomain>::Value<'a>> {
-        Ok(GraphRecordValue::Bool(value))
+    ) -> QueryResult<<IndexValue<Value> as ValueDomain>::Value<'a>> {
+        Ok(Value::Bool(value))
     }
 }
 
@@ -468,16 +474,16 @@ impl ValueTransition<Scalar> for IndexValue<bool> {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<Scalar as ValueDomain>::Value<'a>> {
-        Ok(GraphRecordValue::Bool(value))
+        Ok(Value::Bool(value))
     }
 }
 
-impl ValueTransition<IndexValue<GraphRecordValue>> for IndexValue<bool> {
+impl ValueTransition<IndexValue<Value>> for IndexValue<bool> {
     fn transition<'a>(
         _label: &'static str,
         value: Self::Value<'a>,
-    ) -> QueryResult<<IndexValue<GraphRecordValue> as ValueDomain>::Value<'a>> {
-        Ok(GraphRecordValue::Bool(value))
+    ) -> QueryResult<<IndexValue<Value> as ValueDomain>::Value<'a>> {
+        Ok(Value::Bool(value))
     }
 }
 
@@ -495,16 +501,16 @@ impl ValueTransition<Scalar> for IndexValue<EdgeIndex> {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<Scalar as ValueDomain>::Value<'a>> {
-        Ok(GraphRecordValue::Int(i64::from(value)))
+        Ok(Value::Int(i64::from(value)))
     }
 }
 
-impl ValueTransition<IndexValue<GraphRecordValue>> for IndexValue<EdgeIndex> {
+impl ValueTransition<IndexValue<Value>> for IndexValue<EdgeIndex> {
     fn transition<'a>(
         _label: &'static str,
         value: Self::Value<'a>,
-    ) -> QueryResult<<IndexValue<GraphRecordValue> as ValueDomain>::Value<'a>> {
-        Ok(GraphRecordValue::Int(i64::from(value)))
+    ) -> QueryResult<<IndexValue<Value> as ValueDomain>::Value<'a>> {
+        Ok(Value::Int(i64::from(value)))
     }
 }
 
@@ -513,7 +519,7 @@ impl ValueTransition<AttributeName> for IndexValue<EdgeIndex> {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<AttributeName as ValueDomain>::Value<'a>> {
-        Ok(GraphRecordAttribute::Int(i64::from(value)))
+        Ok(AttributeName::from(i64::from(value)))
     }
 }
 
@@ -522,7 +528,7 @@ impl ValueTransition<IndexValue<NodeIndex>> for IndexValue<EdgeIndex> {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<NodeIndex> as ValueDomain>::Value<'a>> {
-        Ok(GraphRecordAttribute::Int(i64::from(value)))
+        Ok(NodeIndex::from(i64::from(value)))
     }
 }
 
@@ -531,7 +537,7 @@ impl ValueTransition<IndexValue<AttributeName>> for IndexValue<EdgeIndex> {
         _label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<AttributeName> as ValueDomain>::Value<'a>> {
-        Ok(GraphRecordAttribute::Int(i64::from(value)))
+        Ok(AttributeName::from(i64::from(value)))
     }
 }
 
@@ -554,16 +560,16 @@ impl ValueTransition<Scalar> for IndexValue<Positional> {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<Scalar as ValueDomain>::Value<'a>> {
-        position_to_integer(label, value, SCALAR_TARGET).map(GraphRecordValue::Int)
+        position_to_integer(label, value, SCALAR_TARGET).map(Value::Int)
     }
 }
 
-impl ValueTransition<IndexValue<GraphRecordValue>> for IndexValue<Positional> {
+impl ValueTransition<IndexValue<Value>> for IndexValue<Positional> {
     fn transition<'a>(
         label: &'static str,
         value: Self::Value<'a>,
-    ) -> QueryResult<<IndexValue<GraphRecordValue> as ValueDomain>::Value<'a>> {
-        position_to_integer(label, value, GRAPHRECORD_VALUE_INDEX_TARGET).map(GraphRecordValue::Int)
+    ) -> QueryResult<<IndexValue<Value> as ValueDomain>::Value<'a>> {
+        position_to_integer(label, value, VALUE_INDEX_TARGET).map(Value::Int)
     }
 }
 
@@ -572,7 +578,7 @@ impl ValueTransition<AttributeName> for IndexValue<Positional> {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<AttributeName as ValueDomain>::Value<'a>> {
-        position_to_integer(label, value, ATTRIBUTE_NAME_TARGET).map(GraphRecordAttribute::Int)
+        position_to_integer(label, value, ATTRIBUTE_NAME_TARGET).map(AttributeName::from)
     }
 }
 
@@ -581,7 +587,7 @@ impl ValueTransition<IndexValue<NodeIndex>> for IndexValue<Positional> {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<NodeIndex> as ValueDomain>::Value<'a>> {
-        position_to_integer(label, value, NODE_INDEX_TARGET).map(GraphRecordAttribute::Int)
+        position_to_integer(label, value, NODE_INDEX_TARGET).map(NodeIndex::from)
     }
 }
 
@@ -590,8 +596,7 @@ impl ValueTransition<IndexValue<AttributeName>> for IndexValue<Positional> {
         label: &'static str,
         value: Self::Value<'a>,
     ) -> QueryResult<<IndexValue<AttributeName> as ValueDomain>::Value<'a>> {
-        position_to_integer(label, value, ATTRIBUTE_NAME_INDEX_TARGET)
-            .map(GraphRecordAttribute::Int)
+        position_to_integer(label, value, ATTRIBUTE_NAME_INDEX_TARGET).map(AttributeName::from)
     }
 }
 

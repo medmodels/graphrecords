@@ -1,4 +1,5 @@
-use crate::{AttributeName, FailureKindValue, IndexDomain, IndexValue, Mask, Scalar, ValueDomain};
+use crate::{FailureKindValue, IndexDomain, IndexValue, Mask, Scalar, ValueDomain};
+use graphrecords_core::graphrecord::AttributeName;
 use std::cmp::Ordering;
 
 pub trait ValueEquality: ValueDomain {

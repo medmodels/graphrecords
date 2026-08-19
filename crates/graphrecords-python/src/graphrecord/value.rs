@@ -1,7 +1,7 @@
 use super::{Lut, traits::DeepFrom};
 use crate::{conversion_lut::ConversionLut, graphrecord::errors::PyGraphRecordError};
 use chrono::{NaiveDateTime, TimeDelta};
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::Value;
 use pyo3::{
     Borrowed, Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
     types::{PyAnyMethods, PyBool, PyDateTime, PyDelta, PyFloat, PyInt, PyString},
@@ -10,97 +10,92 @@ use std::ops::Deref;
 
 #[repr(transparent)]
 #[derive(Clone, Debug)]
-pub struct PyGraphRecordValue(GraphRecordValue);
+pub struct PyValue(Value);
 
-impl From<GraphRecordValue> for PyGraphRecordValue {
-    fn from(value: GraphRecordValue) -> Self {
+impl From<Value> for PyValue {
+    fn from(value: Value) -> Self {
         Self(value)
     }
 }
 
-impl From<PyGraphRecordValue> for GraphRecordValue {
-    fn from(value: PyGraphRecordValue) -> Self {
+impl From<PyValue> for Value {
+    fn from(value: PyValue) -> Self {
         value.0
     }
 }
 
-impl DeepFrom<PyGraphRecordValue> for GraphRecordValue {
-    fn deep_from(value: PyGraphRecordValue) -> Self {
+impl DeepFrom<PyValue> for Value {
+    fn deep_from(value: PyValue) -> Self {
         value.into()
     }
 }
 
-impl DeepFrom<GraphRecordValue> for PyGraphRecordValue {
-    fn deep_from(value: GraphRecordValue) -> Self {
+impl DeepFrom<Value> for PyValue {
+    fn deep_from(value: Value) -> Self {
         value.into()
     }
 }
 
-impl Deref for PyGraphRecordValue {
-    type Target = GraphRecordValue;
+impl Deref for PyValue {
+    type Target = Value;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-static GRAPHRECORDVALUE_CONVERSION_LUT: Lut<GraphRecordValue> = ConversionLut::new();
+static VALUE_CONVERSION_LUT: Lut<Value> = ConversionLut::new();
 
 #[allow(clippy::unnecessary_wraps)]
-pub(crate) fn convert_pyobject_to_graphrecordvalue(
-    ob: &Bound<'_, PyAny>,
-) -> PyResult<GraphRecordValue> {
-    fn convert_string(ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
-        Ok(GraphRecordValue::String(
+pub(crate) fn convert_pyobject_to_value(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+    fn convert_string(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+        Ok(Value::String(
             ob.extract::<String>().expect("Extraction must succeed"),
         ))
     }
 
-    fn convert_int(ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
-        Ok(GraphRecordValue::Int(
+    fn convert_int(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+        Ok(Value::Int(
             ob.extract::<i64>().expect("Extraction must succeed"),
         ))
     }
 
-    fn convert_float(ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
-        Ok(GraphRecordValue::Float(
+    fn convert_float(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+        Ok(Value::Float(
             ob.extract::<f64>().expect("Extraction must succeed"),
         ))
     }
 
-    fn convert_bool(ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
-        Ok(GraphRecordValue::Bool(
+    fn convert_bool(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+        Ok(Value::Bool(
             ob.extract::<bool>().expect("Extraction must succeed"),
         ))
     }
 
-    fn convert_datetime(ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
-        Ok(GraphRecordValue::DateTime(
+    fn convert_datetime(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+        Ok(Value::DateTime(
             ob.extract::<NaiveDateTime>()
                 .expect("Extraction must succeed"),
         ))
     }
 
-    fn convert_duration(ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
-        Ok(GraphRecordValue::Duration(
+    fn convert_duration(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+        Ok(Value::Duration(
             ob.extract::<TimeDelta>().expect("Extraction must succeed"),
         ))
     }
 
-    const fn convert_null(_ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
-        Ok(GraphRecordValue::Null)
+    const fn convert_null(_ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+        Ok(Value::Null)
     }
 
-    fn throw_error(ob: &Bound<'_, PyAny>) -> PyResult<GraphRecordValue> {
-        Err(
-            PyGraphRecordError::Conversion(format!("Failed to convert {ob} into GraphRecordValue"))
-                .into(),
-        )
+    fn throw_error(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+        Err(PyGraphRecordError::Conversion(format!("Failed to convert {ob} into Value")).into())
     }
 
     let type_pointer = ob.get_type_ptr() as usize;
 
-    let conversion_function = GRAPHRECORDVALUE_CONVERSION_LUT.get_or_insert(type_pointer, || {
+    let conversion_function = VALUE_CONVERSION_LUT.get_or_insert(type_pointer, || {
         if ob.is_instance_of::<PyString>() {
             convert_string
         } else if ob.is_instance_of::<PyBool>() {
@@ -123,28 +118,28 @@ pub(crate) fn convert_pyobject_to_graphrecordvalue(
     conversion_function(ob)
 }
 
-impl FromPyObject<'_, '_> for PyGraphRecordValue {
+impl FromPyObject<'_, '_> for PyValue {
     type Error = PyErr;
 
     fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_graphrecordvalue(&ob).map(Self::from)
+        convert_pyobject_to_value(&ob).map(Self::from)
     }
 }
 
-impl<'py> IntoPyObject<'py> for PyGraphRecordValue {
+impl<'py> IntoPyObject<'py> for PyValue {
     type Error = PyErr;
     type Output = Bound<'py, Self::Target>;
     type Target = PyAny;
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match self.0 {
-            GraphRecordValue::String(value) => value.into_bound_py_any(py),
-            GraphRecordValue::Int(value) => value.into_bound_py_any(py),
-            GraphRecordValue::Float(value) => value.into_bound_py_any(py),
-            GraphRecordValue::Bool(value) => value.into_bound_py_any(py),
-            GraphRecordValue::DateTime(value) => value.into_bound_py_any(py),
-            GraphRecordValue::Duration(value) => value.into_bound_py_any(py),
-            GraphRecordValue::Null => py.None().into_bound_py_any(py),
+            Value::String(value) => value.into_bound_py_any(py),
+            Value::Int(value) => value.into_bound_py_any(py),
+            Value::Float(value) => value.into_bound_py_any(py),
+            Value::Bool(value) => value.into_bound_py_any(py),
+            Value::DateTime(value) => value.into_bound_py_any(py),
+            Value::Duration(value) => value.into_bound_py_any(py),
+            Value::Null => py.None().into_bound_py_any(py),
         }
     }
 }

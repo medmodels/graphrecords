@@ -1,7 +1,7 @@
 use crate::{
     Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::arithmetic::DivisionByZero,
 };
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::Value;
 
 pub trait ValueDivide: ValueDomain {
     fn divide<'a>(
@@ -11,16 +11,10 @@ pub trait ValueDivide: ValueDomain {
     ) -> QueryResult<Self::Value<'a>>;
 }
 
-fn is_division_by_zero(dividend: &GraphRecordValue, divisor: &GraphRecordValue) -> bool {
+fn is_division_by_zero(dividend: &Value, divisor: &Value) -> bool {
     match (dividend, divisor) {
-        (
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_) | GraphRecordValue::Duration(_),
-            GraphRecordValue::Int(0),
-        ) => true,
-        (
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_),
-            GraphRecordValue::Float(divisor),
-        ) => *divisor == 0.0,
+        (Value::Int(_) | Value::Float(_) | Value::Duration(_), Value::Int(0)) => true,
+        (Value::Int(_) | Value::Float(_), Value::Float(divisor)) => *divisor == 0.0,
         _ => false,
     }
 }
@@ -39,7 +33,7 @@ impl ValueDivide for Scalar {
     }
 }
 
-impl ValueDivide for IndexValue<GraphRecordValue> {
+impl ValueDivide for IndexValue<Value> {
     fn divide<'a>(
         label: &'static str,
         value: Self::Value<'a>,

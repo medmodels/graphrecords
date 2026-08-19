@@ -1,5 +1,5 @@
 use crate::Diagnostic;
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::Value;
 use std::{
     error::Error,
     fmt::{self, Display, Formatter},
@@ -7,17 +7,17 @@ use std::{
 
 #[derive(Debug)]
 pub struct InvalidMedianValue {
-    value: GraphRecordValue,
+    value: Value,
 }
 
 impl InvalidMedianValue {
     #[must_use]
-    pub const fn new(value: GraphRecordValue) -> Self {
+    pub const fn new(value: Value) -> Self {
         Self { value }
     }
 
     #[must_use]
-    pub const fn value(&self) -> &GraphRecordValue {
+    pub const fn value(&self) -> &Value {
         &self.value
     }
 }
@@ -49,17 +49,17 @@ impl Diagnostic for InvalidMedianValue {
 
 #[derive(Debug)]
 pub struct InvalidStandardDeviationValue {
-    value: GraphRecordValue,
+    value: Value,
 }
 
 impl InvalidStandardDeviationValue {
     #[must_use]
-    pub const fn new(value: GraphRecordValue) -> Self {
+    pub const fn new(value: Value) -> Self {
         Self { value }
     }
 
     #[must_use]
-    pub const fn value(&self) -> &GraphRecordValue {
+    pub const fn value(&self) -> &Value {
         &self.value
     }
 }
@@ -88,17 +88,17 @@ impl Diagnostic for InvalidStandardDeviationValue {
 
 #[derive(Debug)]
 pub struct InvalidVarianceValue {
-    value: GraphRecordValue,
+    value: Value,
 }
 
 impl InvalidVarianceValue {
     #[must_use]
-    pub const fn new(value: GraphRecordValue) -> Self {
+    pub const fn new(value: Value) -> Self {
         Self { value }
     }
 
     #[must_use]
-    pub const fn value(&self) -> &GraphRecordValue {
+    pub const fn value(&self) -> &Value {
         &self.value
     }
 }

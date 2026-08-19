@@ -10,7 +10,8 @@ mod value_conversion;
 mod value_target;
 
 use crate::{
-    graphrecord::attribute::PyGraphRecordAttribute, querying::exception::FailureConversion,
+    graphrecord::{PyAttributeName, PyGroup},
+    querying::exception::FailureConversion,
 };
 pub use argument::PyArgument;
 pub use cast_target::PyCastTarget;
@@ -284,7 +285,7 @@ impl PyOperand {
         self.invoke("split", &[Self::scalar_argument(delimiter)?])
     }
 
-    fn attribute(&self, attribute: PyGraphRecordAttribute) -> PyResult<Self> {
+    fn attribute(&self, attribute: PyAttributeName) -> PyResult<Self> {
         self.invoke(
             "attribute",
             &[DynInvokeArgument::Attribute(attribute.into())],
@@ -311,14 +312,14 @@ impl PyOperand {
         self.invoke("child_index", &[])
     }
 
-    fn has_attribute(&self, attribute: PyGraphRecordAttribute) -> PyResult<Self> {
+    fn has_attribute(&self, attribute: PyAttributeName) -> PyResult<Self> {
         self.invoke(
             "has_attribute",
             &[DynInvokeArgument::Attribute(attribute.into())],
         )
     }
 
-    fn in_group(&self, group: PyGraphRecordAttribute) -> PyResult<Self> {
+    fn in_group(&self, group: PyGroup) -> PyResult<Self> {
         self.invoke("in_group", &[DynInvokeArgument::Group(group.into())])
     }
 

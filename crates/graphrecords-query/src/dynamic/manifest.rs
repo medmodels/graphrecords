@@ -324,7 +324,7 @@ macro_rules! operation_dynamic_capture {
 }
 
 macro_rules! operation_dynamic_field {
-    ($arguments:expr, $position:expr,GraphRecordAttribute) => {
+    ($arguments:expr, $position:expr,AttributeName) => {
         $crate::dynamic::invoke_attribute($arguments, $position)
     };
     ($arguments:expr, $position:expr,Group) => {

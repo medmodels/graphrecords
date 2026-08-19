@@ -1,8 +1,7 @@
 use crate::{
-    AttributeName, Failure, IndexValue, QueryResult, Scalar, ValueDomain,
-    error::numeric::NonNumericValue,
+    Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::numeric::NonNumericValue,
 };
-use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue, NodeIndex};
+use graphrecords_core::graphrecord::{AttributeName, Identifier, NodeIndex, Value};
 
 pub trait ValueNegate: ValueDomain {
     fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
@@ -11,9 +10,9 @@ pub trait ValueNegate: ValueDomain {
 impl ValueNegate for Scalar {
     fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
-            GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Int(-integer)),
-            GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(-float)),
-            GraphRecordValue::Duration(duration) => Ok(GraphRecordValue::Duration(-duration)),
+            Value::Int(integer) => Ok(Value::Int(-integer)),
+            Value::Float(float) => Ok(Value::Float(-float)),
+            Value::Duration(duration) => Ok(Value::Duration(-duration)),
             value => Err(Failure::new(label, NonNumericValue::new(value))),
         }
     }
@@ -21,43 +20,37 @@ impl ValueNegate for Scalar {
 
 impl ValueNegate for AttributeName {
     fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
-        match value {
-            GraphRecordAttribute::Int(integer) => Ok(GraphRecordAttribute::Int(-integer)),
-            value @ GraphRecordAttribute::String(_) => {
-                Err(Failure::new(label, NonNumericValue::new(value)))
-            }
+        match value.identifier() {
+            Identifier::Int(integer) => Ok(Self::from(-integer)),
+            Identifier::String(_) => Err(Failure::new(label, NonNumericValue::new(value))),
         }
     }
 }
 
 impl ValueNegate for IndexValue<NodeIndex> {
     fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
-        match value {
-            GraphRecordAttribute::Int(integer) => Ok(GraphRecordAttribute::Int(-integer)),
-            value @ GraphRecordAttribute::String(_) => {
-                Err(Failure::new(label, NonNumericValue::new(value)))
-            }
+        match value.identifier() {
+            Identifier::Int(integer) => Ok(NodeIndex::from(-integer)),
+            Identifier::String(_) => Err(Failure::new(label, NonNumericValue::new(value))),
         }
     }
 }
 
 impl ValueNegate for IndexValue<AttributeName> {
     fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
-        match value {
-            GraphRecordAttribute::Int(integer) => Ok(GraphRecordAttribute::Int(-integer)),
-            value @ GraphRecordAttribute::String(_) => {
-                Err(Failure::new(label, NonNumericValue::new(value)))
-            }
+        match value.identifier() {
+            Identifier::Int(integer) => Ok(AttributeName::from(-integer)),
+            Identifier::String(_) => Err(Failure::new(label, NonNumericValue::new(value))),
         }
     }
 }
 
-impl ValueNegate for IndexValue<GraphRecordValue> {
+impl ValueNegate for IndexValue<Value> {
     fn negate<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
         match value {
-            GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Int(-integer)),
-            GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(-float)),
-            GraphRecordValue::Duration(duration) => Ok(GraphRecordValue::Duration(-duration)),
+            Value::Int(integer) => Ok(Value::Int(-integer)),
+            Value::Float(float) => Ok(Value::Float(-float)),
+            Value::Duration(duration) => Ok(Value::Duration(-duration)),
             value => Err(Failure::new(label, NonNumericValue::new(value))),
         }
     }

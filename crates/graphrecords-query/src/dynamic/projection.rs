@@ -3,11 +3,11 @@ use super::{
     DynStreamShape, DynValue, DynYield,
 };
 use crate::{
-    AttributeName, Bare, BareValueDomain, EdgeEndpointRole, ElementShape, EntityDomain,
-    EntityReference, EvaluateContext, EvaluateOperand, ExpandedChild, ExpandedIndex,
-    ExpandedIndexOwned, ExpandedIndexReference, Explain, Failure, FailureKind, FailureKindValue,
-    FailureValue, IndexDomain, IndexValue, Indexed, Mask, Operand, OrderState, Ordered, Positional,
-    QueryResult, Scalar, Unit, Unordered, ValueDomain,
+    Bare, BareValueDomain, EdgeEndpointRole, ElementShape, EntityDomain, EntityReference,
+    EvaluateContext, EvaluateOperand, ExpandedChild, ExpandedIndex, ExpandedIndexOwned,
+    ExpandedIndexReference, Explain, Failure, FailureKind, FailureKindValue, FailureValue,
+    IndexDomain, IndexValue, Indexed, Mask, Operand, OrderState, Ordered, Positional, QueryResult,
+    Scalar, Unit, Unordered, ValueDomain,
     dynamic::DynEntityReference,
     element::{
         Arity, ElementEmission, ElementTransition, Expanding, IndexedExpansionPipeline, Pipeline,
@@ -29,7 +29,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex},
+    graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value},
 };
 use graphrecords_utils::aliases::GrHashSet;
 use std::{
@@ -184,7 +184,7 @@ macro_rules! implement_copy_index_projection {
 }
 
 implement_copy_index_projection!(AttributeName, Attribute, Attribute);
-implement_copy_index_projection!(GraphRecordValue, Value, Value);
+implement_copy_index_projection!(Value, Value, Value);
 implement_copy_index_projection!(bool, Bool, Bool);
 implement_copy_index_projection!(EdgeEndpointRole, EndpointRole, EndpointRole);
 implement_copy_index_projection!(FailureKind, FailureKind, FailureKind);

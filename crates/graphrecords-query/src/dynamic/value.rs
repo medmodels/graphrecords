@@ -1,7 +1,7 @@
 use super::{DynIndex, DynIndexOwned};
 use crate::{
-    AttributeName, BareValueDomain, Failure, FailureKind, FailureKindValue, FailureValue,
-    IndexDomain, IndexValue, Mask, Positional, QueryResult, ReturnValueDomain, Scalar, ValueDomain,
+    BareValueDomain, Failure, FailureKind, FailureKindValue, FailureValue, IndexDomain, IndexValue,
+    Mask, Positional, QueryResult, ReturnValueDomain, Scalar, ValueDomain,
     capabilities::{
         EnsureSortable, GroupingValue, IntValue, PayloadKind, StringValue, ValueAbsolute, ValueAdd,
         ValueCast, ValueCeil, ValueClip, ValueCubeRoot, ValueDivide, ValueEquality,
@@ -17,9 +17,7 @@ use crate::{
     error::dispatch::UnsupportedValueRole,
     registry::ValueDescriptor,
 };
-use graphrecords_core::graphrecord::{
-    EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex,
-};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
 use std::{
     cmp::Ordering,
     fmt::{self, Display, Formatter},
@@ -109,16 +107,16 @@ impl PartialOrd for DynEntityReference {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum DynEquivalenceKey {
-    Scalar(GraphRecordValue),
-    Attribute(GraphRecordAttribute),
+    Scalar(Value),
+    Attribute(AttributeName),
     Index(DynIndexOwned),
     FailureKind(FailureKind),
 }
 
 #[derive(Clone, Debug)]
 pub enum DynValue {
-    Scalar(GraphRecordValue),
-    Attribute(GraphRecordAttribute),
+    Scalar(Value),
+    Attribute(AttributeName),
     Index(DynIndexOwned),
     EntityReference(DynEntityReference),
     Failure(Box<Failure>),
@@ -166,7 +164,7 @@ macro_rules! implement_arithmetic_capability {
                             )
                             .map(DynIndexOwned::Attribute),
                             (DynIndexOwned::Value(value), DynIndexOwned::Value(argument)) => {
-                                <IndexValue<GraphRecordValue> as $trait>::$method(
+                                <IndexValue<Value> as $trait>::$method(
                                     label, value, argument,
                                 )
                                 .map(DynIndexOwned::Value)
@@ -197,7 +195,7 @@ macro_rules! implement_arithmetic_capability {
     };
 }
 
-macro_rules! implement_graphrecord_value_binary_capability {
+macro_rules! implement_value_binary_capability {
     ($trait:ident, $method:ident) => {
         impl $trait for DynValue {
             fn $method<'a>(
@@ -212,7 +210,7 @@ macro_rules! implement_graphrecord_value_binary_capability {
                     (
                         Self::Index(DynIndexOwned::Value(value)),
                         Self::Index(DynIndexOwned::Value(argument)),
-                    ) => <IndexValue<GraphRecordValue> as $trait>::$method(label, value, argument)
+                    ) => <IndexValue<Value> as $trait>::$method(label, value, argument)
                         .map(DynIndexOwned::Value)
                         .map(Self::Index),
                     (value, argument) => {
@@ -254,7 +252,7 @@ macro_rules! implement_attribute_numeric_capability {
                             .map(Self::Index)
                     }
                     Self::Index(DynIndexOwned::Value(value)) => {
-                        <IndexValue<GraphRecordValue> as $trait>::$method(label, value)
+                        <IndexValue<Value> as $trait>::$method(label, value)
                             .map(DynIndexOwned::Value)
                             .map(Self::Index)
                     }
@@ -269,7 +267,7 @@ macro_rules! implement_attribute_numeric_capability {
     };
 }
 
-macro_rules! implement_graphrecord_value_unary_capability {
+macro_rules! implement_value_unary_capability {
     ($trait:ident, $method:ident) => {
         impl $trait for DynValue {
             fn $method<'a>(
@@ -281,7 +279,7 @@ macro_rules! implement_graphrecord_value_unary_capability {
                         <Scalar as $trait>::$method(label, value).map(Self::Scalar)
                     }
                     Self::Index(DynIndexOwned::Value(value)) => {
-                        <IndexValue<GraphRecordValue> as $trait>::$method(label, value)
+                        <IndexValue<Value> as $trait>::$method(label, value)
                             .map(DynIndexOwned::Value)
                             .map(Self::Index)
                     }
@@ -296,7 +294,7 @@ macro_rules! implement_graphrecord_value_unary_capability {
     };
 }
 
-macro_rules! implement_graphrecord_value_cast {
+macro_rules! implement_value_cast {
     ($target:ty) => {
         impl ValueCast<$target> for DynValue {
             fn cast<'a>(
@@ -309,7 +307,7 @@ macro_rules! implement_graphrecord_value_cast {
                         <Scalar as ValueCast<$target>>::cast(label, value, target).map(Self::Scalar)
                     }
                     Self::Index(DynIndexOwned::Value(value)) => {
-                        <IndexValue<GraphRecordValue> as ValueCast<$target>>::cast(
+                        <IndexValue<Value> as ValueCast<$target>>::cast(
                             label, value, target,
                         )
                         .map(DynIndexOwned::Value)
@@ -356,7 +354,7 @@ macro_rules! implement_value_and_attribute_cast {
                         .map(Self::Index)
                     }
                     Self::Index(DynIndexOwned::Value(value)) => {
-                        <IndexValue<GraphRecordValue> as ValueCast<$target>>::cast(
+                        <IndexValue<Value> as ValueCast<$target>>::cast(
                             label, value, target,
                         )
                         .map(DynIndexOwned::Value)
@@ -490,7 +488,7 @@ impl ValueMedian for DynValue {
         match value {
             Self::Scalar(value) => Scalar::validate_median(label, value),
             Self::Index(DynIndexOwned::Value(value)) => {
-                IndexValue::<GraphRecordValue>::validate_median(label, value)
+                IndexValue::<Value>::validate_median(label, value)
             }
             value => {
                 let value_role = value.description();
@@ -520,7 +518,7 @@ impl ValueMedian for DynValue {
             Self::Index(DynIndexOwned::Value(_))
                 if values.iter().all(|value| {
                     matches!(value, Self::Index(DynIndexOwned::Value(_)))
-                }) => IndexValue::<GraphRecordValue>::find_incomparable_median_values(
+                }) => IndexValue::<Value>::find_incomparable_median_values(
                 values.into_iter().map(|value| {
                     let Self::Index(DynIndexOwned::Value(value)) = value else {
                         unreachable!(
@@ -566,7 +564,7 @@ impl ValueMedian for DynValue {
                     }
                 };
 
-                IndexValue::<GraphRecordValue>::median(label, lower, upper)
+                IndexValue::<Value>::median(label, lower, upper)
                     .map(DynIndexOwned::Value)
                     .map(Self::Index)
             }
@@ -581,11 +579,11 @@ impl ValueMedian for DynValue {
 impl ValueMode for DynValue {}
 
 impl ValueScalar for DynValue {
-    fn into_scalar(label: &'static str, value: Self::Value<'_>) -> QueryResult<GraphRecordValue> {
+    fn into_scalar(label: &'static str, value: Self::Value<'_>) -> QueryResult<Value> {
         match value {
             Self::Scalar(value) => Scalar::into_scalar(label, value),
             Self::Index(DynIndexOwned::Value(value)) => {
-                IndexValue::<GraphRecordValue>::into_scalar(label, value)
+                IndexValue::<Value>::into_scalar(label, value)
             }
             value => {
                 let value_role = value.description();
@@ -594,11 +592,11 @@ impl ValueScalar for DynValue {
         }
     }
 
-    fn from_scalar<'a>(role: &Self::Value<'_>, value: GraphRecordValue) -> Self::Value<'a> {
+    fn from_scalar<'a>(role: &Self::Value<'_>, value: Value) -> Self::Value<'a> {
         match role {
             Self::Scalar(role) => Self::Scalar(Scalar::from_scalar(role, value)),
             Self::Index(DynIndexOwned::Value(role)) => Self::Index(DynIndexOwned::Value(
-                IndexValue::<GraphRecordValue>::from_scalar(role, value),
+                IndexValue::<Value>::from_scalar(role, value),
             )),
             role => {
                 let role = role.description();
@@ -609,7 +607,7 @@ impl ValueScalar for DynValue {
 }
 
 implement_arithmetic_capability!(ValueAdd, add);
-implement_graphrecord_value_binary_capability!(ValueDivide, divide);
+implement_value_binary_capability!(ValueDivide, divide);
 implement_arithmetic_capability!(ValueModulo, modulo);
 implement_arithmetic_capability!(ValueMultiply, multiply);
 implement_arithmetic_capability!(ValuePower, power);
@@ -664,10 +662,10 @@ impl ValueOrdering for DynValue {
     }
 }
 
-implement_graphrecord_value_cast!(BoolTarget);
-implement_graphrecord_value_cast!(DateTimeTarget);
-implement_graphrecord_value_cast!(DurationTarget);
-implement_graphrecord_value_cast!(FloatTarget);
+implement_value_cast!(BoolTarget);
+implement_value_cast!(DateTimeTarget);
+implement_value_cast!(DurationTarget);
+implement_value_cast!(FloatTarget);
 implement_value_and_attribute_cast!(IntTarget);
 implement_value_and_attribute_cast!(StringTarget);
 
@@ -738,9 +736,7 @@ impl IntValue for DynValue {
             Self::Index(DynIndexOwned::Attribute(value)) => {
                 IndexValue::<AttributeName>::into_int(label, value)
             }
-            Self::Index(DynIndexOwned::Value(value)) => {
-                IndexValue::<GraphRecordValue>::into_int(label, value)
-            }
+            Self::Index(DynIndexOwned::Value(value)) => IndexValue::<Value>::into_int(label, value),
             value => {
                 let value_role = value.description();
                 panic!("registry admitted IntValue for dynamic value role {value_role}")
@@ -758,7 +754,7 @@ impl ValueKindTest for DynValue {
             Self::Index(DynIndexOwned::Attribute(value)) => {
                 IndexValue::<AttributeName>::kind(value)
             }
-            Self::Index(DynIndexOwned::Value(value)) => IndexValue::<GraphRecordValue>::kind(value),
+            Self::Index(DynIndexOwned::Value(value)) => IndexValue::<Value>::kind(value),
             value => {
                 let value_role = value.description();
                 panic!("registry admitted ValueKindTest for dynamic value role {value_role}")
@@ -770,7 +766,7 @@ impl ValueKindTest for DynValue {
 impl ValueScalarKindTest for DynValue {}
 
 implement_attribute_numeric_capability!(ValueAbsolute, absolute);
-implement_graphrecord_value_unary_capability!(ValueCeil, ceil);
+implement_value_unary_capability!(ValueCeil, ceil);
 
 impl ValueClip for DynValue {
     fn clip<'a>(
@@ -818,7 +814,7 @@ impl ValueClip for DynValue {
                 Self::Index(DynIndexOwned::Value(value)),
                 Self::Index(DynIndexOwned::Value(lower)),
                 Self::Index(DynIndexOwned::Value(upper)),
-            ) => IndexValue::<GraphRecordValue>::clip(label, value, lower, upper)
+            ) => IndexValue::<Value>::clip(label, value, lower, upper)
                 .map(DynIndexOwned::Value)
                 .map(Self::Index),
             (value, lower, upper) => {
@@ -833,14 +829,14 @@ impl ValueClip for DynValue {
     }
 }
 
-implement_graphrecord_value_unary_capability!(ValueCubeRoot, cube_root);
-implement_graphrecord_value_unary_capability!(ValueExponential, exponential);
-implement_graphrecord_value_unary_capability!(ValueFloor, floor);
-implement_graphrecord_value_unary_capability!(ValueLogarithm, logarithm);
+implement_value_unary_capability!(ValueCubeRoot, cube_root);
+implement_value_unary_capability!(ValueExponential, exponential);
+implement_value_unary_capability!(ValueFloor, floor);
+implement_value_unary_capability!(ValueLogarithm, logarithm);
 implement_attribute_numeric_capability!(ValueNegate, negate);
-implement_graphrecord_value_unary_capability!(ValueRound, round);
+implement_value_unary_capability!(ValueRound, round);
 implement_attribute_numeric_capability!(ValueSign, sign);
-implement_graphrecord_value_unary_capability!(ValueSquareRoot, square_root);
+implement_value_unary_capability!(ValueSquareRoot, square_root);
 
 impl EnsureSortable for DynValue {
     fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
@@ -849,7 +845,7 @@ impl EnsureSortable for DynValue {
 
         match first {
             Self::Scalar(_) if values.iter().all(|value| matches!(value, Self::Scalar(_))) => {
-                GraphRecordValue::find_incomparable(values.into_iter().map(|value| {
+                Value::find_incomparable(values.into_iter().map(|value| {
                     let Self::Scalar(value) = value else {
                         unreachable!("dynamic values were checked as scalars")
                     };
@@ -861,7 +857,7 @@ impl EnsureSortable for DynValue {
                     .iter()
                     .all(|value| matches!(value, Self::Attribute(_))) =>
             {
-                GraphRecordAttribute::find_incomparable(values.into_iter().map(|value| {
+                AttributeName::find_incomparable(values.into_iter().map(|value| {
                     let Self::Attribute(value) = value else {
                         unreachable!("dynamic values were checked as attributes")
                     };
@@ -896,7 +892,7 @@ impl StringValue for DynValue {
                 IndexValue::<AttributeName>::into_string(label, value)
             }
             Self::Index(DynIndexOwned::Value(value)) => {
-                IndexValue::<GraphRecordValue>::into_string(label, value)
+                IndexValue::<Value>::into_string(label, value)
             }
             value => {
                 let value_role = value.description();
@@ -916,7 +912,7 @@ impl StringValue for DynValue {
                 IndexValue::<AttributeName>::from_string(role, value),
             )),
             Self::Index(DynIndexOwned::Value(role)) => Self::Index(DynIndexOwned::Value(
-                IndexValue::<GraphRecordValue>::from_string(role, value),
+                IndexValue::<Value>::from_string(role, value),
             )),
             role => {
                 let role = role.description();

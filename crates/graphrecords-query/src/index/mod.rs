@@ -3,14 +3,14 @@ mod entity;
 mod expanded;
 mod key;
 
-use crate::{AttributeName, FailureKind};
+use crate::FailureKind;
 pub use edge_endpoint::EdgeEndpointRole;
 pub use entity::{EntityAttributes, IndicesInGroup};
 pub use expanded::{ExpandedChild, ExpandedIndex, ExpandedIndexOwned, ExpandedIndexReference};
 use graphrecords_core::{
     GraphRecord,
     errors::GraphRecordResult,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
+    graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value},
 };
 pub use key::GroupKey;
 use std::{
@@ -99,7 +99,7 @@ impl IndexDomain for FailureKind {
     }
 }
 
-impl IndexDomain for GraphRecordValue {
+impl IndexDomain for Value {
     type Index<'a> = Self;
     type Owned = Self;
 
@@ -113,8 +113,8 @@ impl IndexDomain for GraphRecordValue {
 }
 
 impl IndexDomain for AttributeName {
-    type Index<'a> = GraphRecordAttribute;
-    type Owned = GraphRecordAttribute;
+    type Index<'a> = Self;
+    type Owned = Self;
 
     fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
         index.clone()

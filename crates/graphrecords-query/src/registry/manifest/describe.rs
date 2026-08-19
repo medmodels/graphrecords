@@ -20,10 +20,9 @@ use super::{
     },
 };
 use crate::{
-    AttributeName, Bare, BareValueDomain, Definite, EdgeEndpointRole, EntityReference,
-    ExpandedIndex, FailureKind, FailureKindValue, FailureValue, IndexDomain, IndexValue, Indexed,
-    Mask, Multiple, OrderState, Ordered, Positional, QueryResult, Scalar, Single, Unit, Unordered,
-    ValueDomain,
+    Bare, BareValueDomain, Definite, EdgeEndpointRole, EntityReference, ExpandedIndex, FailureKind,
+    FailureKindValue, FailureValue, IndexDomain, IndexValue, Indexed, Mask, Multiple, OrderState,
+    Ordered, Positional, QueryResult, Scalar, Single, Unit, Unordered, ValueDomain,
     capabilities::GroupingValue,
     element::{Arity, Dropping, ElementEmission, ElementShape, Expanding, Preserving, Retention},
     execution::EvaluationCache,
@@ -36,7 +35,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     errors::GraphRecordResult,
-    graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex},
+    graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value},
 };
 use std::{marker::PhantomData, sync::Arc};
 
@@ -669,7 +668,7 @@ macro_rules! describe_concrete_index {
 }
 
 describe_concrete_index!(
-    GraphRecordValue,
+    Value,
     bool,
     AttributeName,
     FailureKind,

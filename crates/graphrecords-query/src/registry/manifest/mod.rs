@@ -439,14 +439,14 @@ pub(crate) use operation_policy_method;
 mod test {
     use super::OperationRegistry;
     use crate::{
-        AttributeName, Mask, Scalar,
+        Mask, Scalar,
         cast::{Bool, Int},
         registry::{
             ArgumentDescriptor, ArityDescriptor, IndexDescriptor, LaneShapeDescriptor,
             OperandDescriptor, OrderDescriptor, ValueArgumentDescriptor, ValueDescriptor,
         },
     };
-    use graphrecords_core::graphrecord::{GraphRecordValue, NodeIndex};
+    use graphrecords_core::graphrecord::{AttributeName, NodeIndex, Value};
 
     fn create_scalar_nodes() -> OperandDescriptor {
         OperandDescriptor::Lane {
@@ -507,7 +507,7 @@ mod test {
     fn create_grouped_scalar_nodes() -> OperandDescriptor {
         OperandDescriptor::Group {
             member: IndexDescriptor::domain::<NodeIndex>(),
-            key: IndexDescriptor::domain::<GraphRecordValue>(),
+            key: IndexDescriptor::domain::<Value>(),
             payload: Box::new(create_scalar_nodes()),
         }
     }
@@ -515,7 +515,7 @@ mod test {
     fn create_grouped_mask_nodes() -> OperandDescriptor {
         OperandDescriptor::Group {
             member: IndexDescriptor::domain::<NodeIndex>(),
-            key: IndexDescriptor::domain::<GraphRecordValue>(),
+            key: IndexDescriptor::domain::<Value>(),
             payload: Box::new(create_mask_nodes()),
         }
     }
@@ -523,7 +523,7 @@ mod test {
     fn create_grouped_scalar_value() -> OperandDescriptor {
         OperandDescriptor::Group {
             member: IndexDescriptor::domain::<NodeIndex>(),
-            key: IndexDescriptor::domain::<GraphRecordValue>(),
+            key: IndexDescriptor::domain::<Value>(),
             payload: Box::new(create_scalar_value()),
         }
     }

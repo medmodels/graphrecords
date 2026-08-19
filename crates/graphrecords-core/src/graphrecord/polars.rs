@@ -1,7 +1,7 @@
 use crate::{
     GraphRecord,
     errors::{ConversionError, GraphRecordError, GraphRecordResult},
-    graphrecord::{AttributeMap, GraphRecordAttribute, GraphRecordValue, NodeIndex},
+    graphrecord::{AttributeMap, AttributeName, Identifier, NodeIndex, Value},
     prelude::{EdgeIndex, Group},
 };
 use chrono::{DateTime, TimeDelta};
@@ -10,7 +10,7 @@ use polars::{datatypes::AnyValue, frame::DataFrame, prelude::Column};
 use std::collections::HashMap;
 
 // TODO: Add tests for Duration
-impl<'a> TryFrom<AnyValue<'a>> for GraphRecordValue {
+impl<'a> TryFrom<AnyValue<'a>> for Value {
     type Error = GraphRecordError;
 
     fn try_from(value: AnyValue<'a>) -> Result<Self, Self::Error> {
@@ -70,7 +70,7 @@ impl<'a> TryFrom<AnyValue<'a>> for GraphRecordValue {
     }
 }
 
-impl<'a> TryFrom<AnyValue<'a>> for GraphRecordAttribute {
+impl<'a> TryFrom<AnyValue<'a>> for Identifier {
     type Error = GraphRecordError;
 
     fn try_from(value: AnyValue<'a>) -> Result<Self, Self::Error> {
@@ -85,7 +85,7 @@ impl<'a> TryFrom<AnyValue<'a>> for GraphRecordAttribute {
             AnyValue::UInt16(value) => Ok(Self::Int(value.into())),
             AnyValue::UInt32(value) => Ok(Self::Int(value.into())),
             _ => Err(GraphRecordError::Conversion(
-                ConversionError::UnsupportedPolarsAttribute {
+                ConversionError::UnsupportedPolarsIdentifier {
                     value: value.to_string(),
                 },
             )),
@@ -93,33 +93,33 @@ impl<'a> TryFrom<AnyValue<'a>> for GraphRecordAttribute {
     }
 }
 
-impl From<GraphRecordValue> for AnyValue<'_> {
-    fn from(value: GraphRecordValue) -> Self {
+impl From<Value> for AnyValue<'_> {
+    fn from(value: Value) -> Self {
         match value {
-            GraphRecordValue::String(value) => AnyValue::StringOwned(value.into()),
-            GraphRecordValue::Int(value) => AnyValue::Int64(value),
-            GraphRecordValue::Float(value) => AnyValue::Float64(value),
-            GraphRecordValue::Bool(value) => AnyValue::Boolean(value),
-            GraphRecordValue::DateTime(value) => {
+            Value::String(value) => AnyValue::StringOwned(value.into()),
+            Value::Int(value) => AnyValue::Int64(value),
+            Value::Float(value) => AnyValue::Float64(value),
+            Value::Bool(value) => AnyValue::Boolean(value),
+            Value::DateTime(value) => {
                 let timestamp = value.and_utc().timestamp_millis();
 
                 AnyValue::Datetime(timestamp, polars::prelude::TimeUnit::Milliseconds, None)
             }
-            GraphRecordValue::Duration(value) => {
+            Value::Duration(value) => {
                 let duration_ms = value.num_milliseconds();
 
                 AnyValue::Duration(duration_ms, polars::prelude::TimeUnit::Milliseconds)
             }
-            GraphRecordValue::Null => AnyValue::Null,
+            Value::Null => AnyValue::Null,
         }
     }
 }
 
-impl From<GraphRecordAttribute> for AnyValue<'_> {
-    fn from(value: GraphRecordAttribute) -> Self {
+impl From<Identifier> for AnyValue<'_> {
+    fn from(value: Identifier) -> Self {
         match value {
-            GraphRecordAttribute::String(value) => AnyValue::StringOwned(value.into()),
-            GraphRecordAttribute::Int(value) => AnyValue::Int64(value),
+            Identifier::String(value) => AnyValue::StringOwned(value.into()),
+            Identifier::Int(value) => AnyValue::Int64(value),
         }
     }
 }
@@ -159,7 +159,7 @@ pub fn dataframe_to_nodes(
     index
         .map(|index_value| {
             Ok((
-                index_value.try_into()?,
+                NodeIndex::from(Identifier::try_from(index_value)?),
                 columns
                     .iter_mut()
                     .map(|(column, column_name)| {
@@ -223,8 +223,8 @@ pub fn dataframe_to_edges(
         .zip(target_index)
         .map(|(source_index_value, target_index_value)| {
             Ok((
-                source_index_value.try_into()?,
-                target_index_value.try_into()?,
+                NodeIndex::from(Identifier::try_from(source_index_value)?),
+                NodeIndex::from(Identifier::try_from(target_index_value)?),
                 columns
                     .iter_mut()
                     .map(|(column, column_name)| {
@@ -274,12 +274,12 @@ impl DataFramesGroupExport {
 
         let node_attributes: Vec<_> = group_schema.nodes().keys().collect();
 
-        let mut node_columns: GrHashMap<GraphRecordAttribute, Vec<AnyValue>> = node_attributes
+        let mut node_columns: GrHashMap<AttributeName, Vec<AnyValue>> = node_attributes
             .iter()
             .map(|attribute_name| ((*attribute_name).clone(), Vec::new()))
             .collect();
 
-        let node_index_attribute = GraphRecordAttribute::String("node_index".into());
+        let node_index_attribute = AttributeName::from("node_index");
 
         if node_columns.contains_key(&node_index_attribute) {
             return Err(GraphRecordError::Conversion(
@@ -295,13 +295,13 @@ impl DataFramesGroupExport {
             node_columns
                 .get_mut(&node_index_attribute)
                 .expect("Attribute must exist in columns")
-                .push(node_index.clone().into());
+                .push(Identifier::from(node_index.clone()).into());
 
             for attribute_name in &node_attributes {
                 let attribute_value = attributes
                     .get(attribute_name)
                     .cloned()
-                    .unwrap_or(GraphRecordValue::Null);
+                    .unwrap_or(Value::Null);
 
                 node_columns
                     .get_mut(*attribute_name)
@@ -313,9 +313,9 @@ impl DataFramesGroupExport {
         let node_columns: Vec<_> = node_columns
             .into_iter()
             .map(|(attribute_name, values)| {
-                let column_name = match attribute_name {
-                    GraphRecordAttribute::String(value) => value,
-                    GraphRecordAttribute::Int(value) => value.to_string(),
+                let column_name = match Identifier::from(attribute_name) {
+                    Identifier::String(value) => value,
+                    Identifier::Int(value) => value.to_string(),
                 };
 
                 Column::new(column_name.into(), values)
@@ -349,14 +349,14 @@ impl DataFramesGroupExport {
 
         let edge_attributes: Vec<_> = group_schema.edges().keys().collect();
 
-        let mut edge_columns: GrHashMap<GraphRecordAttribute, Vec<AnyValue>> = edge_attributes
+        let mut edge_columns: GrHashMap<AttributeName, Vec<AnyValue>> = edge_attributes
             .iter()
             .map(|attribute_name| ((*attribute_name).clone(), Vec::new()))
             .collect();
 
-        let edge_index_attribute = GraphRecordAttribute::String("edge_index".into());
-        let source_node_index_attribute = GraphRecordAttribute::String("source_node_index".into());
-        let target_node_index_attribute = GraphRecordAttribute::String("target_node_index".into());
+        let edge_index_attribute = AttributeName::from("edge_index");
+        let source_node_index_attribute = AttributeName::from("source_node_index");
+        let target_node_index_attribute = AttributeName::from("target_node_index");
 
         if edge_columns.contains_key(&edge_index_attribute) {
             return Err(GraphRecordError::Conversion(
@@ -395,17 +395,17 @@ impl DataFramesGroupExport {
             edge_columns
                 .get_mut(&source_node_index_attribute)
                 .expect("Attribute must exist in columns")
-                .push(source_node_index.into());
+                .push(Identifier::from(source_node_index).into());
             edge_columns
                 .get_mut(&target_node_index_attribute)
                 .expect("Attribute must exist in columns")
-                .push(target_node_index.into());
+                .push(Identifier::from(target_node_index).into());
 
             for attribute_name in &edge_attributes {
                 let attribute_value = attributes
                     .get(attribute_name)
                     .cloned()
-                    .unwrap_or(GraphRecordValue::Null);
+                    .unwrap_or(Value::Null);
 
                 edge_columns
                     .get_mut(*attribute_name)
@@ -417,9 +417,9 @@ impl DataFramesGroupExport {
         let edge_columns: Vec<_> = edge_columns
             .into_iter()
             .map(|(attribute_name, values)| {
-                let column_name = match attribute_name {
-                    GraphRecordAttribute::String(value) => value,
-                    GraphRecordAttribute::Int(value) => value.to_string(),
+                let column_name = match Identifier::from(attribute_name) {
+                    Identifier::String(value) => value,
+                    Identifier::Int(value) => value.to_string(),
                 };
 
                 Column::new(column_name.into(), values)
@@ -464,7 +464,7 @@ impl DataFramesExport {
 
 #[cfg(test)]
 mod test {
-    use super::{GraphRecordValue, dataframe_to_edges, dataframe_to_nodes};
+    use super::{Value, dataframe_to_edges, dataframe_to_nodes};
     use crate::errors::GraphRecordError;
     use chrono::NaiveDateTime;
     use polars::prelude::*;
@@ -474,82 +474,82 @@ mod test {
     fn test_try_from_anyvalue_string() {
         let any_value = AnyValue::String("value");
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
-        assert_eq!(GraphRecordValue::String("value".to_string()), value);
+        assert_eq!(Value::String("value".to_string()), value);
     }
 
     #[test]
     fn test_from_anyvalue_int8() {
         let any_value = AnyValue::Int8(0);
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
-        assert_eq!(GraphRecordValue::Int(0), value);
+        assert_eq!(Value::Int(0), value);
     }
 
     #[test]
     fn test_from_anyvalue_int16() {
         let any_value = AnyValue::Int16(0);
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
-        assert_eq!(GraphRecordValue::Int(0), value);
+        assert_eq!(Value::Int(0), value);
     }
 
     #[test]
     fn test_from_anyvalue_int32() {
         let any_value = AnyValue::Int32(0);
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
-        assert_eq!(GraphRecordValue::Int(0), value);
+        assert_eq!(Value::Int(0), value);
     }
 
     #[test]
     fn test_from_anyvalue_int64() {
         let any_value = AnyValue::Int64(0);
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
-        assert_eq!(GraphRecordValue::Int(0), value);
+        assert_eq!(Value::Int(0), value);
     }
 
     #[test]
     fn test_from_anyvalue_float32() {
         let any_value = AnyValue::Float32(0.0);
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
-        assert_eq!(GraphRecordValue::Float(0.0), value);
+        assert_eq!(Value::Float(0.0), value);
     }
 
     #[test]
     fn test_from_anyvalue_float64() {
         let any_value = AnyValue::Float64(0.0);
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
-        assert_eq!(GraphRecordValue::Float(0.0), value);
+        assert_eq!(Value::Float(0.0), value);
     }
 
     #[test]
     fn test_from_anyvalue_bool() {
         let any_value = AnyValue::Boolean(false);
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
-        assert_eq!(GraphRecordValue::Bool(false), value);
+        assert_eq!(Value::Bool(false), value);
     }
 
     #[test]
     fn test_from_anyvalue_datetime() {
         let any_value = AnyValue::Datetime(0, polars::prelude::TimeUnit::Microseconds, None);
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
         assert_eq!(
-            GraphRecordValue::DateTime(
+            Value::DateTime(
                 NaiveDateTime::parse_from_str("1970-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap()
             ),
             value
@@ -557,10 +557,10 @@ mod test {
 
         let any_value = AnyValue::Datetime(0, polars::prelude::TimeUnit::Milliseconds, None);
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
         assert_eq!(
-            GraphRecordValue::DateTime(
+            Value::DateTime(
                 NaiveDateTime::parse_from_str("1970-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap()
             ),
             value
@@ -568,10 +568,10 @@ mod test {
 
         let any_value = AnyValue::Datetime(0, polars::prelude::TimeUnit::Nanoseconds, None);
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
         assert_eq!(
-            GraphRecordValue::DateTime(
+            Value::DateTime(
                 NaiveDateTime::parse_from_str("1970-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap()
             ),
             value
@@ -582,9 +582,9 @@ mod test {
     fn test_from_anyvalue_null() {
         let any_value = AnyValue::Null;
 
-        let value = GraphRecordValue::try_from(any_value).unwrap();
+        let value = Value::try_from(any_value).unwrap();
 
-        assert_eq!(GraphRecordValue::Null, value);
+        assert_eq!(Value::Null, value);
     }
 
     #[test]

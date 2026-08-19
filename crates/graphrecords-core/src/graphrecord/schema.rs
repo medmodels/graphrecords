@@ -1,8 +1,5 @@
-use super::{AttributeMap, EdgeIndex, GraphRecord, Group, NodeIndex};
-use crate::{
-    errors::SchemaError,
-    graphrecord::{GraphRecordAttribute, datatypes::DataType},
-};
+use super::{AttributeMap, AttributeName, EdgeIndex, GraphRecord, Group, NodeIndex};
+use crate::{errors::SchemaError, graphrecord::datatypes::DataType};
 use graphrecords_utils::aliases::GrHashMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -162,7 +159,7 @@ enum AttributeSchemaKind<'a> {
 impl AttributeSchemaKind<'_> {
     fn attribute_missing_error(
         &self,
-        attribute: &GraphRecordAttribute,
+        attribute: &AttributeName,
         data_type: &DataType,
     ) -> SchemaError {
         match self {
@@ -181,7 +178,7 @@ impl AttributeSchemaKind<'_> {
 
     fn data_type_mismatch_error(
         &self,
-        attribute: &GraphRecordAttribute,
+        attribute: &AttributeName,
         data_type: &DataType,
         expected_data_type: &DataType,
     ) -> SchemaError {
@@ -201,7 +198,7 @@ impl AttributeSchemaKind<'_> {
         }
     }
 
-    fn attributes_not_in_schema_error(&self, attributes: Vec<GraphRecordAttribute>) -> SchemaError {
+    fn attributes_not_in_schema_error(&self, attributes: Vec<AttributeName>) -> SchemaError {
         match self {
             Self::Node(node_index) => SchemaError::NodeAttributesNotInSchema {
                 node_index: (*node_index).clone(),
@@ -215,7 +212,7 @@ impl AttributeSchemaKind<'_> {
     }
 }
 
-type AttributeSchemaMapping = HashMap<GraphRecordAttribute, AttributeDataType>;
+type AttributeSchemaMapping = HashMap<AttributeName, AttributeDataType>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -240,7 +237,7 @@ where
 
 impl AttributeSchema {
     #[must_use]
-    pub const fn new(mapping: HashMap<GraphRecordAttribute, AttributeDataType>) -> Self {
+    pub const fn new(mapping: HashMap<AttributeName, AttributeDataType>) -> Self {
         Self(mapping)
     }
 
@@ -617,7 +614,7 @@ impl Schema {
 
     pub fn set_node_attribute(
         &mut self,
-        attribute: &GraphRecordAttribute,
+        attribute: &AttributeName,
         data_type: DataType,
         attribute_type: AttributeType,
         group: Option<&Group>,
@@ -645,7 +642,7 @@ impl Schema {
 
     pub fn set_edge_attribute(
         &mut self,
-        attribute: &GraphRecordAttribute,
+        attribute: &AttributeName,
         data_type: DataType,
         attribute_type: AttributeType,
         group: Option<&Group>,
@@ -673,7 +670,7 @@ impl Schema {
 
     pub fn update_node_attribute(
         &mut self,
-        attribute: &GraphRecordAttribute,
+        attribute: &AttributeName,
         data_type: DataType,
         attribute_type: AttributeType,
         group: Option<&Group>,
@@ -705,7 +702,7 @@ impl Schema {
 
     pub fn update_edge_attribute(
         &mut self,
-        attribute: &GraphRecordAttribute,
+        attribute: &AttributeName,
         data_type: DataType,
         attribute_type: AttributeType,
         group: Option<&Group>,
@@ -735,11 +732,7 @@ impl Schema {
         Ok(())
     }
 
-    pub fn remove_node_attribute(
-        &mut self,
-        attribute: &GraphRecordAttribute,
-        group: Option<&Group>,
-    ) {
+    pub fn remove_node_attribute(&mut self, attribute: &AttributeName, group: Option<&Group>) {
         match group {
             Some(group) => {
                 if let Some(group_schema) = self.groups.get_mut(group) {
@@ -752,11 +745,7 @@ impl Schema {
         }
     }
 
-    pub fn remove_edge_attribute(
-        &mut self,
-        attribute: &GraphRecordAttribute,
-        group: Option<&Group>,
-    ) {
+    pub fn remove_edge_attribute(&mut self, attribute: &AttributeName, group: Option<&Group>) {
         match group {
             Some(group) => {
                 if let Some(group_schema) = self.groups.get_mut(group) {

@@ -1,10 +1,7 @@
 use crate::{
     GraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
-    prelude::{
-        AttributeMap, EdgeIndex, GraphRecordAttribute, GraphRecordValue, Group, NodeIndex,
-        SchemaType,
-    },
+    prelude::{AttributeMap, AttributeName, EdgeIndex, Group, NodeIndex, SchemaType, Value},
 };
 
 macro_rules! impl_attributes_mut {
@@ -107,8 +104,8 @@ macro_rules! impl_attributes_mut {
 
             pub fn update_attribute(
                 &mut self,
-                attribute: &GraphRecordAttribute,
-                value: GraphRecordValue,
+                attribute: &AttributeName,
+                value: Value,
             ) -> GraphRecordResult<()> {
                 let groups = self.get_groups();
 
@@ -129,8 +126,8 @@ macro_rules! impl_attributes_mut {
 
             pub fn remove_attribute(
                 &mut self,
-                attribute: &GraphRecordAttribute,
-            ) -> GraphRecordResult<GraphRecordValue> {
+                attribute: &AttributeName,
+            ) -> GraphRecordResult<Value> {
                 let groups = self.get_groups();
 
                 let mut attributes = self

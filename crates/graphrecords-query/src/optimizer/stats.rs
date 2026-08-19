@@ -1,6 +1,6 @@
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{GraphRecordAttribute, Group},
+    graphrecord::{AttributeName, Group},
 };
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use std::{
@@ -71,7 +71,7 @@ impl Statistic for EdgeGroupSize {
 pub struct NodeAttributeCardinality;
 
 impl Statistic for NodeAttributeCardinality {
-    type Key = GraphRecordAttribute;
+    type Key = AttributeName;
     type Value = usize;
 
     fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
@@ -92,7 +92,7 @@ impl Statistic for NodeAttributeCardinality {
 pub struct EdgeAttributeCardinality;
 
 impl Statistic for EdgeAttributeCardinality {
-    type Key = GraphRecordAttribute;
+    type Key = AttributeName;
     type Value = usize;
 
     fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {

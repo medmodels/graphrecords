@@ -1,23 +1,12 @@
-use graphrecords_core::prelude::{DataType, GraphRecordValue};
+use graphrecords_core::prelude::{DataType, Value};
 use itertools::Itertools;
 
 #[derive(Debug, Clone)]
 pub enum AttributeOverviewData {
-    Categorical {
-        distinct_values: Vec<GraphRecordValue>,
-    },
-    Continuous {
-        min: GraphRecordValue,
-        mean: GraphRecordValue,
-        max: GraphRecordValue,
-    },
-    Temporal {
-        min: GraphRecordValue,
-        max: GraphRecordValue,
-    },
-    Unstructured {
-        distinct_count: usize,
-    },
+    Categorical { distinct_values: Vec<Value> },
+    Continuous { min: Value, mean: Value, max: Value },
+    Temporal { min: Value, max: Value },
+    Unstructured { distinct_count: usize },
 }
 
 impl AttributeOverviewData {

@@ -4,7 +4,8 @@ from typing_extensions import Final
 
 from graphrecords._graphrecords.datatype import PyDataType
 from graphrecords.types import (
-    GraphRecordAttribute,
+    AttributeName,
+    Group,
     PyCategoricalAttributeOverview,
     PyContinuousAttributeOverview,
     PyTemporalAttributeOverview,
@@ -24,11 +25,11 @@ class PyAttributeOverview:
 
 class PyNodeGroupOverview:
     count: int
-    attributes: Dict[GraphRecordAttribute, PyAttributeOverview]
+    attributes: Dict[AttributeName, PyAttributeOverview]
 
 class PyEdgeGroupOverview:
     count: int
-    attributes: Dict[GraphRecordAttribute, PyAttributeOverview]
+    attributes: Dict[AttributeName, PyAttributeOverview]
 
 class PyGroupOverview:
     node_overview: PyNodeGroupOverview
@@ -36,4 +37,4 @@ class PyGroupOverview:
 
 class PyOverview:
     ungrouped_overview: PyGroupOverview
-    grouped_overviews: Dict[GraphRecordAttribute, PyGroupOverview]
+    grouped_overviews: Dict[Group, PyGroupOverview]

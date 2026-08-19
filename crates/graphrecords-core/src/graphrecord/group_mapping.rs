@@ -1,10 +1,9 @@
-use super::{EdgeIndex, GraphRecordAttribute, NodeIndex};
+use super::{EdgeIndex, NodeIndex};
 use crate::errors::{GraphRecordError, GraphRecordResult};
+pub use crate::graphrecord::datatypes::Group;
 use graphrecords_utils::aliases::{GrHashMap, GrHashMapEntry, GrHashSet};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-
-pub type Group = GraphRecordAttribute;
 
 #[derive(Default, Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

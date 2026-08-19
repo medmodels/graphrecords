@@ -1,8 +1,5 @@
-use crate::{
-    AttributeName, FailureKind, FailureKindValue, IndexDomain, IndexValue, Mask, Scalar,
-    ValueDomain,
-};
-use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue};
+use crate::{FailureKind, FailureKindValue, IndexDomain, IndexValue, Mask, Scalar, ValueDomain};
+use graphrecords_core::graphrecord::{AttributeName, Value};
 use std::hash::Hash;
 
 pub trait ValueEquivalence: ValueDomain {
@@ -12,7 +9,7 @@ pub trait ValueEquivalence: ValueDomain {
 }
 
 impl ValueEquivalence for Scalar {
-    type Key = GraphRecordValue;
+    type Key = Value;
 
     fn equivalence_key(value: &Self::Value<'_>) -> Self::Key {
         value.clone()
@@ -28,7 +25,7 @@ impl ValueEquivalence for Mask {
 }
 
 impl ValueEquivalence for AttributeName {
-    type Key = GraphRecordAttribute;
+    type Key = Self;
 
     fn equivalence_key(value: &Self::Value<'_>) -> Self::Key {
         value.clone()

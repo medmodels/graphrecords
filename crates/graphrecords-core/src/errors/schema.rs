@@ -1,4 +1,4 @@
-use crate::graphrecord::{EdgeIndex, GraphRecordAttribute, Group, NodeIndex, datatypes::DataType};
+use crate::graphrecord::{AttributeName, EdgeIndex, Group, NodeIndex, datatypes::DataType};
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -14,33 +14,33 @@ pub enum SchemaError {
     },
     NodeAttributeMissing {
         node_index: NodeIndex,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
     },
     EdgeAttributeMissing {
         edge_index: EdgeIndex,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
     },
     NodeAttributeDataTypeMismatch {
         node_index: NodeIndex,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         expected_data_type: DataType,
     },
     EdgeAttributeDataTypeMismatch {
         edge_index: EdgeIndex,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         expected_data_type: DataType,
     },
     NodeAttributesNotInSchema {
         node_index: NodeIndex,
-        attributes: Vec<GraphRecordAttribute>,
+        attributes: Vec<AttributeName>,
     },
     EdgeAttributesNotInSchema {
         edge_index: EdgeIndex,
-        attributes: Vec<GraphRecordAttribute>,
+        attributes: Vec<AttributeName>,
     },
     ContinuousAttributeNotNumeric,
     TemporalAttributeNotTemporal,
@@ -48,7 +48,7 @@ pub enum SchemaError {
 
 impl Error for SchemaError {}
 
-fn join_attributes(attributes: &[GraphRecordAttribute]) -> String {
+fn join_attributes(attributes: &[AttributeName]) -> String {
     attributes
         .iter()
         .map(ToString::to_string)

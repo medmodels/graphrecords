@@ -10,7 +10,7 @@ use crate::{
     registry::operation_manifest,
     traits::Count,
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
+use graphrecords_core::{GraphRecord, graphrecord::Value};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Lane)]
@@ -41,7 +41,7 @@ impl<I: IndexDomain, V: ValueDomain, O: OrderState> LaneKernel<Indexed<I, V>, Mu
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let count = values.try_fold(0_i64, |count, (_, item)| item.map(|_| count + 1));
 
-        Ok(count.map(GraphRecordValue::Int))
+        Ok(count.map(Value::Int))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
@@ -59,7 +59,7 @@ impl<V: BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for Cou
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
         let count = values.try_fold(0_i64, |count, item| item.map(|_| count + 1));
 
-        Ok(count.map(GraphRecordValue::Int))
+        Ok(count.map(Value::Int))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
@@ -80,7 +80,7 @@ impl<I: IndexDomain, V: ValueDomain> LaneKernel<Indexed<I, V>, Single> for Count
             None => Ok(0_i64),
         };
 
-        Ok(count.map(GraphRecordValue::Int))
+        Ok(count.map(Value::Int))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
@@ -101,7 +101,7 @@ impl<V: BareValueDomain> LaneKernel<Bare<V>, Single> for CountOperation {
             None => Ok(0_i64),
         };
 
-        Ok(count.map(GraphRecordValue::Int))
+        Ok(count.map(Value::Int))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
@@ -117,7 +117,7 @@ impl<I: IndexDomain, V: ValueDomain> LaneKernel<Indexed<I, V>, Definite> for Cou
         value: KeyedStream<'a, I, V, Definite>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(value.1.map(|_| GraphRecordValue::Int(1)))
+        Ok(value.1.map(|_| Value::Int(1)))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
@@ -133,7 +133,7 @@ impl<V: BareValueDomain> LaneKernel<Bare<V>, Definite> for CountOperation {
         value: BareStream<'a, V, Definite>,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(value.map(|_| GraphRecordValue::Int(1)))
+        Ok(value.map(|_| Value::Int(1)))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {

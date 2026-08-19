@@ -1,5 +1,5 @@
-use crate::{AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain};
-use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex};
+use crate::{Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
 
 pub trait ValueAdd: ValueDomain {
     fn add<'a>(
@@ -69,7 +69,7 @@ impl ValueAdd for IndexValue<EdgeIndex> {
     }
 }
 
-impl ValueAdd for IndexValue<GraphRecordValue> {
+impl ValueAdd for IndexValue<Value> {
     fn add<'a>(
         label: &'static str,
         value: Self::Value<'a>,

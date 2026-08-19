@@ -10,7 +10,7 @@ use crate::{
     registry::operation_manifest,
     traits::Attribute,
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
+use graphrecords_core::{GraphRecord, graphrecord::AttributeName};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -18,11 +18,11 @@ use graphrecords_core::{GraphRecord, graphrecord::GraphRecordAttribute};
 #[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct AttributeOperation {
     #[explain(label)]
-    attribute: GraphRecordAttribute,
+    attribute: AttributeName,
 }
 
 impl Prepare for AttributeOperation {
-    type Prepared<'a> = &'a GraphRecordAttribute;
+    type Prepared<'a> = &'a AttributeName;
 
     fn prepare<'a>(
         &'a self,
@@ -120,7 +120,7 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
 impl<O: Apply<AttributeOperation>> Attribute for O {
     type ReturnOperand = O::Output;
 
-    fn attribute(&self, attribute: GraphRecordAttribute) -> Self::ReturnOperand {
+    fn attribute(&self, attribute: AttributeName) -> Self::ReturnOperand {
         Self::ReturnOperand::new(OperationContext::new(
             self.clone(),
             AttributeOperation { attribute },
@@ -135,7 +135,7 @@ operation_manifest! {
 
         kernel {
             parameters: <I: EntityAttributes>;
-            field: attribute: GraphRecordAttribute;
+            field: attribute: AttributeName;
             input: Indexed<I, Unit>;
             output: Indexed<I, Scalar>;
             emission: Preserving;
@@ -143,7 +143,7 @@ operation_manifest! {
 
         kernel {
             parameters: <E: EntityAttributes, I: IndexDomain>;
-            field: attribute: GraphRecordAttribute;
+            field: attribute: AttributeName;
             input: Indexed<I, EntityReference<E>>;
             output: Indexed<I, Scalar>;
             emission: Preserving;

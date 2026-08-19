@@ -1,18 +1,17 @@
 mod edge;
 mod node;
 
-use super::{GraphRecordAttribute, GraphRecordValue, group_mapping::GroupMapping};
+use super::{AttributeName, Value, group_mapping::GroupMapping};
 use crate::errors::GraphRecordError;
+pub use crate::graphrecord::datatypes::NodeIndex;
 use edge::Edge;
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use node::Node;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-pub type NodeIndex = GraphRecordAttribute;
 pub type EdgeIndex = u32;
-pub type AttributeMap = HashMap<GraphRecordAttribute, GraphRecordValue>;
+pub type AttributeMap = HashMap<AttributeName, Value>;
 
 #[derive(Default, Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

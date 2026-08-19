@@ -12,7 +12,7 @@ from graphrecords._graphrecords.overview import (
 from graphrecords._graphrecords.schema import PyAttributeType
 from graphrecords.datatype import DataType
 from graphrecords.schema import AttributeType
-from graphrecords.types import GraphRecordAttribute
+from graphrecords.types import AttributeName, Group
 
 if TYPE_CHECKING:
     from graphrecords._graphrecords.overview import PyAttributeOverview
@@ -144,11 +144,11 @@ class NodeGroupOverview:
         return self._py_node_group_overview.count
 
     @property
-    def attributes(self) -> Dict[GraphRecordAttribute, AttributeOverview]:
+    def attributes(self) -> Dict[AttributeName, AttributeOverview]:
         """The attribute overviews of the node group.
 
         Returns:
-            Dict[GraphRecordAttribute, AttributeOverview]: The attribute overviews
+            Dict[AttributeName, AttributeOverview]: The attribute overviews
                 of the node group.
         """
         return {
@@ -197,11 +197,11 @@ class EdgeGroupOverview:
         return self._py_edge_group_overview.count
 
     @property
-    def attributes(self) -> Dict[GraphRecordAttribute, AttributeOverview]:
+    def attributes(self) -> Dict[AttributeName, AttributeOverview]:
         """The attribute overviews of the edge group.
 
         Returns:
-            Dict[GraphRecordAttribute, AttributeOverview]: The attribute overviews
+            Dict[AttributeName, AttributeOverview]: The attribute overviews
                 of the edge group.
         """
         return {
@@ -291,7 +291,7 @@ class Overview:
         return overview
 
     @property
-    def ungrouped_verview(self) -> GroupOverview:
+    def ungrouped_overview(self) -> GroupOverview:
         """The overview of ungrouped nodes/edges.
 
         Returns:
@@ -302,11 +302,11 @@ class Overview:
         )
 
     @property
-    def grouped_overviews(self) -> Dict[GraphRecordAttribute, GroupOverview]:
+    def grouped_overviews(self) -> Dict[Group, GroupOverview]:
         """The overviews of grouped nodes/edges.
 
         Returns:
-            Dict[GraphRecordAttribute, GroupOverview]: The overviews of grouped
+            Dict[Group, GroupOverview]: The overviews of grouped
                 nodes/edges.
         """
         return {

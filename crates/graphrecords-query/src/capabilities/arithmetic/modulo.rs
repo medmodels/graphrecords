@@ -1,9 +1,9 @@
 use crate::{
-    AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
+    Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
     error::arithmetic::ModuloByZero,
 };
 use graphrecords_core::graphrecord::{
-    EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex, datatypes::Mod,
+    AttributeName, EdgeIndex, Identifier, NodeIndex, Value, datatypes::Mod,
 };
 
 pub trait ValueModulo: ValueDomain {
@@ -14,26 +14,14 @@ pub trait ValueModulo: ValueDomain {
     ) -> QueryResult<Self::Value<'a>>;
 }
 
-const fn is_attribute_modulo_by_zero(
-    value: &GraphRecordAttribute,
-    modulus: &GraphRecordAttribute,
-) -> bool {
-    matches!(
-        (value, modulus),
-        (GraphRecordAttribute::Int(_), GraphRecordAttribute::Int(0))
-    )
+const fn is_identifier_modulo_by_zero(value: &Identifier, modulus: &Identifier) -> bool {
+    matches!((value, modulus), (Identifier::Int(_), Identifier::Int(0)))
 }
 
-fn is_graphrecord_value_modulo_by_zero(
-    value: &GraphRecordValue,
-    modulus: &GraphRecordValue,
-) -> bool {
+fn is_value_modulo_by_zero(value: &Value, modulus: &Value) -> bool {
     match (value, modulus) {
-        (GraphRecordValue::Int(_) | GraphRecordValue::Float(_), GraphRecordValue::Int(0)) => true,
-        (
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_),
-            GraphRecordValue::Float(modulus),
-        ) => *modulus == 0.0,
+        (Value::Int(_) | Value::Float(_), Value::Int(0)) => true,
+        (Value::Int(_) | Value::Float(_), Value::Float(modulus)) => *modulus == 0.0,
         _ => false,
     }
 }
@@ -44,7 +32,7 @@ impl ValueModulo for Scalar {
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        if is_graphrecord_value_modulo_by_zero(&value, &argument) {
+        if is_value_modulo_by_zero(&value, &argument) {
             return Err(Failure::new(label, ModuloByZero));
         }
 
@@ -60,7 +48,7 @@ impl ValueModulo for AttributeName {
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        if is_attribute_modulo_by_zero(&value, &argument) {
+        if is_identifier_modulo_by_zero(value.identifier(), argument.identifier()) {
             return Err(Failure::new(label, ModuloByZero));
         }
 
@@ -90,7 +78,7 @@ impl ValueModulo for IndexValue<NodeIndex> {
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        if is_attribute_modulo_by_zero(&value, &argument) {
+        if is_identifier_modulo_by_zero(value.identifier(), argument.identifier()) {
             return Err(Failure::new(label, ModuloByZero));
         }
 
@@ -106,7 +94,7 @@ impl ValueModulo for IndexValue<AttributeName> {
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        if is_attribute_modulo_by_zero(&value, &argument) {
+        if is_identifier_modulo_by_zero(value.identifier(), argument.identifier()) {
             return Err(Failure::new(label, ModuloByZero));
         }
 
@@ -130,13 +118,13 @@ impl ValueModulo for IndexValue<EdgeIndex> {
     }
 }
 
-impl ValueModulo for IndexValue<GraphRecordValue> {
+impl ValueModulo for IndexValue<Value> {
     fn modulo<'a>(
         label: &'static str,
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        if is_graphrecord_value_modulo_by_zero(&value, &argument) {
+        if is_value_modulo_by_zero(&value, &argument) {
             return Err(Failure::new(label, ModuloByZero));
         }
 

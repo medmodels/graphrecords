@@ -17,7 +17,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, Group, NodeIndex},
+    graphrecord::{AttributeName, EdgeIndex, Group, NodeIndex},
 };
 use std::{
     any::Any,
@@ -749,7 +749,7 @@ pub fn invoke_operand(arguments: &[DynInvokeArgument], position: usize) -> &DynO
     operand
 }
 
-pub fn invoke_attribute(arguments: &[DynInvokeArgument], position: usize) -> GraphRecordAttribute {
+pub fn invoke_attribute(arguments: &[DynInvokeArgument], position: usize) -> AttributeName {
     let Some(DynInvokeArgument::Attribute(attribute)) = arguments.get(position) else {
         panic!("registry routed an operation without its declared attribute argument")
     };

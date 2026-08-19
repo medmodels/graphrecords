@@ -1,6 +1,6 @@
 use graphrecords_core::{
     errors::GraphRecordError as CoreGraphRecordError,
-    graphrecord::{GraphRecordValue, NodeIndex},
+    graphrecord::{NodeIndex, Value},
 };
 use graphrecords_query::{
     Diagnostic, External, Failure,
@@ -108,16 +108,14 @@ impl FailureConversion for Failure {
             name if name == <ArgumentAbsent>::name() => ArgumentAbsentError::new_err(message),
             name if name == <DivisionByZero>::name() => DivisionByZeroError::new_err(message),
             name if name == <ModuloByZero>::name() => ModuloByZeroError::new_err(message),
-            name if name == <IncomparableValues<GraphRecordValue>>::name() => {
+            name if name == <IncomparableValues<Value>>::name() => {
                 IncomparableValuesError::new_err(message)
             }
-            name if name == <IncomparableValuesAt<GraphRecordValue, NodeIndex>>::name() => {
+            name if name == <IncomparableValuesAt<Value, NodeIndex>>::name() => {
                 IncomparableValuesAtError::new_err(message)
             }
-            name if name == <InvalidCast<GraphRecordValue>>::name() => {
-                InvalidCastError::new_err(message)
-            }
-            name if name == <InvalidTransition<GraphRecordValue>>::name() => {
+            name if name == <InvalidCast<Value>>::name() => InvalidCastError::new_err(message),
+            name if name == <InvalidTransition<Value>>::name() => {
                 InvalidTransitionError::new_err(message)
             }
             name if name == <UnsupportedValueRole>::name() => {
@@ -147,26 +145,26 @@ impl FailureConversion for Failure {
             name if name == <NoChildIndex<NodeIndex>>::name() => {
                 NoChildIndexError::new_err(message)
             }
-            name if name == <IntegerOverflow<GraphRecordValue>>::name() => {
+            name if name == <IntegerOverflow<Value>>::name() => {
                 IntegerOverflowError::new_err(message)
             }
-            name if name == <InvalidClipBounds<GraphRecordValue>>::name() => {
+            name if name == <InvalidClipBounds<Value>>::name() => {
                 InvalidClipBoundsError::new_err(message)
             }
             name if name == <NegativeLength>::name() => NegativeLengthError::new_err(message),
             name if name == <NegativeSquareRoot>::name() => {
                 NegativeSquareRootError::new_err(message)
             }
-            name if name == <NonIntegerValue<GraphRecordValue>>::name() => {
+            name if name == <NonIntegerValue<Value>>::name() => {
                 NonIntegerValueError::new_err(message)
             }
-            name if name == <NonNumericValue<GraphRecordValue>>::name() => {
+            name if name == <NonNumericValue<Value>>::name() => {
                 NonNumericValueError::new_err(message)
             }
             name if name == <NonPositiveLogarithm>::name() => {
                 NonPositiveLogarithmError::new_err(message)
             }
-            name if name == <IncomparableIndices<GraphRecordValue, NodeIndex>>::name() => {
+            name if name == <IncomparableIndices<Value, NodeIndex>>::name() => {
                 IncomparableIndicesError::new_err(message)
             }
             name if name == <EmptySplitDelimiter>::name() => {
@@ -181,7 +179,7 @@ impl FailureConversion for Failure {
             name if name == <InvalidStringSlice>::name() => {
                 InvalidStringSliceError::new_err(message)
             }
-            name if name == <NonStringValue<GraphRecordValue>>::name() => {
+            name if name == <NonStringValue<Value>>::name() => {
                 NonStringValueError::new_err(message)
             }
             name if name == <StringLengthOverflow>::name() => {

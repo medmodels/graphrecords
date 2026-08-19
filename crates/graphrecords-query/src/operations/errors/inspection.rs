@@ -9,7 +9,7 @@ use crate::{
     registry::operation_manifest,
     traits::{ErrorKind, ErrorKindName, Errors, HasErrorCause, InErrorGroup, IsErrorKind},
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
+use graphrecords_core::{GraphRecord, graphrecord::Value};
 use std::{
     any::type_name,
     error::Error,
@@ -489,7 +489,7 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, FailureKindValue>> for ErrorKindNa
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, FailureKindValue>, Self>> {
         Ok(Pipeline::unkeyed(|result: QueryResult<FailureKind>| {
-            result.map(|kind| GraphRecordValue::from(kind.name()))
+            result.map(|kind| Value::from(kind.name()))
         }))
     }
 }
@@ -503,7 +503,7 @@ impl ElementKernel<Bare<FailureKindValue>> for ErrorKindNameOperation {
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<FailureKindValue>, Self>> {
         Ok(Pipeline::new(|result: QueryResult<FailureKind>| {
-            result.map(|kind| GraphRecordValue::from(kind.name()))
+            result.map(|kind| Value::from(kind.name()))
         }))
     }
 }

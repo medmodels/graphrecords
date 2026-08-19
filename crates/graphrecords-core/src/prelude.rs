@@ -1,5 +1,5 @@
 pub use crate::graphrecord::{
-    AttributeMap, EdgeIndex, Group, NodeIndex,
-    datatypes::{DataType, GraphRecordAttribute, GraphRecordValue},
+    AttributeMap, AttributeName, EdgeIndex, Group, NodeIndex, PluginName,
+    datatypes::{DataType, Identifier, Value},
     schema::{AttributeDataType, AttributeSchema, AttributeType, GroupSchema, Schema, SchemaType},
 };

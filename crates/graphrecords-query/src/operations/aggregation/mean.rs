@@ -11,7 +11,7 @@ use crate::{
     registry::operation_manifest,
     traits::Mean,
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
+use graphrecords_core::{GraphRecord, graphrecord::Value};
 use std::ops::{Add, Div};
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
@@ -48,7 +48,7 @@ where
         let mean = values
             .try_fold(
                 (None, 0_i64, None),
-                |(sum, count, role): (Option<GraphRecordValue>, _, _), (index, value)| {
+                |(sum, count, role): (Option<Value>, _, _), (index, value)| {
                     let value = value?;
                     let role = role.or_else(|| Some(value.clone()));
                     let value = V::into_scalar(Self::LABEL, value)
@@ -66,7 +66,7 @@ where
             .and_then(|(sum, count, role)| {
                 sum.zip(role)
                     .map(|(sum, role)| {
-                        sum.div(GraphRecordValue::Int(count))
+                        sum.div(Value::Int(count))
                             .map(|value| V::from_scalar(&role, value))
                             .map_err(|error| Failure::new(Self::LABEL, error))
                     })
@@ -96,7 +96,7 @@ where
         let mean = values
             .try_fold(
                 (None, 0_i64, None),
-                |(sum, count, role): (Option<GraphRecordValue>, _, _), value| {
+                |(sum, count, role): (Option<Value>, _, _), value| {
                     let value = value?;
                     let role = role.or_else(|| Some(value.clone()));
                     let value = V::into_scalar(Self::LABEL, value)?;
@@ -113,7 +113,7 @@ where
             .and_then(|(sum, count, role)| {
                 sum.zip(role)
                     .map(|(sum, role)| {
-                        sum.div(GraphRecordValue::Int(count))
+                        sum.div(Value::Int(count))
                             .map(|value| V::from_scalar(&role, value))
                             .map_err(|error| Failure::new(Self::LABEL, error))
                     })

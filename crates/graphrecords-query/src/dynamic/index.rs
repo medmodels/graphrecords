@@ -1,12 +1,12 @@
 use crate::{
-    AttributeName, EdgeEndpointRole, FailureKind, IndexDomain, Position, Positional, QueryResult,
+    EdgeEndpointRole, FailureKind, IndexDomain, Position, Positional, QueryResult,
     capabilities::{EnsureSortable, incomparable_pair},
     index::GroupKey,
     registry::IndexDescriptor,
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
+    graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value},
 };
 use std::{
     cmp::Ordering,
@@ -21,8 +21,8 @@ pub enum DynIndexOwned {
     Positional(Position),
     Node(NodeIndex),
     Edge(EdgeIndex),
-    Attribute(GraphRecordAttribute),
-    Value(GraphRecordValue),
+    Attribute(AttributeName),
+    Value(Value),
     Bool(bool),
     EndpointRole(EdgeEndpointRole),
     FailureKind(FailureKind),
@@ -34,8 +34,8 @@ pub enum DynIndexRef<'a> {
     Positional(Position),
     Node(&'a NodeIndex),
     Edge(&'a EdgeIndex),
-    Attribute(GraphRecordAttribute),
-    Value(GraphRecordValue),
+    Attribute(AttributeName),
+    Value(Value),
     Bool(bool),
     EndpointRole(EdgeEndpointRole),
     FailureKind(FailureKind),
@@ -137,7 +137,7 @@ impl DynIndexOwned {
             Self::Node(_) => IndexDescriptor::domain::<NodeIndex>(),
             Self::Edge(_) => IndexDescriptor::domain::<EdgeIndex>(),
             Self::Attribute(_) => IndexDescriptor::domain::<AttributeName>(),
-            Self::Value(_) => IndexDescriptor::domain::<GraphRecordValue>(),
+            Self::Value(_) => IndexDescriptor::domain::<Value>(),
             Self::Bool(_) => IndexDescriptor::domain::<bool>(),
             Self::EndpointRole(_) => IndexDescriptor::domain::<EdgeEndpointRole>(),
             Self::FailureKind(_) => IndexDescriptor::domain::<FailureKind>(),
@@ -158,7 +158,7 @@ impl DynIndexOwned {
             Self::Node(_) => "node index",
             Self::Edge(_) => "edge index",
             Self::Attribute(_) => "attribute-name index",
-            Self::Value(_) => "graphrecord-value index",
+            Self::Value(_) => "value index",
             Self::Bool(_) => "boolean index",
             Self::EndpointRole(_) => "edge-endpoint-role index",
             Self::FailureKind(_) => "failure-kind index",
@@ -329,7 +329,7 @@ macro_rules! implement_dynamic_index {
                             .iter()
                             .all(|value| matches!(value, Self::Attribute(_))) =>
                     {
-                        GraphRecordAttribute::find_incomparable(values.into_iter().map(|value| {
+                        AttributeName::find_incomparable(values.into_iter().map(|value| {
                             let Self::Attribute(value) = value else {
                                 unreachable!(
                                     "dynamic indices were checked as attribute-name indices"
@@ -341,7 +341,7 @@ macro_rules! implement_dynamic_index {
                     Self::Value(_)
                         if values.iter().all(|value| matches!(value, Self::Value(_))) =>
                     {
-                        GraphRecordValue::find_incomparable(values.into_iter().map(|value| {
+                        Value::find_incomparable(values.into_iter().map(|value| {
                             let Self::Value(value) = value else {
                                 unreachable!("dynamic indices were checked as value indices")
                             };
@@ -458,7 +458,7 @@ impl GroupKey for DynIndex {
                     .map(DynIndexRef::Attribute)
             }
             DynIndexOwned::Value(value) => {
-                GraphRecordValue::resolve_key(label, graphrecord, value).map(DynIndexRef::Value)
+                Value::resolve_key(label, graphrecord, value).map(DynIndexRef::Value)
             }
             DynIndexOwned::Bool(value) => {
                 bool::resolve_key(label, graphrecord, value).map(DynIndexRef::Bool)

@@ -1,10 +1,10 @@
 #![allow(clippy::new_without_default, clippy::significant_drop_tightening)]
 
-pub mod attribute;
 mod borrowed;
 pub mod connector;
 pub mod datatype;
 pub mod errors;
+pub mod identifier;
 pub mod overview;
 pub mod plugins;
 pub mod schema;
@@ -19,20 +19,19 @@ use crate::{
     },
     querying::PyOperand,
 };
-use attribute::PyGraphRecordAttribute;
 use borrowed::BorrowedGraphRecord;
 use connector::PyConnector;
 use errors::PyGraphRecordError;
 use graphrecords_core::{
     errors::{ConversionError, GraphRecordError},
     graphrecord::{
-        AttributeMap, EdgeDataFrameInput, EdgeIndex, GraphRecord, GraphRecordAttribute,
-        GraphRecordValue, Group, NodeDataFrameInput, connector::ConnectedGraphRecord,
-        plugins::Plugin,
+        AttributeMap, AttributeName, EdgeDataFrameInput, EdgeIndex, GraphRecord, Group,
+        NodeDataFrameInput, Value, connector::ConnectedGraphRecord, plugins::Plugin,
     },
     prelude::NodeIndex,
 };
 use graphrecords_overview::{GroupOverviewable, Overviewable};
+use identifier::PyIdentifier;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use pyo3::{
     exceptions::PyRuntimeError,
@@ -47,12 +46,13 @@ use std::{
     ptr::NonNull,
 };
 use traits::DeepInto;
-use value::PyGraphRecordValue;
+use value::PyValue;
 
-pub type PyAttributes = HashMap<PyGraphRecordAttribute, PyGraphRecordValue>;
-pub type PyGroup = PyGraphRecordAttribute;
-pub type PyPluginName = PyGraphRecordAttribute;
-pub type PyNodeIndex = PyGraphRecordAttribute;
+pub type PyAttributeName = PyIdentifier;
+pub type PyAttributes = HashMap<PyAttributeName, PyValue>;
+pub type PyGroup = PyIdentifier;
+pub type PyPluginName = PyIdentifier;
+pub type PyNodeIndex = PyIdentifier;
 pub type PyEdgeIndex = EdgeIndex;
 type Lut<T> = ConversionLut<usize, fn(&Bound<'_, PyAny>) -> PyResult<T>>;
 
@@ -373,7 +373,7 @@ impl PyGraphRecord {
                 .expect("Setting item must succeed");
 
             inner_dict
-                .set_item(PyGraphRecordAttribute::from(group), group_dict)
+                .set_item(PyGroup::from(group), group_dict)
                 .expect("Setting item must succeed");
         }
 
@@ -524,11 +524,12 @@ impl PyGraphRecord {
         node_index
             .into_iter()
             .map(|node_index| {
+                let node_index = NodeIndex::from(node_index);
                 let node_attributes = graphrecord
                     .node_attributes(&node_index)
                     .map_err(PyGraphRecordError::from)?;
 
-                Ok((node_index, node_attributes.deep_into()))
+                Ok((node_index.into(), node_attributes.deep_into()))
             })
             .collect()
     }
@@ -571,13 +572,14 @@ impl PyGraphRecord {
         node_index
             .into_iter()
             .map(|node_index| {
+                let node_index = NodeIndex::from(node_index);
                 let edges = graphrecord
                     .outgoing_edges(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .copied()
                     .collect();
 
-                Ok((node_index, edges))
+                Ok((node_index.into(), edges))
             })
             .collect()
     }
@@ -591,13 +593,14 @@ impl PyGraphRecord {
         node_index
             .into_iter()
             .map(|node_index| {
+                let node_index = NodeIndex::from(node_index);
                 let edges = graphrecord
                     .incoming_edges(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .copied()
                     .collect();
 
-                Ok((node_index, edges))
+                Ok((node_index.into(), edges))
             })
             .collect()
     }
@@ -631,8 +634,8 @@ impl PyGraphRecord {
         source_node_indices: Vec<PyNodeIndex>,
         target_node_indices: Vec<PyNodeIndex>,
     ) -> PyResult<Vec<EdgeIndex>> {
-        let source_node_indices: Vec<GraphRecordAttribute> = source_node_indices.deep_into();
-        let target_node_indices: Vec<GraphRecordAttribute> = target_node_indices.deep_into();
+        let source_node_indices: Vec<NodeIndex> = source_node_indices.deep_into();
+        let target_node_indices: Vec<NodeIndex> = target_node_indices.deep_into();
 
         Ok(self
             .inner()?
@@ -649,8 +652,8 @@ impl PyGraphRecord {
         first_node_indices: Vec<PyNodeIndex>,
         second_node_indices: Vec<PyNodeIndex>,
     ) -> PyResult<Vec<EdgeIndex>> {
-        let first_node_indices: Vec<GraphRecordAttribute> = first_node_indices.deep_into();
-        let second_node_indices: Vec<GraphRecordAttribute> = second_node_indices.deep_into();
+        let first_node_indices: Vec<NodeIndex> = first_node_indices.deep_into();
+        let second_node_indices: Vec<NodeIndex> = second_node_indices.deep_into();
 
         Ok(self
             .inner()?
@@ -674,20 +677,22 @@ impl PyGraphRecord {
             node_indices
                 .into_iter()
                 .map(|node_index| {
+                    let node_index = NodeIndex::from(node_index);
                     let attributes = graphrecord
                         .remove_node_bypass_plugins(&node_index)
                         .map_err(PyGraphRecordError::from)?;
-                    Ok((node_index, attributes.deep_into()))
+                    Ok((node_index.into(), attributes.deep_into()))
                 })
                 .collect()
         } else {
             node_indices
                 .into_iter()
                 .map(|node_index| {
+                    let node_index = NodeIndex::from(node_index);
                     let attributes = graphrecord
                         .remove_node(&node_index)
                         .map_err(PyGraphRecordError::from)?;
-                    Ok((node_index, attributes.deep_into()))
+                    Ok((node_index.into(), attributes.deep_into()))
                 })
                 .collect()
         }
@@ -703,6 +708,7 @@ impl PyGraphRecord {
         let attributes: AttributeMap = attributes.deep_into();
 
         for node_index in node_indices {
+            let node_index = NodeIndex::from(node_index);
             let mut current_attributes = graphrecord
                 .node_attributes_mut(&node_index)
                 .map_err(PyGraphRecordError::from)?;
@@ -718,15 +724,16 @@ impl PyGraphRecord {
     pub fn update_node_attribute(
         &self,
         node_indices: Vec<PyNodeIndex>,
-        attribute: PyGraphRecordAttribute,
-        value: PyGraphRecordValue,
+        attribute: PyAttributeName,
+        value: PyValue,
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        let attribute: GraphRecordAttribute = attribute.into();
-        let value: GraphRecordValue = value.into();
+        let attribute: AttributeName = attribute.into();
+        let value: Value = value.into();
 
         for node_index in node_indices {
+            let node_index = NodeIndex::from(node_index);
             let mut node_attributes = graphrecord
                 .node_attributes_mut(&node_index)
                 .map_err(PyGraphRecordError::from)?;
@@ -742,13 +749,14 @@ impl PyGraphRecord {
     pub fn remove_node_attribute(
         &self,
         node_indices: Vec<PyNodeIndex>,
-        attribute: PyGraphRecordAttribute,
+        attribute: PyAttributeName,
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        let attribute: GraphRecordAttribute = attribute.into();
+        let attribute: AttributeName = attribute.into();
 
         for node_index in node_indices {
+            let node_index = NodeIndex::from(node_index);
             let mut node_attributes = graphrecord
                 .node_attributes_mut(&node_index)
                 .map_err(PyGraphRecordError::from)?;
@@ -965,13 +973,13 @@ impl PyGraphRecord {
     pub fn update_edge_attribute(
         &self,
         edge_indices: Vec<EdgeIndex>,
-        attribute: PyGraphRecordAttribute,
-        value: PyGraphRecordValue,
+        attribute: PyAttributeName,
+        value: PyValue,
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        let attribute: GraphRecordAttribute = attribute.into();
-        let value: GraphRecordValue = value.into();
+        let attribute: AttributeName = attribute.into();
+        let value: Value = value.into();
 
         for edge_index in edge_indices {
             let mut edge_attributes = graphrecord
@@ -989,11 +997,11 @@ impl PyGraphRecord {
     pub fn remove_edge_attribute(
         &self,
         edge_indices: Vec<EdgeIndex>,
-        attribute: PyGraphRecordAttribute,
+        attribute: PyAttributeName,
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
-        let attribute: GraphRecordAttribute = attribute.into();
+        let attribute: AttributeName = attribute.into();
 
         for edge_index in edge_indices {
             let mut edge_attributes = graphrecord
@@ -1035,6 +1043,8 @@ impl PyGraphRecord {
         bypass_plugins: bool,
     ) -> PyResult<Vec<EdgeIndex>> {
         let mut graphrecord = self.inner_mut()?;
+
+        let group: Group = group.into();
 
         if bypass_plugins {
             Ok(graphrecord
@@ -1129,6 +1139,8 @@ impl PyGraphRecord {
     ) -> PyResult<Vec<EdgeIndex>> {
         let mut graphrecord = self.inner_mut()?;
 
+        let group: Group = group.into();
+
         if bypass_plugins {
             Ok(graphrecord
                 .add_edges_dataframes_with_group_bypass_plugins(edges_dataframes, &group)
@@ -1199,14 +1211,14 @@ impl PyGraphRecord {
         if bypass_plugins {
             group.into_iter().try_for_each(|group| {
                 graphrecord
-                    .remove_group_bypass_plugins(&group)
+                    .remove_group_bypass_plugins(&group.into())
                     .map_err(PyGraphRecordError::from)?;
                 Ok(())
             })
         } else {
             group.into_iter().try_for_each(|group| {
                 graphrecord
-                    .remove_group(&group)
+                    .remove_group(&group.into())
                     .map_err(PyGraphRecordError::from)?;
                 Ok(())
             })
@@ -1362,16 +1374,18 @@ impl PyGraphRecord {
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
 
+        let group: Group = group.into();
+
         if bypass_plugins {
             node_indices.into_iter().try_for_each(|node_index| {
                 Ok(graphrecord
-                    .remove_node_from_group_bypass_plugins(&group, &node_index)
+                    .remove_node_from_group_bypass_plugins(&group, &node_index.into())
                     .map_err(PyGraphRecordError::from)?)
             })
         } else {
             node_indices.into_iter().try_for_each(|node_index| {
                 Ok(graphrecord
-                    .remove_node_from_group(&group, &node_index)
+                    .remove_node_from_group(&group, &node_index.into())
                     .map_err(PyGraphRecordError::from)?)
             })
         }
@@ -1433,6 +1447,8 @@ impl PyGraphRecord {
         bypass_plugins: bool,
     ) -> PyResult<()> {
         let mut graphrecord = self.inner_mut()?;
+
+        let group: Group = group.into();
 
         if bypass_plugins {
             edge_indices.into_iter().try_for_each(|edge_index| {
@@ -1504,13 +1520,14 @@ impl PyGraphRecord {
         group
             .into_iter()
             .map(|group| {
+                let group = Group::from(group);
                 let nodes_attributes = graphrecord
                     .nodes_in_group(&group)
                     .map_err(PyGraphRecordError::from)?
                     .map(|node_index| node_index.clone().into())
                     .collect();
 
-                Ok((group, nodes_attributes))
+                Ok((group.into(), nodes_attributes))
             })
             .collect()
     }
@@ -1532,13 +1549,14 @@ impl PyGraphRecord {
         group
             .into_iter()
             .map(|group| {
+                let group = Group::from(group);
                 let edges = graphrecord
                     .edges_in_group(&group)
                     .map_err(PyGraphRecordError::from)?
                     .copied()
                     .collect();
 
-                Ok((group, edges))
+                Ok((group.into(), edges))
             })
             .collect()
     }
@@ -1556,13 +1574,14 @@ impl PyGraphRecord {
         node_index
             .into_iter()
             .map(|node_index| {
+                let node_index = NodeIndex::from(node_index);
                 let groups = graphrecord
                     .groups_of_node(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|group| group.clone().into())
                     .collect();
 
-                Ok((node_index, groups))
+                Ok((node_index.into(), groups))
             })
             .collect()
     }
@@ -1620,13 +1639,14 @@ impl PyGraphRecord {
         node_indices
             .into_iter()
             .map(|node_index| {
+                let node_index = NodeIndex::from(node_index);
                 let neighbors = graphrecord
                     .outgoing_neighbors(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|neighbor| neighbor.clone().into())
                     .collect();
 
-                Ok((node_index, neighbors))
+                Ok((node_index.into(), neighbors))
             })
             .collect()
     }
@@ -1640,13 +1660,14 @@ impl PyGraphRecord {
         node_indices
             .into_iter()
             .map(|node_index| {
+                let node_index = NodeIndex::from(node_index);
                 let neighbors = graphrecord
                     .incoming_neighbors(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|neighbor| neighbor.clone().into())
                     .collect();
 
-                Ok((node_index, neighbors))
+                Ok((node_index.into(), neighbors))
             })
             .collect()
     }
@@ -1660,13 +1681,14 @@ impl PyGraphRecord {
         node_indices
             .into_iter()
             .map(|node_index| {
+                let node_index = NodeIndex::from(node_index);
                 let neighbors = graphrecord
                     .neighbors(&node_index)
                     .map_err(PyGraphRecordError::from)?
                     .map(|neighbor| neighbor.clone().into())
                     .collect();
 
-                Ok((node_index, neighbors))
+                Ok((node_index.into(), neighbors))
             })
             .collect()
     }

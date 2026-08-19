@@ -33,9 +33,9 @@ from graphrecords.datatype import (
 )
 from graphrecords.datatype import Union as DataTypeUnion
 from graphrecords.types import (
+    AttributeName,
     Attributes,
     EdgeIndex,
-    GraphRecordAttribute,
     NodeIndex,
 )
 
@@ -175,7 +175,7 @@ AttributeDataType: TypeAlias = Union[
     CategoricalPair, ContinuousPair, TemporalPair, UnstructuredPair
 ]
 
-AttributesSchema: TypeAlias = Dict[GraphRecordAttribute, AttributeDataType]
+AttributesSchema: TypeAlias = Dict[AttributeName, AttributeDataType]
 
 
 class GroupSchema:
@@ -188,13 +188,13 @@ class GroupSchema:
         *,
         nodes: Optional[
             Dict[
-                GraphRecordAttribute,
+                AttributeName,
                 Union[DataType, AttributeDataType],
             ],
         ] = None,
         edges: Optional[
             Dict[
-                GraphRecordAttribute,
+                AttributeName,
                 Union[DataType, AttributeDataType],
             ],
         ] = None,
@@ -202,11 +202,11 @@ class GroupSchema:
         """Initializes a new instance of GroupSchema.
 
         Args:
-            nodes (Dict[GraphRecordAttribute, Union[DataType, AttributeDataType]]):
+            nodes (Dict[AttributeName, Union[DataType, AttributeDataType]]):
                 A dictionary mapping node attributes to their data
                 types and optional attribute types. Defaults to an empty dictionary.
                 When no attribute type is provided, it is inferred from the data type.
-            edges (Dict[GraphRecordAttribute, Union[DataType, AttributeDataType]]):
+            edges (Dict[AttributeName, Union[DataType, AttributeDataType]]):
                 A dictionary mapping edge attributes to their data types and
                 optional attribute types. Defaults to an empty dictionary.
                 When no attribute type is provided, it is inferred from the data type.
@@ -491,7 +491,7 @@ class Schema:
     @overload
     def set_node_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         attribute_type: Optional[
             Literal[AttributeType.Categorical, AttributeType.Unstructured]
@@ -502,7 +502,7 @@ class Schema:
     @overload
     def set_node_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: ContinuousType,
         attribute_type: Literal[AttributeType.Continuous],
         group: Optional[Group] = None,
@@ -511,7 +511,7 @@ class Schema:
     @overload
     def set_node_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: TemporalType,
         attribute_type: Literal[AttributeType.Temporal],
         group: Optional[Group] = None,
@@ -519,7 +519,7 @@ class Schema:
 
     def set_node_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         attribute_type: Optional[AttributeType] = None,
         group: Optional[Group] = None,
@@ -529,7 +529,7 @@ class Schema:
         If a data type for the attribute already exists, it is overwritten.
 
         Args:
-            attribute (GraphRecordAttribute): The name of the attribute.
+            attribute (AttributeName): The name of the attribute.
             data_type (DataType): The data type of the attribute.
             attribute_type (Optional[AttributeType], optional): The attribute type of
                 the attribute. If not provided, the attribute type is inferred
@@ -551,7 +551,7 @@ class Schema:
     @overload
     def set_edge_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         attribute_type: Optional[
             Literal[AttributeType.Categorical, AttributeType.Unstructured]
@@ -562,7 +562,7 @@ class Schema:
     @overload
     def set_edge_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: ContinuousType,
         attribute_type: Literal[AttributeType.Continuous],
         group: Optional[Group] = None,
@@ -571,7 +571,7 @@ class Schema:
     @overload
     def set_edge_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: TemporalType,
         attribute_type: Literal[AttributeType.Temporal],
         group: Optional[Group] = None,
@@ -579,7 +579,7 @@ class Schema:
 
     def set_edge_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         attribute_type: Optional[AttributeType] = None,
         group: Optional[Group] = None,
@@ -589,7 +589,7 @@ class Schema:
         If a data type for the attribute already exists, it is overwritten.
 
         Args:
-            attribute (GraphRecordAttribute): The name of the attribute.
+            attribute (AttributeName): The name of the attribute.
             data_type (DataType): The data type of the attribute.
             attribute_type (Optional[AttributeType], optional): The attribute type of
                 the attribute. If not provided, the attribute type is inferred
@@ -611,7 +611,7 @@ class Schema:
     @overload
     def update_node_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         attribute_type: Optional[
             Literal[AttributeType.Categorical, AttributeType.Unstructured]
@@ -622,7 +622,7 @@ class Schema:
     @overload
     def update_node_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: ContinuousType,
         attribute_type: Literal[AttributeType.Continuous],
         group: Optional[Group] = None,
@@ -631,7 +631,7 @@ class Schema:
     @overload
     def update_node_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: TemporalType,
         attribute_type: Literal[AttributeType.Temporal],
         group: Optional[Group] = None,
@@ -639,7 +639,7 @@ class Schema:
 
     def update_node_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         attribute_type: Optional[AttributeType] = None,
         group: Optional[Group] = None,
@@ -650,7 +650,7 @@ class Schema:
         with the new data type.
 
         Args:
-            attribute (GraphRecordAttribute): The name of the attribute.
+            attribute (AttributeName): The name of the attribute.
             data_type (DataType): The data type of the attribute.
             attribute_type (Optional[AttributeType], optional): The attribute type of
                 the attribute. If not provided, the attribute type is inferred
@@ -672,7 +672,7 @@ class Schema:
     @overload
     def update_edge_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         attribute_type: Optional[
             Literal[AttributeType.Categorical, AttributeType.Unstructured]
@@ -683,7 +683,7 @@ class Schema:
     @overload
     def update_edge_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: ContinuousType,
         attribute_type: Literal[AttributeType.Continuous],
         group: Optional[Group] = None,
@@ -692,7 +692,7 @@ class Schema:
     @overload
     def update_edge_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: TemporalType,
         attribute_type: Literal[AttributeType.Temporal],
         group: Optional[Group] = None,
@@ -700,7 +700,7 @@ class Schema:
 
     def update_edge_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         attribute_type: Optional[AttributeType] = None,
         group: Optional[Group] = None,
@@ -711,7 +711,7 @@ class Schema:
         with the new data type.
 
         Args:
-            attribute (GraphRecordAttribute): The name of the attribute.
+            attribute (AttributeName): The name of the attribute.
             data_type (DataType): The data type of the attribute.
             attribute_type (Optional[AttributeType], optional): The attribute type of
                 the attribute. If not provided, the attribute type is inferred
@@ -731,24 +731,24 @@ class Schema:
         )
 
     def remove_node_attribute(
-        self, attribute: GraphRecordAttribute, group: Optional[Group] = None
+        self, attribute: AttributeName, group: Optional[Group] = None
     ) -> None:
         """Removes a node attribute from the schema.
 
         Args:
-            attribute (GraphRecordAttribute): The name of the attribute to remove.
+            attribute (AttributeName): The name of the attribute to remove.
             group (Optional[Group], optional): The group to remove the attribute from.
                 If not provided, the ungrouped schema is used. Defaults to None.
         """
         self._schema.remove_node_attribute(attribute, group)
 
     def remove_edge_attribute(
-        self, attribute: GraphRecordAttribute, group: Optional[Group] = None
+        self, attribute: AttributeName, group: Optional[Group] = None
     ) -> None:
         """Removes an edge attribute from the schema.
 
         Args:
-            attribute (GraphRecordAttribute): The name of the attribute to remove.
+            attribute (AttributeName): The name of the attribute to remove.
             group (Optional[Group], optional): The group to remove the attribute from.
                 If not provided, the ungrouped schema is used. Defaults to None.
         """

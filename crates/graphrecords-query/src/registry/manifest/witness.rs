@@ -26,7 +26,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     errors::{GraphRecordError, GraphRecordResult},
-    graphrecord::{AttributeMap, GraphRecordAttribute, GraphRecordValue, Group},
+    graphrecord::{AttributeMap, AttributeName, Group, Value},
 };
 use graphrecords_utils::aliases::GrHashSet;
 use std::{
@@ -110,7 +110,7 @@ impl EntityAttributes for EntityAttributesWitness {
         unreachable!("operation manifest witnesses must never execute")
     }
 
-    fn attribute_cardinality(_stats: &Stats, _attribute: &GraphRecordAttribute) -> usize {
+    fn attribute_cardinality(_stats: &Stats, _attribute: &AttributeName) -> usize {
         unreachable!("operation manifest witnesses must never execute")
     }
 }
@@ -544,11 +544,11 @@ impl<S: 'static> ValueEquivalence for ValueWitness<ModeCapability, S> {
 impl<S: 'static> ValueMode for ValueWitness<ModeCapability, S> {}
 
 impl<S: 'static> ValueScalar for ValueWitness<ScalarCapability, S> {
-    fn into_scalar(_label: &'static str, _value: Self::Value<'_>) -> QueryResult<GraphRecordValue> {
+    fn into_scalar(_label: &'static str, _value: Self::Value<'_>) -> QueryResult<Value> {
         unreachable!("operation manifest witnesses must never execute")
     }
 
-    fn from_scalar<'a>(_role: &Self::Value<'_>, _value: GraphRecordValue) -> Self::Value<'a> {
+    fn from_scalar<'a>(_role: &Self::Value<'_>, _value: Value) -> Self::Value<'a> {
         unreachable!("operation manifest witnesses must never execute")
     }
 }

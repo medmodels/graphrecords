@@ -1,5 +1,6 @@
 use super::OperandHandle;
-use crate::{AttributeName, Bare, Definite, Indexed, Multiple, Single};
+use crate::{Bare, Definite, Indexed, Multiple, Single};
+use graphrecords_core::graphrecord::AttributeName;
 
 pub type AttributesOperand<I, O> = OperandHandle<Indexed<I, AttributeName>, Multiple<O>>;
 pub type BareAttributesOperand<O> = OperandHandle<Bare<AttributeName>, Multiple<O>>;

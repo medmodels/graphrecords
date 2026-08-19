@@ -1,9 +1,9 @@
 use crate::graphrecord::{
-    attribute::PyGraphRecordAttribute,
+    PyAttributeName, PyGroup,
     datatype::PyDataType,
     schema::PyAttributeType,
     traits::{DeepFrom, DeepInto},
-    value::PyGraphRecordValue,
+    value::PyValue,
 };
 use graphrecords_overview::{
     AttributeOverview, AttributeOverviewData, EdgeGroupOverview, GroupOverview, NodeGroupOverview,
@@ -61,7 +61,7 @@ impl PyAttributeOverview {
 
         match &self.0.data {
             AttributeOverviewData::Categorical { distinct_values } => {
-                let distinct_values: Vec<PyGraphRecordValue> = distinct_values.clone().deep_into();
+                let distinct_values: Vec<PyValue> = distinct_values.clone().deep_into();
 
                 dict.set_item("distinct_values", distinct_values)
                     .expect("Setting item must succeed");
@@ -73,11 +73,11 @@ impl PyAttributeOverview {
                     .into()
             }
             AttributeOverviewData::Continuous { min, mean, max } => {
-                dict.set_item("min", PyGraphRecordValue::from(min.clone()))
+                dict.set_item("min", PyValue::from(min.clone()))
                     .expect("Setting item must succeed");
-                dict.set_item("mean", PyGraphRecordValue::from(mean.clone()))
+                dict.set_item("mean", PyValue::from(mean.clone()))
                     .expect("Setting item must succeed");
-                dict.set_item("max", PyGraphRecordValue::from(max.clone()))
+                dict.set_item("max", PyValue::from(max.clone()))
                     .expect("Setting item must succeed");
                 dict.set_item("attribute_type", PyAttributeType::Continuous)
                     .expect("Setting item must succeed");
@@ -85,9 +85,9 @@ impl PyAttributeOverview {
                 dict.into()
             }
             AttributeOverviewData::Temporal { min, max } => {
-                dict.set_item("min", PyGraphRecordValue::from(min.clone()))
+                dict.set_item("min", PyValue::from(min.clone()))
                     .expect("Setting item must succeed");
-                dict.set_item("max", PyGraphRecordValue::from(max.clone()))
+                dict.set_item("max", PyValue::from(max.clone()))
                     .expect("Setting item must succeed");
                 dict.set_item("attribute_type", PyAttributeType::Temporal)
                     .expect("Setting item must succeed");
@@ -149,7 +149,7 @@ impl PyNodeGroupOverview {
     }
 
     #[getter]
-    pub fn attributes(&self) -> HashMap<PyGraphRecordAttribute, PyAttributeOverview> {
+    pub fn attributes(&self) -> HashMap<PyAttributeName, PyAttributeOverview> {
         self.0.attributes.clone().deep_into()
     }
 
@@ -201,12 +201,8 @@ impl PyEdgeGroupOverview {
     }
 
     #[getter]
-    pub fn attributes(&self) -> HashMap<PyGraphRecordAttribute, PyAttributeOverview> {
-        self.0
-            .attributes
-            .iter()
-            .map(|(k, v)| (k.clone().into(), v.clone().into()))
-            .collect()
+    pub fn attributes(&self) -> HashMap<PyAttributeName, PyAttributeOverview> {
+        self.0.attributes.clone().deep_into()
     }
 
     pub fn __repr__(&self) -> PyResult<String> {
@@ -297,7 +293,7 @@ impl PyOverview {
     }
 
     #[getter]
-    pub fn grouped_overviews(&self) -> HashMap<PyGraphRecordAttribute, PyGroupOverview> {
+    pub fn grouped_overviews(&self) -> HashMap<PyGroup, PyGroupOverview> {
         self.0.grouped_overviews.clone().deep_into()
     }
 

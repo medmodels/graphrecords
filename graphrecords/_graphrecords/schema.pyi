@@ -4,9 +4,9 @@ from typing import Dict, List, Optional
 from graphrecords._graphrecords.datatype import PyDataType
 from graphrecords._graphrecords.graphrecord import PyGraphRecord
 from graphrecords.types import (
+    AttributeName,
     Attributes,
     EdgeIndex,
-    GraphRecordAttribute,
     Group,
     NodeIndex,
 )
@@ -29,14 +29,14 @@ class PyAttributeDataType:
     ) -> None: ...
 
 class PyGroupSchema:
-    nodes: Dict[GraphRecordAttribute, PyAttributeDataType]
-    edges: Dict[GraphRecordAttribute, PyAttributeDataType]
+    nodes: Dict[AttributeName, PyAttributeDataType]
+    edges: Dict[AttributeName, PyAttributeDataType]
 
     def __init__(
         self,
         *,
-        nodes: Dict[GraphRecordAttribute, PyAttributeDataType],
-        edges: Dict[GraphRecordAttribute, PyAttributeDataType],
+        nodes: Dict[AttributeName, PyAttributeDataType],
+        edges: Dict[AttributeName, PyAttributeDataType],
     ) -> None: ...
     def validate_node(self, index: NodeIndex, attributes: Attributes) -> None: ...
     def validate_edge(self, index: EdgeIndex, attributes: Attributes) -> None: ...
@@ -68,37 +68,37 @@ class PySchema:
     ) -> None: ...
     def set_node_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
         group: Optional[Group] = None,
     ) -> None: ...
     def set_edge_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
         group: Optional[Group] = None,
     ) -> None: ...
     def update_node_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
         group: Optional[Group] = None,
     ) -> None: ...
     def update_edge_attribute(
         self,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
         group: Optional[Group] = None,
     ) -> None: ...
     def remove_node_attribute(
-        self, attribute: GraphRecordAttribute, group: Optional[Group] = None
+        self, attribute: AttributeName, group: Optional[Group] = None
     ) -> None: ...
     def remove_edge_attribute(
-        self, attribute: GraphRecordAttribute, group: Optional[Group] = None
+        self, attribute: AttributeName, group: Optional[Group] = None
     ) -> None: ...
     def add_group(self, group: Group, schema: PyGroupSchema) -> None: ...
     def remove_group(self, group: Group) -> None: ...

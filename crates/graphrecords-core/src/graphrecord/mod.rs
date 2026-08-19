@@ -10,14 +10,13 @@ mod polars;
 pub mod schema;
 
 pub use self::{
-    datatypes::{GraphRecordAttribute, GraphRecordValue},
-    graph::{AttributeMap, EdgeIndex, NodeIndex},
-    group_mapping::Group,
+    datatypes::{AttributeName, Group, Identifier, NodeIndex, PluginName, Value},
+    graph::{AttributeMap, EdgeIndex},
 };
 #[cfg(feature = "serde")]
 use crate::errors::ConversionError;
 #[cfg(feature = "plugins")]
-use crate::graphrecord::plugins::{Plugin, PluginName};
+use crate::graphrecord::plugins::Plugin;
 use crate::{
     errors::{GraphRecordError, GraphRecordResult, SchemaError},
     graphrecord::{
@@ -1554,8 +1553,7 @@ impl GraphRecord {
 #[cfg(test)]
 mod test {
     use super::{
-        AttributeMap, EdgeDataFrameInput, GraphRecord, GraphRecordAttribute, NodeDataFrameInput,
-        NodeIndex,
+        AttributeMap, EdgeDataFrameInput, GraphRecord, Group, NodeDataFrameInput, NodeIndex,
     };
     use crate::{
         errors::{GraphRecordError, SchemaError},
@@ -3426,7 +3424,7 @@ mod test {
 
         let groups: Vec<_> = graphrecord.groups().collect();
 
-        assert_eq!(vec![&(GraphRecordAttribute::from("0"))], groups);
+        assert_eq!(vec![&(Group::from("0"))], groups);
     }
 
     #[test]

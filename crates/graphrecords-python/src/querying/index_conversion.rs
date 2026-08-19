@@ -1,10 +1,10 @@
 use crate::{
-    graphrecord::{attribute::PyGraphRecordAttribute, value::PyGraphRecordValue},
+    graphrecord::{PyAttributeName, PyNodeIndex, value::PyValue},
     querying::{endpoint::PyEdgeEndpointRole, failure_kind::PyFailureKind},
 };
-use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
 use graphrecords_query::{
-    AttributeName, FailureKind,
+    FailureKind,
     dynamic::DynIndexOwned,
     index::{EdgeEndpointRole, Position, Positional},
     registry::IndexDescriptor,
@@ -29,20 +29,16 @@ impl IndexConversion for DynIndexOwned {
             return object.extract::<Position>().map(Self::Positional);
         }
         if domain.is::<NodeIndex>() {
-            return Ok(Self::Node(
-                object.extract::<PyGraphRecordAttribute>()?.into(),
-            ));
+            return Ok(Self::Node(object.extract::<PyNodeIndex>()?.into()));
         }
         if domain.is::<EdgeIndex>() {
             return object.extract().map(Self::Edge);
         }
         if domain.is::<AttributeName>() {
-            return Ok(Self::Attribute(
-                object.extract::<PyGraphRecordAttribute>()?.into(),
-            ));
+            return Ok(Self::Attribute(object.extract::<PyAttributeName>()?.into()));
         }
-        if domain.is::<GraphRecordValue>() {
-            return Ok(Self::Value(object.extract::<PyGraphRecordValue>()?.into()));
+        if domain.is::<Value>() {
+            return Ok(Self::Value(object.extract::<PyValue>()?.into()));
         }
         if domain.is::<bool>() {
             return object.extract().map(Self::Bool);
@@ -65,15 +61,12 @@ impl IndexConversion for DynIndexOwned {
     fn to_python(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match self {
             Self::Positional(position) => Ok(position.into_pyobject(py)?.into_any().unbind()),
-            Self::Node(index) | Self::Attribute(index) => {
-                Ok(PyGraphRecordAttribute::from(index.clone())
-                    .into_pyobject(py)?
-                    .unbind())
-            }
-            Self::Edge(index) => Ok(index.into_pyobject(py)?.into_any().unbind()),
-            Self::Value(value) => Ok(PyGraphRecordValue::from(value.clone())
+            Self::Node(index) => Ok(PyNodeIndex::from(index.clone()).into_pyobject(py)?.unbind()),
+            Self::Attribute(index) => Ok(PyAttributeName::from(index.clone())
                 .into_pyobject(py)?
                 .unbind()),
+            Self::Edge(index) => Ok(index.into_pyobject(py)?.into_any().unbind()),
+            Self::Value(value) => Ok(PyValue::from(value.clone()).into_pyobject(py)?.unbind()),
             Self::Bool(value) => Ok(value.into_pyobject(py)?.to_owned().into_any().unbind()),
             Self::EndpointRole(role) => Ok(PyEdgeEndpointRole::from(*role)
                 .into_pyobject(py)?

@@ -11,7 +11,7 @@ use crate::{
     registry::operation_manifest,
     traits::UniqueCount,
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
+use graphrecords_core::{GraphRecord, graphrecord::Value};
 use graphrecords_utils::aliases::GrHashSet;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
@@ -51,7 +51,7 @@ impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V
             },
         );
 
-        Ok(count.map(|(_, count)| GraphRecordValue::Int(count)))
+        Ok(count.map(|(_, count)| Value::Int(count)))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
@@ -76,7 +76,7 @@ impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, M
             Ok((unique, count + i64::from(inserted)))
         });
 
-        Ok(count.map(|(_, count)| GraphRecordValue::Int(count)))
+        Ok(count.map(|(_, count)| Value::Int(count)))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {

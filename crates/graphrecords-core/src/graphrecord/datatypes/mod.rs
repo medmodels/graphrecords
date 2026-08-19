@@ -1,7 +1,12 @@
-mod attribute;
+mod identifier;
+mod identity;
 mod value;
 
-pub use self::{attribute::GraphRecordAttribute, value::GraphRecordValue};
+pub use self::{
+    identifier::Identifier,
+    identity::{AttributeName, Group, NodeIndex, PluginName},
+    value::Value,
+};
 use super::EdgeIndex;
 use crate::errors::GraphRecordResult;
 #[cfg(feature = "serde")]
@@ -25,49 +30,49 @@ pub enum DataType {
 }
 
 // TODO: Add tests for Duration
-impl From<GraphRecordValue> for DataType {
-    fn from(value: GraphRecordValue) -> Self {
+impl From<Value> for DataType {
+    fn from(value: Value) -> Self {
         match value {
-            GraphRecordValue::String(_) => Self::String,
-            GraphRecordValue::Int(_) => Self::Int,
-            GraphRecordValue::Float(_) => Self::Float,
-            GraphRecordValue::Bool(_) => Self::Bool,
-            GraphRecordValue::DateTime(_) => Self::DateTime,
-            GraphRecordValue::Duration(_) => Self::Duration,
-            GraphRecordValue::Null => Self::Null,
+            Value::String(_) => Self::String,
+            Value::Int(_) => Self::Int,
+            Value::Float(_) => Self::Float,
+            Value::Bool(_) => Self::Bool,
+            Value::DateTime(_) => Self::DateTime,
+            Value::Duration(_) => Self::Duration,
+            Value::Null => Self::Null,
         }
     }
 }
 
 // TODO: Add tests for Duration
-impl From<&GraphRecordValue> for DataType {
-    fn from(value: &GraphRecordValue) -> Self {
+impl From<&Value> for DataType {
+    fn from(value: &Value) -> Self {
         match value {
-            GraphRecordValue::String(_) => Self::String,
-            GraphRecordValue::Int(_) => Self::Int,
-            GraphRecordValue::Float(_) => Self::Float,
-            GraphRecordValue::Bool(_) => Self::Bool,
-            GraphRecordValue::DateTime(_) => Self::DateTime,
-            GraphRecordValue::Duration(_) => Self::Duration,
-            GraphRecordValue::Null => Self::Null,
+            Value::String(_) => Self::String,
+            Value::Int(_) => Self::Int,
+            Value::Float(_) => Self::Float,
+            Value::Bool(_) => Self::Bool,
+            Value::DateTime(_) => Self::DateTime,
+            Value::Duration(_) => Self::Duration,
+            Value::Null => Self::Null,
         }
     }
 }
 
-impl From<GraphRecordAttribute> for DataType {
-    fn from(value: GraphRecordAttribute) -> Self {
+impl From<Identifier> for DataType {
+    fn from(value: Identifier) -> Self {
         match value {
-            GraphRecordAttribute::String(_) => Self::String,
-            GraphRecordAttribute::Int(_) => Self::Int,
+            Identifier::String(_) => Self::String,
+            Identifier::Int(_) => Self::Int,
         }
     }
 }
 
-impl From<&GraphRecordAttribute> for DataType {
-    fn from(value: &GraphRecordAttribute) -> Self {
+impl From<&Identifier> for DataType {
+    fn from(value: &Identifier) -> Self {
         match value {
-            GraphRecordAttribute::String(_) => Self::String,
-            GraphRecordAttribute::Int(_) => Self::Int,
+            Identifier::String(_) => Self::String,
+            Identifier::Int(_) => Self::Int,
         }
     }
 }
@@ -257,7 +262,7 @@ pub trait Slice {
 
 #[cfg(test)]
 mod test {
-    use super::{DataType, GraphRecordValue};
+    use super::{DataType, Value};
     use chrono::NaiveDateTime;
 
     #[test]
@@ -266,47 +271,35 @@ mod test {
     }
 
     #[test]
-    fn test_from_graphrecordvalue() {
+    fn test_from_value() {
         assert_eq!(
             DataType::String,
-            DataType::from(GraphRecordValue::String(String::new()))
+            DataType::from(Value::String(String::new()))
         );
-        assert_eq!(DataType::Int, DataType::from(GraphRecordValue::Int(0)));
-        assert_eq!(
-            DataType::Float,
-            DataType::from(GraphRecordValue::Float(0.0))
-        );
-        assert_eq!(
-            DataType::Bool,
-            DataType::from(GraphRecordValue::Bool(false))
-        );
+        assert_eq!(DataType::Int, DataType::from(Value::Int(0)));
+        assert_eq!(DataType::Float, DataType::from(Value::Float(0.0)));
+        assert_eq!(DataType::Bool, DataType::from(Value::Bool(false)));
         assert_eq!(
             DataType::DateTime,
-            DataType::from(GraphRecordValue::DateTime(NaiveDateTime::MIN))
+            DataType::from(Value::DateTime(NaiveDateTime::MIN))
         );
-        assert_eq!(DataType::Null, DataType::from(GraphRecordValue::Null));
+        assert_eq!(DataType::Null, DataType::from(Value::Null));
     }
 
     #[test]
-    fn test_from_graphrecordvalue_reference() {
+    fn test_from_value_reference() {
         assert_eq!(
             DataType::String,
-            DataType::from(&GraphRecordValue::String(String::new()))
+            DataType::from(&Value::String(String::new()))
         );
-        assert_eq!(DataType::Int, DataType::from(&GraphRecordValue::Int(0)));
-        assert_eq!(
-            DataType::Float,
-            DataType::from(&GraphRecordValue::Float(0.0))
-        );
-        assert_eq!(
-            DataType::Bool,
-            DataType::from(&GraphRecordValue::Bool(false))
-        );
+        assert_eq!(DataType::Int, DataType::from(&Value::Int(0)));
+        assert_eq!(DataType::Float, DataType::from(&Value::Float(0.0)));
+        assert_eq!(DataType::Bool, DataType::from(&Value::Bool(false)));
         assert_eq!(
             DataType::DateTime,
-            DataType::from(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
+            DataType::from(&Value::DateTime(NaiveDateTime::MIN))
         );
-        assert_eq!(DataType::Null, DataType::from(&GraphRecordValue::Null));
+        assert_eq!(DataType::Null, DataType::from(&Value::Null));
     }
 
     #[test]

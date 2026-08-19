@@ -26,15 +26,14 @@ use super::{
     PreRemoveGroupContext, PreRemoveNodeContext, PreRemoveNodeFromGroupContext,
     PreRemoveNodeFromGroupsContext, PreRemoveNodesFromGroupsContext, PreSetSchemaContext,
 };
+pub use crate::graphrecord::datatypes::PluginName;
 use crate::{
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{EdgeDataFrameInput, GraphRecord, NodeDataFrameInput},
-    prelude::{AttributeMap, EdgeIndex, GraphRecordAttribute, Group, NodeIndex, Schema},
+    prelude::{AttributeMap, EdgeIndex, Group, NodeIndex, Schema},
 };
 use graphrecords_utils::aliases::GrHashMap;
 use std::sync::Arc;
-
-pub type PluginName = GraphRecordAttribute;
 
 impl GraphRecord {
     pub fn with_plugins(

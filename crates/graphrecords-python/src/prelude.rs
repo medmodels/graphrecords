@@ -1,12 +1,12 @@
 pub use crate::{
     graphrecord::{
         PyAttributes, PyEdgeIndex, PyGraphRecord, PyGroup, PyNodeIndex,
-        attribute::PyGraphRecordAttribute,
         datatype::{
             PyAny, PyBool, PyDateTime, PyDuration, PyFloat, PyInt, PyNull, PyOption, PyString,
             PyUnion,
         },
         errors::PyGraphRecordError,
+        identifier::PyIdentifier,
         overview::{
             PyAttributeOverview, PyEdgeGroupOverview, PyGroupOverview, PyNodeGroupOverview,
             PyOverview,
@@ -42,7 +42,7 @@ pub use crate::{
             PyPreRemoveNodesFromGroupsContext, PyPreSetSchemaContext,
         },
         schema::{PyAttributeDataType, PyAttributeType, PyGroupSchema, PySchema, PySchemaType},
-        value::PyGraphRecordValue,
+        value::PyValue,
     },
     querying::{
         ArgumentAbsentError, DivisionByZeroError, DuplicateExpandedChildIndexError,

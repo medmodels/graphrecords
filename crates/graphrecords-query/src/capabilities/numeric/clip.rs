@@ -1,13 +1,11 @@
 use crate::{
-    AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
+    Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
     error::{
         comparison::IncomparableValues,
         numeric::{InvalidClipBounds, NonNumericValue},
     },
 };
-use graphrecords_core::graphrecord::{
-    EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex,
-};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, Identifier, NodeIndex, Value};
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
@@ -51,59 +49,17 @@ where
     }
 }
 
-fn clip_graphrecord_attribute(
-    label: &'static str,
-    value: GraphRecordAttribute,
-    lower: GraphRecordAttribute,
-    upper: GraphRecordAttribute,
-) -> QueryResult<GraphRecordAttribute> {
+fn clip_value(label: &'static str, value: Value, lower: Value, upper: Value) -> QueryResult<Value> {
     let value = match value {
-        GraphRecordAttribute::Int(_) => value,
-        value @ GraphRecordAttribute::String(_) => {
-            return Err(Failure::new(label, NonNumericValue::new(value)));
-        }
-    };
-    let lower = match lower {
-        GraphRecordAttribute::Int(_) => lower,
-        lower @ GraphRecordAttribute::String(_) => {
-            return Err(Failure::new(label, NonNumericValue::new(lower)));
-        }
-    };
-    let upper = match upper {
-        GraphRecordAttribute::Int(_) => upper,
-        upper @ GraphRecordAttribute::String(_) => {
-            return Err(Failure::new(label, NonNumericValue::new(upper)));
-        }
-    };
-
-    clip_ordered(label, value, lower, upper)
-}
-
-fn clip_graphrecord_value(
-    label: &'static str,
-    value: GraphRecordValue,
-    lower: GraphRecordValue,
-    upper: GraphRecordValue,
-) -> QueryResult<GraphRecordValue> {
-    let value = match value {
-        GraphRecordValue::Int(_)
-        | GraphRecordValue::Float(_)
-        | GraphRecordValue::DateTime(_)
-        | GraphRecordValue::Duration(_) => value,
+        Value::Int(_) | Value::Float(_) | Value::DateTime(_) | Value::Duration(_) => value,
         value => return Err(Failure::new(label, NonNumericValue::new(value))),
     };
     let lower = match lower {
-        GraphRecordValue::Int(_)
-        | GraphRecordValue::Float(_)
-        | GraphRecordValue::DateTime(_)
-        | GraphRecordValue::Duration(_) => lower,
+        Value::Int(_) | Value::Float(_) | Value::DateTime(_) | Value::Duration(_) => lower,
         lower => return Err(Failure::new(label, NonNumericValue::new(lower))),
     };
     let upper = match upper {
-        GraphRecordValue::Int(_)
-        | GraphRecordValue::Float(_)
-        | GraphRecordValue::DateTime(_)
-        | GraphRecordValue::Duration(_) => upper,
+        Value::Int(_) | Value::Float(_) | Value::DateTime(_) | Value::Duration(_) => upper,
         upper => return Err(Failure::new(label, NonNumericValue::new(upper))),
     };
 
@@ -117,7 +73,7 @@ impl ValueClip for Scalar {
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_graphrecord_value(label, value, lower, upper)
+        clip_value(label, value, lower, upper)
     }
 }
 
@@ -128,7 +84,17 @@ impl ValueClip for AttributeName {
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_graphrecord_attribute(label, value, lower, upper)
+        if let Identifier::String(_) = value.identifier() {
+            return Err(Failure::new(label, NonNumericValue::new(value)));
+        }
+        if let Identifier::String(_) = lower.identifier() {
+            return Err(Failure::new(label, NonNumericValue::new(lower)));
+        }
+        if let Identifier::String(_) = upper.identifier() {
+            return Err(Failure::new(label, NonNumericValue::new(upper)));
+        }
+
+        clip_ordered(label, value, lower, upper)
     }
 }
 
@@ -150,7 +116,17 @@ impl ValueClip for IndexValue<NodeIndex> {
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_graphrecord_attribute(label, value, lower, upper)
+        if let Identifier::String(_) = value.identifier() {
+            return Err(Failure::new(label, NonNumericValue::new(value)));
+        }
+        if let Identifier::String(_) = lower.identifier() {
+            return Err(Failure::new(label, NonNumericValue::new(lower)));
+        }
+        if let Identifier::String(_) = upper.identifier() {
+            return Err(Failure::new(label, NonNumericValue::new(upper)));
+        }
+
+        clip_ordered(label, value, lower, upper)
     }
 }
 
@@ -161,7 +137,17 @@ impl ValueClip for IndexValue<AttributeName> {
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_graphrecord_attribute(label, value, lower, upper)
+        if let Identifier::String(_) = value.identifier() {
+            return Err(Failure::new(label, NonNumericValue::new(value)));
+        }
+        if let Identifier::String(_) = lower.identifier() {
+            return Err(Failure::new(label, NonNumericValue::new(lower)));
+        }
+        if let Identifier::String(_) = upper.identifier() {
+            return Err(Failure::new(label, NonNumericValue::new(upper)));
+        }
+
+        clip_ordered(label, value, lower, upper)
     }
 }
 
@@ -176,13 +162,13 @@ impl ValueClip for IndexValue<EdgeIndex> {
     }
 }
 
-impl ValueClip for IndexValue<GraphRecordValue> {
+impl ValueClip for IndexValue<Value> {
     fn clip<'a>(
         label: &'static str,
         value: Self::Value<'a>,
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_graphrecord_value(label, value, lower, upper)
+        clip_value(label, value, lower, upper)
     }
 }

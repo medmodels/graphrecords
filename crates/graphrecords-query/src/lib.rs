@@ -38,8 +38,8 @@ pub use operations::{EdgeDirection, MaybeAbsent, PreparedIndexedMultiple};
 pub use selection::{QueryEdges, QueryNodes};
 pub use traits::*;
 pub use value::{
-    AttributeName, BareValueDomain, EntityReference, FailureKindValue, FailureValue, IndexValue,
-    Mask, ReturnValueDomain, Scalar, Unit, ValueDomain,
+    BareValueDomain, EntityReference, FailureKindValue, FailureValue, IndexValue, Mask,
+    ReturnValueDomain, Scalar, Unit, ValueDomain,
 };
 
 mod sealed {
@@ -52,7 +52,7 @@ mod test {
     use graphrecords_core::{
         GraphRecord,
         errors::GraphRecordError,
-        graphrecord::{AttributeMap, GraphRecordValue, NodeIndex},
+        graphrecord::{AttributeMap, NodeIndex, Value},
     };
     use std::collections::HashMap;
 
@@ -131,10 +131,7 @@ mod test {
 
         assert_eq!(1, elements.len());
         assert_eq!(&NodeIndex::from("0"), elements[0].0);
-        assert_eq!(
-            &GraphRecordValue::from("ipsum"),
-            elements[0].1.as_ref().unwrap()
-        );
+        assert_eq!(&Value::from("ipsum"), elements[0].1.as_ref().unwrap());
     }
 
     #[test]
@@ -151,10 +148,7 @@ mod test {
 
         assert_eq!(1, elements.len());
         assert_eq!(&NodeIndex::from("1"), elements[0].0);
-        assert_eq!(
-            &GraphRecordValue::from("consectetur"),
-            elements[0].1.as_ref().unwrap()
-        );
+        assert_eq!(&Value::from("consectetur"), elements[0].1.as_ref().unwrap());
     }
 
     #[test]
@@ -185,9 +179,6 @@ mod test {
 
         assert_eq!(1, elements.len());
         assert_eq!(&2, elements[0].0);
-        assert_eq!(
-            &GraphRecordValue::from("ut"),
-            elements[0].1.as_ref().unwrap()
-        );
+        assert_eq!(&Value::from("ut"), elements[0].1.as_ref().unwrap());
     }
 }

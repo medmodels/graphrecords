@@ -1,4 +1,4 @@
-use crate::graphrecord::{GraphRecordAttribute, GraphRecordValue};
+use crate::graphrecord::{AttributeName, Value};
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -7,12 +7,12 @@ use std::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConversionError {
-    ValueToAttribute { value: GraphRecordValue },
+    ValueToIdentifier { value: Value },
     UnsupportedPolarsValue { value: String },
-    UnsupportedPolarsAttribute { value: String },
+    UnsupportedPolarsIdentifier { value: String },
     TimestampOutOfRange { timestamp: i64 },
     ColumnNotFound { column_name: String },
-    ReservedAttributeName { attribute: GraphRecordAttribute },
+    ReservedAttributeName { attribute: AttributeName },
     NodeDataFrameCreation { group: String },
     EdgeDataFrameCreation { group: String },
     FileRead { path: String, kind: ErrorKind },
@@ -29,14 +29,14 @@ impl Error for ConversionError {}
 impl Display for ConversionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Self::ValueToAttribute { value } => {
-                write!(f, "Cannot convert `{value}` into `GraphRecordAttribute`")
+            Self::ValueToIdentifier { value } => {
+                write!(f, "Cannot convert `{value}` into `Identifier`")
             }
             Self::UnsupportedPolarsValue { value } => {
-                write!(f, "Cannot convert `{value}` into `GraphRecordValue`")
+                write!(f, "Cannot convert `{value}` into `Value`")
             }
-            Self::UnsupportedPolarsAttribute { value } => {
-                write!(f, "Cannot convert `{value}` into `GraphRecordAttribute`")
+            Self::UnsupportedPolarsIdentifier { value } => {
+                write!(f, "Cannot convert `{value}` into `Identifier`")
             }
             Self::TimestampOutOfRange { timestamp } => {
                 write!(f, "Cannot convert timestamp `{timestamp}` into a datetime")
@@ -78,28 +78,28 @@ impl Display for ConversionError {
 #[cfg(test)]
 mod test {
     use super::ConversionError;
-    use crate::graphrecord::GraphRecordValue;
+    use crate::graphrecord::Value;
     use std::io::ErrorKind;
 
     #[test]
     fn test_display_values() {
         assert_eq!(
-            "Cannot convert `true` into `GraphRecordAttribute`",
-            ConversionError::ValueToAttribute {
-                value: GraphRecordValue::Bool(true)
+            "Cannot convert `true` into `Identifier`",
+            ConversionError::ValueToIdentifier {
+                value: Value::Bool(true)
             }
             .to_string()
         );
         assert_eq!(
-            "Cannot convert `true` into `GraphRecordValue`",
+            "Cannot convert `true` into `Value`",
             ConversionError::UnsupportedPolarsValue {
                 value: "true".to_string()
             }
             .to_string()
         );
         assert_eq!(
-            "Cannot convert `true` into `GraphRecordAttribute`",
-            ConversionError::UnsupportedPolarsAttribute {
+            "Cannot convert `true` into `Identifier`",
+            ConversionError::UnsupportedPolarsIdentifier {
                 value: "true".to_string()
             }
             .to_string()

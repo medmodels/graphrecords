@@ -1,10 +1,10 @@
 use crate::{
-    AttributeName, Failure, FailureKind, QueryResult,
+    Failure, FailureKind, QueryResult,
     index::{EntityDomain, ExpandedIndex, ExpandedIndexReference, IndexDomain, Positional},
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex},
+    graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value},
 };
 
 pub trait GroupKey: IndexDomain {
@@ -57,7 +57,7 @@ impl GroupKey for FailureKind {
     }
 }
 
-impl GroupKey for GraphRecordValue {
+impl GroupKey for Value {
     fn resolve_key<'a>(
         _label: &'static str,
         _graphrecord: &'a GraphRecord,

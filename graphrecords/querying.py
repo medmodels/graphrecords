@@ -149,11 +149,14 @@ from graphrecords.types import (
     EdgeIndex as EdgeIndexPayload,
 )
 from graphrecords.types import (
-    GraphRecordAttribute,
-    GraphRecordValue,
+    Group,
+    Identifier,
 )
 from graphrecords.types import (
     NodeIndex as NodeIndexPayload,
+)
+from graphrecords.types import (
+    Value as ValuePayload,
 )
 
 if TYPE_CHECKING:
@@ -164,11 +167,11 @@ EdgeDirection = PyEdgeDirection
 EdgeEndpointRole = PyEdgeEndpointRole
 FailureKind = PyFailureKind
 
-Attribute: TypeAlias = GraphRecordAttribute
-ScalarValue: TypeAlias = GraphRecordValue
+Attribute: TypeAlias = Identifier
+ScalarValue: TypeAlias = ValuePayload
 _BooleanValue: TypeAlias = bool
 IndexPayload: TypeAlias = Union[
-    GraphRecordValue,
+    ValuePayload,
     EdgeEndpointRole,
     FailureKind,
     Tuple["IndexPayload", Optional["IndexPayload"]],
@@ -3387,16 +3390,16 @@ class Operand(Generic[S, C, Unpack[Levels]]):
     @overload
     def in_group(
         self: Operand[Indexed[EntityType, Unit], ContainerType, Unpack[Levels]],
-        group: Attribute,
+        group: Group,
     ) -> Operand[Indexed[EntityType, Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def in_group(
         self: Operand[Indexed[IndexType, ReferenceType], ContainerType, Unpack[Levels]],
-        group: Attribute,
+        group: Group,
     ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
 
-    def in_group(self, group: Attribute) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
+    def in_group(self, group: Group) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
         return Operand._from_py_operand(self._operand.in_group(group))
 
     @overload

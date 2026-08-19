@@ -64,7 +64,7 @@ impl From<PyGraphRecordError> for PyErr {
             | GraphRecordError::NodeNotInGroup { .. }
             | GraphRecordError::EdgeNotInGroup { .. }
             | GraphRecordError::IncompatibleValueOperands { .. }
-            | GraphRecordError::IncompatibleAttributeOperands { .. }
+            | GraphRecordError::IncompatibleIdentifierOperands { .. }
             | GraphRecordError::InvalidTimestamp => PyAssertionError::new_err(message),
             GraphRecordError::Schema(_) => PyValueError::new_err(message),
             GraphRecordError::PluginFailure { .. }
