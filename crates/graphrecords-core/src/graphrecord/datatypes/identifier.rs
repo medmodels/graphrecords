@@ -4,7 +4,7 @@ use super::{
 };
 use crate::errors::{ConversionError, GraphRecordError, GraphRecordResult, ValueOperation};
 use graphrecords_utils::implement_from_for_wrapper;
-#[cfg(feature = "serde")]
+#[cfg(any(feature = "serde", feature = "io"))]
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
@@ -14,7 +14,7 @@ use std::{
 };
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(any(feature = "serde", feature = "io"), derive(Serialize, Deserialize))]
 pub enum Identifier {
     Int(i64),
     String(String),
@@ -134,9 +134,9 @@ impl Mul for Identifier {
 
 // TODO: Add tests
 impl Pow for Identifier {
-    fn pow(self, rhs: Self) -> GraphRecordResult<Self> {
-        match (self, rhs) {
-            (Self::Int(value), Self::Int(rhs)) => Ok(Self::Int(value.pow(rhs as u32))),
+    fn pow(self, exponent: Self) -> GraphRecordResult<Self> {
+        match (self, exponent) {
+            (Self::Int(value), Self::Int(exponent)) => Ok(Self::Int(value.pow(exponent as u32))),
             (left, right) => Err(GraphRecordError::IncompatibleIdentifierOperands {
                 operation: ValueOperation::Power,
                 left,
@@ -278,45 +278,45 @@ mod test {
 
     #[test]
     fn test_from_str() {
-        let attribute = Identifier::from("value");
+        let identifier = Identifier::from("value");
 
-        assert_eq!(Identifier::String("value".to_string()), attribute);
+        assert_eq!(Identifier::String("value".to_string()), identifier);
     }
 
     #[test]
     fn test_from_string() {
-        let attribute = Identifier::from("value".to_string());
+        let identifier = Identifier::from("value".to_string());
 
-        assert_eq!(Identifier::String("value".to_string()), attribute);
+        assert_eq!(Identifier::String("value".to_string()), identifier);
     }
 
     #[test]
     fn test_from_int() {
-        let attribute = Identifier::from(0);
+        let identifier = Identifier::from(0);
 
-        assert_eq!(Identifier::Int(0), attribute);
+        assert_eq!(Identifier::Int(0), identifier);
     }
 
     #[test]
     fn test_try_from_value() {
-        let attribute = Identifier::try_from(Value::from("value")).unwrap();
+        let identifier = Identifier::try_from(Value::from("value")).unwrap();
 
-        assert_eq!(Identifier::String("value".to_string()), attribute);
+        assert_eq!(Identifier::String("value".to_string()), identifier);
 
-        let attribute = Identifier::try_from(Value::from(0)).unwrap();
+        let identifier = Identifier::try_from(Value::from(0)).unwrap();
 
-        assert_eq!(Identifier::Int(0), attribute);
+        assert_eq!(Identifier::Int(0), identifier);
 
         assert!(
-            Identifier::try_from(Value::from(true)).is_err_and(|e| matches!(
-                e,
+            Identifier::try_from(Value::from(true)).is_err_and(|error| matches!(
+                error,
                 GraphRecordError::Conversion(ConversionError::ValueToIdentifier { .. })
             ))
         );
 
         assert!(
-            Identifier::try_from(Value::from(0.0)).is_err_and(|e| matches!(
-                e,
+            Identifier::try_from(Value::from(0.0)).is_err_and(|error| matches!(
+                error,
                 GraphRecordError::Conversion(ConversionError::ValueToIdentifier { .. })
             ))
         );

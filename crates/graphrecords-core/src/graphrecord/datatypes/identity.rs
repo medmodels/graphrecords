@@ -3,17 +3,17 @@ use super::{
     TrimStart, Uppercase, Value,
 };
 use crate::errors::{GraphRecordError, GraphRecordResult};
-#[cfg(feature = "serde")]
+#[cfg(any(feature = "serde", feature = "io"))]
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     ops::{Add, Mul, Range, Sub},
 };
 
-macro_rules! implement_identity {
+macro_rules! implement_identifier_wrapper {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Hash)]
-        #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+        #[cfg_attr(any(feature = "serde", feature = "io"), derive(Serialize, Deserialize))]
         pub struct $name(Identifier);
 
         impl $name {
@@ -91,8 +91,8 @@ macro_rules! implement_identity {
         }
 
         impl Pow for $name {
-            fn pow(self, exp: Self) -> GraphRecordResult<Self> {
-                self.0.pow(exp.0).map(Self)
+            fn pow(self, exponent: Self) -> GraphRecordResult<Self> {
+                self.0.pow(exponent.0).map(Self)
             }
         }
 
@@ -164,7 +164,7 @@ macro_rules! implement_identity {
     };
 }
 
-implement_identity!(NodeIndex);
-implement_identity!(Group);
-implement_identity!(AttributeName);
-implement_identity!(PluginName);
+implement_identifier_wrapper!(NodeIndex);
+implement_identifier_wrapper!(Group);
+implement_identifier_wrapper!(AttributeName);
+implement_identifier_wrapper!(PluginName);

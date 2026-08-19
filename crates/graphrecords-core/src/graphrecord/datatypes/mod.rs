@@ -1,20 +1,27 @@
+mod edge_index;
 mod identifier;
 mod identity;
 mod value;
+mod view;
 
 pub use self::{
+    edge_index::EdgeIndex,
     identifier::Identifier,
     identity::{AttributeName, Group, NodeIndex, PluginName},
     value::Value,
+    view::{
+        AttributeNameView, GroupView, IdentifierView, NodeIndexView, PluginNameView, ValueView,
+    },
 };
-use super::EdgeIndex;
 use crate::errors::GraphRecordResult;
-#[cfg(feature = "serde")]
+#[cfg(any(feature = "serde", feature = "io"))]
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, ops::Range};
+use std::{collections::HashMap, fmt::Display, ops::Range};
+
+pub type AttributeMap = HashMap<AttributeName, Value>;
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(any(feature = "serde", feature = "io"), derive(Serialize, Deserialize))]
 pub enum DataType {
     String,
     Int,
@@ -29,7 +36,6 @@ pub enum DataType {
     Option(Box<Self>),
 }
 
-// TODO: Add tests for Duration
 impl From<Value> for DataType {
     fn from(value: Value) -> Self {
         match value {
@@ -44,7 +50,6 @@ impl From<Value> for DataType {
     }
 }
 
-// TODO: Add tests for Duration
 impl From<&Value> for DataType {
     fn from(value: &Value) -> Self {
         match value {
@@ -84,8 +89,8 @@ impl PartialEq for DataType {
                 (first_union.0 == second_union.0 && first_union.1 == second_union.1)
                     || (first_union.1 == second_union.0 && first_union.0 == second_union.1)
             }
-            (Self::Option(first_datatype), Self::Option(second_datatype)) => {
-                first_datatype == second_datatype
+            (Self::Option(first_data_type), Self::Option(second_data_type)) => {
+                first_data_type == second_data_type
             }
             _ => matches!(
                 (self, other),
@@ -104,7 +109,6 @@ impl PartialEq for DataType {
 
 impl Eq for DataType {}
 
-// TODO: Add tests for Duration
 impl Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -116,11 +120,11 @@ impl Display for DataType {
             Self::Duration => write!(f, "Duration"),
             Self::Null => write!(f, "Null"),
             Self::Any => write!(f, "Any"),
-            Self::Union((first_datatype, second_datatype)) => {
+            Self::Union((first_data_type, second_data_type)) => {
                 write!(f, "Union[")?;
-                first_datatype.fmt(f)?;
+                first_data_type.fmt(f)?;
                 write!(f, ", ")?;
-                second_datatype.fmt(f)?;
+                second_data_type.fmt(f)?;
                 write!(f, "]")
             }
             Self::Option(data_type) => {
@@ -132,16 +136,15 @@ impl Display for DataType {
     }
 }
 
-// TODO: Add tests for Duration
 impl DataType {
-    pub(crate) fn evaluate(&self, other: &Self) -> bool {
+    pub(crate) fn accepts(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Union(_), Self::Union(_)) | (Self::Option(_), Self::Option(_)) => self == other,
-            (Self::Union((first_datatype, second_datatype)), _) => {
-                first_datatype.evaluate(other) || second_datatype.evaluate(other)
+            (Self::Union((first_data_type, second_data_type)), _) => {
+                first_data_type.accepts(other) || second_data_type.accepts(other)
             }
             (Self::Option(_), Self::Null) | (Self::Any, _) => true,
-            (Self::Option(datatype), _) => datatype.evaluate(other),
+            (Self::Option(data_type), _) => data_type.accepts(other),
             _ => matches!(
                 (self, other),
                 (Self::String, Self::String)
@@ -161,48 +164,20 @@ pub trait StartsWith {
     fn starts_with(&self, other: &Self) -> bool;
 }
 
-// TODO: Add tests
-impl StartsWith for EdgeIndex {
-    fn starts_with(&self, other: &Self) -> bool {
-        self.to_string().starts_with(&other.to_string())
-    }
-}
-
 pub trait EndsWith {
     fn ends_with(&self, other: &Self) -> bool;
-}
-
-// TODO: Add tests
-impl EndsWith for EdgeIndex {
-    fn ends_with(&self, other: &Self) -> bool {
-        self.to_string().ends_with(&other.to_string())
-    }
 }
 
 pub trait Contains {
     fn contains(&self, other: &Self) -> bool;
 }
 
-// TODO: Add tests
-impl Contains for EdgeIndex {
-    fn contains(&self, other: &Self) -> bool {
-        self.to_string().contains(&other.to_string())
-    }
-}
-
 pub trait Pow: Sized {
-    fn pow(self, exp: Self) -> GraphRecordResult<Self>;
+    fn pow(self, exponent: Self) -> GraphRecordResult<Self>;
 }
 
 pub trait Mod: Sized {
     fn r#mod(self, other: Self) -> GraphRecordResult<Self>;
-}
-
-// TODO: Add tests
-impl Mod for EdgeIndex {
-    fn r#mod(self, other: Self) -> GraphRecordResult<Self> {
-        Ok(self % other)
-    }
 }
 
 pub trait Round {
@@ -262,8 +237,8 @@ pub trait Slice {
 
 #[cfg(test)]
 mod test {
-    use super::{DataType, Value};
-    use chrono::NaiveDateTime;
+    use super::{DataType, Identifier, Value};
+    use chrono::{NaiveDateTime, TimeDelta};
 
     #[test]
     fn test_default() {
@@ -283,6 +258,10 @@ mod test {
             DataType::DateTime,
             DataType::from(Value::DateTime(NaiveDateTime::MIN))
         );
+        assert_eq!(
+            DataType::Duration,
+            DataType::from(Value::Duration(TimeDelta::seconds(5)))
+        );
         assert_eq!(DataType::Null, DataType::from(Value::Null));
     }
 
@@ -299,7 +278,29 @@ mod test {
             DataType::DateTime,
             DataType::from(&Value::DateTime(NaiveDateTime::MIN))
         );
+        assert_eq!(
+            DataType::Duration,
+            DataType::from(&Value::Duration(TimeDelta::seconds(5)))
+        );
         assert_eq!(DataType::Null, DataType::from(&Value::Null));
+    }
+
+    #[test]
+    fn test_from_identifier() {
+        assert_eq!(
+            DataType::String,
+            DataType::from(Identifier::String(String::new()))
+        );
+        assert_eq!(DataType::Int, DataType::from(Identifier::Int(0)));
+    }
+
+    #[test]
+    fn test_from_identifier_reference() {
+        assert_eq!(
+            DataType::String,
+            DataType::from(&Identifier::String(String::new()))
+        );
+        assert_eq!(DataType::Int, DataType::from(&Identifier::Int(0)));
     }
 
     #[test]
@@ -410,6 +411,7 @@ mod test {
         assert_eq!("Float", format!("{}", DataType::Float));
         assert_eq!("Bool", format!("{}", DataType::Bool));
         assert_eq!("DateTime", format!("{}", DataType::DateTime));
+        assert_eq!("Duration", format!("{}", DataType::Duration));
         assert_eq!("Null", format!("{}", DataType::Null));
         assert_eq!("Any", format!("{}", DataType::Any));
         assert_eq!(
@@ -426,95 +428,110 @@ mod test {
     }
 
     #[test]
-    fn test_evaluate() {
-        assert!(DataType::String.evaluate(&DataType::String));
-        assert!(DataType::Int.evaluate(&DataType::Int));
-        assert!(DataType::Float.evaluate(&DataType::Float));
-        assert!(DataType::Bool.evaluate(&DataType::Bool));
-        assert!(DataType::DateTime.evaluate(&DataType::DateTime));
-        assert!(DataType::Null.evaluate(&DataType::Null));
-        assert!(DataType::Any.evaluate(&DataType::Any));
+    fn test_accepts() {
+        assert!(DataType::String.accepts(&DataType::String));
+        assert!(DataType::Int.accepts(&DataType::Int));
+        assert!(DataType::Float.accepts(&DataType::Float));
+        assert!(DataType::Bool.accepts(&DataType::Bool));
+        assert!(DataType::DateTime.accepts(&DataType::DateTime));
+        assert!(DataType::Duration.accepts(&DataType::Duration));
+        assert!(DataType::Null.accepts(&DataType::Null));
+        assert!(DataType::Any.accepts(&DataType::Any));
 
         assert!(
-            DataType::Union((Box::new(DataType::String), Box::new(DataType::Int))).evaluate(
+            DataType::Union((Box::new(DataType::String), Box::new(DataType::Int))).accepts(
                 &DataType::Union((Box::new(DataType::String), Box::new(DataType::Int)))
             )
         );
         assert!(
-            DataType::Union((Box::new(DataType::String), Box::new(DataType::Int))).evaluate(
+            DataType::Union((Box::new(DataType::String), Box::new(DataType::Int))).accepts(
                 &DataType::Union((Box::new(DataType::Int), Box::new(DataType::String)))
             )
         );
 
         assert!(
             DataType::Union((Box::new(DataType::String), Box::new(DataType::Int)))
-                .evaluate(&DataType::String)
+                .accepts(&DataType::String)
         );
         assert!(
             DataType::Union((Box::new(DataType::String), Box::new(DataType::Int)))
-                .evaluate(&DataType::Int)
+                .accepts(&DataType::Int)
         );
 
         assert!(
             DataType::Option(Box::new(DataType::String))
-                .evaluate(&DataType::Option(Box::new(DataType::String)))
+                .accepts(&DataType::Option(Box::new(DataType::String)))
         );
-        assert!(DataType::Option(Box::new(DataType::String)).evaluate(&DataType::Null));
-        assert!(DataType::Option(Box::new(DataType::String)).evaluate(&DataType::String));
+        assert!(DataType::Option(Box::new(DataType::String)).accepts(&DataType::Null));
+        assert!(DataType::Option(Box::new(DataType::String)).accepts(&DataType::String));
 
-        assert!(DataType::Any.evaluate(&DataType::String));
+        assert!(DataType::Any.accepts(&DataType::String));
 
-        assert!(!DataType::String.evaluate(&DataType::Int));
-        assert!(!DataType::String.evaluate(&DataType::Float));
-        assert!(!DataType::String.evaluate(&DataType::Bool));
-        assert!(!DataType::String.evaluate(&DataType::DateTime));
-        assert!(!DataType::String.evaluate(&DataType::Null));
-        assert!(!DataType::String.evaluate(&DataType::Any));
+        assert!(!DataType::String.accepts(&DataType::Int));
+        assert!(!DataType::String.accepts(&DataType::Float));
+        assert!(!DataType::String.accepts(&DataType::Bool));
+        assert!(!DataType::String.accepts(&DataType::DateTime));
+        assert!(!DataType::String.accepts(&DataType::Duration));
+        assert!(!DataType::String.accepts(&DataType::Null));
+        assert!(!DataType::String.accepts(&DataType::Any));
 
-        assert!(!DataType::Int.evaluate(&DataType::String));
-        assert!(!DataType::Int.evaluate(&DataType::Float));
-        assert!(!DataType::Int.evaluate(&DataType::Bool));
-        assert!(!DataType::Int.evaluate(&DataType::DateTime));
-        assert!(!DataType::Int.evaluate(&DataType::Null));
-        assert!(!DataType::Int.evaluate(&DataType::Any));
+        assert!(!DataType::Int.accepts(&DataType::String));
+        assert!(!DataType::Int.accepts(&DataType::Float));
+        assert!(!DataType::Int.accepts(&DataType::Bool));
+        assert!(!DataType::Int.accepts(&DataType::DateTime));
+        assert!(!DataType::Int.accepts(&DataType::Duration));
+        assert!(!DataType::Int.accepts(&DataType::Null));
+        assert!(!DataType::Int.accepts(&DataType::Any));
 
-        assert!(!DataType::Float.evaluate(&DataType::String));
-        assert!(!DataType::Float.evaluate(&DataType::Int));
-        assert!(!DataType::Float.evaluate(&DataType::Bool));
-        assert!(!DataType::Float.evaluate(&DataType::DateTime));
-        assert!(!DataType::Float.evaluate(&DataType::Null));
-        assert!(!DataType::Float.evaluate(&DataType::Any));
+        assert!(!DataType::Float.accepts(&DataType::String));
+        assert!(!DataType::Float.accepts(&DataType::Int));
+        assert!(!DataType::Float.accepts(&DataType::Bool));
+        assert!(!DataType::Float.accepts(&DataType::DateTime));
+        assert!(!DataType::Float.accepts(&DataType::Duration));
+        assert!(!DataType::Float.accepts(&DataType::Null));
+        assert!(!DataType::Float.accepts(&DataType::Any));
 
-        assert!(!DataType::Bool.evaluate(&DataType::String));
-        assert!(!DataType::Bool.evaluate(&DataType::Int));
-        assert!(!DataType::Bool.evaluate(&DataType::Float));
-        assert!(!DataType::Bool.evaluate(&DataType::DateTime));
-        assert!(!DataType::Bool.evaluate(&DataType::Null));
-        assert!(!DataType::Bool.evaluate(&DataType::Any));
+        assert!(!DataType::Bool.accepts(&DataType::String));
+        assert!(!DataType::Bool.accepts(&DataType::Int));
+        assert!(!DataType::Bool.accepts(&DataType::Float));
+        assert!(!DataType::Bool.accepts(&DataType::DateTime));
+        assert!(!DataType::Bool.accepts(&DataType::Duration));
+        assert!(!DataType::Bool.accepts(&DataType::Null));
+        assert!(!DataType::Bool.accepts(&DataType::Any));
 
-        assert!(!DataType::DateTime.evaluate(&DataType::String));
-        assert!(!DataType::DateTime.evaluate(&DataType::Int));
-        assert!(!DataType::DateTime.evaluate(&DataType::Float));
-        assert!(!DataType::DateTime.evaluate(&DataType::Bool));
-        assert!(!DataType::DateTime.evaluate(&DataType::Null));
-        assert!(!DataType::DateTime.evaluate(&DataType::Any));
+        assert!(!DataType::DateTime.accepts(&DataType::String));
+        assert!(!DataType::DateTime.accepts(&DataType::Int));
+        assert!(!DataType::DateTime.accepts(&DataType::Float));
+        assert!(!DataType::DateTime.accepts(&DataType::Bool));
+        assert!(!DataType::DateTime.accepts(&DataType::Duration));
+        assert!(!DataType::DateTime.accepts(&DataType::Null));
+        assert!(!DataType::DateTime.accepts(&DataType::Any));
 
-        assert!(!DataType::Null.evaluate(&DataType::String));
-        assert!(!DataType::Null.evaluate(&DataType::Int));
-        assert!(!DataType::Null.evaluate(&DataType::Float));
-        assert!(!DataType::Null.evaluate(&DataType::Bool));
-        assert!(!DataType::Null.evaluate(&DataType::DateTime));
-        assert!(!DataType::Null.evaluate(&DataType::Any));
+        assert!(!DataType::Duration.accepts(&DataType::String));
+        assert!(!DataType::Duration.accepts(&DataType::Int));
+        assert!(!DataType::Duration.accepts(&DataType::Float));
+        assert!(!DataType::Duration.accepts(&DataType::Bool));
+        assert!(!DataType::Duration.accepts(&DataType::DateTime));
+        assert!(!DataType::Duration.accepts(&DataType::Null));
+        assert!(!DataType::Duration.accepts(&DataType::Any));
+
+        assert!(!DataType::Null.accepts(&DataType::String));
+        assert!(!DataType::Null.accepts(&DataType::Int));
+        assert!(!DataType::Null.accepts(&DataType::Float));
+        assert!(!DataType::Null.accepts(&DataType::Bool));
+        assert!(!DataType::Null.accepts(&DataType::DateTime));
+        assert!(!DataType::Null.accepts(&DataType::Duration));
+        assert!(!DataType::Null.accepts(&DataType::Any));
 
         assert!(
-            !DataType::Union((Box::new(DataType::String), Box::new(DataType::Int))).evaluate(
+            !DataType::Union((Box::new(DataType::String), Box::new(DataType::Int))).accepts(
                 &DataType::Union((Box::new(DataType::Int), Box::new(DataType::Float)))
             )
         );
 
         assert!(
             !DataType::Option(Box::new(DataType::String))
-                .evaluate(&DataType::Option(Box::new(DataType::Int)))
+                .accepts(&DataType::Option(Box::new(DataType::Int)))
         );
     }
 }

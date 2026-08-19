@@ -1,3650 +1,1445 @@
-pub mod attributes;
-#[cfg(feature = "connectors")]
-pub mod connector;
+pub mod batch;
+pub mod changes;
 pub mod datatypes;
-mod graph;
-mod group_mapping;
+#[cfg(feature = "io")]
+mod io;
 #[cfg(feature = "plugins")]
 pub mod plugins;
-mod polars;
 pub mod schema;
+pub(crate) mod state;
+pub mod state_view;
 
-pub use self::{
-    datatypes::{AttributeName, Group, Identifier, NodeIndex, PluginName, Value},
-    graph::{AttributeMap, EdgeIndex},
-};
-#[cfg(feature = "serde")]
-use crate::errors::ConversionError;
 #[cfg(feature = "plugins")]
-use crate::graphrecord::plugins::Plugin;
+pub use self::plugins::Plugin;
+pub use self::{
+    batch::{EdgeBatch, NodeBatch},
+    changes::Changes,
+    datatypes::{
+        AttributeMap, AttributeName, AttributeNameView, EdgeIndex, Group, GroupView, Identifier,
+        IdentifierView, NodeIndex, NodeIndexView, PluginName, PluginNameView, Value, ValueView,
+    },
+    state::{EdgeAddress, GroupAddress, NodeAddress, StateIdentity},
+    state_view::{EdgeAttributeAddress, NodeAttributeAddress, StateView},
+};
 use crate::{
-    errors::{GraphRecordError, GraphRecordResult, SchemaError},
+    errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
-        attributes::{EdgeAttributesMut, NodeAttributesMut},
-        polars::DataFramesExport,
+        changes::{
+            AddEdges, AddEdgesInGroups, AddEdgesToGroup, AddGroup, AddNodes, AddNodesInGroups,
+            AddNodesToGroup, Clear, FreezeSchema, RemoveEdgeAttributes, RemoveEdges,
+            RemoveEdgesFromGroup, RemoveGroups, RemoveNodeAttributes, RemoveNodes,
+            RemoveNodesFromGroup, ReplaceEdgeAttributes, ReplaceNodeAttributes, SetEdgeAttributes,
+            SetNodeAttributes, SetSchema, UnfreezeSchema,
+        },
+        schema::Schema,
+        state::GraphState,
     },
 };
-use ::polars::frame::DataFrame;
-use graph::Graph;
-#[cfg(feature = "plugins")]
-use graphrecords_utils::aliases::GrHashMap;
 use graphrecords_utils::aliases::GrHashSet;
-use group_mapping::GroupMapping;
-use polars::{dataframe_to_edges, dataframe_to_nodes};
-use schema::{GroupSchema, Schema, SchemaType};
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "plugins")]
 use std::sync::Arc;
-use std::{
-    collections::{HashMap, hash_map::Entry},
-    mem,
-};
-#[cfg(feature = "serde")]
-use std::{fs, path::Path};
 
-#[derive(Debug, Clone)]
-pub struct NodeDataFrameInput {
-    pub dataframe: DataFrame,
-    pub index_column: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct EdgeDataFrameInput {
-    pub dataframe: DataFrame,
-    pub source_index_column: String,
-    pub target_index_column: String,
-}
-
-impl<D, S> From<(D, S)> for NodeDataFrameInput
-where
-    D: Into<DataFrame>,
-    S: Into<String>,
-{
-    fn from(val: (D, S)) -> Self {
-        Self {
-            dataframe: val.0.into(),
-            index_column: val.1.into(),
-        }
-    }
-}
-
-impl<D, S> From<(D, S, S)> for EdgeDataFrameInput
-where
-    D: Into<DataFrame>,
-    S: Into<String>,
-{
-    fn from(val: (D, S, S)) -> Self {
-        Self {
-            dataframe: val.0.into(),
-            source_index_column: val.1.into(),
-            target_index_column: val.2.into(),
-        }
-    }
-}
-
-fn node_dataframes_to_tuples(
-    nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-) -> GraphRecordResult<Vec<(NodeIndex, AttributeMap)>> {
-    let nodes = nodes_dataframes
-        .into_iter()
-        .map(|dataframe_input| {
-            let dataframe_input = dataframe_input.into();
-
-            dataframe_to_nodes(dataframe_input.dataframe, &dataframe_input.index_column)
-        })
-        .collect::<GraphRecordResult<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-
-    Ok(nodes)
-}
-
-fn edge_dataframes_to_tuples(
-    edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-) -> GraphRecordResult<Vec<(NodeIndex, NodeIndex, AttributeMap)>> {
-    let edges = edges_dataframes
-        .into_iter()
-        .map(|dataframe_input| {
-            let dataframe_input = dataframe_input.into();
-
-            dataframe_to_edges(
-                dataframe_input.dataframe,
-                &dataframe_input.source_index_column,
-                &dataframe_input.target_index_column,
-            )
-        })
-        .collect::<GraphRecordResult<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-
-    Ok(edges)
-}
-
-#[allow(clippy::type_complexity)]
-fn dataframes_to_tuples(
-    nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-    edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-) -> GraphRecordResult<(
-    Vec<(NodeIndex, AttributeMap)>,
-    Vec<(NodeIndex, NodeIndex, AttributeMap)>,
-)> {
-    let nodes = node_dataframes_to_tuples(nodes_dataframes)?;
-    let edges = edge_dataframes_to_tuples(edges_dataframes)?;
-
-    Ok((nodes, edges))
-}
-
-#[derive(Default, Debug, Clone)]
-#[allow(clippy::unsafe_derive_deserialize)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone)]
 pub struct GraphRecord {
-    graph: Graph,
-    group_mapping: GroupMapping,
-    schema: Schema,
-
+    state: Arc<GraphState>,
     #[cfg(feature = "plugins")]
-    plugins: Arc<GrHashMap<PluginName, Box<dyn Plugin>>>,
+    plugins: Arc<Vec<(PluginName, Arc<dyn Plugin>)>>,
 }
 
 impl GraphRecord {
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    #[must_use]
-    pub fn with_schema(schema: Schema) -> Self {
         Self {
-            schema,
-            ..Default::default()
+            state: Arc::new(GraphState::new()),
+            #[cfg(feature = "plugins")]
+            plugins: Arc::new(Vec::new()),
         }
     }
 
-    #[must_use]
-    pub fn with_capacity(nodes: usize, edges: usize, schema: Option<Schema>) -> Self {
-        Self {
-            graph: Graph::with_capacity(nodes, edges),
-            schema: schema.unwrap_or_default(),
-            ..Default::default()
-        }
+    pub(crate) const fn state(&self) -> &Arc<GraphState> {
+        &self.state
     }
 
-    pub fn from_tuples(
-        nodes: Vec<(NodeIndex, AttributeMap)>,
-        edges: Option<Vec<(NodeIndex, NodeIndex, AttributeMap)>>,
-        schema: Option<Schema>,
-    ) -> GraphRecordResult<Self> {
-        let mut graphrecord = Self::with_capacity(
-            nodes.len(),
-            edges.as_ref().map_or(0, std::vec::Vec::len),
-            schema,
-        );
+    #[cfg(feature = "plugins")]
+    pub(crate) fn apply(&self, changes: Changes) -> GraphRecordResult<Self> {
+        let mut current = changes;
 
-        for (node_index, attributes) in nodes {
-            graphrecord.add_node_impl(node_index, attributes)?;
-        }
+        for entry in self.plugins.iter() {
+            let mut next = Changes::new();
 
-        if let Some(edges) = edges {
-            for (source_node_index, target_node_index, attributes) in edges {
-                graphrecord.add_edge_impl(source_node_index, target_node_index, attributes)?;
+            for change in current {
+                next.extend(change.dispatch(entry.1.as_ref(), self)?);
+            }
+
+            current = next;
+
+            if current.is_empty() {
+                return Ok(Self {
+                    state: Arc::clone(&self.state),
+                    plugins: Arc::clone(&self.plugins),
+                });
             }
         }
 
-        Ok(graphrecord)
+        let post_dispatch_hooks: Vec<_> = current
+            .iter()
+            .map(|change| change.post_dispatch_hook())
+            .collect();
+
+        let mut state = (*self.state).clone();
+
+        for change in current {
+            state = change.apply(state)?;
+        }
+
+        state.identity = StateIdentity::mint();
+
+        let candidate = Self {
+            state: Arc::new(state),
+            plugins: Arc::clone(&self.plugins),
+        };
+
+        for hook in post_dispatch_hooks {
+            for entry in self.plugins.iter() {
+                hook(entry.1.as_ref(), self, &candidate)?;
+            }
+        }
+
+        Ok(candidate)
     }
 
-    pub fn from_dataframes(
-        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-        schema: Option<Schema>,
-    ) -> GraphRecordResult<Self> {
-        let (nodes, edges) = dataframes_to_tuples(nodes_dataframes, edges_dataframes)?;
+    #[cfg(not(feature = "plugins"))]
+    pub(crate) fn apply(&self, changes: Changes) -> GraphRecordResult<Self> {
+        let mut state = (*self.state).clone();
 
-        Self::from_tuples(nodes, Some(edges), schema)
-    }
+        for change in changes {
+            state = change.apply(state)?;
+        }
 
-    pub fn from_nodes_dataframes(
-        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-        schema: Option<Schema>,
-    ) -> GraphRecordResult<Self> {
-        let nodes = node_dataframes_to_tuples(nodes_dataframes)?;
+        state.identity = StateIdentity::mint();
 
-        Self::from_tuples(nodes, None, schema)
-    }
-
-    #[cfg(feature = "serde")]
-    pub fn from_ron<P>(path: P) -> GraphRecordResult<Self>
-    where
-        P: AsRef<Path>,
-    {
-        let file = fs::read_to_string(&path).map_err(|error| {
-            GraphRecordError::Conversion(ConversionError::FileRead {
-                path: path.as_ref().display().to_string(),
-                kind: error.kind(),
-            })
-        })?;
-
-        ron::from_str(&file).map_err(|_| {
-            GraphRecordError::Conversion(ConversionError::RonDeserialization {
-                path: path.as_ref().display().to_string(),
-            })
+        Ok(Self {
+            state: Arc::new(state),
         })
     }
 
-    #[cfg(feature = "serde")]
-    pub fn to_ron<P>(&self, path: P) -> GraphRecordResult<()>
-    where
-        P: AsRef<Path>,
-    {
-        let ron_string = ron::to_string(self)
-            .map_err(|_| GraphRecordError::Conversion(ConversionError::RonSerialization))?;
-
-        if let Some(parent) = path.as_ref().parent() {
-            fs::create_dir_all(parent).map_err(|error| {
-                GraphRecordError::Conversion(ConversionError::DirectoryCreation {
-                    path: parent.display().to_string(),
-                    kind: error.kind(),
-                })
-            })?;
+    #[cfg(feature = "plugins")]
+    pub fn add_plugin(
+        &self,
+        name: PluginName,
+        plugin: impl Plugin + 'static,
+    ) -> GraphRecordResult<Self> {
+        if self.plugins.iter().any(|entry| entry.0 == name) {
+            return Err(GraphRecordError::PluginAlreadyExists { name });
         }
 
-        fs::write(&path, ron_string).map_err(|error| {
-            GraphRecordError::Conversion(ConversionError::FileWrite {
-                path: path.as_ref().display().to_string(),
-                kind: error.kind(),
-            })
+        let plugin: Arc<dyn Plugin> = Arc::new(plugin);
+        let mut plugins = (*self.plugins).clone();
+        plugins.push((name, Arc::clone(&plugin)));
+
+        let candidate = Self {
+            state: Arc::clone(&self.state),
+            plugins: Arc::new(plugins),
+        };
+
+        let changes = plugin.initialize(&candidate)?;
+        if changes.is_empty() {
+            return Ok(candidate);
+        }
+
+        candidate.apply(changes)
+    }
+
+    #[cfg(feature = "plugins")]
+    pub fn remove_plugin(&self, name: &PluginName) -> GraphRecordResult<Self> {
+        let plugin = self
+            .plugins
+            .iter()
+            .find(|entry| entry.0 == *name)
+            .map(|entry| Arc::clone(&entry.1))
+            .ok_or_else(|| GraphRecordError::PluginNotFound { name: name.clone() })?;
+
+        let changes = plugin.finalize(self)?;
+        let settled = if changes.is_empty() {
+            Self {
+                state: Arc::clone(&self.state),
+                plugins: Arc::clone(&self.plugins),
+            }
+        } else {
+            self.apply(changes)?
+        };
+
+        let plugins = settled
+            .plugins
+            .iter()
+            .filter(|entry| entry.0 != *name)
+            .cloned()
+            .collect();
+
+        Ok(Self {
+            state: Arc::clone(&settled.state),
+            plugins: Arc::new(plugins),
         })
     }
 
-    pub fn to_dataframes(&self) -> GraphRecordResult<DataFramesExport> {
-        DataFramesExport::new(self)
+    #[cfg(feature = "plugins")]
+    pub fn plugins(&self) -> impl Iterator<Item = &PluginName> {
+        self.plugins.iter().map(|entry| &entry.0)
     }
 
-    #[allow(clippy::too_many_lines)]
-    fn set_schema_impl(&mut self, mut schema: Schema) -> GraphRecordResult<()> {
-        let mut nodes_group_cache = HashMap::<&Group, usize>::new();
-        let mut nodes_ungrouped_visited = false;
-        let mut edges_group_cache = HashMap::<&Group, usize>::new();
-        let mut edges_ungrouped_visited = false;
-
-        for (node_index, node) in &self.graph.nodes {
-            let groups_of_node: Vec<_> = self
-                .groups_of_node(node_index)
-                .expect("groups of node must exist")
-                .collect();
-
-            if groups_of_node.is_empty() {
-                match schema.schema_type() {
-                    SchemaType::Inferred => {
-                        let nodes_in_groups = self.group_mapping.nodes_in_group.len();
-
-                        let nodes_not_in_groups = self.graph.node_count() - nodes_in_groups;
-
-                        schema.update_node(
-                            &node.attributes,
-                            None,
-                            nodes_not_in_groups == 0 || !nodes_ungrouped_visited,
-                        );
-
-                        nodes_ungrouped_visited = true;
-                    }
-                    SchemaType::Provided => {
-                        schema.validate_node(node_index, &node.attributes, None)?;
-                    }
-                }
-            } else {
-                for group in groups_of_node {
-                    match schema.schema_type() {
-                        SchemaType::Inferred => match nodes_group_cache.entry(group) {
-                            Entry::Occupied(entry) => {
-                                schema.update_node(
-                                    &node.attributes,
-                                    Some(group),
-                                    *entry.get() == 0,
-                                );
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(
-                                    self.group_mapping
-                                        .nodes_in_group
-                                        .get(group)
-                                        .map_or(0, GrHashSet::len),
-                                );
-
-                                schema.update_node(&node.attributes, Some(group), true);
-                            }
-                        },
-                        SchemaType::Provided => {
-                            schema.validate_node(node_index, &node.attributes, Some(group))?;
-                        }
-                    }
-                }
-            }
-        }
-
-        for (edge_index, edge) in &self.graph.edges {
-            let groups_of_edge: Vec<_> = self
-                .groups_of_edge(edge_index)
-                .expect("groups of edge must exist")
-                .collect();
-
-            if groups_of_edge.is_empty() {
-                match schema.schema_type() {
-                    SchemaType::Inferred => {
-                        let edges_in_groups = self.group_mapping.edges_in_group.len();
-
-                        let edges_not_in_groups = self.graph.edge_count() - edges_in_groups;
-
-                        schema.update_edge(
-                            &edge.attributes,
-                            None,
-                            edges_not_in_groups == 0 || !edges_ungrouped_visited,
-                        );
-
-                        edges_ungrouped_visited = true;
-                    }
-                    SchemaType::Provided => {
-                        schema.validate_edge(edge_index, &edge.attributes, None)?;
-                    }
-                }
-            } else {
-                for group in groups_of_edge {
-                    match schema.schema_type() {
-                        SchemaType::Inferred => match edges_group_cache.entry(group) {
-                            Entry::Occupied(entry) => {
-                                schema.update_edge(
-                                    &edge.attributes,
-                                    Some(group),
-                                    *entry.get() == 0,
-                                );
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(
-                                    self.group_mapping
-                                        .edges_in_group
-                                        .get(group)
-                                        .map_or(0, GrHashSet::len),
-                                );
-
-                                schema.update_edge(&edge.attributes, Some(group), true);
-                            }
-                        },
-                        SchemaType::Provided => {
-                            schema.validate_edge(edge_index, &edge.attributes, Some(group))?;
-                        }
-                    }
-                }
-            }
-        }
-
-        mem::swap(&mut self.schema, &mut schema);
-
-        Ok(())
+    pub fn add_nodes(&self, batch: impl Into<NodeBatch>) -> GraphRecordResult<Self> {
+        self.apply(AddNodes::new(batch.into()).into())
     }
 
-    /// # Safety
-    ///
-    /// This function should only be used if the data has been validated against the schema.
-    /// Using this function with invalid data may lead to undefined behavior.
-    /// This function does not run any plugin hooks.
-    pub const unsafe fn set_schema_unchecked(&mut self, schema: &mut Schema) {
-        mem::swap(&mut self.schema, schema);
-    }
-
-    #[must_use]
-    pub const fn get_schema(&self) -> &Schema {
-        &self.schema
-    }
-
-    const fn freeze_schema_impl(&mut self) {
-        self.schema.freeze();
-    }
-
-    const fn unfreeze_schema_impl(&mut self) {
-        self.schema.unfreeze();
-    }
-
-    pub fn node_indices(&self) -> impl Iterator<Item = &NodeIndex> {
-        self.graph.node_indices()
-    }
-
-    pub fn resolve_node_index(&self, node_index: &NodeIndex) -> GraphRecordResult<&NodeIndex> {
-        self.graph.resolve_node_index(node_index)
-    }
-
-    pub fn node_attributes(&self, node_index: &NodeIndex) -> GraphRecordResult<&AttributeMap> {
-        self.graph.node_attributes(node_index)
-    }
-
-    pub fn node_attributes_mut<'a>(
-        &'a mut self,
-        node_index: &'a NodeIndex,
-    ) -> GraphRecordResult<NodeAttributesMut<'a>> {
-        NodeAttributesMut::new(node_index, self)
-    }
-
-    pub fn outgoing_edges(
+    pub fn add_node(
         &self,
-        node_index: &NodeIndex,
-    ) -> GraphRecordResult<impl Iterator<Item = &EdgeIndex> + use<'_>> {
-        self.graph.outgoing_edges(node_index)
-    }
-
-    pub fn incoming_edges(
-        &self,
-        node_index: &NodeIndex,
-    ) -> GraphRecordResult<impl Iterator<Item = &EdgeIndex> + use<'_>> {
-        self.graph.incoming_edges(node_index)
-    }
-
-    pub fn edge_indices(&self) -> impl Iterator<Item = &EdgeIndex> {
-        self.graph.edge_indices()
-    }
-
-    pub fn resolve_edge_index(&self, edge_index: &EdgeIndex) -> GraphRecordResult<&EdgeIndex> {
-        self.graph.resolve_edge_index(edge_index)
-    }
-
-    pub fn edge_attributes(&self, edge_index: &EdgeIndex) -> GraphRecordResult<&AttributeMap> {
-        self.graph.edge_attributes(edge_index)
-    }
-
-    pub fn edge_attributes_mut<'a>(
-        &'a mut self,
-        edge_index: &'a EdgeIndex,
-    ) -> GraphRecordResult<EdgeAttributesMut<'a>> {
-        EdgeAttributesMut::new(edge_index, self)
-    }
-
-    pub fn edge_endpoints(
-        &self,
-        edge_index: &EdgeIndex,
-    ) -> GraphRecordResult<(&NodeIndex, &NodeIndex)> {
-        self.graph.edge_endpoints(edge_index)
-    }
-
-    pub fn edges_connecting<'a>(
-        &'a self,
-        outgoing_node_indices: Vec<&'a NodeIndex>,
-        incoming_node_indices: Vec<&'a NodeIndex>,
-    ) -> impl Iterator<Item = &'a EdgeIndex> + 'a {
-        self.graph
-            .edges_connecting(outgoing_node_indices, incoming_node_indices)
-    }
-
-    pub fn edges_connecting_undirected<'a>(
-        &'a self,
-        first_node_indices: Vec<&'a NodeIndex>,
-        second_node_indices: Vec<&'a NodeIndex>,
-    ) -> impl Iterator<Item = &'a EdgeIndex> + 'a {
-        self.graph
-            .edges_connecting_undirected(first_node_indices, second_node_indices)
-    }
-
-    fn add_node_impl(
-        &mut self,
         node_index: NodeIndex,
         attributes: AttributeMap,
-    ) -> GraphRecordResult<()> {
-        match self.schema.schema_type() {
-            SchemaType::Inferred => {
-                let nodes_in_groups = self.group_mapping.nodes_in_group.len();
-
-                let nodes_not_in_groups = self.graph.node_count() - nodes_in_groups;
-
-                self.schema
-                    .update_node(&attributes, None, nodes_not_in_groups == 0);
-            }
-            SchemaType::Provided => {
-                self.schema.validate_node(&node_index, &attributes, None)?;
-            }
-        }
-
-        self.graph.add_node(node_index, attributes)
+    ) -> GraphRecordResult<Self> {
+        self.add_nodes(vec![(node_index, attributes)])
     }
 
-    // TODO: Add tests
-    #[allow(clippy::needless_pass_by_value)]
-    fn add_node_with_group_impl(
-        &mut self,
+    pub fn add_nodes_in_groups(
+        &self,
+        batch: impl Into<NodeBatch>,
+        groups: Vec<Group>,
+    ) -> GraphRecordResult<Self> {
+        self.apply(AddNodesInGroups::new(batch.into(), groups).into())
+    }
+
+    pub fn add_node_in_group(
+        &self,
         node_index: NodeIndex,
         attributes: AttributeMap,
-        group: Group,
-    ) -> GraphRecordResult<()> {
-        match self.schema.schema_type() {
-            SchemaType::Inferred => {
-                let nodes_in_group = self
-                    .group_mapping
-                    .nodes_in_group
-                    .get(&group)
-                    .map_or(0, GrHashSet::len);
-
-                self.schema
-                    .update_node(&attributes, Some(&group), nodes_in_group == 0);
-            }
-            SchemaType::Provided => {
-                self.schema
-                    .validate_node(&node_index, &attributes, Some(&group))?;
-            }
-        }
-
-        self.graph.add_node(node_index.clone(), attributes)?;
-
-        self.group_mapping
-            .add_node_to_group(group, node_index.clone())
-            .inspect_err(|_| {
-                self.graph
-                    .remove_node(&node_index, &mut self.group_mapping)
-                    .expect("Node must exist");
-            })
+        groups: Vec<Group>,
+    ) -> GraphRecordResult<Self> {
+        self.add_nodes_in_groups(vec![(node_index, attributes)], groups)
     }
 
-    fn add_node_with_groups_impl(
-        &mut self,
-        node_index: NodeIndex,
-        attributes: AttributeMap,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<()> {
-        let groups = groups.as_ref();
-
-        match groups.split_first() {
-            None => self.add_node_impl(node_index, attributes),
-            Some((first, rest)) => {
-                self.add_node_with_group_impl(node_index.clone(), attributes, first.clone())?;
-
-                for group in rest {
-                    self.add_node_to_group_impl(group.clone(), node_index.clone())
-                        .inspect_err(|_| {
-                            self.graph
-                                .remove_node(&node_index, &mut self.group_mapping)
-                                .expect("Node must exist");
-                        })?;
-                }
-
-                Ok(())
-            }
-        }
+    pub fn add_edges(&self, batch: impl Into<EdgeBatch>) -> GraphRecordResult<Self> {
+        self.apply(AddEdges::new(batch.into()).into())
     }
 
-    fn remove_node_impl(&mut self, node_index: &NodeIndex) -> GraphRecordResult<AttributeMap> {
-        self.graph.remove_node(node_index, &mut self.group_mapping)
-    }
-
-    fn add_nodes_impl(&mut self, nodes: Vec<(NodeIndex, AttributeMap)>) -> GraphRecordResult<()> {
-        for (node_index, attributes) in nodes {
-            self.add_node_impl(node_index, attributes)?;
-        }
-
-        Ok(())
-    }
-
-    // TODO: Add tests
-    #[allow(clippy::needless_pass_by_value)]
-    fn add_nodes_with_group_impl(
-        &mut self,
-        nodes: Vec<(NodeIndex, AttributeMap)>,
-        group: Group,
-    ) -> GraphRecordResult<()> {
-        if !self.contains_group(&group) {
-            self.add_group_impl(group.clone(), None, None)?;
-        }
-
-        for (node_index, attributes) in nodes {
-            self.add_node_with_group_impl(node_index, attributes, group.clone())?;
-        }
-
-        Ok(())
-    }
-
-    fn add_nodes_with_groups_impl(
-        &mut self,
-        nodes: Vec<(NodeIndex, AttributeMap)>,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<()> {
-        let groups = groups.as_ref();
-
-        for group in groups {
-            if !self.contains_group(group) {
-                self.add_group_impl(group.clone(), None, None)?;
-            }
-        }
-
-        for (node_index, attributes) in nodes {
-            self.add_node_with_groups_impl(node_index, attributes, groups)?;
-        }
-
-        Ok(())
-    }
-
-    fn add_nodes_dataframes_impl(
-        &mut self,
-        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-    ) -> GraphRecordResult<()> {
-        self.add_nodes_impl(node_dataframes_to_tuples(nodes_dataframes)?)
-    }
-
-    // TODO: Add tests
-    fn add_nodes_dataframes_with_group_impl(
-        &mut self,
-        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-        group: Group,
-    ) -> GraphRecordResult<()> {
-        self.add_nodes_with_group_impl(node_dataframes_to_tuples(nodes_dataframes)?, group)
-    }
-
-    fn add_nodes_dataframes_with_groups_impl(
-        &mut self,
-        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<()> {
-        self.add_nodes_with_groups_impl(node_dataframes_to_tuples(nodes_dataframes)?, groups)
-    }
-
-    #[allow(clippy::needless_pass_by_value)]
-    fn add_edge_impl(
-        &mut self,
+    pub fn add_edge(
+        &self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
         attributes: AttributeMap,
-    ) -> GraphRecordResult<EdgeIndex> {
-        let edge_index =
-            self.graph
-                .add_edge(source_node_index, target_node_index, attributes.clone())?;
-
-        match self.schema.schema_type() {
-            SchemaType::Inferred => {
-                let edges_in_groups = self.group_mapping.edges_in_group.len();
-
-                let edges_not_in_groups = self.graph.edge_count() - edges_in_groups;
-
-                self.schema
-                    .update_edge(&attributes, None, edges_not_in_groups <= 1);
-
-                Ok(edge_index)
-            }
-            SchemaType::Provided => {
-                match self.schema.validate_edge(&edge_index, &attributes, None) {
-                    Ok(()) => Ok(edge_index),
-                    Err(e) => {
-                        self.graph
-                            .remove_edge(&edge_index)
-                            .expect("Edge must exist");
-
-                        Err(e.into())
-                    }
-                }
-            }
-        }
+    ) -> GraphRecordResult<Self> {
+        self.add_edges(vec![(source_node_index, target_node_index, attributes)])
     }
 
-    // TODO: Add tests
-    #[allow(clippy::needless_pass_by_value)]
-    fn add_edge_with_group_impl(
-        &mut self,
+    pub fn add_edges_in_groups(
+        &self,
+        batch: impl Into<EdgeBatch>,
+        groups: Vec<Group>,
+    ) -> GraphRecordResult<Self> {
+        self.apply(AddEdgesInGroups::new(batch.into(), groups).into())
+    }
+
+    pub fn add_edge_in_group(
+        &self,
         source_node_index: NodeIndex,
         target_node_index: NodeIndex,
         attributes: AttributeMap,
-        group: Group,
-    ) -> GraphRecordResult<EdgeIndex> {
-        let edge_index =
-            self.graph
-                .add_edge(source_node_index, target_node_index, attributes.clone())?;
-
-        match self.schema.schema_type() {
-            SchemaType::Inferred => {
-                let edges_in_group = self
-                    .group_mapping
-                    .edges_in_group
-                    .get(&group)
-                    .map_or(0, GrHashSet::len);
-
-                self.schema
-                    .update_edge(&attributes, Some(&group), edges_in_group == 0);
-            }
-            SchemaType::Provided => {
-                self.schema
-                    .validate_edge(&edge_index, &attributes, Some(&group))
-                    .inspect_err(|_| {
-                        self.graph
-                            .remove_edge(&edge_index)
-                            .expect("Edge must exist");
-                    })?;
-            }
-        }
-
-        self.group_mapping
-            .add_edge_to_group(group, edge_index)
-            .inspect_err(|_| {
-                self.graph
-                    .remove_edge(&edge_index)
-                    .expect("Edge must exist");
-            })?;
-
-        Ok(edge_index)
+        groups: Vec<Group>,
+    ) -> GraphRecordResult<Self> {
+        self.add_edges_in_groups(
+            vec![(source_node_index, target_node_index, attributes)],
+            groups,
+        )
     }
 
-    fn add_edge_with_groups_impl(
-        &mut self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
-        attributes: AttributeMap,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<EdgeIndex> {
-        let groups = groups.as_ref();
-
-        match groups.split_first() {
-            None => self.add_edge_impl(source_node_index, target_node_index, attributes),
-            Some((first, rest)) => {
-                let edge_index = self.add_edge_with_group_impl(
-                    source_node_index,
-                    target_node_index,
-                    attributes,
-                    first.clone(),
-                )?;
-
-                for group in rest {
-                    self.add_edge_to_group_impl(group.clone(), edge_index)
-                        .inspect_err(|_| {
-                            self.graph
-                                .remove_edge(&edge_index)
-                                .expect("Edge must exist");
-                        })?;
-                }
-
-                Ok(edge_index)
-            }
-        }
+    pub fn remove_nodes(&self, node_indices: Vec<NodeIndex>) -> GraphRecordResult<Self> {
+        self.apply(RemoveNodes::new(node_indices).into())
     }
 
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn remove_edge_impl(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<AttributeMap> {
-        self.group_mapping.remove_edge(edge_index);
-
-        self.graph.remove_edge(edge_index)
+    pub fn remove_edges(&self, edge_indices: Vec<EdgeIndex>) -> GraphRecordResult<Self> {
+        self.apply(RemoveEdges::new(edge_indices).into())
     }
 
-    fn add_edges_impl(
-        &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        edges
-            .into_iter()
-            .map(|(source_node_index, target_node_index, attributes)| {
-                self.add_edge_impl(source_node_index, target_node_index, attributes)
-            })
-            .collect()
-    }
-
-    // TODO: Add tests
-    fn add_edges_with_group_impl(
-        &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
-        group: &Group,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        if !self.contains_group(group) {
-            self.add_group_impl(group.clone(), None, None)?;
-        }
-
-        edges
-            .into_iter()
-            .map(|(source_node_index, target_node_index, attributes)| {
-                self.add_edge_with_group_impl(
-                    source_node_index,
-                    target_node_index,
-                    attributes,
-                    group.clone(),
-                )
-            })
-            .collect()
-    }
-
-    fn add_edges_with_groups_impl(
-        &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        let groups = groups.as_ref();
-
-        for group in groups {
-            if !self.contains_group(group) {
-                self.add_group_impl(group.clone(), None, None)?;
-            }
-        }
-
-        edges
-            .into_iter()
-            .map(|(source_node_index, target_node_index, attributes)| {
-                self.add_edge_with_groups_impl(
-                    source_node_index,
-                    target_node_index,
-                    attributes,
-                    groups,
-                )
-            })
-            .collect()
-    }
-
-    fn add_edges_dataframes_impl(
-        &mut self,
-        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        self.add_edges_impl(edge_dataframes_to_tuples(edges_dataframes)?)
-    }
-
-    // TODO: Add tests
-    fn add_edges_dataframes_with_group_impl(
-        &mut self,
-        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-        group: &Group,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        self.add_edges_with_group_impl(edge_dataframes_to_tuples(edges_dataframes)?, group)
-    }
-
-    fn add_edges_dataframes_with_groups_impl(
-        &mut self,
-        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        self.add_edges_with_groups_impl(edge_dataframes_to_tuples(edges_dataframes)?, groups)
-    }
-
-    fn add_group_impl(
-        &mut self,
-        group: Group,
-        node_indices: Option<Vec<NodeIndex>>,
-        edge_indices: Option<Vec<EdgeIndex>>,
-    ) -> GraphRecordResult<()> {
-        if self.group_mapping.contains_group(&group) {
-            return Err(GraphRecordError::GroupAlreadyExists {
-                group: group.clone(),
-            });
-        }
-
-        if let Some(ref node_indices) = node_indices {
-            for node_index in node_indices {
-                if !self.graph.contains_node(node_index) {
-                    return Err(GraphRecordError::NodeNotFound {
+    #[expect(clippy::missing_panics_doc, reason = "infallible")]
+    pub fn keep_nodes(&self, node_indices: &[NodeIndex]) -> GraphRecordResult<Self> {
+        let keep_addresses: GrHashSet<_> = node_indices
+            .iter()
+            .map(|node_index| {
+                self.state.resolve_node_address(node_index).ok_or_else(|| {
+                    GraphRecordError::NodeNotFound {
                         node_index: node_index.clone(),
-                    });
-                }
-            }
-        }
+                    }
+                })
+            })
+            .collect::<GraphRecordResult<_>>()?;
 
-        if let Some(ref edge_indices) = edge_indices {
-            for edge_index in edge_indices {
-                if !self.graph.contains_edge(edge_index) {
-                    return Err(GraphRecordError::EdgeNotFound {
+        let nodes_to_remove = self
+            .state
+            .node_addresses()
+            .filter(|address| !keep_addresses.contains(address))
+            .map(|address| {
+                NodeIndex::from(Identifier::from(
+                    self.state.node_key(address).expect("Node must exist."),
+                ))
+            })
+            .collect();
+
+        self.remove_nodes(nodes_to_remove)
+    }
+
+    #[expect(clippy::missing_panics_doc, reason = "infallible")]
+    pub fn keep_edges(&self, edge_indices: &[EdgeIndex]) -> GraphRecordResult<Self> {
+        let keep_addresses: GrHashSet<_> = edge_indices
+            .iter()
+            .map(|edge_index| {
+                self.state
+                    .resolve_edge_address(edge_index)
+                    .ok_or(GraphRecordError::EdgeNotFound {
                         edge_index: *edge_index,
-                    });
-                }
-            }
-        }
+                    })
+            })
+            .collect::<GraphRecordResult<_>>()?;
 
-        match self.schema.schema_type() {
-            SchemaType::Inferred => {
-                if !self.schema.groups().contains_key(&group) {
-                    self.schema
-                        .add_group(group.clone(), GroupSchema::default())?;
-                }
+        let edges_to_remove = self
+            .state
+            .edge_addresses()
+            .filter(|address| !keep_addresses.contains(address))
+            .map(|address| self.state.edge_index(address).expect("Edge must exist."))
+            .collect();
 
-                if let Some(ref node_indices) = node_indices {
-                    let mut empty = true;
+        self.remove_edges(edges_to_remove)
+    }
 
-                    for node_index in node_indices {
-                        let node_attributes = self.graph.node_attributes(node_index)?;
-
-                        self.schema
-                            .update_node(node_attributes, Some(&group), empty);
-
-                        empty = false;
-                    }
-                }
-
-                if let Some(ref edge_indices) = edge_indices {
-                    let mut empty = true;
-
-                    for edge_index in edge_indices {
-                        let edge_attributes = self.graph.edge_attributes(edge_index)?;
-
-                        self.schema
-                            .update_edge(edge_attributes, Some(&group), empty);
-
-                        empty = false;
-                    }
-                }
-            }
-            SchemaType::Provided => {
-                if !self.schema.groups().contains_key(&group) {
-                    return Err(SchemaError::GroupNotInSchema {
+    #[expect(clippy::missing_panics_doc, reason = "infallible")]
+    pub fn keep_groups(&self, groups: &[Group]) -> GraphRecordResult<Self> {
+        let keep_addresses: GrHashSet<_> = groups
+            .iter()
+            .map(|group| {
+                self.state.resolve_group_address(group).ok_or_else(|| {
+                    GraphRecordError::GroupNotFound {
                         group: group.clone(),
                     }
-                    .into());
-                }
+                })
+            })
+            .collect::<GraphRecordResult<_>>()?;
 
-                if let Some(ref node_indices) = node_indices {
-                    for node_index in node_indices {
-                        let node_attributes = self.graph.node_attributes(node_index)?;
+        let groups_to_remove = self
+            .state
+            .group_addresses()
+            .filter(|address| !keep_addresses.contains(address))
+            .map(|address| {
+                self.state
+                    .group_name(address)
+                    .expect("Group must exist.")
+                    .clone()
+            })
+            .collect();
 
-                        self.schema
-                            .validate_node(node_index, node_attributes, Some(&group))?;
-                    }
-                }
-
-                if let Some(ref edge_indices) = edge_indices {
-                    for edge_index in edge_indices {
-                        let edge_attributes = self.graph.edge_attributes(edge_index)?;
-
-                        self.schema
-                            .validate_edge(edge_index, edge_attributes, Some(&group))?;
-                    }
-                }
-            }
-        }
-
-        self.group_mapping
-            .add_group(group, node_indices, edge_indices)
-            .expect("Group must not exist");
-
-        Ok(())
+        self.remove_groups(groups_to_remove)
     }
 
-    fn remove_group_impl(&mut self, group: &Group) -> GraphRecordResult<()> {
-        self.group_mapping.remove_group(group)
-    }
-
-    fn add_node_to_group_impl(
-        &mut self,
-        group: Group,
-        node_index: NodeIndex,
-    ) -> GraphRecordResult<()> {
-        let node_attributes = self.graph.node_attributes(&node_index)?;
-
-        match self.schema.schema_type() {
-            SchemaType::Inferred => {
-                let nodes_in_group = self
-                    .group_mapping
-                    .nodes_in_group
-                    .get(&group)
-                    .map_or(0, GrHashSet::len);
-
-                self.schema
-                    .update_node(node_attributes, Some(&group), nodes_in_group == 0);
-            }
-            SchemaType::Provided => {
-                self.schema
-                    .validate_node(&node_index, node_attributes, Some(&group))?;
-            }
-        }
-
-        self.group_mapping.add_node_to_group(group, node_index)
-    }
-
-    #[allow(clippy::needless_pass_by_value)]
-    fn add_node_to_groups_impl(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        node_index: NodeIndex,
-    ) -> GraphRecordResult<()> {
-        groups
-            .as_ref()
-            .iter()
-            .try_for_each(|group| self.add_node_to_group_impl(group.clone(), node_index.clone()))
-    }
-
-    fn add_nodes_to_groups_impl(
-        &mut self,
-        groups: impl AsRef<[Group]>,
+    pub fn set_node_attributes(
+        &self,
         node_indices: Vec<NodeIndex>,
-    ) -> GraphRecordResult<()> {
-        let groups = groups.as_ref();
-
-        node_indices
-            .into_iter()
-            .try_for_each(|node_index| self.add_node_to_groups_impl(groups, node_index))
+        attributes: AttributeMap,
+    ) -> GraphRecordResult<Self> {
+        self.apply(SetNodeAttributes::new(node_indices, attributes).into())
     }
 
-    fn add_edge_to_group_impl(
-        &mut self,
-        group: Group,
-        edge_index: EdgeIndex,
-    ) -> GraphRecordResult<()> {
-        let edge_attributes = self.graph.edge_attributes(&edge_index)?;
-
-        match self.schema.schema_type() {
-            SchemaType::Inferred => {
-                let edges_in_group = self
-                    .group_mapping
-                    .edges_in_group
-                    .get(&group)
-                    .map_or(0, GrHashSet::len);
-
-                self.schema
-                    .update_edge(edge_attributes, Some(&group), edges_in_group == 0);
-            }
-            SchemaType::Provided => {
-                self.schema
-                    .validate_edge(&edge_index, edge_attributes, Some(&group))?;
-            }
-        }
-
-        self.group_mapping.add_edge_to_group(group, edge_index)
+    pub fn replace_node_attributes(
+        &self,
+        node_indices: Vec<NodeIndex>,
+        attributes: AttributeMap,
+    ) -> GraphRecordResult<Self> {
+        self.apply(ReplaceNodeAttributes::new(node_indices, attributes).into())
     }
 
-    fn add_edge_to_groups_impl(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        edge_index: EdgeIndex,
-    ) -> GraphRecordResult<()> {
-        groups
-            .as_ref()
-            .iter()
-            .try_for_each(|group| self.add_edge_to_group_impl(group.clone(), edge_index))
+    pub fn remove_node_attributes(
+        &self,
+        node_indices: Vec<NodeIndex>,
+        attribute_names: Vec<AttributeName>,
+    ) -> GraphRecordResult<Self> {
+        self.apply(RemoveNodeAttributes::new(node_indices, attribute_names).into())
     }
 
-    fn add_edges_to_groups_impl(
-        &mut self,
-        groups: impl AsRef<[Group]>,
+    pub fn set_edge_attributes(
+        &self,
         edge_indices: Vec<EdgeIndex>,
-    ) -> GraphRecordResult<()> {
-        let groups = groups.as_ref();
-
-        edge_indices
-            .into_iter()
-            .try_for_each(|edge_index| self.add_edge_to_groups_impl(groups, edge_index))
+        attributes: AttributeMap,
+    ) -> GraphRecordResult<Self> {
+        self.apply(SetEdgeAttributes::new(edge_indices, attributes).into())
     }
 
-    fn remove_node_from_group_impl(
-        &mut self,
-        group: &Group,
-        node_index: &NodeIndex,
-    ) -> GraphRecordResult<()> {
-        if !self.graph.contains_node(node_index) {
-            return Err(GraphRecordError::NodeNotFound {
-                node_index: node_index.clone(),
-            });
-        }
-
-        self.group_mapping.remove_node_from_group(group, node_index)
-    }
-
-    fn remove_node_from_groups_impl(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        node_index: &NodeIndex,
-    ) -> GraphRecordResult<()> {
-        groups
-            .as_ref()
-            .iter()
-            .try_for_each(|group| self.remove_node_from_group_impl(group, node_index))
-    }
-
-    fn remove_nodes_from_groups_impl(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        node_indices: &[NodeIndex],
-    ) -> GraphRecordResult<()> {
-        let groups = groups.as_ref();
-
-        node_indices
-            .iter()
-            .try_for_each(|node_index| self.remove_node_from_groups_impl(groups, node_index))
-    }
-
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn remove_edge_from_group_impl(
-        &mut self,
-        group: &Group,
-        edge_index: &EdgeIndex,
-    ) -> GraphRecordResult<()> {
-        if !self.graph.contains_edge(edge_index) {
-            return Err(GraphRecordError::EdgeNotFound {
-                edge_index: *edge_index,
-            });
-        }
-
-        self.group_mapping.remove_edge_from_group(group, edge_index)
-    }
-
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn remove_edge_from_groups_impl(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        edge_index: &EdgeIndex,
-    ) -> GraphRecordResult<()> {
-        groups
-            .as_ref()
-            .iter()
-            .try_for_each(|group| self.remove_edge_from_group_impl(group, edge_index))
-    }
-
-    fn remove_edges_from_groups_impl(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        edge_indices: &[EdgeIndex],
-    ) -> GraphRecordResult<()> {
-        let groups = groups.as_ref();
-
-        edge_indices
-            .iter()
-            .try_for_each(|edge_index| self.remove_edge_from_groups_impl(groups, edge_index))
-    }
-
-    pub fn groups(&self) -> impl Iterator<Item = &Group> {
-        self.group_mapping.groups()
-    }
-
-    pub fn nodes_in_group(
+    pub fn replace_edge_attributes(
         &self,
-        group: &Group,
-    ) -> GraphRecordResult<impl Iterator<Item = &NodeIndex> + use<'_>> {
-        self.group_mapping.nodes_in_group(group)
+        edge_indices: Vec<EdgeIndex>,
+        attributes: AttributeMap,
+    ) -> GraphRecordResult<Self> {
+        self.apply(ReplaceEdgeAttributes::new(edge_indices, attributes).into())
     }
 
-    pub fn ungrouped_nodes(&self) -> impl Iterator<Item = &NodeIndex> {
-        let nodes_in_groups: GrHashSet<_> = self
-            .group_mapping
-            .nodes_in_group
-            .values()
-            .flat_map(|nodes| nodes.iter())
-            .collect();
-
-        self.graph
-            .node_indices()
-            .filter(move |node_index| !nodes_in_groups.contains(*node_index))
-    }
-
-    pub fn edges_in_group(
+    pub fn remove_edge_attributes(
         &self,
-        group: &Group,
-    ) -> GraphRecordResult<impl Iterator<Item = &EdgeIndex> + use<'_>> {
-        self.group_mapping.edges_in_group(group)
+        edge_indices: Vec<EdgeIndex>,
+        attribute_names: Vec<AttributeName>,
+    ) -> GraphRecordResult<Self> {
+        self.apply(RemoveEdgeAttributes::new(edge_indices, attribute_names).into())
     }
 
-    pub fn ungrouped_edges(&self) -> impl Iterator<Item = &EdgeIndex> {
-        let edges_in_groups: GrHashSet<_> = self
-            .group_mapping
-            .edges_in_group
-            .values()
-            .flat_map(|edges| edges.iter())
-            .collect();
-
-        self.graph
-            .edge_indices()
-            .filter(move |edge_index| !edges_in_groups.contains(*edge_index))
+    pub fn add_group(&self, group: Group) -> GraphRecordResult<Self> {
+        self.apply(AddGroup::new(group).into())
     }
 
-    pub fn groups_of_node(
+    pub fn remove_groups(&self, groups: Vec<Group>) -> GraphRecordResult<Self> {
+        self.apply(RemoveGroups::new(groups).into())
+    }
+
+    pub fn add_nodes_to_group(
         &self,
-        node_index: &NodeIndex,
-    ) -> GraphRecordResult<impl Iterator<Item = &Group> + use<'_>> {
-        if !self.graph.contains_node(node_index) {
-            return Err(GraphRecordError::NodeNotFound {
-                node_index: node_index.clone(),
-            });
+        group: Group,
+        node_indices: Vec<NodeIndex>,
+    ) -> GraphRecordResult<Self> {
+        self.apply(AddNodesToGroup::new(group, node_indices).into())
+    }
+
+    pub fn remove_nodes_from_group(
+        &self,
+        group: Group,
+        node_indices: Vec<NodeIndex>,
+    ) -> GraphRecordResult<Self> {
+        self.apply(RemoveNodesFromGroup::new(group, node_indices).into())
+    }
+
+    pub fn add_edges_to_group(
+        &self,
+        group: Group,
+        edge_indices: Vec<EdgeIndex>,
+    ) -> GraphRecordResult<Self> {
+        self.apply(AddEdgesToGroup::new(group, edge_indices).into())
+    }
+
+    pub fn remove_edges_from_group(
+        &self,
+        group: Group,
+        edge_indices: Vec<EdgeIndex>,
+    ) -> GraphRecordResult<Self> {
+        self.apply(RemoveEdgesFromGroup::new(group, edge_indices).into())
+    }
+
+    pub fn set_schema(&self, schema: Schema) -> GraphRecordResult<Self> {
+        self.apply(SetSchema::new(schema).into())
+    }
+
+    pub fn freeze_schema(&self) -> GraphRecordResult<Self> {
+        self.apply(FreezeSchema::new().into())
+    }
+
+    pub fn unfreeze_schema(&self) -> GraphRecordResult<Self> {
+        self.apply(UnfreezeSchema::new().into())
+    }
+
+    pub fn clear(&self) -> GraphRecordResult<Self> {
+        self.apply(Clear::new().into())
+    }
+
+    #[must_use]
+    pub fn compact(&self) -> Self {
+        let mut state = (*self.state).clone();
+        state.compact();
+        state.identity = StateIdentity::mint();
+
+        Self {
+            state: Arc::new(state),
+            #[cfg(feature = "plugins")]
+            plugins: Arc::clone(&self.plugins),
         }
-
-        Ok(self.group_mapping.groups_of_node(node_index))
-    }
-
-    pub fn groups_of_edge(
-        &self,
-        edge_index: &EdgeIndex,
-    ) -> GraphRecordResult<impl Iterator<Item = &Group> + use<'_>> {
-        if !self.graph.contains_edge(edge_index) {
-            return Err(GraphRecordError::EdgeNotFound {
-                edge_index: *edge_index,
-            });
-        }
-
-        Ok(self.group_mapping.groups_of_edge(edge_index))
     }
 
     #[must_use]
     pub fn node_count(&self) -> usize {
-        self.graph.node_count()
+        self.state.node_count()
     }
 
     #[must_use]
     pub fn edge_count(&self) -> usize {
-        self.graph.edge_count()
+        self.state.edge_count()
     }
 
     #[must_use]
     pub fn group_count(&self) -> usize {
-        self.group_mapping.group_count()
+        self.state.group_count()
     }
 
     #[must_use]
     pub fn contains_node(&self, node_index: &NodeIndex) -> bool {
-        self.graph.contains_node(node_index)
+        self.state.resolve_node_address(node_index).is_some()
     }
 
     #[must_use]
     pub fn contains_edge(&self, edge_index: &EdgeIndex) -> bool {
-        self.graph.contains_edge(edge_index)
+        self.state.resolve_edge_address(edge_index).is_some()
     }
 
     #[must_use]
     pub fn contains_group(&self, group: &Group) -> bool {
-        self.group_mapping.contains_group(group)
+        self.state.resolve_group_address(group).is_some()
     }
 
-    pub fn outgoing_neighbors(
+    #[must_use]
+    pub fn schema(&self) -> &Schema {
+        self.state.schema()
+    }
+
+    #[must_use]
+    pub fn node_attribute(
         &self,
         node_index: &NodeIndex,
-    ) -> GraphRecordResult<impl Iterator<Item = &NodeIndex> + use<'_>> {
-        self.graph.outgoing_neighbors(node_index)
+        attribute_name: &AttributeName,
+    ) -> Option<ValueView<'_>> {
+        let address = self.state.resolve_node_address(node_index)?;
+
+        self.state.node_attribute_by_name(address, attribute_name)
     }
 
-    // TODO: Add tests
-    pub fn incoming_neighbors(
+    #[must_use]
+    pub fn edge_attribute(
         &self,
-        node_index: &NodeIndex,
-    ) -> GraphRecordResult<impl Iterator<Item = &NodeIndex> + use<'_>> {
-        self.graph.incoming_neighbors(node_index)
+        edge_index: &EdgeIndex,
+        attribute_name: &AttributeName,
+    ) -> Option<ValueView<'_>> {
+        let address = self.state.resolve_edge_address(edge_index)?;
+
+        self.state.edge_attribute_by_name(address, attribute_name)
     }
 
-    pub fn neighbors(
+    #[expect(clippy::missing_panics_doc, reason = "infallible")]
+    pub fn node_indices(&self) -> impl Iterator<Item = NodeIndexView<'_>> {
+        self.state.node_addresses().map(|address| {
+            self.state
+                .node_key(address)
+                .map(NodeIndexView::from)
+                .expect("Node must exist.")
+        })
+    }
+
+    #[expect(clippy::missing_panics_doc, reason = "infallible")]
+    pub fn edge_indices(&self) -> impl Iterator<Item = EdgeIndex> + '_ {
+        self.state
+            .edge_addresses()
+            .map(|address| self.state.edge_index(address).expect("Edge must exist."))
+    }
+
+    #[must_use]
+    pub fn edge_endpoints(
         &self,
-        node_index: &NodeIndex,
-    ) -> GraphRecordResult<impl Iterator<Item = &NodeIndex> + use<'_>> {
-        self.graph.neighbors(node_index)
-    }
+        edge_index: &EdgeIndex,
+    ) -> Option<(NodeIndexView<'_>, NodeIndexView<'_>)> {
+        let address = self.state.resolve_edge_address(edge_index)?;
+        let endpoints = self.state.edge_endpoints(address)?;
 
-    fn clear_impl(&mut self) {
-        self.graph.clear();
-        self.group_mapping.clear();
+        let source = self.state.node_key(endpoints.source_address)?;
+        let target = self.state.node_key(endpoints.target_address)?;
+
+        Some((NodeIndexView::from(source), NodeIndexView::from(target)))
     }
 }
 
-#[cfg(not(feature = "plugins"))]
-impl GraphRecord {
-    pub fn set_schema(&mut self, schema: Schema) -> GraphRecordResult<()> {
-        self.set_schema_impl(schema)
-    }
-
-    pub const fn freeze_schema(&mut self) -> GraphRecordResult<()> {
-        self.freeze_schema_impl();
-
-        Ok(())
-    }
-
-    pub const fn unfreeze_schema(&mut self) -> GraphRecordResult<()> {
-        self.unfreeze_schema_impl();
-
-        Ok(())
-    }
-
-    pub fn add_node(
-        &mut self,
-        node_index: NodeIndex,
-        attributes: AttributeMap,
-    ) -> GraphRecordResult<()> {
-        self.add_node_impl(node_index, attributes)
-    }
-
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn add_node_with_group(
-        &mut self,
-        node_index: NodeIndex,
-        attributes: AttributeMap,
-        group: Group,
-    ) -> GraphRecordResult<()> {
-        self.add_node_with_group_impl(node_index, attributes, group)
-    }
-
-    pub fn add_node_with_groups(
-        &mut self,
-        node_index: NodeIndex,
-        attributes: AttributeMap,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<()> {
-        self.add_node_with_groups_impl(node_index, attributes, groups)
-    }
-
-    pub fn remove_node(&mut self, node_index: &NodeIndex) -> GraphRecordResult<AttributeMap> {
-        self.remove_node_impl(node_index)
-    }
-
-    pub fn add_nodes(&mut self, nodes: Vec<(NodeIndex, AttributeMap)>) -> GraphRecordResult<()> {
-        self.add_nodes_impl(nodes)
-    }
-
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn add_nodes_with_group(
-        &mut self,
-        nodes: Vec<(NodeIndex, AttributeMap)>,
-        group: Group,
-    ) -> GraphRecordResult<()> {
-        self.add_nodes_with_group_impl(nodes, group)
-    }
-
-    pub fn add_nodes_with_groups(
-        &mut self,
-        nodes: Vec<(NodeIndex, AttributeMap)>,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<()> {
-        self.add_nodes_with_groups_impl(nodes, groups)
-    }
-
-    pub fn add_nodes_dataframes(
-        &mut self,
-        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-    ) -> GraphRecordResult<()> {
-        self.add_nodes_dataframes_impl(nodes_dataframes)
-    }
-
-    pub fn add_nodes_dataframes_with_group(
-        &mut self,
-        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-        group: Group,
-    ) -> GraphRecordResult<()> {
-        self.add_nodes_dataframes_with_group_impl(nodes_dataframes, group)
-    }
-
-    pub fn add_nodes_dataframes_with_groups(
-        &mut self,
-        nodes_dataframes: impl IntoIterator<Item = impl Into<NodeDataFrameInput>>,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<()> {
-        self.add_nodes_dataframes_with_groups_impl(nodes_dataframes, groups)
-    }
-
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn add_edge(
-        &mut self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
-        attributes: AttributeMap,
-    ) -> GraphRecordResult<EdgeIndex> {
-        self.add_edge_impl(source_node_index, target_node_index, attributes)
-    }
-
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn add_edge_with_group(
-        &mut self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
-        attributes: AttributeMap,
-        group: Group,
-    ) -> GraphRecordResult<EdgeIndex> {
-        self.add_edge_with_group_impl(source_node_index, target_node_index, attributes, group)
-    }
-
-    pub fn add_edge_with_groups(
-        &mut self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
-        attributes: AttributeMap,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<EdgeIndex> {
-        self.add_edge_with_groups_impl(source_node_index, target_node_index, attributes, groups)
-    }
-
-    pub fn remove_edge(&mut self, edge_index: &EdgeIndex) -> GraphRecordResult<AttributeMap> {
-        self.remove_edge_impl(edge_index)
-    }
-
-    pub fn add_edges(
-        &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        self.add_edges_impl(edges)
-    }
-
-    pub fn add_edges_with_group(
-        &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
-        group: &Group,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        self.add_edges_with_group_impl(edges, group)
-    }
-
-    pub fn add_edges_with_groups(
-        &mut self,
-        edges: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        self.add_edges_with_groups_impl(edges, groups)
-    }
-
-    pub fn add_edges_dataframes(
-        &mut self,
-        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        self.add_edges_dataframes_impl(edges_dataframes)
-    }
-
-    pub fn add_edges_dataframes_with_group(
-        &mut self,
-        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-        group: &Group,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        self.add_edges_dataframes_with_group_impl(edges_dataframes, group)
-    }
-
-    pub fn add_edges_dataframes_with_groups(
-        &mut self,
-        edges_dataframes: impl IntoIterator<Item = impl Into<EdgeDataFrameInput>>,
-        groups: impl AsRef<[Group]>,
-    ) -> GraphRecordResult<Vec<EdgeIndex>> {
-        self.add_edges_dataframes_with_groups_impl(edges_dataframes, groups)
-    }
-
-    pub fn add_group(
-        &mut self,
-        group: Group,
-        node_indices: Option<Vec<NodeIndex>>,
-        edge_indices: Option<Vec<EdgeIndex>>,
-    ) -> GraphRecordResult<()> {
-        self.add_group_impl(group, node_indices, edge_indices)
-    }
-
-    pub fn remove_group(&mut self, group: &Group) -> GraphRecordResult<()> {
-        self.remove_group_impl(group)
-    }
-
-    pub fn add_node_to_group(
-        &mut self,
-        group: Group,
-        node_index: NodeIndex,
-    ) -> GraphRecordResult<()> {
-        self.add_node_to_group_impl(group, node_index)
-    }
-
-    pub fn add_node_to_groups(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        node_index: NodeIndex,
-    ) -> GraphRecordResult<()> {
-        self.add_node_to_groups_impl(groups, node_index)
-    }
-
-    pub fn add_nodes_to_groups(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        node_indices: Vec<NodeIndex>,
-    ) -> GraphRecordResult<()> {
-        self.add_nodes_to_groups_impl(groups, node_indices)
-    }
-
-    pub fn add_edge_to_group(
-        &mut self,
-        group: Group,
-        edge_index: EdgeIndex,
-    ) -> GraphRecordResult<()> {
-        self.add_edge_to_group_impl(group, edge_index)
-    }
-
-    pub fn add_edge_to_groups(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        edge_index: EdgeIndex,
-    ) -> GraphRecordResult<()> {
-        self.add_edge_to_groups_impl(groups, edge_index)
-    }
-
-    pub fn add_edges_to_groups(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        edge_indices: Vec<EdgeIndex>,
-    ) -> GraphRecordResult<()> {
-        self.add_edges_to_groups_impl(groups, edge_indices)
-    }
-
-    pub fn remove_node_from_group(
-        &mut self,
-        group: &Group,
-        node_index: &NodeIndex,
-    ) -> GraphRecordResult<()> {
-        self.remove_node_from_group_impl(group, node_index)
-    }
-
-    pub fn remove_node_from_groups(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        node_index: &NodeIndex,
-    ) -> GraphRecordResult<()> {
-        self.remove_node_from_groups_impl(groups, node_index)
-    }
-
-    pub fn remove_nodes_from_groups(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        node_indices: &[NodeIndex],
-    ) -> GraphRecordResult<()> {
-        self.remove_nodes_from_groups_impl(groups, node_indices)
-    }
-
-    pub fn remove_edge_from_group(
-        &mut self,
-        group: &Group,
-        edge_index: &EdgeIndex,
-    ) -> GraphRecordResult<()> {
-        self.remove_edge_from_group_impl(group, edge_index)
-    }
-
-    pub fn remove_edge_from_groups(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        edge_index: &EdgeIndex,
-    ) -> GraphRecordResult<()> {
-        self.remove_edge_from_groups_impl(groups, edge_index)
-    }
-
-    pub fn remove_edges_from_groups(
-        &mut self,
-        groups: impl AsRef<[Group]>,
-        edge_indices: &[EdgeIndex],
-    ) -> GraphRecordResult<()> {
-        self.remove_edges_from_groups_impl(groups, edge_indices)
-    }
-
-    pub fn clear(&mut self) -> GraphRecordResult<()> {
-        self.clear_impl();
-
-        Ok(())
+impl Default for GraphRecord {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{
-        AttributeMap, EdgeDataFrameInput, GraphRecord, Group, NodeDataFrameInput, NodeIndex,
-    };
+    use super::{AttributeMap, GraphRecord, Identifier, NodeIndexView};
     use crate::{
-        errors::{GraphRecordError, SchemaError},
+        errors::GraphRecordError,
         graphrecord::{
-            SchemaType,
+            EdgeIndex, Value,
             datatypes::DataType,
-            schema::{AttributeSchema, GroupSchema, Schema},
+            schema::{AttributeDataType, AttributeType, GroupSchema, Schema, SchemaType},
         },
     };
-    use polars::prelude::{DataFrame, NamedFrom, PolarsError, Series};
-    use std::collections::HashMap;
-    #[cfg(feature = "serde")]
-    use std::fs;
+    use std::{collections::HashMap, sync::Arc};
 
-    fn create_nodes() -> Vec<(NodeIndex, AttributeMap)> {
-        vec![
-            (
-                "0".into(),
-                HashMap::from([("lorem".into(), "ipsum".into())]),
-            ),
-            (
-                "1".into(),
-                HashMap::from([("amet".into(), "consectetur".into())]),
-            ),
-            (
-                "2".into(),
-                HashMap::from([("adipiscing".into(), "elit".into())]),
-            ),
-            ("3".into(), HashMap::new()),
-        ]
+    fn create_lorem_attributes() -> AttributeMap {
+        AttributeMap::from([("lorem".into(), 42.into())])
     }
 
-    fn create_edges() -> Vec<(NodeIndex, NodeIndex, AttributeMap)> {
-        vec![
-            (
-                "0".into(),
-                "1".into(),
-                HashMap::from([
-                    ("sed".into(), "do".into()),
-                    ("eiusmod".into(), "tempor".into()),
-                ]),
-            ),
-            (
-                "1".into(),
-                "0".into(),
-                HashMap::from([
-                    ("sed".into(), "do".into()),
-                    ("eiusmod".into(), "tempor".into()),
-                ]),
-            ),
-            (
-                "1".into(),
-                "2".into(),
-                HashMap::from([("incididunt".into(), "ut".into())]),
-            ),
-            ("0".into(), "2".into(), HashMap::new()),
-        ]
+    fn create_graphrecord_with_two_nodes() -> GraphRecord {
+        GraphRecord::new()
+            .add_node("lorem".into(), create_lorem_attributes())
+            .unwrap()
+            .add_node("ipsum".into(), AttributeMap::new())
+            .unwrap()
     }
 
-    fn create_nodes_dataframe() -> Result<DataFrame, PolarsError> {
-        let s0 = Series::new("index".into(), &["0", "1"]);
-        let s1 = Series::new("attribute".into(), &[1, 2]);
-        DataFrame::new(2, vec![s0.into(), s1.into()])
-    }
-
-    fn create_edges_dataframe() -> Result<DataFrame, PolarsError> {
-        let s0 = Series::new("from".into(), &["0", "1"]);
-        let s1 = Series::new("to".into(), &["1", "0"]);
-        let s2 = Series::new("attribute".into(), &[1, 2]);
-        DataFrame::new(2, vec![s0.into(), s1.into(), s2.into()])
-    }
-
-    fn create_graphrecord() -> GraphRecord {
-        let nodes = create_nodes();
-        let edges = create_edges();
-
-        GraphRecord::from_tuples(nodes, Some(edges), None).unwrap()
-    }
-
-    #[test]
-    fn test_from_tuples() {
-        let graphrecord = create_graphrecord();
-
-        assert_eq!(4, graphrecord.node_count());
-        assert_eq!(4, graphrecord.edge_count());
-    }
-
-    #[test]
-    fn test_invalid_from_tuples() {
-        let nodes = create_nodes();
-
-        // Adding an edge pointing to a non-existing node should fail
-        assert!(
-            GraphRecord::from_tuples(
-                nodes.clone(),
-                Some(vec![("0".into(), "50".into(), HashMap::new())]),
-                None
-            )
-            .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-
-        // Adding an edge from a non-existing should fail
-        assert!(
-            GraphRecord::from_tuples(
-                nodes,
-                Some(vec![("50".into(), "0".into(), HashMap::new())]),
-                None
-            )
-            .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_from_dataframes() {
-        let nodes_dataframe = create_nodes_dataframe().unwrap();
-        let edges_dataframe = create_edges_dataframe().unwrap();
-
-        let graphrecord = GraphRecord::from_dataframes(
-            vec![(nodes_dataframe, "index".to_string())],
-            vec![(edges_dataframe, "from".to_string(), "to".to_string())],
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(2, graphrecord.node_count());
-        assert_eq!(2, graphrecord.edge_count());
-    }
-
-    #[test]
-    fn test_from_nodes_dataframes() {
-        let nodes_dataframe = create_nodes_dataframe().unwrap();
-
-        let graphrecord =
-            GraphRecord::from_nodes_dataframes(vec![(nodes_dataframe, "index".to_string())], None)
-                .unwrap();
-
-        assert_eq!(2, graphrecord.node_count());
-    }
-
-    #[test]
-    #[cfg(feature = "serde")]
-    fn test_ron() {
-        let graphrecord = create_graphrecord();
-
-        let mut file_path = std::env::temp_dir().into_os_string();
-        file_path.push("/graphrecord_test/");
-
-        fs::create_dir_all(&file_path).unwrap();
-
-        file_path.push("test.ron");
-
-        graphrecord.to_ron(&file_path).unwrap();
-
-        let loaded_graphrecord = GraphRecord::from_ron(&file_path).unwrap();
-
-        assert_eq!(graphrecord.node_count(), loaded_graphrecord.node_count());
-        assert_eq!(graphrecord.edge_count(), loaded_graphrecord.edge_count());
-    }
-
-    #[test]
-    fn test_set_schema() {
-        let mut graphrecord = GraphRecord::new();
-
-        let group_schema = GroupSchema::new(
-            AttributeSchema::from([("attribute".into(), DataType::Int.into())]),
-            AttributeSchema::from([("attribute".into(), DataType::Int.into())]),
-        );
-
-        graphrecord
-            .add_node("0".into(), HashMap::from([("attribute".into(), 1.into())]))
+    fn create_graphrecord_with_one_edge() -> (GraphRecord, EdgeIndex) {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .add_edge("lorem".into(), "ipsum".into(), create_lorem_attributes())
             .unwrap();
-        graphrecord
-            .add_node("1".into(), HashMap::from([("attribute".into(), 1.into())]))
-            .unwrap();
-        graphrecord
-            .add_edge(
-                "0".into(),
-                "1".into(),
-                HashMap::from([("attribute".into(), 1.into())]),
-            )
-            .unwrap();
+        let edge_index = graphrecord.edge_indices().next().unwrap();
 
-        let schema = Schema::new_provided(HashMap::default(), group_schema.clone());
-
-        assert!(graphrecord.set_schema(schema.clone()).is_ok());
-
-        assert_eq!(schema, *graphrecord.get_schema());
-
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord
-            .add_node("0".into(), HashMap::from([("attribute".into(), 1.into())]))
-            .unwrap();
-        graphrecord
-            .add_node("1".into(), HashMap::from([("attribute".into(), 1.into())]))
-            .unwrap();
-        graphrecord
-            .add_node("2".into(), HashMap::from([("attribute".into(), 1.into())]))
-            .unwrap();
-        graphrecord
-            .add_edge(
-                "0".into(),
-                "1".into(),
-                HashMap::from([("attribute".into(), 1.into())]),
-            )
-            .unwrap();
-        graphrecord
-            .add_edge(
-                "0".into(),
-                "1".into(),
-                HashMap::from([("attribute".into(), 1.into())]),
-            )
-            .unwrap();
-        graphrecord
-            .add_edge(
-                "0".into(),
-                "1".into(),
-                HashMap::from([("attribute".into(), 1.into())]),
-            )
-            .unwrap();
-
-        let schema = Schema::new_inferred(
-            HashMap::from([
-                ("0".into(), group_schema.clone()),
-                ("1".into(), group_schema.clone()),
-            ]),
-            group_schema,
-        );
-
-        graphrecord
-            .add_group(
-                "0".into(),
-                Some(vec!["0".into(), "1".into()]),
-                Some(vec![0, 1]),
-            )
-            .unwrap();
-        graphrecord
-            .add_group(
-                "1".into(),
-                Some(vec!["0".into(), "1".into()]),
-                Some(vec![0, 1]),
-            )
-            .unwrap();
-
-        let inferred_schema = Schema::new_inferred(HashMap::default(), GroupSchema::default());
-
-        assert!(graphrecord.set_schema(inferred_schema).is_ok());
-
-        assert_eq!(schema, *graphrecord.get_schema());
+        (graphrecord, edge_index)
     }
 
     #[test]
-    fn test_invalid_set_schema() {
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord
-            .add_node("0".into(), HashMap::from([("attribute2".into(), 1.into())]))
-            .unwrap();
-
-        let schema = Schema::new_provided(
-            HashMap::default(),
-            GroupSchema::new(
-                AttributeSchema::from([("attribute".into(), DataType::Int.into())]),
-                AttributeSchema::from([("attribute".into(), DataType::Int.into())]),
-            ),
-        );
-
-        let previous_schema = graphrecord.get_schema().clone();
-
-        assert!(
-            graphrecord
-                .set_schema(schema.clone())
-                .is_err_and(|e| { matches!(e, GraphRecordError::Schema(_)) })
-        );
-
-        assert_eq!(previous_schema, *graphrecord.get_schema());
-
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord
-            .add_node("0".into(), HashMap::from([("attribute".into(), 1.into())]))
-            .unwrap();
-        graphrecord
-            .add_node("1".into(), HashMap::from([("attribute".into(), 1.into())]))
-            .unwrap();
-        graphrecord
-            .add_edge(
-                "0".into(),
-                "1".into(),
-                HashMap::from([("attribute2".into(), 1.into())]),
-            )
-            .unwrap();
-
-        let previous_schema = graphrecord.get_schema().clone();
-
-        assert!(
-            graphrecord
-                .set_schema(schema)
-                .is_err_and(|e| { matches!(e, GraphRecordError::Schema(_)) })
-        );
-
-        assert_eq!(previous_schema, *graphrecord.get_schema());
-    }
-
-    #[test]
-    fn test_freeze_schema() {
-        let mut graphrecord = GraphRecord::new();
-
-        assert_eq!(
-            SchemaType::Inferred,
-            *graphrecord.get_schema().schema_type()
-        );
-
-        graphrecord.freeze_schema().unwrap();
-
-        assert_eq!(
-            SchemaType::Provided,
-            *graphrecord.get_schema().schema_type()
-        );
-    }
-
-    #[test]
-    fn test_unfreeze_schema() {
-        let schema = Schema::new_provided(HashMap::default(), GroupSchema::default());
-        let mut graphrecord = GraphRecord::with_schema(schema);
-
-        assert_eq!(
-            *graphrecord.get_schema().schema_type(),
-            SchemaType::Provided
-        );
-
-        graphrecord.unfreeze_schema().unwrap();
-
-        assert_eq!(
-            *graphrecord.get_schema().schema_type(),
-            SchemaType::Inferred
-        );
-    }
-
-    #[test]
-    fn test_node_indices() {
-        let graphrecord = create_graphrecord();
-
-        let node_indices: Vec<_> = create_nodes()
-            .into_iter()
-            .map(|(node_index, _)| node_index)
-            .collect();
-
-        for node_index in graphrecord.node_indices() {
-            assert!(node_indices.contains(node_index));
-        }
-    }
-
-    #[test]
-    fn test_node_attributes() {
-        let graphrecord = create_graphrecord();
-
-        let attributes = graphrecord.node_attributes(&"0".into()).unwrap();
-
-        assert_eq!(&create_nodes()[0].1, attributes);
-    }
-
-    #[test]
-    fn test_invalid_node_attributes() {
-        let graphrecord = create_graphrecord();
-
-        // Querying a non-existing node should fail
-        assert!(
-            graphrecord
-                .node_attributes(&"50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_node_attributes_mut() {
-        let mut graphrecord = create_graphrecord();
-
-        let node_index = "0".into();
-        let mut attributes = graphrecord.node_attributes_mut(&node_index).unwrap();
-
-        let new_attributes = HashMap::from([("0".into(), "1".into()), ("2".into(), "3".into())]);
-
-        attributes
-            .replace_attributes(new_attributes.clone())
-            .unwrap();
-
-        assert_eq!(
-            &new_attributes,
-            graphrecord.node_attributes(&node_index).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_invalid_node_attributes_mut() {
-        let mut graphrecord = create_graphrecord();
-
-        // Accessing the node attributes of a non-existing node should fail
-        assert!(
-            graphrecord
-                .node_attributes_mut(&"50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_outgoing_edges() {
-        let graphrecord = create_graphrecord();
-
-        let edges = graphrecord.outgoing_edges(&"0".into()).unwrap();
-
-        assert_eq!(2, edges.count());
-    }
-
-    #[test]
-    fn test_invalid_outgoing_edges() {
-        let graphrecord = create_graphrecord();
-
-        assert!(
-            graphrecord
-                .outgoing_edges(&"50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_incoming_edges() {
-        let graphrecord = create_graphrecord();
-
-        let edges = graphrecord.incoming_edges(&"2".into()).unwrap();
-
-        assert_eq!(2, edges.count());
-    }
-
-    #[test]
-    fn test_invalid_incoming_edges() {
-        let graphrecord = create_graphrecord();
-
-        assert!(
-            graphrecord
-                .incoming_edges(&"50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_edge_indices() {
-        let graphrecord = create_graphrecord();
-        let edges = [0, 1, 2, 3];
-
-        for edge in graphrecord.edge_indices() {
-            assert!(edges.contains(edge));
-        }
-    }
-
-    #[test]
-    fn test_edge_attributes() {
-        let graphrecord = create_graphrecord();
-
-        let attributes = graphrecord.edge_attributes(&0).unwrap();
-
-        assert_eq!(&create_edges()[0].2, attributes);
-    }
-
-    #[test]
-    fn test_invalid_edge_attributes() {
-        let graphrecord = create_graphrecord();
-
-        // Querying a non-existing node should fail
-        assert!(
-            graphrecord
-                .edge_attributes(&50)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_edge_attributes_mut() {
-        let mut graphrecord = create_graphrecord();
-
-        let mut attributes = graphrecord.edge_attributes_mut(&0).unwrap();
-
-        let new_attributes = HashMap::from([("0".into(), "1".into()), ("2".into(), "3".into())]);
-
-        attributes
-            .replace_attributes(new_attributes.clone())
-            .unwrap();
-
-        assert_eq!(&new_attributes, graphrecord.edge_attributes(&0).unwrap());
-    }
-
-    #[test]
-    fn test_invalid_edge_attributes_mut() {
-        let mut graphrecord = create_graphrecord();
-
-        // Accessing the edge attributes of a non-existing edge should fail
-        assert!(
-            graphrecord
-                .edge_attributes_mut(&50)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_edge_endpoints() {
-        let graphrecord = create_graphrecord();
-
-        let edge = &create_edges()[0];
-
-        let endpoints = graphrecord.edge_endpoints(&0).unwrap();
-
-        assert_eq!(&edge.0, endpoints.0);
-
-        assert_eq!(&edge.1, endpoints.1);
-    }
-
-    #[test]
-    fn test_invalid_edge_endpoints() {
-        let graphrecord = create_graphrecord();
-
-        // Accessing the edge endpoints of a non-existing edge should fail
-        assert!(
-            graphrecord
-                .edge_endpoints(&50)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_edges_connecting() {
-        let graphrecord = create_graphrecord();
-
-        let first_index = "0".into();
-        let second_index = "1".into();
-        let edges_connecting =
-            graphrecord.edges_connecting(vec![&first_index], vec![&second_index]);
-
-        assert_eq!(vec![&0], edges_connecting.collect::<Vec<_>>());
-
-        let first_index = "0".into();
-        let second_index = "3".into();
-        let edges_connecting =
-            graphrecord.edges_connecting(vec![&first_index], vec![&second_index]);
-
-        assert_eq!(0, edges_connecting.count());
-
-        let first_index = "0".into();
-        let second_index = "1".into();
-        let third_index = "2".into();
-        let mut edges_connecting: Vec<_> = graphrecord
-            .edges_connecting(vec![&first_index, &second_index], vec![&third_index])
-            .collect();
-
-        edges_connecting.sort();
-        assert_eq!(vec![&2, &3], edges_connecting);
-
-        let first_index = "0".into();
-        let second_index = "1".into();
-        let third_index = "2".into();
-        let fourth_index = "3".into();
-        let mut edges_connecting: Vec<_> = graphrecord
-            .edges_connecting(
-                vec![&first_index, &second_index],
-                vec![&third_index, &fourth_index],
-            )
-            .collect();
-
-        edges_connecting.sort();
-        assert_eq!(vec![&2, &3], edges_connecting);
-    }
-
-    #[test]
-    fn test_edges_connecting_undirected() {
-        let graphrecord = create_graphrecord();
-
-        let first_index = "0".into();
-        let second_index = "1".into();
-        let mut edges_connecting: Vec<_> = graphrecord
-            .edges_connecting_undirected(vec![&first_index], vec![&second_index])
-            .collect();
-
-        edges_connecting.sort();
-        assert_eq!(vec![&0, &1], edges_connecting);
-    }
-
-    #[test]
-    fn test_add_node() {
-        let mut graphrecord = GraphRecord::new();
-
-        assert_eq!(0, graphrecord.node_count());
-
-        graphrecord.add_node("0".into(), HashMap::new()).unwrap();
-
-        assert_eq!(1, graphrecord.node_count());
-
-        graphrecord.freeze_schema().unwrap();
-
-        graphrecord.add_node("1".into(), HashMap::new()).unwrap();
-
-        assert_eq!(2, graphrecord.node_count());
-    }
-
-    #[test]
-    fn test_invalid_add_node() {
-        let mut graphrecord = create_graphrecord();
-
-        assert!(
-            graphrecord
-                .add_node("0".into(), HashMap::new())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeAlreadyExists { .. }))
-        );
-
-        graphrecord.freeze_schema().unwrap();
-
-        assert!(
-            graphrecord
-                .add_node("4".into(), HashMap::from([("attribute".into(), 1.into())]))
-                .is_err_and(|e| matches!(e, GraphRecordError::Schema(_)))
-        );
-    }
-
-    #[test]
-    fn test_remove_node() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("group".into(), Some(vec!["0".into()]), Some(vec![0]))
-            .unwrap();
-
-        let nodes = create_nodes();
-
-        assert_eq!(4, graphrecord.node_count());
-        assert_eq!(4, graphrecord.edge_count());
-        assert_eq!(
-            1,
-            graphrecord
-                .nodes_in_group(&("group".into()))
-                .unwrap()
-                .count()
-        );
-        assert_eq!(
-            1,
-            graphrecord
-                .edges_in_group(&("group".into()))
-                .unwrap()
-                .count()
-        );
-
-        assert_eq!(nodes[0].1, graphrecord.remove_node(&"0".into()).unwrap());
-
-        assert_eq!(3, graphrecord.node_count());
-        assert_eq!(1, graphrecord.edge_count());
-        assert_eq!(
-            0,
-            graphrecord
-                .nodes_in_group(&("group".into()))
-                .unwrap()
-                .count()
-        );
-        assert_eq!(
-            0,
-            graphrecord
-                .edges_in_group(&("group".into()))
-                .unwrap()
-                .count()
-        );
-
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord.add_node(0.into(), HashMap::new()).unwrap();
-        graphrecord
-            .add_edge(0.into(), 0.into(), HashMap::new())
-            .unwrap();
-
-        assert_eq!(1, graphrecord.node_count());
-        assert_eq!(1, graphrecord.edge_count());
-
-        assert!(graphrecord.remove_node(&0.into()).is_ok());
+    fn test_new() {
+        let graphrecord = GraphRecord::new();
 
         assert_eq!(0, graphrecord.node_count());
         assert_eq!(0, graphrecord.edge_count());
-    }
-
-    #[test]
-    fn test_invalid_remove_node() {
-        let mut graphrecord = create_graphrecord();
-
-        // Removing a non-existing node should fail
-        assert!(
-            graphrecord
-                .remove_node(&"50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
+        assert_eq!(0, graphrecord.group_count());
     }
 
     #[test]
     fn test_add_nodes() {
-        let mut graphrecord = GraphRecord::new();
+        let graphrecord = create_graphrecord_with_two_nodes();
 
-        assert_eq!(0, graphrecord.node_count());
+        assert_eq!(2, graphrecord.node_count());
+        assert!(graphrecord.contains_node(&"lorem".into()));
+        assert!(graphrecord.contains_node(&"ipsum".into()));
+        assert_eq!(
+            Some(42.into()),
+            graphrecord
+                .node_attribute(&"lorem".into(), &"lorem".into())
+                .map(Value::from)
+        );
 
-        let nodes = create_nodes();
+        let derived = graphrecord
+            .add_node("dolor".into(), AttributeMap::new())
+            .unwrap();
 
-        graphrecord.add_nodes(nodes).unwrap();
-
-        assert_eq!(4, graphrecord.node_count());
+        assert_eq!(2, graphrecord.node_count());
+        assert!(!graphrecord.contains_node(&"dolor".into()));
+        assert_eq!(3, derived.node_count());
+        assert!(!Arc::ptr_eq(graphrecord.state(), derived.state()));
     }
 
     #[test]
     fn test_invalid_add_nodes() {
-        let mut graphrecord = create_graphrecord();
+        let original = create_graphrecord_with_two_nodes();
 
-        let nodes = create_nodes();
+        let result = original
+            .add_nodes(vec![
+                ("dolor".into(), AttributeMap::new()),
+                ("lorem".into(), AttributeMap::new()),
+            ])
+            .map(|_| ());
 
-        assert!(
-            graphrecord
-                .add_nodes(nodes)
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeAlreadyExists { .. }))
+        assert_eq!(
+            Err(GraphRecordError::NodeAlreadyExists {
+                node_index: "lorem".into()
+            }),
+            result
         );
+        assert_eq!(2, original.node_count());
+        assert!(!original.contains_node(&"dolor".into()));
     }
 
     #[test]
-    fn test_add_nodes_dataframe() {
-        let mut graphrecord = GraphRecord::new();
-
-        assert_eq!(0, graphrecord.node_count());
-
-        let nodes_dataframe = create_nodes_dataframe().unwrap();
-
-        graphrecord
-            .add_nodes_dataframes(vec![(nodes_dataframe, "index".to_string())])
+    fn test_add_nodes_in_groups() {
+        let graphrecord = GraphRecord::new()
+            .add_group("dolor".into())
+            .unwrap()
+            .add_nodes_in_groups(
+                vec![("lorem".into(), AttributeMap::new())],
+                vec!["dolor".into()],
+            )
             .unwrap();
 
-        assert_eq!(2, graphrecord.node_count());
-    }
+        assert!(graphrecord.contains_node(&"lorem".into()));
 
-    #[test]
-    fn test_add_edge() {
-        let mut graphrecord = create_graphrecord();
+        let state = graphrecord.state();
+        let node_address = state.resolve_node_address(&"lorem".into()).unwrap();
+        let group_address = state.resolve_group_address(&"dolor".into()).unwrap();
 
-        assert_eq!(4, graphrecord.edge_count());
-
-        graphrecord
-            .add_edge("0".into(), "3".into(), HashMap::new())
-            .unwrap();
-
-        assert_eq!(5, graphrecord.edge_count());
-
-        graphrecord.freeze_schema().unwrap();
-
-        graphrecord
-            .add_edge("0".into(), "3".into(), HashMap::new())
-            .unwrap();
-
-        assert_eq!(6, graphrecord.edge_count());
-    }
-
-    #[test]
-    fn test_invalid_add_edge() {
-        let mut graphrecord = GraphRecord::new();
-
-        let nodes = create_nodes();
-
-        graphrecord.add_nodes(nodes).unwrap();
-
-        // Adding an edge pointing to a non-existing node should fail
         assert!(
-            graphrecord
-                .add_edge("0".into(), "50".into(), HashMap::new())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
+            state
+                .node_memberships(node_address)
+                .any(|membership| membership == group_address)
         );
-
-        // Adding an edge from a non-existing node should fail
         assert!(
             graphrecord
-                .add_edge("50".into(), "0".into(), HashMap::new())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-
-        graphrecord.freeze_schema().unwrap();
-
-        assert!(
-            graphrecord
-                .add_edge(
-                    "0".into(),
-                    "3".into(),
-                    HashMap::from([("attribute".into(), 1.into())])
-                )
-                .is_err_and(|e| matches!(e, GraphRecordError::Schema(_)))
+                .add_nodes_to_group("dolor".into(), vec!["lorem".into()])
+                .is_err_and(|error| matches!(error, GraphRecordError::NodeAlreadyInGroup { .. }))
         );
     }
 
     #[test]
-    fn test_remove_edge() {
-        let mut graphrecord = create_graphrecord();
+    fn test_invalid_add_nodes_in_groups() {
+        let result = GraphRecord::new()
+            .add_nodes_in_groups(
+                vec![("lorem".into(), AttributeMap::new())],
+                vec!["dolor".into()],
+            )
+            .map(|_| ());
 
-        let edges = create_edges();
-
-        assert_eq!(edges[0].2, graphrecord.remove_edge(&0).unwrap());
-    }
-
-    #[test]
-    fn test_invalid_remove_edge() {
-        let mut graphrecord = create_graphrecord();
-
-        // Removing a non-existing edge should fail
-        assert!(
-            graphrecord
-                .remove_edge(&50)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
+        assert_eq!(
+            Err(GraphRecordError::GroupNotFound {
+                group: "dolor".into()
+            }),
+            result
         );
     }
 
     #[test]
     fn test_add_edges() {
-        let mut graphrecord = GraphRecord::new();
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
 
-        let nodes = create_nodes();
+        assert_eq!(1, graphrecord.edge_count());
+        assert!(graphrecord.contains_edge(&edge_index));
+        assert_eq!(
+            Some(42.into()),
+            graphrecord
+                .edge_attribute(&edge_index, &"lorem".into())
+                .map(Value::from)
+        );
 
-        graphrecord.add_nodes(nodes).unwrap();
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .add_edges(vec![
+                ("lorem".into(), "ipsum".into(), create_lorem_attributes()),
+                ("ipsum".into(), "lorem".into(), AttributeMap::new()),
+                ("lorem".into(), "lorem".into(), AttributeMap::new()),
+            ])
+            .unwrap();
 
-        assert_eq!(0, graphrecord.edge_count());
+        let edge_indices: Vec<_> = graphrecord.edge_indices().collect();
 
-        let edges = create_edges();
-
-        graphrecord.add_edges(edges).unwrap();
-
-        assert_eq!(4, graphrecord.edge_count());
+        assert_eq!(3, graphrecord.edge_count());
+        assert_eq!(3, edge_indices.len());
+        assert!(
+            edge_indices
+                .iter()
+                .all(|edge_index| graphrecord.contains_edge(edge_index))
+        );
     }
 
     #[test]
-    fn test_add_edges_dataframe() {
-        let mut graphrecord = GraphRecord::new();
+    fn test_invalid_add_edges() {
+        let result = create_graphrecord_with_two_nodes()
+            .add_edge("lorem".into(), "dolor".into(), AttributeMap::new())
+            .map(|_| ());
 
-        let nodes = create_nodes();
+        assert_eq!(
+            Err(GraphRecordError::NodeNotFound {
+                node_index: "dolor".into()
+            }),
+            result
+        );
 
-        graphrecord.add_nodes(nodes).unwrap();
+        let original = create_graphrecord_with_two_nodes();
 
-        assert_eq!(0, graphrecord.edge_count());
+        let result = original
+            .add_edges(vec![
+                ("lorem".into(), "ipsum".into(), AttributeMap::new()),
+                ("lorem".into(), "dolor".into(), AttributeMap::new()),
+            ])
+            .map(|_| ());
 
-        let edges = create_edges_dataframe().unwrap();
+        assert_eq!(
+            Err(GraphRecordError::NodeNotFound {
+                node_index: "dolor".into()
+            }),
+            result
+        );
+        assert_eq!(0, original.edge_count());
+    }
 
-        graphrecord
-            .add_edges_dataframes(vec![(edges, "from", "to")])
+    #[test]
+    fn test_add_edges_in_groups() {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .add_group("dolor".into())
+            .unwrap()
+            .add_edges_in_groups(
+                vec![("lorem".into(), "ipsum".into(), AttributeMap::new())],
+                vec!["dolor".into()],
+            )
+            .unwrap();
+        let edge_index = graphrecord.edge_indices().next().unwrap();
+
+        let state = graphrecord.state();
+        let edge_address = state.resolve_edge_address(&edge_index).unwrap();
+        let group_address = state.resolve_group_address(&"dolor".into()).unwrap();
+
+        assert!(
+            state
+                .edge_memberships(edge_address)
+                .any(|membership| membership == group_address)
+        );
+        assert!(
+            graphrecord
+                .add_edges_to_group("dolor".into(), vec![edge_index])
+                .is_err_and(|error| matches!(error, GraphRecordError::EdgeAlreadyInGroup { .. }))
+        );
+    }
+
+    #[test]
+    fn test_invalid_add_edges_in_groups() {
+        let result = create_graphrecord_with_two_nodes()
+            .add_edges_in_groups(
+                vec![("lorem".into(), "ipsum".into(), AttributeMap::new())],
+                vec!["dolor".into()],
+            )
+            .map(|_| ());
+
+        assert_eq!(
+            Err(GraphRecordError::GroupNotFound {
+                group: "dolor".into()
+            }),
+            result
+        );
+    }
+
+    #[test]
+    fn test_remove_nodes() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
+
+        let removed = graphrecord.remove_nodes(vec!["lorem".into()]).unwrap();
+
+        assert_eq!(1, removed.node_count());
+        assert!(!removed.contains_node(&"lorem".into()));
+        assert_eq!(0, removed.edge_count());
+        assert!(!removed.contains_edge(&edge_index));
+        assert_eq!(2, graphrecord.node_count());
+
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .remove_nodes(vec!["lorem".into()])
+            .unwrap()
+            .add_node(
+                "lorem".into(),
+                AttributeMap::from([("sed".into(), 7.into())]),
+            )
             .unwrap();
 
-        assert_eq!(2, graphrecord.edge_count());
+        assert_eq!(2, graphrecord.node_count());
+        assert_eq!(
+            Some(7.into()),
+            graphrecord
+                .node_attribute(&"lorem".into(), &"sed".into())
+                .map(Value::from)
+        );
+    }
+
+    #[test]
+    fn test_invalid_remove_nodes() {
+        let result = create_graphrecord_with_two_nodes()
+            .remove_nodes(vec!["dolor".into()])
+            .map(|_| ());
+
+        assert_eq!(
+            Err(GraphRecordError::NodeNotFound {
+                node_index: "dolor".into()
+            }),
+            result
+        );
+    }
+
+    #[test]
+    fn test_remove_edges() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
+
+        let removed = graphrecord.remove_edges(vec![edge_index]).unwrap();
+
+        assert_eq!(0, removed.edge_count());
+        assert!(!removed.contains_edge(&edge_index));
+        assert_eq!(2, removed.node_count());
+    }
+
+    #[test]
+    fn test_invalid_remove_edges() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
+        let removed = graphrecord.remove_edges(vec![edge_index]).unwrap();
+
+        let result = removed.remove_edges(vec![edge_index]).map(|_| ());
+
+        assert_eq!(Err(GraphRecordError::EdgeNotFound { edge_index }), result);
+    }
+
+    #[test]
+    fn test_keep_nodes() {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .add_node("dolor".into(), AttributeMap::new())
+            .unwrap();
+
+        let kept = graphrecord.keep_nodes(&["lorem".into()]).unwrap();
+
+        assert_eq!(1, kept.node_count());
+        assert!(kept.contains_node(&"lorem".into()));
+        assert!(!kept.contains_node(&"ipsum".into()));
+
+        let kept = create_graphrecord_with_two_nodes().keep_nodes(&[]).unwrap();
+
+        assert_eq!(0, kept.node_count());
+    }
+
+    #[test]
+    fn test_invalid_keep_nodes() {
+        let result = create_graphrecord_with_two_nodes()
+            .keep_nodes(&["dolor".into()])
+            .map(|_| ());
+
+        assert_eq!(
+            Err(GraphRecordError::NodeNotFound {
+                node_index: "dolor".into()
+            }),
+            result
+        );
+    }
+
+    #[test]
+    fn test_keep_edges() {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .add_node("dolor".into(), AttributeMap::new())
+            .unwrap()
+            .add_edge("lorem".into(), "ipsum".into(), AttributeMap::new())
+            .unwrap()
+            .add_edge("ipsum".into(), "dolor".into(), AttributeMap::new())
+            .unwrap();
+        let first_edge_index = graphrecord.edge_indices().next().unwrap();
+
+        let kept = graphrecord.keep_edges(&[first_edge_index]).unwrap();
+
+        assert_eq!(1, kept.edge_count());
+        assert!(kept.contains_edge(&first_edge_index));
+
+        let (graphrecord, _) = create_graphrecord_with_one_edge();
+
+        let kept = graphrecord.keep_edges(&[]).unwrap();
+
+        assert_eq!(0, kept.edge_count());
+        assert_eq!(2, kept.node_count());
+    }
+
+    #[test]
+    fn test_invalid_keep_edges() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
+        let removed = graphrecord.remove_edges(vec![edge_index]).unwrap();
+
+        let result = removed.keep_edges(&[edge_index]).map(|_| ());
+
+        assert_eq!(Err(GraphRecordError::EdgeNotFound { edge_index }), result);
+    }
+
+    #[test]
+    fn test_keep_groups() {
+        let graphrecord = GraphRecord::new()
+            .add_group("lorem".into())
+            .unwrap()
+            .add_group("ipsum".into())
+            .unwrap();
+
+        let kept = graphrecord.keep_groups(&["lorem".into()]).unwrap();
+
+        assert_eq!(1, kept.group_count());
+        assert!(kept.contains_group(&"lorem".into()));
+        assert!(!kept.contains_group(&"ipsum".into()));
+
+        let graphrecord = GraphRecord::new().add_group("lorem".into()).unwrap();
+
+        let kept = graphrecord.keep_groups(&[]).unwrap();
+
+        assert_eq!(0, kept.group_count());
+    }
+
+    #[test]
+    fn test_invalid_keep_groups() {
+        let result = GraphRecord::new()
+            .keep_groups(&["lorem".into()])
+            .map(|_| ());
+
+        assert_eq!(
+            Err(GraphRecordError::GroupNotFound {
+                group: "lorem".into()
+            }),
+            result
+        );
+    }
+
+    #[test]
+    fn test_set_node_attributes() {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .set_node_attributes(
+                vec!["ipsum".into()],
+                AttributeMap::from([("sed".into(), true.into())]),
+            )
+            .unwrap();
+
+        assert_eq!(
+            Some(true.into()),
+            graphrecord
+                .node_attribute(&"ipsum".into(), &"sed".into())
+                .map(Value::from)
+        );
+    }
+
+    #[test]
+    fn test_replace_node_attributes() {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .replace_node_attributes(vec!["lorem".into()], AttributeMap::new())
+            .unwrap();
+
+        assert_eq!(
+            None,
+            graphrecord.node_attribute(&"lorem".into(), &"lorem".into())
+        );
+    }
+
+    #[test]
+    fn test_remove_node_attributes() {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .remove_node_attributes(vec!["lorem".into()], vec!["lorem".into()])
+            .unwrap();
+
+        assert_eq!(
+            None,
+            graphrecord.node_attribute(&"lorem".into(), &"lorem".into())
+        );
+    }
+
+    #[test]
+    fn test_invalid_remove_node_attributes() {
+        let result = create_graphrecord_with_two_nodes()
+            .remove_node_attributes(vec!["ipsum".into()], vec!["sed".into()])
+            .map(|_| ());
+
+        assert_eq!(
+            Err(GraphRecordError::NodeAttributeNotFound {
+                node_index: "ipsum".into(),
+                attribute_name: "sed".into(),
+            }),
+            result
+        );
+    }
+
+    #[test]
+    fn test_set_edge_attributes() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
+
+        let graphrecord = graphrecord
+            .set_edge_attributes(
+                vec![edge_index],
+                AttributeMap::from([("sed".into(), true.into())]),
+            )
+            .unwrap();
+
+        assert_eq!(
+            Some(true.into()),
+            graphrecord
+                .edge_attribute(&edge_index, &"sed".into())
+                .map(Value::from)
+        );
+    }
+
+    #[test]
+    fn test_replace_edge_attributes() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
+
+        let graphrecord = graphrecord
+            .replace_edge_attributes(vec![edge_index], AttributeMap::new())
+            .unwrap();
+
+        assert_eq!(
+            None,
+            graphrecord.edge_attribute(&edge_index, &"lorem".into())
+        );
+    }
+
+    #[test]
+    fn test_remove_edge_attributes() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
+
+        let graphrecord = graphrecord
+            .remove_edge_attributes(vec![edge_index], vec!["lorem".into()])
+            .unwrap();
+
+        assert_eq!(
+            None,
+            graphrecord.edge_attribute(&edge_index, &"lorem".into())
+        );
     }
 
     #[test]
     fn test_add_group() {
-        let mut graphrecord = create_graphrecord();
-
-        assert_eq!(0, graphrecord.group_count());
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
+        let graphrecord = GraphRecord::new().add_group("lorem".into()).unwrap();
 
         assert_eq!(1, graphrecord.group_count());
-
-        graphrecord
-            .add_group("1".into(), Some(vec!["0".into(), "1".into()]), None)
-            .unwrap();
-
-        assert_eq!(2, graphrecord.group_count());
-
-        assert_eq!(2, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
+        assert!(graphrecord.contains_group(&"lorem".into()));
     }
 
     #[test]
     fn test_invalid_add_group() {
-        let mut graphrecord = create_graphrecord();
+        let result = GraphRecord::new()
+            .add_group("lorem".into())
+            .unwrap()
+            .add_group("lorem".into())
+            .map(|_| ());
 
-        // Adding a group with a non-existing node should fail
-        assert!(
-            graphrecord
-                .add_group("0".into(), Some(vec!["50".into()]), None)
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-
-        // Adding a group with a non-existing edge should fail
-        assert!(
-            graphrecord
-                .add_group("0".into(), None, Some(vec![50]))
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
-        );
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-
-        // Adding an already existing group should fail
-        assert!(
-            graphrecord
-                .add_group("0".into(), None, None)
-                .is_err_and(|e| matches!(e, GraphRecordError::GroupAlreadyExists { .. }))
-        );
-
-        graphrecord.freeze_schema().unwrap();
-
-        assert!(
-            graphrecord
-                .add_group("2".into(), None, None)
-                .is_err_and(|e| matches!(
-                    e,
-                    GraphRecordError::Schema(SchemaError::GroupNotInSchema { .. })
-                ))
-        );
-
-        graphrecord.remove_group(&"0".into()).unwrap();
-
-        assert!(
-            graphrecord
-                .add_group("0".into(), Some(vec!["0".into()]), None)
-                .is_err_and(|e| matches!(e, GraphRecordError::Schema(_)))
-        );
-        assert!(
-            graphrecord
-                .add_group("0".into(), None, Some(vec![0]))
-                .is_err_and(|e| matches!(e, GraphRecordError::Schema(_)))
+        assert_eq!(
+            Err(GraphRecordError::GroupAlreadyExists {
+                group: "lorem".into()
+            }),
+            result
         );
     }
 
     #[test]
-    fn test_remove_group() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-
-        assert_eq!(1, graphrecord.group_count());
-
-        graphrecord.remove_group(&"0".into()).unwrap();
+    fn test_remove_groups() {
+        let graphrecord = GraphRecord::new()
+            .add_group("lorem".into())
+            .unwrap()
+            .remove_groups(vec!["lorem".into()])
+            .unwrap();
 
         assert_eq!(0, graphrecord.group_count());
     }
 
     #[test]
-    fn test_invalid_remove_group() {
-        let mut graphrecord = GraphRecord::new();
+    fn test_invalid_remove_groups() {
+        let result = GraphRecord::new()
+            .remove_groups(vec!["lorem".into()])
+            .map(|_| ());
 
-        // Removing a non-existing group should fail
-        assert!(
-            graphrecord
-                .remove_group(&"0".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::GroupNotFound { .. }))
+        assert_eq!(
+            Err(GraphRecordError::GroupNotFound {
+                group: "lorem".into()
+            }),
+            result
         );
     }
 
     #[test]
-    fn test_add_node_to_group() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into(), "1".into()]), None)
+    fn test_add_nodes_to_group() {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .add_group("dolor".into())
+            .unwrap()
+            .add_nodes_to_group("dolor".into(), vec!["lorem".into()])
             .unwrap();
 
-        assert_eq!(2, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-
-        graphrecord
-            .add_node_to_group("0".into(), "2".into())
-            .unwrap();
-
-        assert_eq!(3, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-
-        graphrecord
-            .add_node("4".into(), HashMap::from([("test".into(), "test".into())]))
-            .unwrap();
-
-        graphrecord
-            .add_group("1".into(), Some(vec!["4".into()]), None)
-            .unwrap();
-
-        graphrecord.freeze_schema().unwrap();
-
-        graphrecord
-            .add_node("5".into(), HashMap::from([("test".into(), "test".into())]))
-            .unwrap();
+        let state = graphrecord.state();
+        let node_address = state.resolve_node_address(&"lorem".into()).unwrap();
+        let group_address = state.resolve_group_address(&"dolor".into()).unwrap();
 
         assert!(
-            graphrecord
-                .add_node_to_group("1".into(), "5".into())
-                .is_ok()
-        );
-
-        assert_eq!(2, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_add_node_to_group() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into()]), None)
-            .unwrap();
-
-        // Adding a non-existing node to a group should fail
-        assert!(
-            graphrecord
-                .add_node_to_group("0".into(), "50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-
-        // Adding a node to a group that already is in the group should fail
-        assert!(
-            graphrecord
-                .add_node_to_group("0".into(), "0".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeAlreadyInGroup { .. }))
-        );
-
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord
-            .add_node("0".into(), HashMap::from([("test".into(), "test".into())]))
-            .unwrap();
-        graphrecord.add_group("group".into(), None, None).unwrap();
-
-        graphrecord.freeze_schema().unwrap();
-
-        assert!(
-            graphrecord
-                .add_node_to_group("group".into(), "0".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::Schema(_)))
+            state
+                .node_memberships(node_address)
+                .any(|membership| membership == group_address)
         );
     }
 
     #[test]
-    fn test_add_node_to_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into()]), None)
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), Some(vec!["1".into()]), None)
-            .unwrap();
-
-        graphrecord
-            .add_node_to_groups(&["0".into(), "1".into()], "2".into())
-            .unwrap();
-
-        assert_eq!(2, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-        assert_eq!(2, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_add_node_to_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into()]), None)
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), Some(vec!["1".into()]), None)
+    fn test_invalid_add_nodes_to_group() {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .add_group("dolor".into())
+            .unwrap()
+            .add_nodes_to_group("dolor".into(), vec!["lorem".into()])
             .unwrap();
 
         assert!(
             graphrecord
-                .add_node_to_groups(&["0".into(), "1".into()], "50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-
-        assert!(
-            graphrecord
-                .add_node_to_groups(&["0".into(), "1".into()], "0".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeAlreadyInGroup { .. }))
-        );
-
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord
-            .add_node("0".into(), HashMap::from([("test".into(), "test".into())]))
-            .unwrap();
-        graphrecord.add_group("group".into(), None, None).unwrap();
-        graphrecord.add_group("group2".into(), None, None).unwrap();
-
-        graphrecord.freeze_schema().unwrap();
-
-        assert!(
-            graphrecord
-                .add_node_to_groups(&["group".into(), "group2".into()], "0".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::Schema(_)))
+                .add_nodes_to_group("dolor".into(), vec!["lorem".into()])
+                .is_err_and(|error| matches!(error, GraphRecordError::NodeAlreadyInGroup { .. }))
         );
     }
 
     #[test]
-    fn test_add_edge_to_group() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0, 1]))
+    fn test_remove_nodes_from_group() {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .add_group("dolor".into())
+            .unwrap()
+            .add_nodes_to_group("dolor".into(), vec!["lorem".into()])
+            .unwrap()
+            .remove_nodes_from_group("dolor".into(), vec!["lorem".into()])
             .unwrap();
 
-        assert_eq!(2, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-
-        graphrecord.add_edge_to_group("0".into(), 2).unwrap();
-
-        assert_eq!(3, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-
-        graphrecord
-            .add_edge("0".into(), "1".into(), HashMap::new())
-            .unwrap();
-
-        graphrecord
-            .add_group("1".into(), None, Some(vec![3]))
-            .unwrap();
-
-        graphrecord.freeze_schema().unwrap();
-
-        let edge_index = graphrecord
-            .add_edge("0".into(), "1".into(), HashMap::new())
-            .unwrap();
+        let state = graphrecord.state();
+        let node_address = state.resolve_node_address(&"lorem".into()).unwrap();
+        let group_address = state.resolve_group_address(&"dolor".into()).unwrap();
 
         assert!(
-            graphrecord
-                .add_edge_to_group("1".into(), edge_index)
-                .is_ok()
-        );
-
-        assert_eq!(2, graphrecord.edges_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_add_edge_to_group() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0]))
-            .unwrap();
-
-        // Adding a non-existing edge to a group should fail
-        assert!(
-            graphrecord
-                .add_edge_to_group("0".into(), 50)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
-        );
-
-        // Adding an edge to a group that already is in the group should fail
-        assert!(
-            graphrecord
-                .add_edge_to_group("0".into(), 0)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeAlreadyInGroup { .. }))
-        );
-
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord.add_node("0".into(), HashMap::new()).unwrap();
-        graphrecord
-            .add_edge(
-                "0".into(),
-                "0".into(),
-                HashMap::from([("test".into(), "test".into())]),
-            )
-            .unwrap();
-        graphrecord.add_group("group".into(), None, None).unwrap();
-
-        graphrecord.freeze_schema().unwrap();
-
-        assert!(
-            graphrecord
-                .add_edge_to_group("group".into(), 0)
-                .is_err_and(|e| matches!(e, GraphRecordError::Schema(_)))
+            !state
+                .node_memberships(node_address)
+                .any(|membership| membership == group_address)
         );
     }
 
     #[test]
-    fn test_add_edge_to_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0]))
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), None, Some(vec![1]))
-            .unwrap();
-
-        graphrecord
-            .add_edge_to_groups(&["0".into(), "1".into()], 2)
-            .unwrap();
-
-        assert_eq!(2, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-        assert_eq!(2, graphrecord.edges_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_add_edge_to_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0]))
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), None, Some(vec![1]))
+    fn test_invalid_remove_nodes_from_group() {
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .add_group("dolor".into())
+            .unwrap()
+            .add_nodes_to_group("dolor".into(), vec!["lorem".into()])
+            .unwrap()
+            .remove_nodes_from_group("dolor".into(), vec!["lorem".into()])
             .unwrap();
 
         assert!(
             graphrecord
-                .add_edge_to_groups(&["0".into(), "1".into()], 50)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
-        );
-
-        assert!(
-            graphrecord
-                .add_edge_to_groups(&["0".into(), "1".into()], 0)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeAlreadyInGroup { .. }))
-        );
-
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord.add_node("0".into(), HashMap::new()).unwrap();
-        graphrecord
-            .add_edge(
-                "0".into(),
-                "0".into(),
-                HashMap::from([("test".into(), "test".into())]),
-            )
-            .unwrap();
-        graphrecord.add_group("group".into(), None, None).unwrap();
-        graphrecord.add_group("group2".into(), None, None).unwrap();
-
-        graphrecord.freeze_schema().unwrap();
-
-        assert!(
-            graphrecord
-                .add_edge_to_groups(&["group".into(), "group2".into()], 0)
-                .is_err_and(|e| matches!(e, GraphRecordError::Schema(_)))
+                .remove_nodes_from_group("dolor".into(), vec!["lorem".into()])
+                .is_err_and(|error| matches!(error, GraphRecordError::NodeNotInGroup { .. }))
         );
     }
 
     #[test]
-    fn test_remove_node_from_group() {
-        let mut graphrecord = create_graphrecord();
+    fn test_add_edges_to_group() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
 
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into(), "1".into()]), None)
+        let graphrecord = graphrecord
+            .add_group("dolor".into())
+            .unwrap()
+            .add_edges_to_group("dolor".into(), vec![edge_index])
             .unwrap();
 
-        assert_eq!(2, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
+        let state = graphrecord.state();
+        let edge_address = state.resolve_edge_address(&edge_index).unwrap();
+        let group_address = state.resolve_group_address(&"dolor".into()).unwrap();
 
-        graphrecord
-            .remove_node_from_group(&"0".into(), &"0".into())
-            .unwrap();
-
-        assert_eq!(1, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_remove_node_from_group() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into()]), None)
-            .unwrap();
-
-        // Removing a node from a non-existing group should fail
         assert!(
-            graphrecord
-                .remove_node_from_group(&"50".into(), &"0".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::GroupNotFound { .. }))
-        );
-
-        // Removing a non-existing node from a group should fail
-        assert!(
-            graphrecord
-                .remove_node_from_group(&"0".into(), &"50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-
-        // Removing a node from a group it is not in should fail
-        assert!(
-            graphrecord
-                .remove_node_from_group(&"0".into(), &"1".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotInGroup { .. }))
+            state
+                .edge_memberships(edge_address)
+                .any(|membership| membership == group_address)
         );
     }
 
     #[test]
-    fn test_remove_node_from_groups() {
-        let mut graphrecord = create_graphrecord();
+    fn test_invalid_add_edges_to_group() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
 
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into(), "1".into()]), None)
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), Some(vec!["0".into(), "2".into()]), None)
-            .unwrap();
-
-        graphrecord
-            .remove_node_from_groups(&["0".into(), "1".into()], &"0".into())
-            .unwrap();
-
-        assert_eq!(1, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-        assert_eq!(1, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_remove_node_from_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into()]), None)
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), Some(vec!["1".into()]), None)
+        let graphrecord = graphrecord
+            .add_group("dolor".into())
+            .unwrap()
+            .add_edges_to_group("dolor".into(), vec![edge_index])
             .unwrap();
 
         assert!(
             graphrecord
-                .remove_node_from_groups(&["0".into(), "1".into()], &"50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-
-        assert!(
-            graphrecord
-                .remove_node_from_groups(&["0".into(), "1".into()], &"1".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotInGroup { .. }))
+                .add_edges_to_group("dolor".into(), vec![edge_index])
+                .is_err_and(|error| matches!(error, GraphRecordError::EdgeAlreadyInGroup { .. }))
         );
     }
 
     #[test]
-    fn test_remove_edge_from_group() {
-        let mut graphrecord = create_graphrecord();
+    fn test_remove_edges_from_group() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
 
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0, 1]))
+        let graphrecord = graphrecord
+            .add_group("dolor".into())
+            .unwrap()
+            .add_edges_to_group("dolor".into(), vec![edge_index])
+            .unwrap()
+            .remove_edges_from_group("dolor".into(), vec![edge_index])
             .unwrap();
 
-        assert_eq!(2, graphrecord.edges_in_group(&"0".into()).unwrap().count());
+        let state = graphrecord.state();
+        let edge_address = state.resolve_edge_address(&edge_index).unwrap();
+        let group_address = state.resolve_group_address(&"dolor".into()).unwrap();
 
-        graphrecord.remove_edge_from_group(&"0".into(), &0).unwrap();
-
-        assert_eq!(1, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_remove_edge_from_group() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0]))
-            .unwrap();
-
-        // Removing an edge from a non-existing group should fail
         assert!(
-            graphrecord
-                .remove_edge_from_group(&"50".into(), &0)
-                .is_err_and(|e| matches!(e, GraphRecordError::GroupNotFound { .. }))
-        );
-
-        // Removing a non-existing edge from a group should fail
-        assert!(
-            graphrecord
-                .remove_edge_from_group(&"0".into(), &50)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
-        );
-
-        // Removing an edge from a group it is not in should fail
-        assert!(
-            graphrecord
-                .remove_edge_from_group(&"0".into(), &1)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotInGroup { .. }))
+            !state
+                .edge_memberships(edge_address)
+                .any(|membership| membership == group_address)
         );
     }
 
     #[test]
-    fn test_remove_edge_from_groups() {
-        let mut graphrecord = create_graphrecord();
+    fn test_invalid_remove_edges_from_group() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
 
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0, 1]))
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), None, Some(vec![0, 2]))
-            .unwrap();
-
-        graphrecord
-            .remove_edge_from_groups(&["0".into(), "1".into()], &0)
-            .unwrap();
-
-        assert_eq!(1, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-        assert_eq!(1, graphrecord.edges_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_remove_edge_from_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0]))
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), None, Some(vec![1]))
+        let graphrecord = graphrecord
+            .add_group("dolor".into())
+            .unwrap()
+            .add_edges_to_group("dolor".into(), vec![edge_index])
+            .unwrap()
+            .remove_edges_from_group("dolor".into(), vec![edge_index])
             .unwrap();
 
         assert!(
             graphrecord
-                .remove_edge_from_groups(&["0".into(), "1".into()], &50)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
-        );
-
-        assert!(
-            graphrecord
-                .remove_edge_from_groups(&["0".into(), "1".into()], &1)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotInGroup { .. }))
+                .remove_edges_from_group("dolor".into(), vec![edge_index])
+                .is_err_and(|error| matches!(error, GraphRecordError::EdgeNotInGroup { .. }))
         );
     }
 
     #[test]
-    fn test_add_nodes_to_groups() {
-        let mut graphrecord = create_graphrecord();
+    fn test_set_schema() {
+        let group_schema = GroupSchema::new(
+            HashMap::from([(
+                "lorem".into(),
+                AttributeDataType::new(DataType::Int, AttributeType::Continuous).unwrap(),
+            )])
+            .into(),
+            HashMap::new().into(),
+        );
+        let schema = Schema::new_provided(HashMap::new(), group_schema);
 
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into()]), None)
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), Some(vec!["1".into()]), None)
-            .unwrap();
-
-        graphrecord
-            .add_nodes_to_groups(&["0".into(), "1".into()], vec!["2".into(), "3".into()])
+        let graphrecord = create_graphrecord_with_two_nodes()
+            .set_node_attributes(vec!["ipsum".into()], create_lorem_attributes())
+            .unwrap()
+            .set_schema(schema.clone())
             .unwrap();
 
-        assert_eq!(3, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-        assert_eq!(3, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
+        assert_eq!(&schema, graphrecord.schema());
     }
 
     #[test]
-    fn test_invalid_add_nodes_to_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into()]), None)
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), Some(vec!["1".into()]), None)
-            .unwrap();
-
-        assert!(
-            graphrecord
-                .add_nodes_to_groups(&["0".into(), "1".into()], vec!["50".into()],)
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
+    fn test_invalid_set_schema() {
+        let group_schema = GroupSchema::new(
+            HashMap::from([(
+                "sed".into(),
+                AttributeDataType::new(DataType::Int, AttributeType::Continuous).unwrap(),
+            )])
+            .into(),
+            HashMap::new().into(),
         );
+        let schema = Schema::new_provided(HashMap::new(), group_schema);
 
-        assert!(
-            graphrecord
-                .add_nodes_to_groups(&["0".into(), "1".into()], vec!["0".into()],)
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeAlreadyInGroup { .. }))
-        );
+        let result = create_graphrecord_with_two_nodes().set_schema(schema);
 
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord
-            .add_node("0".into(), HashMap::from([("test".into(), "test".into())]))
-            .unwrap();
-        graphrecord.add_group("group".into(), None, None).unwrap();
-        graphrecord.add_group("group2".into(), None, None).unwrap();
-
-        graphrecord.freeze_schema().unwrap();
-
-        assert!(
-            graphrecord
-                .add_nodes_to_groups(&["group".into(), "group2".into()], vec!["0".into()],)
-                .is_err_and(|e| matches!(e, GraphRecordError::Schema(_)))
-        );
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_add_edges_to_groups() {
-        let mut graphrecord = create_graphrecord();
+    fn test_freeze_schema() {
+        let graphrecord = create_graphrecord_with_two_nodes();
 
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0]))
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), None, Some(vec![1]))
-            .unwrap();
+        let frozen = graphrecord.freeze_schema().unwrap();
 
-        graphrecord
-            .add_edges_to_groups(&["0".into(), "1".into()], vec![2, 3])
-            .unwrap();
-
-        assert_eq!(3, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-        assert_eq!(3, graphrecord.edges_in_group(&"1".into()).unwrap().count());
+        assert_eq!(&SchemaType::Provided, frozen.schema().schema_type());
     }
 
     #[test]
-    fn test_invalid_add_edges_to_groups() {
-        let mut graphrecord = create_graphrecord();
+    fn test_unfreeze_schema() {
+        let frozen = create_graphrecord_with_two_nodes().freeze_schema().unwrap();
 
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0]))
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), None, Some(vec![1]))
-            .unwrap();
+        let unfrozen = frozen.unfreeze_schema().unwrap();
 
-        assert!(
-            graphrecord
-                .add_edges_to_groups(&["0".into(), "1".into()], vec![50])
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
-        );
-
-        assert!(
-            graphrecord
-                .add_edges_to_groups(&["0".into(), "1".into()], vec![0])
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeAlreadyInGroup { .. }))
-        );
-
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord.add_node("0".into(), HashMap::new()).unwrap();
-        graphrecord
-            .add_edge(
-                "0".into(),
-                "0".into(),
-                HashMap::from([("test".into(), "test".into())]),
-            )
-            .unwrap();
-        graphrecord.add_group("group".into(), None, None).unwrap();
-        graphrecord.add_group("group2".into(), None, None).unwrap();
-
-        graphrecord.freeze_schema().unwrap();
-
-        assert!(
-            graphrecord
-                .add_edges_to_groups(&["group".into(), "group2".into()], vec![0])
-                .is_err_and(|e| matches!(e, GraphRecordError::Schema(_)))
-        );
+        assert_eq!(&SchemaType::Inferred, unfrozen.schema().schema_type());
     }
 
     #[test]
-    fn test_remove_nodes_from_groups() {
-        let mut graphrecord = create_graphrecord();
+    fn test_clear() {
+        let (graphrecord, _) = create_graphrecord_with_one_edge();
 
-        graphrecord
-            .add_group(
-                "0".into(),
-                Some(vec!["0".into(), "1".into(), "2".into()]),
-                None,
-            )
-            .unwrap();
-        graphrecord
-            .add_group(
-                "1".into(),
-                Some(vec!["0".into(), "1".into(), "2".into()]),
-                None,
-            )
-            .unwrap();
+        let cleared = graphrecord.clear().unwrap();
 
-        graphrecord
-            .remove_nodes_from_groups(&["0".into(), "1".into()], &["0".into(), "1".into()])
-            .unwrap();
-
-        assert_eq!(1, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-        assert_eq!(1, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_remove_nodes_from_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into()]), None)
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), Some(vec!["1".into()]), None)
-            .unwrap();
-
-        assert!(
-            graphrecord
-                .remove_nodes_from_groups(&["0".into(), "1".into()], &["50".into()],)
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-
-        assert!(
-            graphrecord
-                .remove_nodes_from_groups(&["0".into(), "1".into()], &["1".into()],)
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotInGroup { .. }))
-        );
-    }
-
-    #[test]
-    fn test_remove_edges_from_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0, 1, 2]))
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), None, Some(vec![0, 1, 2]))
-            .unwrap();
-
-        graphrecord
-            .remove_edges_from_groups(&["0".into(), "1".into()], &[0, 1])
-            .unwrap();
-
-        assert_eq!(1, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-        assert_eq!(1, graphrecord.edges_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_remove_edges_from_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0]))
-            .unwrap();
-        graphrecord
-            .add_group("1".into(), None, Some(vec![1]))
-            .unwrap();
-
-        assert!(
-            graphrecord
-                .remove_edges_from_groups(&["0".into(), "1".into()], &[50])
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
-        );
-
-        assert!(
-            graphrecord
-                .remove_edges_from_groups(&["0".into(), "1".into()], &[1])
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotInGroup { .. }))
-        );
-    }
-
-    #[test]
-    fn test_add_node_with_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-        graphrecord.add_group("1".into(), None, None).unwrap();
-
-        graphrecord
-            .add_node_with_groups(
-                "4".into(),
-                HashMap::from([("lorem".into(), "ipsum".into())]),
-                &["0".into(), "1".into()],
-            )
-            .unwrap();
-
-        assert_eq!(5, graphrecord.node_count());
-        assert_eq!(1, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-        assert_eq!(1, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_add_node_with_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-        graphrecord.add_group("1".into(), None, None).unwrap();
-
-        assert!(
-            graphrecord
-                .add_node_with_groups("0".into(), HashMap::new(), &["0".into(), "1".into()],)
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeAlreadyExists { .. }))
-        );
-    }
-
-    #[test]
-    fn test_add_edge_with_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-        graphrecord.add_group("1".into(), None, None).unwrap();
-
-        let edge_index = graphrecord
-            .add_edge_with_groups(
-                "0".into(),
-                "1".into(),
-                HashMap::from([("sed".into(), "do".into())]),
-                &["0".into(), "1".into()],
-            )
-            .unwrap();
-
-        assert_eq!(5, graphrecord.edge_count());
-        assert_eq!(4, edge_index);
-        assert_eq!(1, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-        assert_eq!(1, graphrecord.edges_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_add_edge_with_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-        graphrecord.add_group("1".into(), None, None).unwrap();
-
-        assert!(
-            graphrecord
-                .add_edge_with_groups(
-                    "50".into(),
-                    "0".into(),
-                    HashMap::new(),
-                    &["0".into(), "1".into()],
-                )
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-
-        assert!(
-            graphrecord
-                .add_edge_with_groups(
-                    "0".into(),
-                    "50".into(),
-                    HashMap::new(),
-                    &["0".into(), "1".into()],
-                )
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_add_nodes_with_groups() {
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-        graphrecord.add_group("1".into(), None, None).unwrap();
-
-        graphrecord
-            .add_nodes_with_groups(
-                vec![
-                    (
-                        "0".into(),
-                        HashMap::from([("lorem".into(), "ipsum".into())]),
-                    ),
-                    (
-                        "1".into(),
-                        HashMap::from([("amet".into(), "consectetur".into())]),
-                    ),
-                ],
-                &["0".into(), "1".into()],
-            )
-            .unwrap();
-
+        assert_eq!(0, cleared.node_count());
+        assert_eq!(0, cleared.edge_count());
         assert_eq!(2, graphrecord.node_count());
-        assert_eq!(2, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-        assert_eq!(2, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
     }
 
     #[test]
-    fn test_invalid_add_nodes_with_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-        graphrecord.add_group("1".into(), None, None).unwrap();
-
-        assert!(
-            graphrecord
-                .add_nodes_with_groups(
-                    vec![("0".into(), HashMap::new())],
-                    &["0".into(), "1".into()],
-                )
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeAlreadyExists { .. }))
-        );
-    }
-
-    #[test]
-    fn test_add_edges_with_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-        graphrecord.add_group("1".into(), None, None).unwrap();
-
-        let edge_indices = graphrecord
-            .add_edges_with_groups(
-                vec![
-                    (
-                        "0".into(),
-                        "1".into(),
-                        HashMap::from([("sed".into(), "do".into())]),
-                    ),
-                    (
-                        "1".into(),
-                        "0".into(),
-                        HashMap::from([("sed".into(), "do".into())]),
-                    ),
-                ],
-                &["0".into(), "1".into()],
-            )
+    fn test_compact() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
+        let removable = graphrecord
+            .add_node("dolor".into(), AttributeMap::new())
+            .unwrap()
+            .remove_nodes(vec!["dolor".into()])
             .unwrap();
 
-        assert_eq!(6, graphrecord.edge_count());
-        assert_eq!(vec![4, 5], edge_indices);
-        assert_eq!(2, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-        assert_eq!(2, graphrecord.edges_in_group(&"1".into()).unwrap().count());
-    }
+        let compacted = removable.compact();
 
-    #[test]
-    fn test_invalid_add_edges_with_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-        graphrecord.add_group("1".into(), None, None).unwrap();
-
-        assert!(
-            graphrecord
-                .add_edges_with_groups(
-                    vec![("50".into(), "0".into(), HashMap::new())],
-                    &["0".into(), "1".into()],
-                )
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-
-        assert!(
-            graphrecord
-                .add_edges_with_groups(
-                    vec![("0".into(), "50".into(), HashMap::new())],
-                    &["0".into(), "1".into()],
-                )
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_add_nodes_dataframes_with_groups() {
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-        graphrecord.add_group("1".into(), None, None).unwrap();
-
-        let nodes_dataframe = create_nodes_dataframe().unwrap();
-
-        graphrecord
-            .add_nodes_dataframes_with_groups(
-                vec![NodeDataFrameInput {
-                    dataframe: nodes_dataframe,
-                    index_column: "index".to_string(),
-                }],
-                &["0".into(), "1".into()],
-            )
-            .unwrap();
-
-        assert_eq!(2, graphrecord.node_count());
-        assert_eq!(2, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-        assert_eq!(2, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_add_edges_dataframes_with_groups() {
-        let mut graphrecord = GraphRecord::new();
-
-        let nodes = create_nodes();
-
-        graphrecord.add_nodes(nodes).unwrap();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-        graphrecord.add_group("1".into(), None, None).unwrap();
-
-        let edges_dataframe = create_edges_dataframe().unwrap();
-
-        let edge_indices = graphrecord
-            .add_edges_dataframes_with_groups(
-                vec![EdgeDataFrameInput {
-                    dataframe: edges_dataframe,
-                    source_index_column: "from".to_string(),
-                    target_index_column: "to".to_string(),
-                }],
-                &["0".into(), "1".into()],
-            )
-            .unwrap();
-
-        assert_eq!(2, graphrecord.edge_count());
-        assert_eq!(2, edge_indices.len());
-        assert_eq!(2, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-        assert_eq!(2, graphrecord.edges_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_groups() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-
-        let groups: Vec<_> = graphrecord.groups().collect();
-
-        assert_eq!(vec![&(Group::from("0"))], groups);
-    }
-
-    #[test]
-    fn test_nodes_in_group() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-
-        assert_eq!(0, graphrecord.nodes_in_group(&"0".into()).unwrap().count());
-
-        graphrecord
-            .add_group("1".into(), Some(vec!["0".into()]), None)
-            .unwrap();
-
-        assert_eq!(1, graphrecord.nodes_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_nodes_in_group() {
-        let graphrecord = create_graphrecord();
-
-        // Querying a non-existing group should fail
-        assert!(
-            graphrecord
-                .nodes_in_group(&"0".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::GroupNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_edges_in_group() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-
-        assert_eq!(0, graphrecord.edges_in_group(&"0".into()).unwrap().count());
-
-        graphrecord
-            .add_group("1".into(), None, Some(vec![0]))
-            .unwrap();
-
-        assert_eq!(1, graphrecord.edges_in_group(&"1".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_edges_in_group() {
-        let graphrecord = create_graphrecord();
-
-        // Querying a non-existing group should fail
-        assert!(
-            graphrecord
-                .edges_in_group(&"0".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::GroupNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_groups_of_node() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), Some(vec!["0".into()]), None)
-            .unwrap();
-
-        assert_eq!(1, graphrecord.groups_of_node(&"0".into()).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_groups_of_node() {
-        let graphrecord = create_graphrecord();
-
-        // Querying the groups of a non-existing node should fail
-        assert!(
-            graphrecord
-                .groups_of_node(&"50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
-        );
-    }
-
-    #[test]
-    fn test_groups_of_edge() {
-        let mut graphrecord = create_graphrecord();
-
-        graphrecord
-            .add_group("0".into(), None, Some(vec![0]))
-            .unwrap();
-
-        assert_eq!(1, graphrecord.groups_of_edge(&0).unwrap().count());
-    }
-
-    #[test]
-    fn test_invalid_groups_of_edge() {
-        let graphrecord = create_graphrecord();
-
-        // Querying the groups of a non-existing edge should fail
-        assert!(
-            graphrecord
-                .groups_of_edge(&50)
-                .is_err_and(|e| matches!(e, GraphRecordError::EdgeNotFound { .. }))
+        assert_eq!(2, compacted.node_count());
+        assert_eq!(1, compacted.edge_count());
+        assert!(!compacted.contains_edge(&edge_index));
+        assert_eq!(
+            Some(42.into()),
+            compacted
+                .node_attribute(&"lorem".into(), &"lorem".into())
+                .map(Value::from)
         );
     }
 
     #[test]
     fn test_node_count() {
-        let mut graphrecord = GraphRecord::new();
-
-        assert_eq!(0, graphrecord.node_count());
-
-        graphrecord.add_node("0".into(), HashMap::new()).unwrap();
-
-        assert_eq!(1, graphrecord.node_count());
+        assert_eq!(2, create_graphrecord_with_two_nodes().node_count());
     }
 
     #[test]
     fn test_edge_count() {
-        let mut graphrecord = GraphRecord::new();
-
-        graphrecord.add_node("0".into(), HashMap::new()).unwrap();
-        graphrecord.add_node("1".into(), HashMap::new()).unwrap();
-
-        assert_eq!(0, graphrecord.edge_count());
-
-        graphrecord
-            .add_edge("0".into(), "1".into(), HashMap::new())
-            .unwrap();
+        let (graphrecord, _) = create_graphrecord_with_one_edge();
 
         assert_eq!(1, graphrecord.edge_count());
     }
 
     #[test]
     fn test_group_count() {
-        let mut graphrecord = create_graphrecord();
-
-        assert_eq!(0, graphrecord.group_count());
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
+        let graphrecord = GraphRecord::new().add_group("lorem".into()).unwrap();
 
         assert_eq!(1, graphrecord.group_count());
     }
 
     #[test]
     fn test_contains_node() {
-        let graphrecord = create_graphrecord();
+        let graphrecord = create_graphrecord_with_two_nodes();
 
-        assert!(graphrecord.contains_node(&"0".into()));
-
-        assert!(!graphrecord.contains_node(&"50".into()));
+        assert!(graphrecord.contains_node(&"lorem".into()));
+        assert!(!graphrecord.contains_node(&"dolor".into()));
     }
 
     #[test]
     fn test_contains_edge() {
-        let graphrecord = create_graphrecord();
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
 
-        assert!(graphrecord.contains_edge(&0));
-
-        assert!(!graphrecord.contains_edge(&50));
+        assert!(graphrecord.contains_edge(&edge_index));
+        assert!(!graphrecord.contains_edge(&EdgeIndex::new(
+            edge_index.tag().wrapping_add(1),
+            edge_index.offset()
+        )));
     }
 
     #[test]
     fn test_contains_group() {
-        let mut graphrecord = create_graphrecord();
+        let graphrecord = GraphRecord::new().add_group("lorem".into()).unwrap();
 
-        assert!(!graphrecord.contains_group(&"0".into()));
-
-        graphrecord.add_group("0".into(), None, None).unwrap();
-
-        assert!(graphrecord.contains_group(&"0".into()));
+        assert!(graphrecord.contains_group(&"lorem".into()));
+        assert!(!graphrecord.contains_group(&"ipsum".into()));
     }
 
     #[test]
-    fn test_outgoing_neighbors() {
-        let graphrecord = create_graphrecord();
+    fn test_node_attribute() {
+        let graphrecord = create_graphrecord_with_two_nodes();
 
-        let neighbors = graphrecord.outgoing_neighbors(&"0".into()).unwrap();
-
-        assert_eq!(2, neighbors.count());
-    }
-
-    #[test]
-    fn test_invalid_outgoing_neighbors() {
-        let graphrecord = GraphRecord::new();
-
-        // Querying neighbors of a non-existing node should fail
-        assert!(
+        assert_eq!(
+            Some(42.into()),
             graphrecord
-                .outgoing_neighbors(&"0".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
+                .node_attribute(&"lorem".into(), &"lorem".into())
+                .map(Value::from)
         );
     }
 
     #[test]
-    fn test_neighbors() {
-        let graphrecord = create_graphrecord();
+    fn test_edge_attribute() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
 
-        let neighbors = graphrecord.outgoing_neighbors(&"2".into()).unwrap();
-        assert_eq!(0, neighbors.count());
-
-        let neighbors = graphrecord.neighbors(&"2".into()).unwrap();
-        assert_eq!(2, neighbors.count());
-    }
-
-    #[test]
-    fn test_invalid_neighbors() {
-        let graphrecord = create_graphrecord();
-
-        assert!(
+        assert_eq!(
+            Some(42.into()),
             graphrecord
-                .neighbors(&"50".into())
-                .is_err_and(|e| matches!(e, GraphRecordError::NodeNotFound { .. }))
+                .edge_attribute(&edge_index, &"lorem".into())
+                .map(Value::from)
         );
     }
 
     #[test]
-    fn test_clear() {
-        let mut graphrecord = create_graphrecord();
+    fn test_edge_endpoints() {
+        let (graphrecord, edge_index) = create_graphrecord_with_one_edge();
 
-        graphrecord.clear().unwrap();
+        assert_eq!(
+            Some((
+                NodeIndexView::from(&Identifier::from("lorem")),
+                NodeIndexView::from(&Identifier::from("ipsum"))
+            )),
+            graphrecord.edge_endpoints(&edge_index)
+        );
+    }
 
-        assert_eq!(0, graphrecord.node_count());
-        assert_eq!(0, graphrecord.edge_count());
-        assert_eq!(0, graphrecord.group_count());
+    #[test]
+    fn test_clone() {
+        let graphrecord = create_graphrecord_with_two_nodes();
+        let cloned = graphrecord.clone();
+
+        assert!(Arc::ptr_eq(graphrecord.state(), cloned.state()));
+    }
+
+    #[test]
+    fn test_default() {
+        assert_eq!(0, GraphRecord::default().node_count());
     }
 }

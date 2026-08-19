@@ -1,4 +1,4 @@
-use super::{conversion::ConversionError, schema::SchemaError};
+use super::{conversion::ConversionError, io::IoError, schema::SchemaError};
 use crate::graphrecord::{
     AttributeName, EdgeIndex, Group, Identifier, NodeIndex, PluginName, Value,
 };
@@ -28,6 +28,7 @@ pub enum GraphRecordError {
     NodeAlreadyExists {
         node_index: NodeIndex,
     },
+    AddressSpaceExhausted,
     GroupNotFound {
         group: Group,
     },
@@ -52,11 +53,11 @@ pub enum GraphRecordError {
     },
     NodeAttributeNotFound {
         node_index: NodeIndex,
-        attribute: AttributeName,
+        attribute_name: AttributeName,
     },
     EdgeAttributeNotFound {
         edge_index: EdgeIndex,
-        attribute: AttributeName,
+        attribute_name: AttributeName,
     },
     IncompatibleValueOperands {
         operation: ValueOperation,
@@ -78,11 +79,9 @@ pub enum GraphRecordError {
     PluginFailure {
         message: String,
     },
-    ConnectorFailure {
-        message: String,
-    },
     Schema(SchemaError),
     Conversion(ConversionError),
+    Io(IoError),
 }
 
 impl Error for GraphRecordError {}
@@ -99,6 +98,12 @@ impl From<ConversionError> for GraphRecordError {
     }
 }
 
+impl From<IoError> for GraphRecordError {
+    fn from(error: IoError) -> Self {
+        Self::Io(error)
+    }
+}
+
 impl Display for GraphRecordError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
@@ -110,6 +115,9 @@ impl Display for GraphRecordError {
             }
             Self::NodeAlreadyExists { node_index } => {
                 write!(f, "Node with index `{node_index}` already exists")
+            }
+            Self::AddressSpaceExhausted => {
+                write!(f, "Address space is exhausted")
             }
             Self::GroupNotFound { group } => write!(f, "Cannot find group `{group}`"),
             Self::GroupAlreadyExists { group } => write!(f, "Group `{group}` already exists"),
@@ -133,17 +141,17 @@ impl Display for GraphRecordError {
             }
             Self::NodeAttributeNotFound {
                 node_index,
-                attribute,
+                attribute_name,
             } => write!(
                 f,
-                "Attribute `{attribute}` does not exist on node `{node_index}`"
+                "Attribute `{attribute_name}` does not exist on node `{node_index}`"
             ),
             Self::EdgeAttributeNotFound {
                 edge_index,
-                attribute,
+                attribute_name,
             } => write!(
                 f,
-                "Attribute `{attribute}` does not exist on edge `{edge_index}`"
+                "Attribute `{attribute_name}` does not exist on edge `{edge_index}`"
             ),
             Self::IncompatibleValueOperands {
                 operation,
@@ -157,7 +165,7 @@ impl Display for GraphRecordError {
                 ValueOperation::Power => {
                     write!(f, "Cannot raise `{left}` to the power of `{right}`")
                 }
-                ValueOperation::Modulo => write!(f, "Cannot mod `{left}` with `{right}`"),
+                ValueOperation::Modulo => write!(f, "Cannot take `{left}` modulo `{right}`"),
             },
             Self::IncompatibleIdentifierOperands {
                 operation,
@@ -171,7 +179,7 @@ impl Display for GraphRecordError {
                 ValueOperation::Power => {
                     write!(f, "Cannot raise `{left}` to the power of `{right}`")
                 }
-                ValueOperation::Modulo => write!(f, "Cannot mod `{left}` with `{right}`"),
+                ValueOperation::Modulo => write!(f, "Cannot take `{left}` modulo `{right}`"),
             },
             Self::InvalidTimestamp => write!(f, "Invalid timestamp"),
             Self::PluginNotFound { name } => {
@@ -181,17 +189,17 @@ impl Display for GraphRecordError {
                 write!(f, "Plugin with name `{name}` already exists")
             }
             Self::PluginFailure { message } => write!(f, "Plugin failed: {message}"),
-            Self::ConnectorFailure { message } => write!(f, "Connector failed: {message}"),
             Self::Schema(error) => write!(f, "{error}"),
             Self::Conversion(error) => write!(f, "{error}"),
+            Self::Io(error) => write!(f, "{error}"),
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{ConversionError, GraphRecordError, SchemaError, ValueOperation};
-    use crate::graphrecord::Value;
+    use super::{ConversionError, GraphRecordError, IoError, SchemaError, ValueOperation};
+    use crate::graphrecord::{EdgeIndex, Value};
 
     #[test]
     fn test_display_entities() {
@@ -203,8 +211,11 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Cannot find edge with index `0`",
-            GraphRecordError::EdgeNotFound { edge_index: 0 }.to_string()
+            "Cannot find edge with index `0000000000000000:0`",
+            GraphRecordError::EdgeNotFound {
+                edge_index: EdgeIndex::new(0, 0)
+            }
+            .to_string()
         );
         assert_eq!(
             "Node with index `\"test\"` already exists",
@@ -212,6 +223,10 @@ mod test {
                 node_index: "test".into()
             }
             .to_string()
+        );
+        assert_eq!(
+            "Address space is exhausted",
+            GraphRecordError::AddressSpaceExhausted.to_string()
         );
         assert_eq!(
             "Cannot find group `\"test\"`",
@@ -240,9 +255,9 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Edge with index `0` already in group `\"group\"`",
+            "Edge with index `0000000000000000:0` already in group `\"group\"`",
             GraphRecordError::EdgeAlreadyInGroup {
-                edge_index: 0,
+                edge_index: EdgeIndex::new(0, 0),
                 group: "group".into()
             }
             .to_string()
@@ -256,9 +271,9 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Edge with index `0` not in group `\"group\"`",
+            "Edge with index `0000000000000000:0` not in group `\"group\"`",
             GraphRecordError::EdgeNotInGroup {
-                edge_index: 0,
+                edge_index: EdgeIndex::new(0, 0),
                 group: "group".into()
             }
             .to_string()
@@ -271,15 +286,15 @@ mod test {
             "Attribute `\"attribute\"` does not exist on node `\"test\"`",
             GraphRecordError::NodeAttributeNotFound {
                 node_index: "test".into(),
-                attribute: "attribute".into()
+                attribute_name: "attribute".into()
             }
             .to_string()
         );
         assert_eq!(
-            "Attribute `\"attribute\"` does not exist on edge `0`",
+            "Attribute `\"attribute\"` does not exist on edge `0000000000000000:0`",
             GraphRecordError::EdgeAttributeNotFound {
-                edge_index: 0,
-                attribute: "attribute".into()
+                edge_index: EdgeIndex::new(0, 0),
+                attribute_name: "attribute".into()
             }
             .to_string()
         );
@@ -314,7 +329,7 @@ mod test {
             error(ValueOperation::Power).to_string()
         );
         assert_eq!(
-            "Cannot mod `1` with `true`",
+            "Cannot take `1` modulo `true`",
             error(ValueOperation::Modulo).to_string()
         );
         assert_eq!(
@@ -329,24 +344,13 @@ mod test {
     }
 
     #[test]
-    fn test_display_remaining() {
+    fn test_display_plugins() {
         assert_eq!(
             "Plugin failed: message",
             GraphRecordError::PluginFailure {
                 message: "message".to_string()
             }
             .to_string()
-        );
-        assert_eq!(
-            "Connector failed: message",
-            GraphRecordError::ConnectorFailure {
-                message: "message".to_string()
-            }
-            .to_string()
-        );
-        assert_eq!(
-            "Invalid timestamp",
-            GraphRecordError::InvalidTimestamp.to_string()
         );
         assert_eq!(
             "Plugin with name `\"plugin\"` does not exist",
@@ -362,6 +366,18 @@ mod test {
             }
             .to_string()
         );
+    }
+
+    #[test]
+    fn test_display_timestamp() {
+        assert_eq!(
+            "Invalid timestamp",
+            GraphRecordError::InvalidTimestamp.to_string()
+        );
+    }
+
+    #[test]
+    fn test_display_wrapped() {
         assert_eq!(
             "Group `\"test\"` is not defined in the schema",
             GraphRecordError::Schema(SchemaError::GroupNotInSchema {
@@ -373,6 +389,13 @@ mod test {
             "Cannot convert `true` into `Identifier`",
             GraphRecordError::Conversion(ConversionError::ValueToIdentifier {
                 value: Value::Bool(true)
+            })
+            .to_string()
+        );
+        assert_eq!(
+            "File `path` is corrupted",
+            GraphRecordError::Io(IoError::CorruptedFile {
+                path: "path".to_string()
             })
             .to_string()
         );

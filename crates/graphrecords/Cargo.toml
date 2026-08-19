@@ -14,9 +14,9 @@ graphrecords-query = { workspace = true }
 graphrecords-overview = { workspace = true }
 
 [features]
-plugins = ["graphrecords-core/plugins"]
 serde = ["graphrecords-core/serde"]
-connectors = ["graphrecords-core/connectors"]
+io = ["graphrecords-core/io"]
+plugins = ["graphrecords-core/plugins"]
 dynamic = ["graphrecords-query/dynamic"]
 
 [lints]

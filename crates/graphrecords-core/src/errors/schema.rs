@@ -134,7 +134,7 @@ impl Display for SchemaError {
 #[cfg(test)]
 mod test {
     use super::SchemaError;
-    use crate::graphrecord::datatypes::DataType;
+    use crate::graphrecord::{EdgeIndex, datatypes::DataType};
 
     #[test]
     fn test_display_groups() {
@@ -166,9 +166,9 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Attribute `\"key\"` of type `Int` not found on edge with index `0`",
+            "Attribute `\"key\"` of type `Int` not found on edge with index `0000000000000000:0`",
             SchemaError::EdgeAttributeMissing {
-                edge_index: 0,
+                edge_index: EdgeIndex::new(0, 0),
                 attribute: "key".into(),
                 data_type: DataType::Int,
             }
@@ -185,9 +185,9 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Attribute `\"key\"` of edge with index `0` is of type `Int`. Expected `Float`.",
+            "Attribute `\"key\"` of edge with index `0000000000000000:0` is of type `Int`. Expected `Float`.",
             SchemaError::EdgeAttributeDataTypeMismatch {
-                edge_index: 0,
+                edge_index: EdgeIndex::new(0, 0),
                 attribute: "key".into(),
                 data_type: DataType::Int,
                 expected_data_type: DataType::Float,
@@ -203,9 +203,9 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Attributes [\"key1\", \"key2\"] of edge with index `0` do not exist in schema.",
+            "Attributes [\"key1\", \"key2\"] of edge with index `0000000000000000:0` do not exist in schema.",
             SchemaError::EdgeAttributesNotInSchema {
-                edge_index: 0,
+                edge_index: EdgeIndex::new(0, 0),
                 attributes: vec!["key1".into(), "key2".into()],
             }
             .to_string()
