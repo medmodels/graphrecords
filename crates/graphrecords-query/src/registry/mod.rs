@@ -8,7 +8,7 @@ mod template;
 pub use capability::{CapabilityIdentifier, CapabilityRegistry};
 pub use descriptor::{
     ArgumentDescriptor, ArgumentMissingPolicy, ArgumentValueSource, ArityDescriptor,
-    DomainDescriptor, IndexDescriptor, LaneShapeDescriptor, OperandDescriptor, OrderDescriptor,
+    DomainDescriptor, ExpressionDescriptor, IndexDescriptor, LaneShapeDescriptor, OrderDescriptor,
     RetentionDescriptor, ValueArgumentDescriptor, ValueDescriptor, ValueRole,
 };
 pub(crate) use emission::OutArityTable;
@@ -20,25 +20,24 @@ pub(crate) use manifest::{
     CastIntCapability, CastStringCapability, CeilCapability, ClipCapability, CubeRootCapability,
     DivideCapability, ElementShapeWitness, EntityAttributesWitness, EntityWitness,
     EnumerableArityWitness, EqualityCapability, EquivalenceCapability, ExponentialCapability,
-    FloorCapability, GroupKeyWitness, GroupMemberWitness, GroupingCapability, IndexWitness,
-    IndicesInGroupWitness, IntCapability, KindTestCapability, LogarithmCapability,
+    FloorCapability, GroupKeyWitness, GroupMemberWitness, GroupMembershipWitness,
+    GroupingCapability, IndexWitness, IntCapability, KindTestCapability, LogarithmCapability,
     MedianCapability, ModeCapability, ModuloCapability, MultiplyCapability, NegateCapability,
     OperationManifest, OperationManifestEntry, OrderingCapability, PowerCapability,
     RoundCapability, ScalarCapability, ScalarKindTestCapability, SetSourceWitness, SignCapability,
-    SortableCapability, SortableIndexWitness, SquareRootCapability, StringCapability,
-    SubtractCapability, ValueDomainCapability, ValueDomainOnly, ValueWitness, describe,
-    manifest_entry_alias, manifest_entry_aliases, manifest_entry_argument_pattern,
-    manifest_entry_set_argument_pattern, manifest_witness_alias, manifest_witness_argument_alias,
-    manifest_witness_set_argument_alias, operation_element_entry, operation_element_method,
-    operation_element_witness, operation_group_entry, operation_group_witness,
-    operation_lane_entry, operation_lane_witness, operation_manifest, operation_manifest_name,
-    operation_policy_method, operation_value_capability_marker, operation_value_capability_witness,
+    SortableCapability, SquareRootCapability, StringCapability, SubtractCapability,
+    TransitionAttributeNameCapability, TransitionAttributeNameIndexCapability,
+    TransitionBoolIndexCapability, TransitionFailureKindIndexCapability,
+    TransitionFailureKindValueCapability, TransitionGroupIndexCapability, TransitionMaskCapability,
+    TransitionNodeIndexCapability, TransitionPositionalIndexCapability, TransitionScalarCapability,
+    TransitionValueIndexCapability, ValueDomainCapability, ValueDomainOnly, ValueWitness, describe,
+    operation_manifest,
 };
 pub use pattern::{
-    AlignmentDescriptor, ArgumentPattern, ArityPattern, Bindings, CapabilitySet, IndexPattern,
-    OrderPattern, RetentionPattern, ShapePattern, StatePattern, ValuePattern, VariableIdentifier,
+    AlignmentDescriptor, ArgumentPattern, ArityPattern, Bindings, CapabilitySet, ExpressionPattern,
+    IndexPattern, OrderPattern, RetentionPattern, ShapePattern, ValuePattern, VariableIdentifier,
 };
 pub use template::{
-    ArityDescriptorTemplate, IndexDescriptorTemplate, LaneShapeDescriptorTemplate,
-    OperandDescriptorTemplate, OrderDescriptorTemplate, ValueDescriptorTemplate,
+    ArityDescriptorTemplate, ExpressionDescriptorTemplate, IndexDescriptorTemplate,
+    LaneShapeDescriptorTemplate, OrderDescriptorTemplate, ValueDescriptorTemplate,
 };

@@ -1,5 +1,5 @@
 use super::{engine::Session, rule::Transformed};
-use crate::Operand;
+use crate::Expression;
 pub use graphrecords_macros::{
     MatchInputs, OperationInputs, OptimizePlan, OptimizerHints, PlanIdentity, PlanInputs, PlanNode,
 };
@@ -15,6 +15,10 @@ pub enum EmptyRule {
     IfAllInputs,
 }
 
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not declare optimizer hints",
+    note = "implement `OptimizerHints` for `{Self}` or derive it with `#[derive(OptimizerHints)]`"
+)]
 pub trait OptimizerHints {
     fn commutes_with_filter(&self) -> bool {
         false
@@ -75,12 +79,12 @@ pub trait MatchInputs {
 }
 
 #[diagnostic::on_unimplemented(
-    message = "`{Self}` cannot produce its operand",
+    message = "`{Self}` cannot produce its expression",
     note = "implement `OptimizePlan` for `{Self}` or derive it with `#[derive(OptimizePlan)]`",
-    note = "the derive requires a `#[plan(operand = ...)]` attribute"
+    note = "the derive requires a `#[plan(expression = ...)]` attribute"
 )]
 pub trait OptimizePlan {
-    type Output: Operand;
+    type Output: Expression;
 
     fn optimize(&self, original: &Self::Output, session: &Session) -> Transformed<Self::Output>;
 }
@@ -91,7 +95,7 @@ pub trait PlanIdentity {
     fn identity_hash<H: Hasher>(&self, state: &mut H);
 }
 
-impl<T: Operand> PlanIdentity for T {
+impl<E: Expression> PlanIdentity for E {
     fn identity_eq(&self, other: &Self) -> bool {
         self.as_plan_node().dyn_eq(other.as_plan_node())
     }
@@ -112,7 +116,7 @@ pub trait PlanInputs: Clone {
     }
 }
 
-impl<T: Operand> PlanInputs for T {
+impl<E: Expression> PlanInputs for E {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         vec![self.as_plan_node()]
     }
@@ -122,6 +126,10 @@ impl<T: Operand> PlanInputs for T {
     }
 }
 
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not expose its operation inputs",
+    note = "implement `OperationInputs` for `{Self}` or derive it with `#[derive(OperationInputs)]`"
+)]
 pub trait OperationInputs: 'static + PlanIdentity + PlanInputs + OptimizerHints {
     type Inputs<'a, I: 'a>;
 

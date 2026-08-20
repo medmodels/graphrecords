@@ -217,7 +217,7 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
                     )?;
                 )*
                 #( formatter.child(&self.#child_accessors); )*
-                #( formatter.labeled_child(#argument_names, &self.#argument_accessors); )*
+                #( formatter.labeled_child(&self.#argument_accessors, #argument_names); )*
                 ::core::result::Result::Ok(())
             }
         }

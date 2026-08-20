@@ -1,14 +1,13 @@
 use super::{padding_character, string_pad_bare, string_pad_indexed};
 use crate::{
-    Bare, BareValueDomain, Explain, External, Failure, IndexDomain, Indexed, Labeled, Operand,
-    Position, QueryResult,
-    capabilities::{IntValue, StringValue},
+    Bare, BareValueDomain, Explain, External, Failure, IndexDomain, Indexed, Labeled, Position,
+    QueryResult,
+    capabilities::{ValueInt, ValueString},
     element::Retention,
     error::string::StringPaddingOverflow,
     execution::EvaluationCache,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
-        Prepare, Unaligned,
+        ArgumentSource, Build, ElementKernel, ElementPipeline, Keyed, Operation, Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::{describe::ArgumentRetention, operation_manifest},
@@ -17,13 +16,9 @@ use crate::{
 use graphrecords_core::GraphRecord;
 use std::iter::repeat_n;
 
-pub(super) fn pad(
-    label: &'static str,
-    mut value: String,
-    width: Position,
-    character: String,
-) -> QueryResult<String> {
-    let character = padding_character(label, character)?;
+fn pad(value: &str, width: Position, character: &str, label: &'static str) -> QueryResult<String> {
+    let mut value = value.to_string();
+    let character = padding_character(character, label)?;
     let padding_length = width.saturating_sub(value.chars().count());
     if padding_length == 0 {
         return Ok(value);
@@ -32,10 +27,10 @@ pub(super) fn pad(
     let capacity = padding_length
         .checked_mul(character.len_utf8())
         .and_then(|padding_bytes| padding_bytes.checked_add(value.len()))
-        .ok_or_else(|| Failure::new(label, StringPaddingOverflow::new(width)))?;
+        .ok_or_else(|| Failure::new(StringPaddingOverflow::new(width), label))?;
     value
         .try_reserve(capacity - value.len())
-        .map_err(|error| Failure::new(label, External::new(error)))?;
+        .map_err(|error| Failure::new(External::new(error), label))?;
     value.extend(repeat_n(character, padding_length));
 
     Ok(value)
@@ -61,7 +56,7 @@ impl<W: Prepare, C: Prepare> Prepare for PadEndOperation<W, C> {
     fn prepare<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok((
             self.width.prepare(graphrecord, cache)?,
@@ -73,20 +68,25 @@ impl<W: Prepare, C: Prepare> Prepare for PadEndOperation<W, C> {
 impl<I, V, W, C> ElementKernel<Indexed<I, V>> for PadEndOperation<W, C>
 where
     I: IndexDomain,
-    V: StringValue,
+    V: ValueString,
     W: ArgumentSource<Keyed<I>>,
-    W::ValueDomain: IntValue,
+    W::ValueDomain: ValueInt,
     C: ArgumentSource<Keyed<I>>,
-    C::ValueDomain: StringValue,
+    C::ValueDomain: ValueString,
 {
     type Emission = <W::Retention as Retention>::Then<C::Retention>;
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(string_pad_indexed::<_, V, W, C>(prepared, Self::LABEL, pad))
+        Ok(string_pad_indexed::<_, V, W, C>(
+            graphrecord,
+            prepared,
+            pad,
+            Self::LABEL,
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -96,20 +96,25 @@ where
 
 impl<V, W, C> ElementKernel<Bare<V>> for PadEndOperation<W, C>
 where
-    V: StringValue + BareValueDomain,
+    V: ValueString + BareValueDomain,
     W: ArgumentSource<Unaligned>,
-    W::ValueDomain: IntValue,
+    W::ValueDomain: ValueInt,
     C: ArgumentSource<Unaligned>,
-    C::ValueDomain: StringValue,
+    C::ValueDomain: ValueString,
 {
     type Emission = <W::Retention as Retention>::Then<C::Retention>;
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(string_pad_bare::<V, W, C>(prepared, Self::LABEL, pad))
+        Ok(string_pad_bare::<V, W, C>(
+            graphrecord,
+            prepared,
+            pad,
+            Self::LABEL,
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -117,18 +122,15 @@ where
     }
 }
 
-impl<O, W, C> PadEnd<W, C> for O
+impl<E, W, C> PadEnd<W, C> for E
 where
     PadEndOperation<W, C>: Operation,
-    O: Apply<PadEndOperation<W, C>>,
+    E: Build<PadEndOperation<W, C>>,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn pad_end(&self, width: W, character: C) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            PadEndOperation { width, character },
-        ))
+    fn pad_end(&self, width: W, character: C) -> Self::Output {
+        self.build(PadEndOperation { width, character })
     }
 }
 
@@ -138,17 +140,18 @@ operation_manifest! {
         scope: element;
 
         kernel {
-            parameters: <I: IndexDomain, V: StringValue>;
-            argument: W: ArgumentSource<Keyed<I>> where W::ValueDomain: IntValue;
-            argument: C: ArgumentSource<Keyed<I>> where C::ValueDomain: StringValue;
+            parameters: <I: IndexDomain, V: ValueString>;
+            argument: W: ArgumentSource<Keyed<I>> where W::ValueDomain: ValueInt;
+            argument: C: ArgumentSource<Keyed<I>> where C::ValueDomain: ValueString;
             input: Indexed<I, V>;
             output: Indexed<I, V>;
             emission: ArgumentRetention;
         }
+
         kernel {
-            parameters: <V: StringValue + BareValueDomain>;
-            argument: W: ArgumentSource<Unaligned> where W::ValueDomain: IntValue;
-            argument: C: ArgumentSource<Unaligned> where C::ValueDomain: StringValue;
+            parameters: <V: ValueString + BareValueDomain>;
+            argument: W: ArgumentSource<Unaligned> where W::ValueDomain: ValueInt;
+            argument: C: ArgumentSource<Unaligned> where C::ValueDomain: ValueString;
             input: Bare<V>;
             output: Bare<V>;
             emission: ArgumentRetention;

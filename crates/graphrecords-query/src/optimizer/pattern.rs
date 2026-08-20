@@ -3,19 +3,19 @@ use super::{
     rule::{Rule, Transformed},
     stats::Stats,
 };
-use crate::Operand;
+use crate::Expression;
 use std::marker::PhantomData;
 
-pub trait Pattern<O: Operand> {
+pub trait Pattern<E: Expression> {
     type Bindings;
 
-    fn try_match(&self, operand: &O) -> Option<Self::Bindings>;
+    fn try_match(&self, expression: &E) -> Option<Self::Bindings>;
 
-    fn rewrite<F>(self, rewrite: F) -> impl Rule<O>
+    fn rewrite<F>(self, rewrite: F) -> impl Rule<E>
     where
         Self: Sized + Send + Sync + 'static,
-        O: 'static,
-        F: Fn(Self::Bindings, &Stats) -> Option<O> + Send + Sync + 'static,
+        E: 'static,
+        F: Fn(Self::Bindings, &Stats) -> Option<E> + Send + Sync + 'static,
     {
         PatternRule {
             pattern: self,
@@ -34,10 +34,10 @@ pub trait Pattern<O: Operand> {
         }
     }
 
-    fn or<Q>(self, other: Q) -> impl Pattern<O, Bindings = Self::Bindings>
+    fn or<Q>(self, other: Q) -> impl Pattern<E, Bindings = Self::Bindings>
     where
         Self: Sized,
-        Q: Pattern<O, Bindings = Self::Bindings>,
+        Q: Pattern<E, Bindings = Self::Bindings>,
     {
         OrPattern {
             left: self,
@@ -51,20 +51,20 @@ struct PatternRule<P, F> {
     rewrite: F,
 }
 
-impl<O, P, F> Rule<O> for PatternRule<P, F>
+impl<E, P, F> Rule<E> for PatternRule<P, F>
 where
-    O: Operand,
-    P: Pattern<O> + Send + Sync + 'static,
-    F: Fn(P::Bindings, &Stats) -> Option<O> + Send + Sync + 'static,
+    E: Expression,
+    P: Pattern<E> + Send + Sync + 'static,
+    F: Fn(P::Bindings, &Stats) -> Option<E> + Send + Sync + 'static,
 {
-    fn apply(&self, operand: O, stats: &Stats) -> Transformed<O> {
-        let Some(bindings) = self.pattern.try_match(&operand) else {
-            return Transformed::unchanged(operand);
+    fn apply(&self, expression: E, stats: &Stats) -> Transformed<E> {
+        let Some(bindings) = self.pattern.try_match(&expression) else {
+            return Transformed::unchanged(expression);
         };
 
         match (self.rewrite)(bindings, stats) {
             Some(rewritten) => Transformed::changed(rewritten),
-            None => Transformed::unchanged(operand),
+            None => Transformed::unchanged(expression),
         }
     }
 }
@@ -75,12 +75,12 @@ pub struct GuardedPattern<P, G> {
 }
 
 impl<P, G> GuardedPattern<P, G> {
-    pub fn rewrite<O, F>(self, rewrite: F) -> impl Rule<O>
+    pub fn rewrite<E, F>(self, rewrite: F) -> impl Rule<E>
     where
-        O: Operand + 'static,
-        P: Pattern<O> + Send + Sync + 'static,
+        E: Expression + 'static,
+        P: Pattern<E> + Send + Sync + 'static,
         G: Fn(&Stats) -> bool + Send + Sync + 'static,
-        F: Fn(P::Bindings, &Stats) -> Option<O> + Send + Sync + 'static,
+        F: Fn(P::Bindings, &Stats) -> Option<E> + Send + Sync + 'static,
     {
         let guard = self.guard;
 
@@ -102,15 +102,15 @@ struct OrPattern<P, Q> {
     right: Q,
 }
 
-impl<O: Operand, P: Pattern<O>, Q: Pattern<O, Bindings = P::Bindings>> Pattern<O>
+impl<E: Expression, P: Pattern<E>, Q: Pattern<E, Bindings = P::Bindings>> Pattern<E>
     for OrPattern<P, Q>
 {
     type Bindings = P::Bindings;
 
-    fn try_match(&self, operand: &O) -> Option<Self::Bindings> {
+    fn try_match(&self, expression: &E) -> Option<Self::Bindings> {
         self.left
-            .try_match(operand)
-            .or_else(|| self.right.try_match(operand))
+            .try_match(expression)
+            .or_else(|| self.right.try_match(expression))
     }
 }
 
@@ -123,11 +123,11 @@ pub const fn not<P>(inner: P) -> NotPattern<P> {
     NotPattern { inner }
 }
 
-impl<O: Operand, P: Pattern<O>> Pattern<O> for NotPattern<P> {
+impl<E: Expression, P: Pattern<E>> Pattern<E> for NotPattern<P> {
     type Bindings = ();
 
-    fn try_match(&self, operand: &O) -> Option<Self::Bindings> {
-        self.inner.try_match(operand).is_none().then_some(())
+    fn try_match(&self, expression: &E) -> Option<Self::Bindings> {
+        self.inner.try_match(expression).is_none().then_some(())
     }
 }
 
@@ -138,10 +138,10 @@ pub const fn any() -> Wildcard {
     Wildcard
 }
 
-impl<O: Operand> Pattern<O> for Wildcard {
+impl<E: Expression> Pattern<E> for Wildcard {
     type Bindings = ();
 
-    fn try_match(&self, _operand: &O) -> Option<Self::Bindings> {
+    fn try_match(&self, _expression: &E) -> Option<Self::Bindings> {
         Some(())
     }
 }
@@ -153,11 +153,11 @@ pub const fn capture() -> Capture {
     Capture
 }
 
-impl<O: Operand> Pattern<O> for Capture {
-    type Bindings = O;
+impl<E: Expression> Pattern<E> for Capture {
+    type Bindings = E;
 
-    fn try_match(&self, operand: &O) -> Option<Self::Bindings> {
-        Some(operand.clone())
+    fn try_match(&self, expression: &E) -> Option<Self::Bindings> {
+        Some(expression.clone())
     }
 }
 
@@ -181,8 +181,8 @@ where
 {
     type Bindings = B;
 
-    fn try_match(&self, operand: &C::Output) -> Option<Self::Bindings> {
-        let context = operand.as_plan_node().downcast::<C>()?;
+    fn try_match(&self, expression: &C::Output) -> Option<Self::Bindings> {
+        let context = expression.as_plan_node().downcast::<C>()?;
 
         self.patterns.match_against(MatchInputs::inputs(context))
     }
@@ -215,9 +215,9 @@ where
     B: 'static,
     F: Fn(&C, B, &Stats) -> Option<C::Output> + Send + Sync + 'static,
 {
-    fn apply(&self, operand: C::Output, stats: &Stats) -> Transformed<C::Output> {
-        let Some(context) = operand.as_plan_node().downcast::<C>() else {
-            return Transformed::unchanged(operand);
+    fn apply(&self, expression: C::Output, stats: &Stats) -> Transformed<C::Output> {
+        let Some(context) = expression.as_plan_node().downcast::<C>() else {
+            return Transformed::unchanged(expression);
         };
 
         let Some(bindings) = self
@@ -225,12 +225,12 @@ where
             .patterns
             .match_against(MatchInputs::inputs(context))
         else {
-            return Transformed::unchanged(operand);
+            return Transformed::unchanged(expression);
         };
 
         match (self.rewrite)(context, bindings, stats) {
             Some(rewritten) => Transformed::changed(rewritten),
-            None => Transformed::unchanged(operand),
+            None => Transformed::unchanged(expression),
         }
     }
 }
@@ -250,16 +250,16 @@ impl MatchAgainst<()> for () {
 }
 
 macro_rules! impl_match_against {
-    ($($index:tt $operand:ident $pattern:ident),+) => {
-        impl<'inputs, $($operand,)+ $($pattern,)+> MatchAgainst<($(&'inputs $operand,)+)>
+    ($($index:tt $expression:ident $pattern:ident),+) => {
+        impl<'inputs, $($expression,)+ $($pattern,)+> MatchAgainst<($(&'inputs $expression,)+)>
             for ($($pattern,)+)
         where
-            $($operand: Operand,)+
-            $($pattern: Pattern<$operand>,)+
+            $($expression: Expression,)+
+            $($pattern: Pattern<$expression>,)+
         {
-            type Bindings = ($(<$pattern as Pattern<$operand>>::Bindings,)+);
+            type Bindings = ($(<$pattern as Pattern<$expression>>::Bindings,)+);
 
-            fn match_against(&self, inputs: ($(&$operand,)+)) -> Option<Self::Bindings> {
+            fn match_against(&self, inputs: ($(&$expression,)+)) -> Option<Self::Bindings> {
                 Some(($( self.$index.try_match(inputs.$index)?, )+))
             }
         }

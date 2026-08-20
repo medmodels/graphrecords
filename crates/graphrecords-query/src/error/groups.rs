@@ -1,8 +1,8 @@
 use crate::{
     Diagnostic, ErrorGroup, FailureKind,
     error::{
-        argument::ArgumentAbsent,
-        grouping::MissingGroupAggregate,
+        argument::ArgumentMissing,
+        grouping::{MissingGroupAggregate, MissingGroupBucket},
         structure::{MissingAttribute, MissingTraversedAttribute},
     },
 };
@@ -16,9 +16,10 @@ impl ErrorGroup for AbsenceErrors {
     }
 
     fn contains(kind: &FailureKind) -> bool {
-        kind.is::<ArgumentAbsent>()
+        kind.is::<ArgumentMissing>()
             || kind.is::<MissingAttribute>()
             || kind.name() == MissingTraversedAttribute::<NodeIndex>::name()
             || kind.is::<MissingGroupAggregate>()
+            || kind.is::<MissingGroupBucket>()
     }
 }

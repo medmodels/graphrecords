@@ -1,29 +1,29 @@
 pub trait Index {
-    type ReturnOperand;
+    type Output;
 
-    fn index(&self) -> Self::ReturnOperand;
+    fn index(&self) -> Self::Output;
 }
 
 pub trait Select {
-    type ReturnOperand;
+    type Output;
 
-    fn select(&self) -> Self::ReturnOperand;
+    fn select(&self) -> Self::Output;
 }
 
 pub trait Resolve {
-    type ReturnOperand;
+    type Output;
 
-    fn resolve(&self) -> Self::ReturnOperand;
+    fn resolve(&self) -> Self::Output;
 }
 
 pub trait ParentIndex {
-    type ReturnOperand;
+    type Output;
 
-    fn parent_index(&self) -> Self::ReturnOperand;
+    fn parent_index(&self) -> Self::Output;
 }
 
 pub trait ChildIndex {
-    type ReturnOperand;
+    type Output;
 
-    fn child_index(&self) -> Self::ReturnOperand;
+    fn child_index(&self) -> Self::Output;
 }

@@ -1,5 +1,7 @@
 use crate::{ExpandedIndexOwned, ExpandedIndexReference, IndexDomain, Position};
-use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
+use graphrecords_core::graphrecord::{
+    AttributeName, AttributeNameView, Group, GroupView, NodeIndex, NodeIndexView, Value, ValueView,
+};
 
 pub trait EnsureSortable: PartialOrd + Sized {
     fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
@@ -51,14 +53,56 @@ impl EnsureSortable for Value {
     }
 }
 
+impl EnsureSortable for ValueView<'_> {
+    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
+    where
+        Self: 'a,
+    {
+        incomparable_with_first(values)
+    }
+}
+
 impl EnsureSortable for NodeIndex {
     fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
         incomparable_with_first(values)
     }
 }
 
+impl EnsureSortable for NodeIndexView<'_> {
+    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
+    where
+        Self: 'a,
+    {
+        incomparable_with_first(values)
+    }
+}
+
 impl EnsureSortable for AttributeName {
     fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
+        incomparable_with_first(values)
+    }
+}
+
+impl EnsureSortable for AttributeNameView<'_> {
+    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
+    where
+        Self: 'a,
+    {
+        incomparable_with_first(values)
+    }
+}
+
+impl EnsureSortable for Group {
+    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
+        incomparable_with_first(values)
+    }
+}
+
+impl EnsureSortable for GroupView<'_> {
+    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
+    where
+        Self: 'a,
+    {
         incomparable_with_first(values)
     }
 }
@@ -70,12 +114,6 @@ impl EnsureSortable for bool {
 }
 
 impl EnsureSortable for Position {
-    fn find_incomparable<'a>(_values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
-        None
-    }
-}
-
-impl EnsureSortable for EdgeIndex {
     fn find_incomparable<'a>(_values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
         None
     }

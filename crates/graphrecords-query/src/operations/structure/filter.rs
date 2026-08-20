@@ -1,11 +1,8 @@
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
-    ValueDomain,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Mask, QueryResult, ValueDomain,
     element::{Dropping, Pipeline, Retention},
-    execution::EvaluationCache,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
-        Prepare, Unaligned,
+        ArgumentSource, Build, ElementKernel, ElementPipeline, Keyed, Operation, Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
@@ -13,28 +10,15 @@ use crate::{
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "Filter")]
 #[plan(optimizer_hints(empty = if_all))]
 pub struct FilterOperation<M> {
     #[argument]
     mask: M,
-}
-
-impl<M: Prepare> Prepare for FilterOperation<M> {
-    type Prepared<'a>
-        = M::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.mask.prepare(graphrecord, cache)
-    }
 }
 
 impl<I, V, M> ElementKernel<Indexed<I, V>> for FilterOperation<M>
@@ -47,18 +31,18 @@ where
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::keyed(move |index, item| {
+        Ok(Pipeline::keyed(move |address, item| {
             let value = match item {
                 Ok(value) => value,
                 Err(failure) => return Some(Err(failure)),
             };
 
-            let step = M::resolve(&prepared, &index, label);
+            let step = M::resolve(graphrecord, &prepared, &address, label);
 
             match M::Retention::collapse(step) {
                 Some(Ok(true)) => Some(Ok(value)),
@@ -85,7 +69,7 @@ where
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
@@ -96,7 +80,7 @@ where
                 Err(failure) => return Some(Err(failure)),
             };
 
-            let step = M::resolve(&prepared, &(), label);
+            let step = M::resolve(graphrecord, &prepared, &(), label);
 
             match M::Retention::collapse(step) {
                 Some(Ok(true)) => Some(Ok(value)),
@@ -114,18 +98,15 @@ where
     }
 }
 
-impl<O, M> Filter<M> for O
+impl<E, M> Filter<M> for E
 where
-    O: Apply<FilterOperation<M>>,
+    E: Build<FilterOperation<M>>,
     FilterOperation<M>: Operation,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn filter(&self, mask: M) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            FilterOperation { mask },
-        ))
+    fn filter(&self, mask: M) -> Self::Output {
+        self.build(FilterOperation { mask })
     }
 }
 

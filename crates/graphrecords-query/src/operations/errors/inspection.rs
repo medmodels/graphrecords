@@ -1,39 +1,32 @@
 use crate::{
-    Bare, BareValueDomain, Diagnostic, ErrorGroup, Explain, Failure, FailureKind, FailureKindValue,
-    FailureValue, IndexDomain, Indexed, Mask, Operand, QueryResult, Scalar, ValueDomain,
+    Bare, BareValueDomain, Diagnostic, ErrorGroup, Explain, Expression, Failure, FailureKind,
+    FailureKindValue, FailureValue, IndexDomain, Indexed, Labeled, Mask, QueryResult, Scalar,
+    Series, ValueDomain,
     element::{Dropping, Pipeline, Preserving},
-    execution::EvaluationCache,
     explain::ExplainFormatter,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{
+        Apply, Build, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare,
+    },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     registry::operation_manifest,
     traits::{ErrorKind, ErrorKindName, Errors, HasErrorCause, InErrorGroup, IsErrorKind},
 };
-use graphrecords_core::{GraphRecord, graphrecord::Value};
+use graphrecords_core::{GraphRecord, graphrecord::ValueView};
 use std::{
     any::type_name,
+    borrow::Cow,
     error::Error,
     fmt::{self, Write},
     marker::PhantomData,
 };
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "Errors")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct ErrorsOperation;
-
-impl Prepare for ErrorsOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<I: IndexDomain, V: ValueDomain> ElementKernel<Indexed<I, V>> for ErrorsOperation {
     type Emission = Dropping;
@@ -63,11 +56,11 @@ impl<V: BareValueDomain> ElementKernel<Bare<V>> for ErrorsOperation {
     }
 }
 
-impl<O: Apply<ErrorsOperation>> Errors for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<ErrorsOperation>> Errors for E {
+    type Output = E::Output;
 
-    fn errors(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), ErrorsOperation))
+    fn errors(&self) -> Self::Output {
+        self.build(ErrorsOperation)
     }
 }
 
@@ -87,6 +80,7 @@ pub(super) mod errors {
                 output: Indexed<I, FailureValue>;
                 emission: Dropping;
             }
+
             kernel {
                 parameters: <V: BareValueDomain>;
                 input: Bare<V>;
@@ -97,27 +91,13 @@ pub(super) mod errors {
     }
 }
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "ErrorKind")]
-#[plan(optimizer_hints(
-    commutes_with_filter,
-    allows_limit_pushdown,
-    empty = if_any
-))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct ErrorKindOperation;
-
-impl Prepare for ErrorKindOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<I: IndexDomain> ElementKernel<Indexed<I, FailureValue>> for ErrorKindOperation {
     type Emission = Preserving;
@@ -147,11 +127,11 @@ impl ElementKernel<Bare<FailureValue>> for ErrorKindOperation {
     }
 }
 
-impl<O: Apply<ErrorKindOperation>> ErrorKind for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<ErrorKindOperation>> ErrorKind for E {
+    type Output = E::Output;
 
-    fn kind(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), ErrorKindOperation))
+    fn kind(&self) -> Self::Output {
+        self.build(ErrorKindOperation)
     }
 }
 
@@ -172,6 +152,7 @@ pub(super) mod kind {
                 output: Indexed<I, FailureKindValue>;
                 emission: Preserving;
             }
+
             kernel {
                 parameters: <>;
                 input: Bare<FailureValue>;
@@ -182,15 +163,15 @@ pub(super) mod kind {
     }
 }
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Element)]
-#[plan(optimizer_hints(
-    commutes_with_filter,
-    allows_limit_pushdown,
-    empty = if_any
-))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct IsErrorKindOperation<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
+}
+
+impl<D: Diagnostic> Labeled for IsErrorKindOperation<D> {
+    const LABEL: &'static str = "IsErrorKind";
 }
 
 impl<D: Diagnostic> IsErrorKindOperation<D> {
@@ -209,19 +190,7 @@ impl<D: Diagnostic> Clone for IsErrorKindOperation<D> {
 
 impl<D: Diagnostic> Explain for IsErrorKindOperation<D> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "IsErrorKind kind={}", D::name())
-    }
-}
-
-impl<D: Diagnostic> Prepare for IsErrorKindOperation<D> {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
+        write!(formatter, "{} kind={}", Self::LABEL, D::name())
     }
 }
 
@@ -255,34 +224,52 @@ impl<D: Diagnostic> ElementKernel<Bare<FailureValue>> for IsErrorKindOperation<D
     }
 }
 
-impl<O: Operand> IsErrorKind for O {
-    type ReturnOperand<D>
-        = O::Output
+impl<E: Expression> IsErrorKind for E {
+    type Expression = E;
+    type Output<D>
+        = E::Output
     where
         D: Diagnostic,
-        O: Apply<IsErrorKindOperation<D>>;
+        E: Apply<IsErrorKindOperation<D>>;
 
-    fn is<D>(&self) -> Self::ReturnOperand<D>
+    fn is<D>(&self) -> Self::Output<D>
     where
         D: Diagnostic,
         Self: Apply<IsErrorKindOperation<D>>,
     {
-        Self::ReturnOperand::new(OperationContext::new(
+        Self::Output::new(OperationContext::new(
             self.clone(),
             IsErrorKindOperation::new(),
         ))
     }
 }
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+impl<E: Expression> IsErrorKind for Series<E> {
+    type Expression = E;
+    type Output<D>
+        = Series<E::Output>
+    where
+        D: Diagnostic,
+        E: Apply<IsErrorKindOperation<D>>;
+
+    fn is<D>(&self) -> Self::Output<D>
+    where
+        D: Diagnostic,
+        E: Apply<IsErrorKindOperation<D>>,
+    {
+        self.bind(self.expression().is())
+    }
+}
+
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Element)]
-#[plan(optimizer_hints(
-    commutes_with_filter,
-    allows_limit_pushdown,
-    empty = if_any
-))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct InErrorGroupOperation<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
+}
+
+impl<G: ErrorGroup> Labeled for InErrorGroupOperation<G> {
+    const LABEL: &'static str = "InErrorGroup";
 }
 
 impl<G: ErrorGroup> InErrorGroupOperation<G> {
@@ -301,19 +288,7 @@ impl<G: ErrorGroup> Clone for InErrorGroupOperation<G> {
 
 impl<G: ErrorGroup> Explain for InErrorGroupOperation<G> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "InErrorGroup group={}", G::name())
-    }
-}
-
-impl<G: ErrorGroup> Prepare for InErrorGroupOperation<G> {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
+        write!(formatter, "{} group={}", Self::LABEL, G::name())
     }
 }
 
@@ -347,37 +322,55 @@ impl<G: ErrorGroup> ElementKernel<Bare<FailureValue>> for InErrorGroupOperation<
     }
 }
 
-impl<O: Operand> InErrorGroup for O {
-    type ReturnOperand<G>
-        = O::Output
+impl<E: Expression> InErrorGroup for E {
+    type Expression = E;
+    type Output<G>
+        = E::Output
     where
         G: ErrorGroup,
-        O: Apply<InErrorGroupOperation<G>>;
+        E: Apply<InErrorGroupOperation<G>>;
 
-    fn in_error_group<G>(&self) -> Self::ReturnOperand<G>
+    fn in_error_group<G>(&self) -> Self::Output<G>
     where
         G: ErrorGroup,
         Self: Apply<InErrorGroupOperation<G>>,
     {
-        Self::ReturnOperand::new(OperationContext::new(
+        Self::Output::new(OperationContext::new(
             self.clone(),
             InErrorGroupOperation::new(),
         ))
     }
 }
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
-#[operation(scope = Element)]
-#[plan(optimizer_hints(
-    commutes_with_filter,
-    allows_limit_pushdown,
-    empty = if_any
-))]
-pub struct HasErrorCauseOperation<C: Error + 'static> {
-    marker: PhantomData<fn() -> C>,
+impl<E: Expression> InErrorGroup for Series<E> {
+    type Expression = E;
+    type Output<G>
+        = Series<E::Output>
+    where
+        G: ErrorGroup,
+        E: Apply<InErrorGroupOperation<G>>;
+
+    fn in_error_group<G>(&self) -> Self::Output<G>
+    where
+        G: ErrorGroup,
+        E: Apply<InErrorGroupOperation<G>>,
+    {
+        self.bind(self.expression().in_error_group())
+    }
 }
 
-impl<C: Error + 'static> HasErrorCauseOperation<C> {
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
+#[operation(scope = Element)]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
+pub struct HasErrorCauseOperation<E: Error + 'static> {
+    marker: PhantomData<fn() -> E>,
+}
+
+impl<E: Error + 'static> Labeled for HasErrorCauseOperation<E> {
+    const LABEL: &'static str = "HasErrorCause";
+}
+
+impl<E: Error + 'static> HasErrorCauseOperation<E> {
     const fn new() -> Self {
         Self {
             marker: PhantomData,
@@ -385,32 +378,20 @@ impl<C: Error + 'static> HasErrorCauseOperation<C> {
     }
 }
 
-impl<C: Error + 'static> Clone for HasErrorCauseOperation<C> {
+impl<E: Error + 'static> Clone for HasErrorCauseOperation<E> {
     fn clone(&self) -> Self {
         Self::new()
     }
 }
 
-impl<C: Error + 'static> Explain for HasErrorCauseOperation<C> {
+impl<E: Error + 'static> Explain for HasErrorCauseOperation<E> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "HasErrorCause cause={}", type_name::<C>())
+        write!(formatter, "{} cause={}", Self::LABEL, type_name::<E>())
     }
 }
 
-impl<C: Error + 'static> Prepare for HasErrorCauseOperation<C> {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<I: IndexDomain, C: Error + 'static> ElementKernel<Indexed<I, FailureValue>>
-    for HasErrorCauseOperation<C>
+impl<I: IndexDomain, E: Error + 'static> ElementKernel<Indexed<I, FailureValue>>
+    for HasErrorCauseOperation<E>
 {
     type Emission = Preserving;
     type OutShape = Indexed<I, Mask>;
@@ -420,12 +401,12 @@ impl<I: IndexDomain, C: Error + 'static> ElementKernel<Indexed<I, FailureValue>>
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, FailureValue>, Self>> {
         Ok(Pipeline::unkeyed(|result: QueryResult<Failure>| {
-            result.map(|failure| failure.has_cause::<C>())
+            result.map(|failure| failure.has_cause::<E>())
         }))
     }
 }
 
-impl<C: Error + 'static> ElementKernel<Bare<FailureValue>> for HasErrorCauseOperation<C> {
+impl<E: Error + 'static> ElementKernel<Bare<FailureValue>> for HasErrorCauseOperation<E> {
     type Emission = Preserving;
     type OutShape = Bare<Mask>;
 
@@ -434,51 +415,55 @@ impl<C: Error + 'static> ElementKernel<Bare<FailureValue>> for HasErrorCauseOper
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<FailureValue>, Self>> {
         Ok(Pipeline::new(|result: QueryResult<Failure>| {
-            result.map(|failure| failure.has_cause::<C>())
+            result.map(|failure| failure.has_cause::<E>())
         }))
     }
 }
 
-impl<O: Operand> HasErrorCause for O {
-    type ReturnOperand<C>
-        = O::Output
+impl<E: Expression> HasErrorCause for E {
+    type Expression = E;
+    type Output<C>
+        = E::Output
     where
         C: Error + 'static,
-        O: Apply<HasErrorCauseOperation<C>>;
+        E: Apply<HasErrorCauseOperation<C>>;
 
-    fn has_cause<C>(&self) -> Self::ReturnOperand<C>
+    fn has_cause<C>(&self) -> Self::Output<C>
     where
         C: Error + 'static,
         Self: Apply<HasErrorCauseOperation<C>>,
     {
-        Self::ReturnOperand::new(OperationContext::new(
+        Self::Output::new(OperationContext::new(
             self.clone(),
             HasErrorCauseOperation::new(),
         ))
     }
 }
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
-#[operation(scope = Element)]
-#[explain(label = "ErrorKindName")]
-#[plan(optimizer_hints(
-    commutes_with_filter,
-    allows_limit_pushdown,
-    empty = if_any
-))]
-pub struct ErrorKindNameOperation;
+impl<E: Expression> HasErrorCause for Series<E> {
+    type Expression = E;
+    type Output<C>
+        = Series<E::Output>
+    where
+        C: Error + 'static,
+        E: Apply<HasErrorCauseOperation<C>>;
 
-impl Prepare for ErrorKindNameOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
+    fn has_cause<C>(&self) -> Self::Output<C>
+    where
+        C: Error + 'static,
+        E: Apply<HasErrorCauseOperation<C>>,
+    {
+        self.bind(self.expression().has_cause())
     }
 }
+
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
+#[operation(scope = Element)]
+#[explain(label = "ErrorKindName")]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
+pub struct ErrorKindNameOperation;
 
 impl<I: IndexDomain> ElementKernel<Indexed<I, FailureKindValue>> for ErrorKindNameOperation {
     type Emission = Preserving;
@@ -489,7 +474,7 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, FailureKindValue>> for ErrorKindNa
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, FailureKindValue>, Self>> {
         Ok(Pipeline::unkeyed(|result: QueryResult<FailureKind>| {
-            result.map(|kind| Value::from(kind.name()))
+            result.map(|kind| ValueView::String(Cow::Borrowed(kind.name())))
         }))
     }
 }
@@ -503,16 +488,16 @@ impl ElementKernel<Bare<FailureKindValue>> for ErrorKindNameOperation {
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<FailureKindValue>, Self>> {
         Ok(Pipeline::new(|result: QueryResult<FailureKind>| {
-            result.map(|kind| Value::from(kind.name()))
+            result.map(|kind| ValueView::String(Cow::Borrowed(kind.name())))
         }))
     }
 }
 
-impl<O: Apply<ErrorKindNameOperation>> ErrorKindName for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<ErrorKindNameOperation>> ErrorKindName for E {
+    type Output = E::Output;
 
-    fn name(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), ErrorKindNameOperation))
+    fn name(&self) -> Self::Output {
+        self.build(ErrorKindNameOperation)
     }
 }
 
@@ -533,6 +518,7 @@ pub(super) mod name {
                 output: Indexed<I, Scalar>;
                 emission: Preserving;
             }
+
             kernel {
                 parameters: <>;
                 input: Bare<FailureKindValue>;

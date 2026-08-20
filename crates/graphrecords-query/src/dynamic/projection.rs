@@ -1,14 +1,14 @@
 use super::{
-    DynArity, DynExpandedOwned, DynExpandedRef, DynIndex, DynIndexOwned, DynIndexRef, DynPayload,
-    DynStreamShape, DynValue, DynYield,
+    DynArity, DynExpandedAddress, DynExpandedOwned, DynExpandedView, DynIndex, DynIndexAddress,
+    DynIndexOwned, DynIndexView, DynPayload, DynStreamShape, DynValue, DynValueView, DynYield,
 };
 use crate::{
-    Bare, BareValueDomain, EdgeEndpointRole, ElementShape, EntityDomain, EntityReference,
-    EvaluateContext, EvaluateOperand, ExpandedChild, ExpandedIndex, ExpandedIndexOwned,
-    ExpandedIndexReference, Explain, Failure, FailureKind, FailureKindValue, FailureValue,
-    IndexDomain, IndexValue, Indexed, Mask, Operand, OrderState, Ordered, Positional, QueryResult,
-    Scalar, Unit, Unordered, ValueDomain,
-    dynamic::DynEntityReference,
+    Bare, BareValueDomain, EdgeEndpointRole, ElementShape, EntityRef, EntityReference,
+    EvaluateContext, EvaluateExpression, ExpandedChild, ExpandedIndex, ExpandedIndexAddress,
+    ExpandedIndexReference, Explain, Expression, Failure, FailureKind, FailureKindValue,
+    FailureValue, IndexDomain, IndexValue, Indexed, Mask, OrderState, Ordered, Positional,
+    QueryResult, Scalar, Unit, Unordered, ValueDomain,
+    dynamic::DynEntityRef,
     element::{
         Arity, ElementEmission, ElementTransition, Expanding, IndexedExpansionPipeline, Pipeline,
         Retention,
@@ -16,8 +16,7 @@ use crate::{
     error::index::DuplicateExpandedChildIndex,
     execution::EvaluationCache,
     explain::ExplainFormatter,
-    index::GroupKey,
-    operands::{GroupOperand, OperandHandle, Partition},
+    expressions::{ExpressionHandle, GroupedExpression, Partition},
     operations::{
         Element, ElementKernel, ElementPipeline, Group, GroupKernel, Lane, LaneKernel, Operation,
         Prepare,
@@ -29,7 +28,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value},
+    graphrecord::{AttributeName, EdgeIndex, Group as GroupIndex, NodeIndex, Value},
 };
 use graphrecords_utils::aliases::GrHashSet;
 use std::{
@@ -41,16 +40,18 @@ use std::{
 
 type DynElementOperationMarker<S, T, E> = PhantomData<fn() -> (S, T, E)>;
 type DynExpansionOperationMarker<I, V, C, W, O> = PhantomData<fn() -> (I, V, C, W, O)>;
-type DynLaneOperationMarker<S, C, O> = PhantomData<fn() -> (S, C, O)>;
+type DynLaneOperationMarker<S, C, E> = PhantomData<fn() -> (S, C, E)>;
 
 pub trait DynIndexProjection: IndexDomain {
-    fn project_index<'a>(graphrecord: &'a GraphRecord, index: DynIndexRef<'a>) -> Self::Index<'a>;
+    fn project_index<'a>(graphrecord: &'a GraphRecord, index: DynIndexView<'a>) -> Self::Index<'a>;
 
-    fn erase_index(index: Self::Index<'_>) -> DynIndexRef<'_>;
-
-    fn project_owned(index: DynIndexOwned) -> Self::Owned;
+    fn erase_index(index: Self::Index<'_>) -> DynIndexView<'_>;
 
     fn erase_owned(index: Self::Owned) -> DynIndexOwned;
+
+    fn project_address(address: DynIndexAddress) -> Self::Address;
+
+    fn erase_address(address: Self::Address) -> DynIndexAddress;
 }
 
 fn index_projection_mismatch<I: IndexDomain>() -> ! {
@@ -59,180 +60,129 @@ fn index_projection_mismatch<I: IndexDomain>() -> ! {
 }
 
 impl DynIndexProjection for DynIndex {
-    fn project_index<'a>(_graphrecord: &'a GraphRecord, index: DynIndexRef<'a>) -> Self::Index<'a> {
+    fn project_index<'a>(
+        _graphrecord: &'a GraphRecord,
+        index: DynIndexView<'a>,
+    ) -> Self::Index<'a> {
         index
     }
 
-    fn erase_index(index: Self::Index<'_>) -> DynIndexRef<'_> {
-        index
-    }
-
-    fn project_owned(index: DynIndexOwned) -> Self::Owned {
-        index
-    }
-
-    fn erase_owned(index: Self::Owned) -> DynIndexOwned {
-        index
-    }
-}
-
-impl DynIndexProjection for Positional {
-    fn project_index<'a>(_graphrecord: &'a GraphRecord, index: DynIndexRef<'a>) -> Self::Index<'a> {
-        let DynIndexRef::Positional(index) = index else {
-            index_projection_mismatch::<Self>()
-        };
-        index
-    }
-
-    fn erase_index(index: Self::Index<'_>) -> DynIndexRef<'_> {
-        DynIndexRef::Positional(index)
-    }
-
-    fn project_owned(index: DynIndexOwned) -> Self::Owned {
-        let DynIndexOwned::Positional(index) = index else {
-            index_projection_mismatch::<Self>()
-        };
+    fn erase_index(index: Self::Index<'_>) -> DynIndexView<'_> {
         index
     }
 
     fn erase_owned(index: Self::Owned) -> DynIndexOwned {
-        DynIndexOwned::Positional(index)
-    }
-}
-
-impl DynIndexProjection for NodeIndex {
-    fn project_index<'a>(graphrecord: &'a GraphRecord, index: DynIndexRef<'a>) -> Self::Index<'a> {
-        let DynIndexRef::Node(index) = index else {
-            index_projection_mismatch::<Self>()
-        };
-        Self::resolve_index(graphrecord, index).unwrap_or_else(|_| {
-            panic!("registry admitted a dynamic node index that the graphrecord cannot resolve")
-        })
-    }
-
-    fn erase_index(index: Self::Index<'_>) -> DynIndexRef<'_> {
-        DynIndexRef::Node(index)
-    }
-
-    fn project_owned(index: DynIndexOwned) -> Self::Owned {
-        let DynIndexOwned::Node(index) = index else {
-            index_projection_mismatch::<Self>()
-        };
         index
     }
 
-    fn erase_owned(index: Self::Owned) -> DynIndexOwned {
-        DynIndexOwned::Node(index)
+    fn project_address(address: DynIndexAddress) -> Self::Address {
+        address
+    }
+
+    fn erase_address(address: Self::Address) -> DynIndexAddress {
+        address
     }
 }
 
-impl DynIndexProjection for EdgeIndex {
-    fn project_index<'a>(graphrecord: &'a GraphRecord, index: DynIndexRef<'a>) -> Self::Index<'a> {
-        let DynIndexRef::Edge(index) = index else {
-            index_projection_mismatch::<Self>()
-        };
-        Self::resolve_index(graphrecord, index).unwrap_or_else(|_| {
-            panic!("registry admitted a dynamic edge index that the graphrecord cannot resolve")
-        })
-    }
-
-    fn erase_index(index: Self::Index<'_>) -> DynIndexRef<'_> {
-        DynIndexRef::Edge(index)
-    }
-
-    fn project_owned(index: DynIndexOwned) -> Self::Owned {
-        let DynIndexOwned::Edge(index) = index else {
-            index_projection_mismatch::<Self>()
-        };
-        index
-    }
-
-    fn erase_owned(index: Self::Owned) -> DynIndexOwned {
-        DynIndexOwned::Edge(index)
-    }
-}
-
-macro_rules! implement_copy_index_projection {
-    ($domain:ty, $reference:ident, $owned:ident) => {
+macro_rules! implement_direct_index_projection {
+    ($domain:ty, $variant:ident) => {
         impl DynIndexProjection for $domain {
             fn project_index<'a>(
                 _graphrecord: &'a GraphRecord,
-                index: DynIndexRef<'a>,
+                index: DynIndexView<'a>,
             ) -> Self::Index<'a> {
-                let DynIndexRef::$reference(index) = index else {
+                let DynIndexView::$variant(index) = index else {
                     index_projection_mismatch::<Self>()
                 };
                 index
             }
 
-            fn erase_index(index: Self::Index<'_>) -> DynIndexRef<'_> {
-                DynIndexRef::$reference(index)
-            }
-
-            fn project_owned(index: DynIndexOwned) -> Self::Owned {
-                let DynIndexOwned::$owned(index) = index else {
-                    index_projection_mismatch::<Self>()
-                };
-                index
+            fn erase_index(index: Self::Index<'_>) -> DynIndexView<'_> {
+                DynIndexView::$variant(index)
             }
 
             fn erase_owned(index: Self::Owned) -> DynIndexOwned {
-                DynIndexOwned::$owned(index)
+                DynIndexOwned::$variant(index)
+            }
+
+            fn project_address(address: DynIndexAddress) -> Self::Address {
+                let DynIndexAddress::$variant(address) = address else {
+                    index_projection_mismatch::<Self>()
+                };
+                address
+            }
+
+            fn erase_address(address: Self::Address) -> DynIndexAddress {
+                DynIndexAddress::$variant(address)
             }
         }
     };
 }
 
-implement_copy_index_projection!(AttributeName, Attribute, Attribute);
-implement_copy_index_projection!(Value, Value, Value);
-implement_copy_index_projection!(bool, Bool, Bool);
-implement_copy_index_projection!(EdgeEndpointRole, EndpointRole, EndpointRole);
-implement_copy_index_projection!(FailureKind, FailureKind, FailureKind);
+implement_direct_index_projection!(Positional, Positional);
+implement_direct_index_projection!(NodeIndex, Node);
+implement_direct_index_projection!(EdgeIndex, Edge);
+implement_direct_index_projection!(GroupIndex, Group);
+implement_direct_index_projection!(AttributeName, Attribute);
+implement_direct_index_projection!(Value, Value);
+implement_direct_index_projection!(bool, Bool);
+implement_direct_index_projection!(EdgeEndpointRole, EndpointRole);
+implement_direct_index_projection!(FailureKind, FailureKind);
 
 impl<P: DynIndexProjection, C: DynIndexProjection> DynIndexProjection for ExpandedIndex<P, C> {
-    fn project_index<'a>(graphrecord: &'a GraphRecord, index: DynIndexRef<'a>) -> Self::Index<'a> {
-        let DynIndexRef::Expanded(index) = index else {
+    fn project_index<'a>(graphrecord: &'a GraphRecord, index: DynIndexView<'a>) -> Self::Index<'a> {
+        let DynIndexView::Expanded(index) = index else {
             index_projection_mismatch::<Self>()
         };
         let (parent, child) = index.into_parts();
         let parent = P::project_index(graphrecord, parent);
         match child {
-            None => ExpandedIndexReference::source(parent),
+            None => ExpandedIndexReference::parent(parent),
             Some(child) => {
                 ExpandedIndexReference::child(parent, C::project_index(graphrecord, child))
             }
         }
     }
 
-    fn erase_index(index: Self::Index<'_>) -> DynIndexRef<'_> {
+    fn erase_index(index: Self::Index<'_>) -> DynIndexView<'_> {
         let parent = P::erase_index(index.parent_index().clone());
         let index = match index.child_index() {
-            None => DynExpandedRef::source(parent),
-            Some(child) => DynExpandedRef::child(parent, C::erase_index(child.clone())),
+            None => DynExpandedView::parent(parent),
+            Some(child) => DynExpandedView::child(parent, C::erase_index(child.clone())),
         };
-        DynIndexRef::Expanded(Box::new(index))
-    }
-
-    fn project_owned(index: DynIndexOwned) -> Self::Owned {
-        let DynIndexOwned::Expanded(index) = index else {
-            index_projection_mismatch::<Self>()
-        };
-        let (parent, child) = index.into_parts();
-        let parent = P::project_owned(parent);
-        match child {
-            None => ExpandedIndexOwned::source(parent),
-            Some(child) => ExpandedIndexOwned::child(parent, C::project_owned(child)),
-        }
+        DynIndexView::Expanded(Box::new(index))
     }
 
     fn erase_owned(index: Self::Owned) -> DynIndexOwned {
         let (parent, child) = index.into_parts();
         let parent = P::erase_owned(parent);
         let index = match child {
-            None => DynExpandedOwned::source(parent),
+            None => DynExpandedOwned::parent(parent),
             Some(child) => DynExpandedOwned::child(parent, C::erase_owned(child)),
         };
         DynIndexOwned::Expanded(Box::new(index))
+    }
+
+    fn project_address(address: DynIndexAddress) -> Self::Address {
+        let DynIndexAddress::Expanded(address) = address else {
+            index_projection_mismatch::<Self>()
+        };
+        let (parent, child) = address.into_parts();
+        let parent = P::project_address(parent);
+        match child {
+            None => ExpandedIndexAddress::parent(parent),
+            Some(child) => ExpandedIndexAddress::child(parent, C::project_address(child)),
+        }
+    }
+
+    fn erase_address(address: Self::Address) -> DynIndexAddress {
+        let (parent, child) = address.into_parts();
+        let parent = P::erase_address(parent);
+        let address = match child {
+            None => DynExpandedAddress::parent(parent),
+            Some(child) => DynExpandedAddress::child(parent, C::erase_address(child)),
+        };
+        DynIndexAddress::Expanded(Box::new(address))
     }
 }
 
@@ -274,14 +224,14 @@ impl DynValueProjection for Scalar {
         _graphrecord: &'a GraphRecord,
         value: <Self::Dynamic as ValueDomain>::Value<'a>,
     ) -> Self::Value<'a> {
-        let DynValue::Scalar(value) = value else {
+        let DynValueView::Scalar(value) = value else {
             value_projection_mismatch::<Self>()
         };
         value
     }
 
     fn erase(value: Self::Value<'_>) -> <Self::Dynamic as ValueDomain>::Value<'_> {
-        DynValue::Scalar(value)
+        DynValueView::Scalar(value)
     }
 }
 
@@ -292,14 +242,14 @@ impl DynValueProjection for AttributeName {
         _graphrecord: &'a GraphRecord,
         value: <Self::Dynamic as ValueDomain>::Value<'a>,
     ) -> Self::Value<'a> {
-        let DynValue::Attribute(value) = value else {
+        let DynValueView::Attribute(value) = value else {
             value_projection_mismatch::<Self>()
         };
         value
     }
 
     fn erase(value: Self::Value<'_>) -> <Self::Dynamic as ValueDomain>::Value<'_> {
-        DynValue::Attribute(value)
+        DynValueView::Attribute(value)
     }
 }
 
@@ -307,17 +257,17 @@ impl<I: DynIndexProjection> DynValueProjection for IndexValue<I> {
     type Dynamic = DynValue;
 
     fn project<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         value: <Self::Dynamic as ValueDomain>::Value<'a>,
     ) -> Self::Value<'a> {
-        let DynValue::Index(value) = value else {
+        let DynValueView::Index(value) = value else {
             value_projection_mismatch::<Self>()
         };
-        I::project_owned(value)
+        I::project_index(graphrecord, value)
     }
 
     fn erase(value: Self::Value<'_>) -> <Self::Dynamic as ValueDomain>::Value<'_> {
-        DynValue::Index(I::erase_owned(value))
+        DynValueView::Index(I::erase_index(value))
     }
 }
 
@@ -325,23 +275,23 @@ impl DynValueProjection for EntityReference<NodeIndex> {
     type Dynamic = DynValue;
 
     fn project<'a>(
-        graphrecord: &'a GraphRecord,
+        _graphrecord: &'a GraphRecord,
         value: <Self::Dynamic as ValueDomain>::Value<'a>,
     ) -> Self::Value<'a> {
-        let DynValue::EntityReference(value) = value else {
+        let DynValueView::EntityReference(value) = value else {
             value_projection_mismatch::<Self>()
         };
-        let Some(index) = value.node_index() else {
-            value_projection_mismatch::<Self>()
-        };
-        NodeIndex::resolve_index(graphrecord, index).unwrap_or_else(|_| {
-            panic!("registry admitted a node reference that the graphrecord cannot resolve")
-        })
+
+        EntityRef::new(
+            value.graphrecord(),
+            NodeIndex::project_address(value.address().clone()),
+        )
     }
 
     fn erase(value: Self::Value<'_>) -> <Self::Dynamic as ValueDomain>::Value<'_> {
-        DynValue::EntityReference(DynEntityReference::node(
-            <NodeIndex as IndexDomain>::to_owned(&value),
+        DynValueView::EntityReference(DynEntityRef::new(
+            value.graphrecord(),
+            NodeIndex::erase_address(*value.address()),
         ))
     }
 }
@@ -350,23 +300,48 @@ impl DynValueProjection for EntityReference<EdgeIndex> {
     type Dynamic = DynValue;
 
     fn project<'a>(
-        graphrecord: &'a GraphRecord,
+        _graphrecord: &'a GraphRecord,
         value: <Self::Dynamic as ValueDomain>::Value<'a>,
     ) -> Self::Value<'a> {
-        let DynValue::EntityReference(value) = value else {
+        let DynValueView::EntityReference(value) = value else {
             value_projection_mismatch::<Self>()
         };
-        let Some(index) = value.edge_index() else {
-            value_projection_mismatch::<Self>()
-        };
-        EdgeIndex::resolve_index(graphrecord, index).unwrap_or_else(|_| {
-            panic!("registry admitted an edge reference that the graphrecord cannot resolve")
-        })
+
+        EntityRef::new(
+            value.graphrecord(),
+            EdgeIndex::project_address(value.address().clone()),
+        )
     }
 
     fn erase(value: Self::Value<'_>) -> <Self::Dynamic as ValueDomain>::Value<'_> {
-        DynValue::EntityReference(DynEntityReference::edge(
-            <EdgeIndex as IndexDomain>::to_owned(&value),
+        DynValueView::EntityReference(DynEntityRef::new(
+            value.graphrecord(),
+            EdgeIndex::erase_address(*value.address()),
+        ))
+    }
+}
+
+impl DynValueProjection for EntityReference<GroupIndex> {
+    type Dynamic = DynValue;
+
+    fn project<'a>(
+        _graphrecord: &'a GraphRecord,
+        value: <Self::Dynamic as ValueDomain>::Value<'a>,
+    ) -> Self::Value<'a> {
+        let DynValueView::EntityReference(value) = value else {
+            value_projection_mismatch::<Self>()
+        };
+
+        EntityRef::new(
+            value.graphrecord(),
+            GroupIndex::project_address(value.address().clone()),
+        )
+    }
+
+    fn erase(value: Self::Value<'_>) -> <Self::Dynamic as ValueDomain>::Value<'_> {
+        DynValueView::EntityReference(DynEntityRef::new(
+            value.graphrecord(),
+            GroupIndex::erase_address(*value.address()),
         ))
     }
 }
@@ -378,14 +353,14 @@ impl DynValueProjection for FailureValue {
         _graphrecord: &'a GraphRecord,
         value: <Self::Dynamic as ValueDomain>::Value<'a>,
     ) -> Self::Value<'a> {
-        let DynValue::Failure(value) = value else {
+        let DynValueView::Failure(value) = value else {
             value_projection_mismatch::<Self>()
         };
         *value
     }
 
     fn erase(value: Self::Value<'_>) -> <Self::Dynamic as ValueDomain>::Value<'_> {
-        DynValue::Failure(Box::new(value))
+        DynValueView::Failure(Box::new(value))
     }
 }
 
@@ -396,14 +371,14 @@ impl DynValueProjection for FailureKindValue {
         _graphrecord: &'a GraphRecord,
         value: <Self::Dynamic as ValueDomain>::Value<'a>,
     ) -> Self::Value<'a> {
-        let DynValue::FailureKind(value) = value else {
+        let DynValueView::FailureKind(value) = value else {
             value_projection_mismatch::<Self>()
         };
         value
     }
 
     fn erase(value: Self::Value<'_>) -> <Self::Dynamic as ValueDomain>::Value<'_> {
-        DynValue::FailureKind(value)
+        DynValueView::FailureKind(value)
     }
 }
 
@@ -452,16 +427,16 @@ impl<I: DynIndexProjection, V: DynValueProjection> DynShapeProjection for Indexe
         graphrecord: &'a GraphRecord,
         element: <Self::Dynamic as ElementShape>::Element<'a>,
     ) -> Self::Element<'a> {
-        let (index, outcome) = element;
+        let (address, outcome) = element;
         (
-            I::project_index(graphrecord, index),
+            I::project_address(address),
             outcome.map(|value| V::project(graphrecord, value)),
         )
     }
 
     fn erase_element(element: Self::Element<'_>) -> <Self::Dynamic as ElementShape>::Element<'_> {
-        let (index, outcome) = element;
-        (I::erase_index(index), outcome.map(V::erase))
+        let (address, outcome) = element;
+        (I::erase_address(address), outcome.map(V::erase))
     }
 }
 
@@ -484,37 +459,37 @@ where
     }
 }
 
-pub trait DynOperandProjection: Operand {
-    type Dynamic: Operand;
+pub trait DynExpressionProjection: Expression {
+    type Dynamic: Expression;
 
-    fn erase_operand(self) -> Self::Dynamic {
+    fn erase_expression(self) -> Self::Dynamic {
         Self::Dynamic::new(DynProjectionContext { input: self })
     }
 
     fn erase<'a>(
         values: Self::ReturnValue<'a>,
-    ) -> <Self::Dynamic as EvaluateOperand>::ReturnValue<'a>
+    ) -> <Self::Dynamic as EvaluateExpression>::ReturnValue<'a>
     where
         Self: 'a;
 }
 
-pub trait DynPayloadOutput: Operand {
+pub trait DynPayloadOutput: Expression {
     fn into_yield<'a>(values: Self::ReturnValue<'a>) -> DynYield<'a>
     where
         Self: 'a;
 }
 
-impl<S, C> DynOperandProjection for OperandHandle<S, C>
+impl<S, C> DynExpressionProjection for ExpressionHandle<S, C>
 where
     S: DynShapeProjection,
     S::Dynamic: ElementShape,
     C: Arity,
 {
-    type Dynamic = OperandHandle<S::Dynamic, C>;
+    type Dynamic = ExpressionHandle<S::Dynamic, C>;
 
     fn erase<'a>(
         values: Self::ReturnValue<'a>,
-    ) -> <Self::Dynamic as EvaluateOperand>::ReturnValue<'a>
+    ) -> <Self::Dynamic as EvaluateExpression>::ReturnValue<'a>
     where
         Self: 'a,
     {
@@ -522,7 +497,7 @@ where
     }
 }
 
-impl<S: DynStreamShape, C: DynArity> DynPayloadOutput for OperandHandle<S, C> {
+impl<S: DynStreamShape, C: DynArity> DynPayloadOutput for ExpressionHandle<S, C> {
     fn into_yield<'a>(values: Self::ReturnValue<'a>) -> DynYield<'a>
     where
         Self: 'a,
@@ -531,30 +506,30 @@ impl<S: DynStreamShape, C: DynArity> DynPayloadOutput for OperandHandle<S, C> {
     }
 }
 
-impl<M, K, S, C> DynOperandProjection for GroupOperand<M, K, OperandHandle<S, C>>
+impl<M, K, S, C> DynExpressionProjection for GroupedExpression<M, K, ExpressionHandle<S, C>>
 where
     M: DynIndexProjection,
-    K: DynIndexProjection + GroupKey,
+    K: DynIndexProjection + IndexDomain,
     S: DynStreamShape,
     C: DynArity,
 {
-    type Dynamic = GroupOperand<DynIndex, DynIndex, DynPayload>;
+    type Dynamic = GroupedExpression<DynIndex, DynIndex, DynPayload>;
 
     fn erase<'a>(
         values: Self::ReturnValue<'a>,
-    ) -> <Self::Dynamic as EvaluateOperand>::ReturnValue<'a>
+    ) -> <Self::Dynamic as EvaluateExpression>::ReturnValue<'a>
     where
         Self: 'a,
     {
         values
-            .map_domains(M::erase_index, K::erase_owned)
+            .map_domains(M::erase_address, K::erase_owned)
             .map_payloads(|_, _, payload| {
                 payload.map(|values| DynYield::Lane(S::erase::<C>(values)))
             })
     }
 }
 
-impl DynPayloadOutput for GroupOperand<DynIndex, DynIndex, DynPayload> {
+impl DynPayloadOutput for GroupedExpression<DynIndex, DynIndex, DynPayload> {
     fn into_yield<'a>(values: Self::ReturnValue<'a>) -> DynYield<'a>
     where
         Self: 'a,
@@ -563,11 +538,11 @@ impl DynPayloadOutput for GroupOperand<DynIndex, DynIndex, DynPayload> {
     }
 }
 
-struct DynProjectionContext<O: DynOperandProjection> {
-    input: O,
+struct DynProjectionContext<E: DynExpressionProjection> {
+    input: E,
 }
 
-impl<O: DynOperandProjection> PlanNode for DynProjectionContext<O> {
+impl<E: DynExpressionProjection> PlanNode for DynProjectionContext<E> {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         vec![self.input.as_plan_node()]
     }
@@ -585,7 +560,7 @@ impl<O: DynOperandProjection> PlanNode for DynProjectionContext<O> {
     }
 }
 
-impl<O: DynOperandProjection> OptimizerHints for DynProjectionContext<O> {
+impl<E: DynExpressionProjection> OptimizerHints for DynProjectionContext<E> {
     fn commutes_with_filter(&self) -> bool {
         self.input.context().commutes_with_filter()
     }
@@ -603,20 +578,20 @@ impl<O: DynOperandProjection> OptimizerHints for DynProjectionContext<O> {
     }
 }
 
-impl<O: DynOperandProjection> Explain for DynProjectionContext<O> {
+impl<E: DynExpressionProjection> Explain for DynProjectionContext<E> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         self.input.describe(formatter)
     }
 }
 
-impl<O: DynOperandProjection> Estimated for DynProjectionContext<O> {
+impl<E: DynExpressionProjection> Estimated for DynProjectionContext<E> {
     fn estimate(&self, stats: &Stats) -> Estimate {
         self.input.context().estimate(stats)
     }
 }
 
-impl<O: DynOperandProjection> OptimizePlan for DynProjectionContext<O> {
-    type Output = O::Dynamic;
+impl<E: DynExpressionProjection> OptimizePlan for DynProjectionContext<E> {
+    type Output = E::Dynamic;
 
     fn optimize(&self, original: &Self::Output, session: &Session) -> Transformed<Self::Output> {
         let input = session.optimize(&self.input);
@@ -629,15 +604,15 @@ impl<O: DynOperandProjection> OptimizePlan for DynProjectionContext<O> {
     }
 }
 
-impl<O: DynOperandProjection> EvaluateContext for DynProjectionContext<O> {
-    type Operand = O::Dynamic;
+impl<E: DynExpressionProjection> EvaluateContext for DynProjectionContext<E> {
+    type Expression = E::Dynamic;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
-        self.input.evaluate(graphrecord, cache).map(O::erase)
+        cache: &'a EvaluationCache,
+    ) -> QueryResult<<Self::Expression as EvaluateExpression>::ReturnValue<'a>> {
+        self.input.evaluate(graphrecord, cache).map(E::erase)
     }
 }
 
@@ -720,7 +695,7 @@ macro_rules! implement_operation_forwarding {
             fn prepare<'a>(
                 &'a self,
                 graphrecord: &'a GraphRecord,
-                cache: &'a EvaluationCache<'a>,
+                cache: &'a EvaluationCache,
             ) -> QueryResult<Self::Prepared<'a>> {
                 self.operation.prepare(graphrecord, cache)
             }
@@ -767,10 +742,10 @@ where
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<DynIndex, V::Dynamic>, Self>> {
         let pipeline = P::pipeline(graphrecord, prepared)?;
-        Ok(Pipeline::keyed(move |index, outcome: QueryResult<_>| {
-            let typed_index = I::project_index(graphrecord, index);
+        Ok(Pipeline::keyed(move |address, outcome: QueryResult<_>| {
+            let typed_address = I::project_address(address);
             let outcome = outcome.map(|value| V::project(graphrecord, value));
-            let step = pipeline.run((typed_index, outcome));
+            let step = pipeline.run((typed_address, outcome));
             <E as ElementEmission>::map_step(step, |outcome| outcome.map(W::erase))
         }))
     }
@@ -798,10 +773,10 @@ where
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<DynIndex, V::Dynamic>, Self>> {
         let pipeline = P::pipeline(graphrecord, prepared)?;
-        Ok(Pipeline::keyed(move |index, outcome: QueryResult<_>| {
-            let typed_index = I::project_index(graphrecord, index);
+        Ok(Pipeline::keyed(move |address, outcome: QueryResult<_>| {
+            let typed_address = I::project_address(address);
             let outcome = outcome.map(|value| V::project(graphrecord, value));
-            let step = pipeline.run((typed_index, outcome));
+            let step = pipeline.run((typed_address, outcome));
             E::map_step(step, |outcome| outcome.map(W::erase))
         }))
     }
@@ -841,10 +816,11 @@ where
 }
 
 fn expand_dyn_source<'a, V, W, O>(
-    parent: DynIndexRef<'a>,
+    graphrecord: &'a GraphRecord,
+    parent: DynIndexAddress,
     source: QueryResult<V::Value<'a>>,
     pipeline: &IndexedExpansionPipeline<'a, DynIndex, DynIndex, V, W, O>,
-) -> Vec<(DynIndexRef<'a>, QueryResult<W::Value<'a>>)>
+) -> Vec<(DynIndexAddress, QueryResult<W::Value<'a>>)>
 where
     V: ValueDomain,
     W: ValueDomain,
@@ -854,16 +830,22 @@ where
     let source_value = match source {
         Ok(value) => value,
         Err(failure) => {
-            let source = DynExpandedRef::source(parent);
-            return vec![(DynIndexRef::Expanded(Box::new(source)), Err(failure))];
+            let parent_address = DynExpandedAddress::parent(parent);
+            return vec![(
+                DynIndexAddress::Expanded(Box::new(parent_address)),
+                Err(failure),
+            )];
         }
     };
 
     let children = match pipeline.run((parent.clone(), source_value)) {
         Ok(children) => children,
         Err(failure) => {
-            let source = DynExpandedRef::source(parent);
-            return vec![(DynIndexRef::Expanded(Box::new(source)), Err(failure))];
+            let parent_address = DynExpandedAddress::parent(parent);
+            return vec![(
+                DynIndexAddress::Expanded(Box::new(parent_address)),
+                Err(failure),
+            )];
         }
     };
 
@@ -871,24 +853,25 @@ where
     let mut fragment = Vec::with_capacity(children.len());
 
     for child in children {
-        let (child_index, outcome) = child.into_parts();
+        let (child_address, outcome) = child.into_parts();
 
-        if !seen_children.insert(<DynIndex as IndexDomain>::to_owned(&child_index)) {
-            let source = DynExpandedRef::source(parent.clone());
-            let source_address = DynIndexRef::Expanded(Box::new(source));
-            let failure = Failure::new_at::<DynIndex, _>(
-                "indexed expansion",
-                DuplicateExpandedChildIndex::<DynIndex>::new(<DynIndex as IndexDomain>::to_owned(
-                    &child_index,
+        if !seen_children.insert(child_address.clone()) {
+            let parent_address = DynExpandedAddress::parent(parent);
+            let address = DynIndexAddress::Expanded(Box::new(parent_address));
+            let failure = Failure::new_at_address::<DynIndex, _>(
+                DuplicateExpandedChildIndex::<DynIndex>::new(DynIndex::own_index(
+                    &DynIndex::index(graphrecord, &child_address),
                 )),
-                &source_address,
+                graphrecord,
+                &address,
+                "indexed expansion",
             );
 
-            return vec![(source_address, Err(failure))];
+            return vec![(address, Err(failure))];
         }
 
-        let child = DynExpandedRef::child(parent.clone(), child_index);
-        fragment.push((DynIndexRef::Expanded(Box::new(child)), outcome));
+        let child = DynExpandedAddress::child(parent.clone(), child_address);
+        fragment.push((DynIndexAddress::Expanded(Box::new(child)), outcome));
     }
 
     fragment
@@ -904,6 +887,7 @@ impl<V: ValueDomain, W: ValueDomain> ElementTransition<Indexed<DynIndex, W>, Exp
         Indexed<DynIndex, W>: 'a;
 
     fn apply<'a, A: Arity>(
+        graphrecord: &'a GraphRecord,
         values: A::Container<'a, Self::Element<'a>>,
         pipeline: Self::Pipeline<'a>,
     ) -> <<Expanding<Ordered> as ElementEmission>::OutArity<A> as Arity>::Container<
@@ -911,7 +895,7 @@ impl<V: ValueDomain, W: ValueDomain> ElementTransition<Indexed<DynIndex, W>, Exp
         <Indexed<DynIndex, W> as ElementShape>::Element<'a>,
     > {
         Expanding::<Ordered>::apply::<A, _, _>(values, move |(parent, source)| {
-            expand_dyn_source::<V, _, _>(parent, source, &pipeline)
+            expand_dyn_source::<V, _, _>(graphrecord, parent, source, &pipeline)
         })
     }
 }
@@ -926,6 +910,7 @@ impl<V: ValueDomain, W: ValueDomain> ElementTransition<Indexed<DynIndex, W>, Exp
         Indexed<DynIndex, W>: 'a;
 
     fn apply<'a, A: Arity>(
+        graphrecord: &'a GraphRecord,
         values: A::Container<'a, Self::Element<'a>>,
         pipeline: Self::Pipeline<'a>,
     ) -> <<Expanding<Unordered> as ElementEmission>::OutArity<A> as Arity>::Container<
@@ -933,7 +918,7 @@ impl<V: ValueDomain, W: ValueDomain> ElementTransition<Indexed<DynIndex, W>, Exp
         <Indexed<DynIndex, W> as ElementShape>::Element<'a>,
     > {
         Expanding::<Unordered>::apply::<A, _, _>(values, move |(parent, source)| {
-            expand_dyn_source::<V, _, _>(parent, source, &pipeline)
+            expand_dyn_source::<V, _, _>(graphrecord, parent, source, &pipeline)
         })
     }
 }
@@ -994,15 +979,18 @@ where
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<DynIndex, V::Dynamic>, Self>> {
         let pipeline = P::pipeline(graphrecord, prepared)?;
-        Ok(Pipeline::new(move |(index, value)| {
-            let index = I::project_index(graphrecord, index);
+        Ok(Pipeline::new(move |(address, value)| {
+            let address = I::project_address(address);
             let value = V::project(graphrecord, value);
-            pipeline.run((index, value)).map(|children| {
+            pipeline.run((address, value)).map(|children| {
                 children
                     .into_iter()
                     .map(|child| {
-                        let (index, outcome) = child.into_parts();
-                        ExpandedChild::from_outcome(C::erase_index(index), outcome.map(W::erase))
+                        let (address, outcome) = child.into_parts();
+                        ExpandedChild::from_outcome(
+                            C::erase_address(address),
+                            outcome.map(W::erase),
+                        )
                     })
                     .collect()
             })
@@ -1032,18 +1020,18 @@ implement_operation_forwarding!(DynGroupOperation<S, C>, Group);
 
 impl<P, S, C> GroupKernel<DynIndex, DynIndex, DynPayload> for DynGroupOperation<P, S, C>
 where
-    P: GroupKernel<DynIndex, DynIndex, OperandHandle<S, C>>,
+    P: GroupKernel<DynIndex, DynIndex, ExpressionHandle<S, C>>,
     S: DynStreamShape,
     C: DynArity,
-    P::Output: DynOperandProjection,
+    P::Output: DynExpressionProjection,
 {
-    type Output = <P::Output as DynOperandProjection>::Dynamic;
+    type Output = <P::Output as DynExpressionProjection>::Dynamic;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
         partition: Partition<'a, DynIndex, DynIndex, DynPayload>,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let partition = project_group_partition::<S, C>(partition);
 
         P::execute(graphrecord, partition, prepared).map(P::Output::erase)
@@ -1056,7 +1044,7 @@ where
 
 fn project_group_partition<S: DynStreamShape, C: DynArity>(
     partition: Partition<'_, DynIndex, DynIndex, DynPayload>,
-) -> Partition<'_, DynIndex, DynIndex, OperandHandle<S, C>> {
+) -> Partition<'_, DynIndex, DynIndex, ExpressionHandle<S, C>> {
     partition.map_payloads(|_, _, payload| {
         payload.map(|yielded| {
             let DynYield::Lane(stream) = yielded else {
@@ -1068,12 +1056,12 @@ fn project_group_partition<S: DynStreamShape, C: DynArity>(
     })
 }
 
-pub struct DynLaneOperation<P, S, C, O> {
+pub struct DynLaneOperation<P, S, C, E> {
     operation: P,
-    marker: DynLaneOperationMarker<S, C, O>,
+    marker: DynLaneOperationMarker<S, C, E>,
 }
 
-impl<P, S, C, O> DynLaneOperation<P, S, C, O> {
+impl<P, S, C, E> DynLaneOperation<P, S, C, E> {
     pub const fn new(operation: P) -> Self {
         Self {
             operation,
@@ -1086,25 +1074,25 @@ impl<P, S, C, O> DynLaneOperation<P, S, C, O> {
     }
 }
 
-implement_operation_forwarding!(DynLaneOperation<S, C, O>, Lane);
+implement_operation_forwarding!(DynLaneOperation<S, C, E>, Lane);
 
-impl<P, S, C, O> LaneKernel<S::Dynamic, C> for DynLaneOperation<P, S, C, O>
+impl<P, S, C, E> LaneKernel<S::Dynamic, C> for DynLaneOperation<P, S, C, E>
 where
-    P: LaneKernel<S, C, Output = O>,
+    P: LaneKernel<S, C, Output = E>,
     S: DynShapeProjection,
     S::Dynamic: ElementShape,
     C: Arity,
-    O: DynOperandProjection,
+    E: DynExpressionProjection,
 {
-    type Output = O::Dynamic;
+    type Output = E::Dynamic;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
-        values: <OperandHandle<S::Dynamic, C> as EvaluateOperand>::ReturnValue<'a>,
+        values: <ExpressionHandle<S::Dynamic, C> as EvaluateExpression>::ReturnValue<'a>,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let values = C::map_elements(values, |element| S::project_element(graphrecord, element));
-        P::execute(graphrecord, values, prepared).map(O::erase)
+        P::execute(graphrecord, values, prepared).map(E::erase)
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {

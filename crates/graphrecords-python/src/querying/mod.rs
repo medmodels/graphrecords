@@ -419,7 +419,7 @@ impl PyOperand {
     }
 
     fn raise_when(&self, condition: &Bound<'_, PyAny>) -> PyResult<Self> {
-        self.invoke("raise_when", &[Self::mask_argument(condition)?])
+        self.invoke("on_error_raise_when", &[Self::mask_argument(condition)?])
     }
 
     fn kind(&self) -> PyResult<Self> {

@@ -1,13 +1,11 @@
 use crate::{
     Bare, BareValueDomain, ExpandedChild, ExpandedIndex, Explain, Failure, IndexDomain, Indexed,
-    Labeled, Operand, Ordered, Positional, QueryResult,
-    capabilities::StringValue,
+    Labeled, Ordered, Positional, QueryResult,
+    capabilities::ValueString,
     element::{Expanding, Pipeline, Retention},
     error::string::EmptySplitDelimiter,
-    execution::EvaluationCache,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
-        Prepare, Unaligned,
+        ArgumentSource, Build, ElementKernel, ElementPipeline, Keyed, Operation, Prepare, Unaligned,
     },
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     registry::operation_manifest,
@@ -15,7 +13,9 @@ use crate::{
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "Split")]
 #[plan(optimizer_hints(empty = if_all))]
@@ -24,60 +24,50 @@ pub struct SplitOperation<A> {
     delimiter: A,
 }
 
-impl<A: Prepare> Prepare for SplitOperation<A> {
-    type Prepared<'a>
-        = A::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.delimiter.prepare(graphrecord, cache)
-    }
-}
-
 impl<I, V, A> ElementKernel<Indexed<I, V>> for SplitOperation<A>
 where
     I: IndexDomain,
-    V: StringValue,
+    V: ValueString,
     A: ArgumentSource<Keyed<I>>,
-    A::ValueDomain: StringValue,
+    A::ValueDomain: ValueString,
 {
     type Emission = Expanding<Ordered>;
     type OutShape = Indexed<ExpandedIndex<I, Positional>, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(Pipeline::keyed(move |index, value: V::Value<'a>| {
-            let role = value.clone();
-            let value =
-                V::into_string(Self::LABEL, value).map_err(|failure| failure.at::<I>(&index))?;
-            let delimiter = match A::Retention::collapse(A::resolve(&prepared, &index, Self::LABEL))
-            {
+        Ok(Pipeline::keyed(move |address, value: V::Value<'a>| {
+            let string = V::as_str(&value, Self::LABEL)
+                .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
+            let delimiter = match A::Retention::collapse(A::resolve(
+                graphrecord,
+                &prepared,
+                &address,
+                Self::LABEL,
+            )) {
                 None => return Ok(Vec::new()),
                 Some(Err(failure)) => return Err(failure),
-                Some(Ok(delimiter)) => A::ValueDomain::into_string(Self::LABEL, delimiter)
-                    .map_err(|failure| failure.at::<I>(&index))?,
+                Some(Ok(delimiter)) => A::ValueDomain::as_str(&delimiter, Self::LABEL)
+                    .map(str::to_string)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?,
             };
 
             if delimiter.is_empty() {
-                return Err(Failure::new_at::<I, _>(
-                    Self::LABEL,
+                return Err(Failure::new_at_address::<I, _>(
                     EmptySplitDelimiter,
-                    &index,
+                    graphrecord,
+                    &address,
+                    Self::LABEL,
                 ));
             }
 
-            Ok(value
+            Ok(string
                 .split(&delimiter)
                 .enumerate()
                 .map(|(position, fragment)| {
-                    ExpandedChild::success(position, V::from_string(&role, fragment.to_owned()))
+                    ExpandedChild::success(position, V::with_string(&value, fragment.to_owned()))
                 })
                 .collect())
         }))
@@ -86,61 +76,63 @@ where
 
 impl<V, A> ElementKernel<Bare<V>> for SplitOperation<A>
 where
-    V: StringValue + BareValueDomain,
+    V: ValueString + BareValueDomain,
     A: ArgumentSource<Unaligned>,
-    A::ValueDomain: StringValue,
+    A::ValueDomain: ValueString,
 {
     type Emission = Expanding<Ordered>;
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         Ok(Pipeline::new(move |outcome: QueryResult<V::Value<'a>>| {
-            let (role, value) = match outcome {
+            let value = match outcome {
                 Err(failure) => return vec![Err(failure)],
-                Ok(value) => {
-                    let role = value.clone();
-                    match V::into_string(Self::LABEL, value) {
-                        Ok(value) => (role, value),
+                Ok(value) => value,
+            };
+            let string = match V::as_str(&value, Self::LABEL) {
+                Ok(string) => string,
+                Err(failure) => return vec![Err(failure)],
+            };
+            let delimiter = match A::Retention::collapse(A::resolve(
+                graphrecord,
+                &prepared,
+                &(),
+                Self::LABEL,
+            )) {
+                None => return Vec::new(),
+                Some(Err(failure)) => return vec![Err(failure)],
+                Some(Ok(delimiter)) => {
+                    match A::ValueDomain::as_str(&delimiter, Self::LABEL).map(str::to_string) {
+                        Ok(delimiter) => delimiter,
                         Err(failure) => return vec![Err(failure)],
                     }
                 }
             };
-            let delimiter = match A::Retention::collapse(A::resolve(&prepared, &(), Self::LABEL)) {
-                None => return Vec::new(),
-                Some(Err(failure)) => return vec![Err(failure)],
-                Some(Ok(delimiter)) => match A::ValueDomain::into_string(Self::LABEL, delimiter) {
-                    Ok(delimiter) => delimiter,
-                    Err(failure) => return vec![Err(failure)],
-                },
-            };
 
             if delimiter.is_empty() {
-                return vec![Err(Failure::new(Self::LABEL, EmptySplitDelimiter))];
+                return vec![Err(Failure::new(EmptySplitDelimiter, Self::LABEL))];
             }
 
-            value
+            string
                 .split(&delimiter)
-                .map(|fragment| Ok(V::from_string(&role, fragment.to_owned())))
+                .map(|fragment| Ok(V::with_string(&value, fragment.to_owned())))
                 .collect()
         }))
     }
 }
 
-impl<O, A> Split<A> for O
+impl<E, A> Split<A> for E
 where
     SplitOperation<A>: Operation,
-    O: Apply<SplitOperation<A>>,
+    E: Build<SplitOperation<A>>,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn split(&self, delimiter: A) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            SplitOperation { delimiter },
-        ))
+    fn split(&self, delimiter: A) -> Self::Output {
+        self.build(SplitOperation { delimiter })
     }
 }
 
@@ -150,15 +142,16 @@ operation_manifest! {
         scope: element;
 
         kernel {
-            parameters: <I: IndexDomain, V: StringValue>;
-            argument: A: ArgumentSource<Keyed<I>> where A::ValueDomain: StringValue;
+            parameters: <I: IndexDomain, V: ValueString>;
+            argument: A: ArgumentSource<Keyed<I>> where A::ValueDomain: ValueString;
             input: Indexed<I, V>;
             output: Indexed<ExpandedIndex<I, Positional>, V>;
             emission: Expanding<Ordered>;
         }
+
         kernel {
-            parameters: <V: StringValue + BareValueDomain>;
-            argument: A: ArgumentSource<Unaligned> where A::ValueDomain: StringValue;
+            parameters: <V: ValueString + BareValueDomain>;
+            argument: A: ArgumentSource<Unaligned> where A::ValueDomain: ValueString;
             input: Bare<V>;
             output: Bare<V>;
             emission: Expanding<Ordered>;

@@ -1,5 +1,5 @@
 use crate::{
-    BareValueDomain, ExpandedChild, ExpandedIndex, ExpandedIndexReference, Failure, IndexDomain,
+    BareValueDomain, ExpandedChild, ExpandedIndex, ExpandedIndexAddress, Failure, IndexDomain,
     QueryResult, ValueDomain,
     element::{
         Arity, Bare, ElementEmission, ElementShape, Expanding, Indexed, OrderState, Ordered,
@@ -7,11 +7,12 @@ use crate::{
     },
     error::index::DuplicateExpandedChildIndex,
 };
+use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashSet;
 use std::marker::PhantomData;
 
 type ExpandedElement<'a, P, C, V> = (
-    ExpandedIndexReference<'a, P, C>,
+    ExpandedIndexAddress<P, C>,
     QueryResult<<V as ValueDomain>::Value<'a>>,
 );
 
@@ -49,7 +50,7 @@ impl<'a, A: 'a, B: 'a, Y: 'a, E: ElementEmission> Pipeline<'a, (A, B), Y, E> {
 pub type IndexedValuePipeline<'a, I, V, W, E> = Pipeline<
     'a,
     (
-        <I as IndexDomain>::Index<'a>,
+        <I as IndexDomain>::Address,
         QueryResult<<V as ValueDomain>::Value<'a>>,
     ),
     <E as ElementEmission>::Step<QueryResult<<W as ValueDomain>::Value<'a>>>,
@@ -65,7 +66,7 @@ pub type BarePipeline<'a, V, W, E> = Pipeline<
 
 pub type IndexedExpansionPipeline<'a, P, C, V, W, O> = Pipeline<
     'a,
-    (<P as IndexDomain>::Index<'a>, <V as ValueDomain>::Value<'a>),
+    (<P as IndexDomain>::Address, <V as ValueDomain>::Value<'a>),
     QueryResult<Vec<ExpandedChild<'a, C, W>>>,
     Expanding<O>,
 >;
@@ -77,6 +78,7 @@ pub trait ElementTransition<T: ElementShape, E: ElementEmission>: ElementShape {
         T: 'a;
 
     fn apply<'a, C: Arity>(
+        graphrecord: &'a GraphRecord,
         values: C::Container<'a, Self::Element<'a>>,
         pipeline: Self::Pipeline<'a>,
     ) -> <E::OutArity<C> as Arity>::Container<'a, T::Element<'a>>;
@@ -88,15 +90,16 @@ impl<I: IndexDomain, V: ValueDomain, W: ValueDomain, E: Retention>
     type Pipeline<'a> = IndexedValuePipeline<'a, I, V, W, E>;
 
     fn apply<'a, C: Arity>(
+        _graphrecord: &'a GraphRecord,
         values: C::Container<'a, Self::Element<'a>>,
         pipeline: Self::Pipeline<'a>,
     ) -> <E::OutArity<C> as Arity>::Container<'a, <Indexed<I, W> as ElementShape>::Element<'a>>
     {
         E::apply(values, move |element| {
-            let (index, value): (I::Index<'a>, _) = element;
-            let step = pipeline.run((index.clone(), value));
+            let (address, value): (I::Address, _) = element;
+            let step = pipeline.run((address.clone(), value));
 
-            <E as Retention>::map_step(step, |value| (index, value))
+            <E as Retention>::map_step(step, |value| (address, value))
         })
     }
 }
@@ -107,6 +110,7 @@ impl<I: IndexDomain, V: ValueDomain, W: BareValueDomain, E: ElementEmission>
     type Pipeline<'a> = IndexedValuePipeline<'a, I, V, W, E>;
 
     fn apply<'a, C: Arity>(
+        _graphrecord: &'a GraphRecord,
         values: C::Container<'a, Self::Element<'a>>,
         pipeline: Self::Pipeline<'a>,
     ) -> <E::OutArity<C> as Arity>::Container<'a, <Bare<W> as ElementShape>::Element<'a>> {
@@ -120,6 +124,7 @@ impl<V: BareValueDomain, W: BareValueDomain, E: ElementEmission> ElementTransiti
     type Pipeline<'a> = BarePipeline<'a, V, W, E>;
 
     fn apply<'a, C: Arity>(
+        _graphrecord: &'a GraphRecord,
         values: C::Container<'a, Self::Element<'a>>,
         pipeline: Self::Pipeline<'a>,
     ) -> <E::OutArity<C> as Arity>::Container<'a, <Bare<W> as ElementShape>::Element<'a>> {
@@ -128,7 +133,8 @@ impl<V: BareValueDomain, W: BareValueDomain, E: ElementEmission> ElementTransiti
 }
 
 fn expand_indexed_source<'a, P, C, V, W, O>(
-    parent: P::Index<'a>,
+    graphrecord: &'a GraphRecord,
+    parent: P::Address,
     source: QueryResult<V::Value<'a>>,
     pipeline: &IndexedExpansionPipeline<'a, P, C, V, W, O>,
 ) -> Vec<ExpandedElement<'a, P, C, W>>
@@ -143,14 +149,14 @@ where
     let source_value = match source {
         Ok(value) => value,
         Err(failure) => {
-            return vec![(ExpandedIndexReference::source(parent), Err(failure))];
+            return vec![(ExpandedIndexAddress::parent(parent), Err(failure))];
         }
     };
 
     let children = match pipeline.run((parent.clone(), source_value)) {
         Ok(children) => children,
         Err(failure) => {
-            return vec![(ExpandedIndexReference::source(parent), Err(failure))];
+            return vec![(ExpandedIndexAddress::parent(parent), Err(failure))];
         }
     };
 
@@ -158,21 +164,25 @@ where
     let mut fragment = Vec::with_capacity(children.len());
 
     for child in children {
-        let (child_index, outcome) = child.into_parts();
+        let (child_address, outcome) = child.into_parts();
 
-        if !seen_children.insert(C::to_owned(&child_index)) {
-            let source_address = ExpandedIndexReference::source(parent.clone());
-            let failure = Failure::new_at::<ExpandedIndex<_, _>, _>(
+        if !seen_children.insert(child_address.clone()) {
+            let parent_address = ExpandedIndexAddress::parent(parent);
+            let failure = Failure::new_at_address::<ExpandedIndex<P, C>, _>(
+                DuplicateExpandedChildIndex::<C>::new(C::own_index(&C::index(
+                    graphrecord,
+                    &child_address,
+                ))),
+                graphrecord,
+                &parent_address,
                 "indexed expansion",
-                DuplicateExpandedChildIndex::<C>::new(C::to_owned(&child_index)),
-                &source_address,
             );
 
-            return vec![(source_address, Err(failure))];
+            return vec![(parent_address, Err(failure))];
         }
 
         fragment.push((
-            ExpandedIndexReference::child(parent.clone(), child_index),
+            ExpandedIndexAddress::child(parent.clone(), child_address),
             outcome,
         ));
     }
@@ -190,6 +200,7 @@ impl<P: IndexDomain, C: IndexDomain, V: ValueDomain, W: ValueDomain>
         Indexed<ExpandedIndex<P, C>, W>: 'a;
 
     fn apply<'a, A: Arity>(
+        graphrecord: &'a GraphRecord,
         values: A::Container<'a, Self::Element<'a>>,
         pipeline: Self::Pipeline<'a>,
     ) -> <<Expanding<Ordered> as ElementEmission>::OutArity<A> as Arity>::Container<
@@ -197,7 +208,7 @@ impl<P: IndexDomain, C: IndexDomain, V: ValueDomain, W: ValueDomain>
         <Indexed<ExpandedIndex<P, C>, W> as ElementShape>::Element<'a>,
     > {
         Expanding::<Ordered>::apply::<A, _, _>(values, move |(parent, source)| {
-            expand_indexed_source::<_, _, V, _, _>(parent, source, &pipeline)
+            expand_indexed_source::<_, _, V, _, _>(graphrecord, parent, source, &pipeline)
         })
     }
 }
@@ -212,6 +223,7 @@ impl<P: IndexDomain, C: IndexDomain, V: ValueDomain, W: ValueDomain>
         Indexed<ExpandedIndex<P, C>, W>: 'a;
 
     fn apply<'a, A: Arity>(
+        graphrecord: &'a GraphRecord,
         values: A::Container<'a, Self::Element<'a>>,
         pipeline: Self::Pipeline<'a>,
     ) -> <<Expanding<Unordered> as ElementEmission>::OutArity<A> as Arity>::Container<
@@ -219,7 +231,7 @@ impl<P: IndexDomain, C: IndexDomain, V: ValueDomain, W: ValueDomain>
         <Indexed<ExpandedIndex<P, C>, W> as ElementShape>::Element<'a>,
     > {
         Expanding::<Unordered>::apply::<A, _, _>(values, move |(parent, source)| {
-            expand_indexed_source::<_, _, V, _, _>(parent, source, &pipeline)
+            expand_indexed_source::<_, _, V, _, _>(graphrecord, parent, source, &pipeline)
         })
     }
 }

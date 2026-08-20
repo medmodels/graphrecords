@@ -1,39 +1,48 @@
-use crate::{Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain};
-use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
+use crate::{
+    Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
+    capabilities::{identifier_into_view, value_into_view},
+};
+use graphrecords_core::graphrecord::{
+    AttributeName, Identifier, NodeIndex, NodeIndexView, Value, datatypes::AttributeNameView,
+};
 
 pub trait ValueSubtract: ValueDomain {
     fn subtract<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>>;
 }
 
 impl ValueSubtract for Scalar {
     fn subtract<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        (value - argument).map_err(|error| Failure::new(label, error))
+        (Value::from(value) - Value::from(argument))
+            .map(value_into_view)
+            .map_err(|error| Failure::new(error, label))
     }
 }
 
 impl ValueSubtract for AttributeName {
     fn subtract<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        (value - argument).map_err(|error| Failure::new(label, error))
+        (Self::from(value) - Self::from(argument))
+            .map(|result| AttributeNameView::from(identifier_into_view(Identifier::from(result))))
+            .map_err(|error| Failure::new(error, label))
     }
 }
 
 impl ValueSubtract for IndexValue<Positional> {
     fn subtract<'a>(
-        _label: &'static str,
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
+        _label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
         Ok(value - argument)
     }
@@ -41,40 +50,34 @@ impl ValueSubtract for IndexValue<Positional> {
 
 impl ValueSubtract for IndexValue<NodeIndex> {
     fn subtract<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        (value - argument).map_err(|error| Failure::new(label, error))
+        (NodeIndex::from(value) - NodeIndex::from(argument))
+            .map(|result| NodeIndexView::from(identifier_into_view(Identifier::from(result))))
+            .map_err(|error| Failure::new(error, label))
     }
 }
 
 impl ValueSubtract for IndexValue<AttributeName> {
     fn subtract<'a>(
+        value: Self::Value<'a>,
+        argument: Self::Value<'a>,
         label: &'static str,
-        value: Self::Value<'a>,
-        argument: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        (value - argument).map_err(|error| Failure::new(label, error))
-    }
-}
-
-impl ValueSubtract for IndexValue<EdgeIndex> {
-    fn subtract<'a>(
-        _label: &'static str,
-        value: Self::Value<'a>,
-        argument: Self::Value<'a>,
-    ) -> QueryResult<Self::Value<'a>> {
-        Ok(value - argument)
+        (AttributeName::from(value) - AttributeName::from(argument))
+            .map(|result| AttributeNameView::from(identifier_into_view(Identifier::from(result))))
+            .map_err(|error| Failure::new(error, label))
     }
 }
 
 impl ValueSubtract for IndexValue<Value> {
     fn subtract<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        (value - argument).map_err(|error| Failure::new(label, error))
+        (value - argument).map_err(|error| Failure::new(error, label))
     }
 }

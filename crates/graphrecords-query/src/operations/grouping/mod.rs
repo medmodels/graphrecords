@@ -12,7 +12,7 @@ mod ungroup_keyed;
 use crate::{
     Arity, Bare, BareValueDomain, Definite, ElementShape, Failure, IndexDomain, Indexed, Multiple,
     OrderState, QueryResult, Single, ValueDomain, error::grouping::UnresolvedGroupKeyFailures,
-    registry::OperationManifest,
+    expressions::PartitionKeyFailureParts, registry::OperationManifest,
 };
 pub use broadcast::BroadcastOperation;
 pub use broadcast_via::BroadcastViaOperation;
@@ -52,7 +52,7 @@ pub(super) fn operation_manifests() -> Vec<OperationManifest> {
 }
 
 fn reject_key_failures<M: IndexDomain>(
-    key_failures: Vec<(M::Index<'_>, Box<Failure>)>,
+    key_failures: Vec<PartitionKeyFailureParts<M>>,
     label: &'static str,
 ) -> QueryResult<()> {
     if key_failures.is_empty() {
@@ -60,13 +60,13 @@ fn reject_key_failures<M: IndexDomain>(
     }
 
     Err(Failure::new(
-        label,
         UnresolvedGroupKeyFailures::new(
             key_failures
                 .into_iter()
                 .map(|key_failure| *key_failure.1)
                 .collect(),
         ),
+        label,
     ))
 }
 

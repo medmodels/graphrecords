@@ -1,11 +1,11 @@
 use crate::{
-    EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled, Operand, QueryResult, Scalar,
-    Unit,
+    EntityRef, EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled, QueryResult,
+    Scalar, Unit,
     element::{Pipeline, Preserving},
     error::structure::{MissingAttribute, MissingTraversedAttribute},
     execution::EvaluationCache,
     index::EntityAttributes,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Attribute,
@@ -27,7 +27,7 @@ impl Prepare for AttributeOperation {
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(&self.attribute)
     }
@@ -41,22 +41,26 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributeOperation
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
-        Ok(Pipeline::keyed(move |index, membership| {
-            membership?;
-            let attributes = I::attributes(graphrecord, &index).expect("Entity must exist");
+        let attribute_address = I::resolve_attribute_address(graphrecord, prepared);
 
-            if let Some(value) = attributes.get(prepared) {
-                return Ok(value.clone());
-            }
+        Ok(Pipeline::keyed(
+            move |address, membership: QueryResult<_>| {
+                membership?;
 
-            let failure = Failure::new_at::<I, _>(
-                Self::LABEL,
-                MissingAttribute::new(prepared.clone()),
-                &index,
-            );
-
-            Err(failure)
-        }))
+                attribute_address
+                    .and_then(|attribute_address| {
+                        I::attribute(graphrecord, &address, attribute_address)
+                    })
+                    .ok_or_else(|| {
+                        Failure::new_at_address::<I, _>(
+                            MissingAttribute::new(prepared.clone()),
+                            graphrecord,
+                            &address,
+                            Self::LABEL,
+                        )
+                    })
+            },
+        ))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -83,21 +87,25 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
-        Ok(Pipeline::keyed(move |key, reference: QueryResult<_>| {
-            reference.and_then(|entity| {
-                let attributes = E::attributes(graphrecord, &entity).expect("Entity must exist");
+        let attribute_address = E::resolve_attribute_address(graphrecord, prepared);
 
-                if let Some(value) = attributes.get(prepared) {
-                    return Ok(value.clone());
+        Ok(Pipeline::keyed(
+            move |address, reference: QueryResult<EntityRef<'a, E>>| {
+                let entity = reference?;
+
+                match attribute_address.and_then(|attribute_address| {
+                    E::attribute(graphrecord, entity.address(), attribute_address)
+                }) {
+                    Some(value) => Ok(value),
+                    None => Err(Failure::new_at_address::<I, _>(
+                        MissingTraversedAttribute::new(prepared.clone(), entity.into_owned()),
+                        graphrecord,
+                        &address,
+                        Self::LABEL,
+                    )),
                 }
-
-                Err(Failure::new_at::<I, _>(
-                    Self::LABEL,
-                    MissingTraversedAttribute::new(prepared.clone(), E::to_owned(&entity)),
-                    &key,
-                ))
-            })
-        }))
+            },
+        ))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -117,14 +125,11 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
     }
 }
 
-impl<O: Apply<AttributeOperation>> Attribute for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<AttributeOperation>> Attribute for E {
+    type Output = E::Output;
 
-    fn attribute(&self, attribute: AttributeName) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            AttributeOperation { attribute },
-        ))
+    fn attribute(&self, attribute: AttributeName) -> Self::Output {
+        self.build(AttributeOperation { attribute })
     }
 }
 

@@ -1,47 +1,47 @@
 pub trait First {
-    type ReturnOperand;
+    type Output;
 
-    fn first(&self) -> Self::ReturnOperand;
+    fn first(&self) -> Self::Output;
 }
 
 pub trait Last {
-    type ReturnOperand;
+    type Output;
 
-    fn last(&self) -> Self::ReturnOperand;
+    fn last(&self) -> Self::Output;
 }
 
 pub trait ReverseOrder {
-    type ReturnOperand;
+    type Output;
 
-    fn reverse_order(&self) -> Self::ReturnOperand;
+    fn reverse_order(&self) -> Self::Output;
 }
 
 pub trait Shuffle {
-    type ReturnOperand;
+    type Output;
 
-    fn shuffle(&self) -> Self::ReturnOperand;
+    fn shuffle(&self) -> Self::Output;
 }
 
 pub trait Sort {
-    type ReturnOperand;
+    type Output;
 
-    fn sort(&self) -> Self::ReturnOperand;
+    fn sort(&self) -> Self::Output;
 }
 
-pub trait SortBy<A> {
-    type ReturnOperand;
+pub trait SortBy<K> {
+    type Output;
 
-    fn sort_by(&self, key: A) -> Self::ReturnOperand;
+    fn sort_by(&self, key: K) -> Self::Output;
 }
 
 pub trait Take {
-    type ReturnOperand;
+    type Output;
 
-    fn take(&self, elements: usize) -> Self::ReturnOperand;
+    fn take(&self, elements: usize) -> Self::Output;
 }
 
 pub trait Unorder {
-    type ReturnOperand;
+    type Output;
 
-    fn unorder(&self) -> Self::ReturnOperand;
+    fn unorder(&self) -> Self::Output;
 }

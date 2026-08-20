@@ -1,47 +1,36 @@
 use super::{numeric_bare, numeric_indexed};
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, QueryResult,
     capabilities::ValueExponential,
     element::Preserving,
-    execution::EvaluationCache,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Exponential,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "Exponential")]
 #[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct ExponentialOperation;
 
-impl Prepare for ExponentialOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<I, V> ElementKernel<Indexed<I, V>> for ExponentialOperation
-where
-    I: IndexDomain,
-    V: ValueExponential,
-{
+impl<I: IndexDomain, V: ValueExponential> ElementKernel<Indexed<I, V>> for ExponentialOperation {
     type Emission = Preserving;
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(numeric_indexed::<I, V, _>(Self::LABEL, V::exponential))
+        Ok(numeric_indexed::<I, V>(
+            graphrecord,
+            V::exponential,
+            Self::LABEL,
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -49,10 +38,7 @@ where
     }
 }
 
-impl<V> ElementKernel<Bare<V>> for ExponentialOperation
-where
-    V: ValueExponential + BareValueDomain,
-{
+impl<V: ValueExponential + BareValueDomain> ElementKernel<Bare<V>> for ExponentialOperation {
     type Emission = Preserving;
     type OutShape = Bare<V>;
 
@@ -60,7 +46,7 @@ where
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(numeric_bare::<V, _>(Self::LABEL, V::exponential))
+        Ok(numeric_bare::<V>(V::exponential, Self::LABEL))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -68,11 +54,11 @@ where
     }
 }
 
-impl<O: Apply<ExponentialOperation>> Exponential for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<ExponentialOperation>> Exponential for E {
+    type Output = E::Output;
 
-    fn exp(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), ExponentialOperation))
+    fn exp(&self) -> Self::Output {
+        self.build(ExponentialOperation)
     }
 }
 

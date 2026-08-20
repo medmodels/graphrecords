@@ -1,37 +1,41 @@
 use super::{
-    DynArity, DynIndex, DynInvokeArgument, DynOperandProjection, DynPayload, DynStream,
-    DynStreamShape, DynTerminal, DynValue, DynYield,
+    DynArity, DynExpressionProjection, DynIndex, DynInvokeArgument, DynPayload, DynStream,
+    DynStreamShape, DynTerminal, DynValue, DynYield, OperationCapture,
+    operation_dynamic_element_apply,
 };
 use crate::{
-    Bare, Cache, Definite, ElementShape, EvaluateOperand, Explanation, Failure, Indexed, Mask,
-    Multiple, Operand, Ordered, QueryResult, Single, Unit, Unordered,
+    Bare, Cache, Definite, ElementShape, EvaluateExpression, Explanation, Expression, Failure,
+    Indexed, Mask, Multiple, Ordered, QueryResult, Single, Unit, Unordered,
     error::dispatch::OperationNotApplicable,
     execution::{CacheableShape, EvaluationCache},
-    operands::{AllEdges, AllNodes, EdgesOperand, GroupOperand, NodesOperand, OperandHandle},
+    expressions::{
+        AllEdges, AllGroups, AllNodes, EdgesExpression, ExpressionHandle, GroupedExpression,
+        GroupsExpression, NodesExpression,
+    },
+    operations::TransitionOperation,
     optimizer::{OptimizationReport, Optimizer, Stats},
     registry::{
-        ArgumentDescriptor, ArityDescriptor, IndexDescriptor, LaneShapeDescriptor,
-        OperandDescriptor, OperationRegistry, OrderDescriptor, ValueDescriptor, ValueRole,
+        ArgumentDescriptor, ArityDescriptor, ExpressionDescriptor, IndexDescriptor,
+        LaneShapeDescriptor, OperationRegistry, OrderDescriptor, ValueDescriptor, ValueRole,
     },
+    traits::Transition,
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, NodeIndex},
+    graphrecord::{EdgeIndex, Group, NodeIndex},
 };
 use std::{
     fmt::{self, Display, Formatter},
     sync::OnceLock,
 };
 
-pub type DynGroupHandle = GroupOperand<DynIndex, DynIndex, DynPayload>;
-
-pub const TRANSITION: &str = "transition";
+pub type DynGroupHandle = GroupedExpression<DynIndex, DynIndex, DynPayload>;
 
 pub enum DynArityHandle<S: ElementShape> {
-    MultipleOrdered(OperandHandle<S, Multiple<Ordered>>),
-    MultipleUnordered(OperandHandle<S, Multiple<Unordered>>),
-    Single(OperandHandle<S, Single>),
-    Definite(OperandHandle<S, Definite>),
+    MultipleOrdered(ExpressionHandle<S, Multiple<Ordered>>),
+    MultipleUnordered(ExpressionHandle<S, Multiple<Unordered>>),
+    Single(ExpressionHandle<S, Single>),
+    Definite(ExpressionHandle<S, Definite>),
 }
 
 #[derive(Clone)]
@@ -50,20 +54,20 @@ pub enum DynHandle {
 }
 
 #[derive(Clone)]
-pub struct DynOperand {
+pub struct DynExpression {
     pub(crate) handle: DynHandle,
-    descriptor: OperandDescriptor,
+    descriptor: ExpressionDescriptor,
 }
 
 pub struct DynExplanation {
-    operand: DynOperand,
+    expression: DynExpression,
     report: OptimizationReport,
 }
 
 #[must_use]
-pub fn query_nodes() -> DynOperand {
-    let handle = NodesOperand::new(AllNodes).erase_operand();
-    let descriptor = OperandDescriptor::Lane {
+pub fn nodes() -> DynExpression {
+    let handle = NodesExpression::new(AllNodes).erase_expression();
+    let descriptor = ExpressionDescriptor::Lane {
         shape: LaneShapeDescriptor::Indexed {
             index: IndexDescriptor::domain::<NodeIndex>(),
             value: ValueDescriptor::unit(),
@@ -73,13 +77,13 @@ pub fn query_nodes() -> DynOperand {
         },
     };
 
-    DynOperand::from_lane(handle, descriptor)
+    DynExpression::from_lane(handle, descriptor)
 }
 
 #[must_use]
-pub fn query_edges() -> DynOperand {
-    let handle = EdgesOperand::new(AllEdges).erase_operand();
-    let descriptor = OperandDescriptor::Lane {
+pub fn edges() -> DynExpression {
+    let handle = EdgesExpression::new(AllEdges).erase_expression();
+    let descriptor = ExpressionDescriptor::Lane {
         shape: LaneShapeDescriptor::Indexed {
             index: IndexDescriptor::domain::<EdgeIndex>(),
             value: ValueDescriptor::unit(),
@@ -89,21 +93,37 @@ pub fn query_edges() -> DynOperand {
         },
     };
 
-    DynOperand::from_lane(handle, descriptor)
+    DynExpression::from_lane(handle, descriptor)
+}
+
+#[must_use]
+pub fn groups() -> DynExpression {
+    let handle = GroupsExpression::new(AllGroups).erase_expression();
+    let descriptor = ExpressionDescriptor::Lane {
+        shape: LaneShapeDescriptor::Indexed {
+            index: IndexDescriptor::domain::<Group>(),
+            value: ValueDescriptor::unit(),
+        },
+        arity: ArityDescriptor::Multiple {
+            order: OrderDescriptor::Unordered,
+        },
+    };
+
+    DynExpression::from_lane(handle, descriptor)
 }
 
 pub trait IntoDynArityHandle: DynArity + Sized {
-    fn into_handle<S: DynStreamShape>(handle: OperandHandle<S, Self>) -> DynArityHandle<S>;
+    fn into_handle<S: DynStreamShape>(handle: ExpressionHandle<S, Self>) -> DynArityHandle<S>;
 
-    fn clone_handle<S: DynStreamShape>(handles: &DynArityHandle<S>) -> OperandHandle<S, Self>;
+    fn clone_handle<S: DynStreamShape>(handles: &DynArityHandle<S>) -> ExpressionHandle<S, Self>;
 }
 
 impl IntoDynArityHandle for Multiple<Ordered> {
-    fn into_handle<S: DynStreamShape>(handle: OperandHandle<S, Self>) -> DynArityHandle<S> {
+    fn into_handle<S: DynStreamShape>(handle: ExpressionHandle<S, Self>) -> DynArityHandle<S> {
         DynArityHandle::MultipleOrdered(handle)
     }
 
-    fn clone_handle<S: DynStreamShape>(handles: &DynArityHandle<S>) -> OperandHandle<S, Self> {
+    fn clone_handle<S: DynStreamShape>(handles: &DynArityHandle<S>) -> ExpressionHandle<S, Self> {
         let DynArityHandle::MultipleOrdered(handle) = handles else {
             panic!("registry selected an ordered-multiple operation for a different dynamic arity")
         };
@@ -112,11 +132,11 @@ impl IntoDynArityHandle for Multiple<Ordered> {
 }
 
 impl IntoDynArityHandle for Multiple<Unordered> {
-    fn into_handle<S: DynStreamShape>(handle: OperandHandle<S, Self>) -> DynArityHandle<S> {
+    fn into_handle<S: DynStreamShape>(handle: ExpressionHandle<S, Self>) -> DynArityHandle<S> {
         DynArityHandle::MultipleUnordered(handle)
     }
 
-    fn clone_handle<S: DynStreamShape>(handles: &DynArityHandle<S>) -> OperandHandle<S, Self> {
+    fn clone_handle<S: DynStreamShape>(handles: &DynArityHandle<S>) -> ExpressionHandle<S, Self> {
         let DynArityHandle::MultipleUnordered(handle) = handles else {
             panic!(
                 "registry selected an unordered-multiple operation for a different dynamic arity"
@@ -127,11 +147,11 @@ impl IntoDynArityHandle for Multiple<Unordered> {
 }
 
 impl IntoDynArityHandle for Single {
-    fn into_handle<S: DynStreamShape>(handle: OperandHandle<S, Self>) -> DynArityHandle<S> {
+    fn into_handle<S: DynStreamShape>(handle: ExpressionHandle<S, Self>) -> DynArityHandle<S> {
         DynArityHandle::Single(handle)
     }
 
-    fn clone_handle<S: DynStreamShape>(handles: &DynArityHandle<S>) -> OperandHandle<S, Self> {
+    fn clone_handle<S: DynStreamShape>(handles: &DynArityHandle<S>) -> ExpressionHandle<S, Self> {
         let DynArityHandle::Single(handle) = handles else {
             panic!("registry selected a single operation for a different dynamic arity")
         };
@@ -140,11 +160,11 @@ impl IntoDynArityHandle for Single {
 }
 
 impl IntoDynArityHandle for Definite {
-    fn into_handle<S: DynStreamShape>(handle: OperandHandle<S, Self>) -> DynArityHandle<S> {
+    fn into_handle<S: DynStreamShape>(handle: ExpressionHandle<S, Self>) -> DynArityHandle<S> {
         DynArityHandle::Definite(handle)
     }
 
-    fn clone_handle<S: DynStreamShape>(handles: &DynArityHandle<S>) -> OperandHandle<S, Self> {
+    fn clone_handle<S: DynStreamShape>(handles: &DynArityHandle<S>) -> ExpressionHandle<S, Self> {
         let DynArityHandle::Definite(handle) = handles else {
             panic!("registry selected a definite operation for a different dynamic arity")
         };
@@ -153,19 +173,19 @@ impl IntoDynArityHandle for Definite {
 }
 
 pub trait IntoDynLaneHandle: DynStreamShape + Sized {
-    fn into_lane<C: IntoDynArityHandle>(handle: OperandHandle<Self, C>) -> DynLaneHandle;
+    fn into_lane<C: IntoDynArityHandle>(handle: ExpressionHandle<Self, C>) -> DynLaneHandle;
 }
 
 pub trait DynLaneState: IntoDynLaneHandle {
     fn handles(handle: &DynLaneHandle) -> &DynArityHandle<Self>;
 }
 
-pub trait IntoDynOperand: Operand + Sized {
-    fn into_dyn(self, descriptor: OperandDescriptor) -> DynOperand;
+pub trait IntoDynExpression: Expression + Sized {
+    fn into_dyn(self, descriptor: ExpressionDescriptor) -> DynExpression;
 }
 
 impl IntoDynLaneHandle for Indexed<DynIndex, DynValue> {
-    fn into_lane<C: IntoDynArityHandle>(handle: OperandHandle<Self, C>) -> DynLaneHandle {
+    fn into_lane<C: IntoDynArityHandle>(handle: ExpressionHandle<Self, C>) -> DynLaneHandle {
         DynLaneHandle::IndexedValue(C::into_handle(handle))
     }
 }
@@ -180,7 +200,7 @@ impl DynLaneState for Indexed<DynIndex, DynValue> {
 }
 
 impl IntoDynLaneHandle for Indexed<DynIndex, Mask> {
-    fn into_lane<C: IntoDynArityHandle>(handle: OperandHandle<Self, C>) -> DynLaneHandle {
+    fn into_lane<C: IntoDynArityHandle>(handle: ExpressionHandle<Self, C>) -> DynLaneHandle {
         DynLaneHandle::IndexedMask(C::into_handle(handle))
     }
 }
@@ -195,7 +215,7 @@ impl DynLaneState for Indexed<DynIndex, Mask> {
 }
 
 impl IntoDynLaneHandle for Indexed<DynIndex, Unit> {
-    fn into_lane<C: IntoDynArityHandle>(handle: OperandHandle<Self, C>) -> DynLaneHandle {
+    fn into_lane<C: IntoDynArityHandle>(handle: ExpressionHandle<Self, C>) -> DynLaneHandle {
         DynLaneHandle::IndexedUnit(C::into_handle(handle))
     }
 }
@@ -210,7 +230,7 @@ impl DynLaneState for Indexed<DynIndex, Unit> {
 }
 
 impl IntoDynLaneHandle for Bare<DynValue> {
-    fn into_lane<C: IntoDynArityHandle>(handle: OperandHandle<Self, C>) -> DynLaneHandle {
+    fn into_lane<C: IntoDynArityHandle>(handle: ExpressionHandle<Self, C>) -> DynLaneHandle {
         DynLaneHandle::BareValue(C::into_handle(handle))
     }
 }
@@ -225,7 +245,7 @@ impl DynLaneState for Bare<DynValue> {
 }
 
 impl IntoDynLaneHandle for Bare<Mask> {
-    fn into_lane<C: IntoDynArityHandle>(handle: OperandHandle<Self, C>) -> DynLaneHandle {
+    fn into_lane<C: IntoDynArityHandle>(handle: ExpressionHandle<Self, C>) -> DynLaneHandle {
         DynLaneHandle::BareMask(C::into_handle(handle))
     }
 }
@@ -239,19 +259,19 @@ impl DynLaneState for Bare<Mask> {
     }
 }
 
-impl<S, C> IntoDynOperand for OperandHandle<S, C>
+impl<S, C> IntoDynExpression for ExpressionHandle<S, C>
 where
     S: IntoDynLaneHandle,
     C: IntoDynArityHandle,
 {
-    fn into_dyn(self, descriptor: OperandDescriptor) -> DynOperand {
-        DynOperand::from_lane(self, descriptor)
+    fn into_dyn(self, descriptor: ExpressionDescriptor) -> DynExpression {
+        DynExpression::from_lane(self, descriptor)
     }
 }
 
-impl IntoDynOperand for DynGroupHandle {
-    fn into_dyn(self, descriptor: OperandDescriptor) -> DynOperand {
-        DynOperand::from_group(self, descriptor)
+impl IntoDynExpression for DynGroupHandle {
+    fn into_dyn(self, descriptor: ExpressionDescriptor) -> DynExpression {
+        DynExpression::from_group(self, descriptor)
     }
 }
 
@@ -270,7 +290,7 @@ impl<S: DynStreamShape> DynArityHandle<S> {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<DynStream<'a>> {
         match self {
             Self::MultipleOrdered(handle) => handle
@@ -351,7 +371,7 @@ impl DynLaneHandle {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<DynStream<'a>> {
         match self {
             Self::IndexedValue(handles) => handles.evaluate(graphrecord, cache),
@@ -408,9 +428,9 @@ impl DynLaneHandle {
     }
 }
 
-impl DynOperand {
+impl DynExpression {
     #[must_use]
-    pub fn from_lane<S, C>(handle: OperandHandle<S, C>, descriptor: OperandDescriptor) -> Self
+    pub fn from_lane<S, C>(handle: ExpressionHandle<S, C>, descriptor: ExpressionDescriptor) -> Self
     where
         S: IntoDynLaneHandle,
         C: IntoDynArityHandle,
@@ -420,17 +440,17 @@ impl DynOperand {
     }
 
     #[must_use]
-    pub fn from_group(handle: DynGroupHandle, descriptor: OperandDescriptor) -> Self {
+    pub fn from_group(handle: DynGroupHandle, descriptor: ExpressionDescriptor) -> Self {
         Self::new(DynHandle::Group(handle), descriptor)
     }
 
-    fn new(handle: DynHandle, descriptor: OperandDescriptor) -> Self {
+    fn new(handle: DynHandle, descriptor: ExpressionDescriptor) -> Self {
         Self::verify_descriptor(&handle, &descriptor);
         Self { handle, descriptor }
     }
 
     #[must_use]
-    pub const fn descriptor(&self) -> &OperandDescriptor {
+    pub const fn descriptor(&self) -> &ExpressionDescriptor {
         &self.descriptor
     }
 
@@ -451,14 +471,6 @@ impl DynOperand {
             .map(DynInvokeArgument::descriptor)
             .collect();
 
-        if method == TRANSITION {
-            let [DynInvokeArgument::ValueTarget(target)] = arguments else {
-                return self.inapplicable(method, argument_descriptors);
-            };
-
-            return self.retarget(*target);
-        }
-
         let registry = REGISTRY.get_or_init(OperationRegistry::builtins);
 
         let Some((output, applier)) =
@@ -476,9 +488,26 @@ impl DynOperand {
         arguments: Vec<ArgumentDescriptor>,
     ) -> QueryResult<Self> {
         Err(Failure::new(
-            "dynamic invocation",
             OperationNotApplicable::new(method.to_string(), self.descriptor.clone(), arguments),
+            "dynamic invocation",
         ))
+    }
+
+    pub(crate) fn erase_mask_lane(&self) -> Self {
+        let capture = OperationCapture::<TransitionOperation<DynValue>>::capture();
+        let operation = capture.transition::<DynValue>().operation();
+        let output = self
+            .descriptor()
+            .with_lane_value(ValueDescriptor::index(IndexDescriptor::domain::<bool>()));
+
+        operation_dynamic_element_apply!(
+            operation,
+            self,
+            output,
+            TransitionOperation<DynValue>,
+            Indexed<DynIndex, Mask>,
+            Indexed<DynIndex, DynValue>
+        )
     }
 
     pub fn evaluate(&self, graphrecord: &GraphRecord) -> QueryResult<DynTerminal> {
@@ -489,19 +518,19 @@ impl DynOperand {
             DynHandle::Lane(handle) => handle
                 .evaluate(graphrecord, &cache)
                 .map(DynYield::Lane)
-                .map(DynTerminal::from_yield),
+                .map(|yielded| DynTerminal::from_yield(graphrecord, yielded)),
             DynHandle::Group(handle) => handle
                 .evaluate(graphrecord, &cache)
                 .map(DynYield::Group)
-                .map(DynTerminal::from_yield),
+                .map(|yielded| DynTerminal::from_yield(graphrecord, yielded)),
         }
     }
 
     #[must_use]
     pub fn explain(&self, graphrecord: &GraphRecord) -> DynExplanation {
-        let (operand, report) = self.optimize(graphrecord);
+        let (expression, report) = self.optimize(graphrecord);
 
-        DynExplanation { operand, report }
+        DynExplanation { expression, report }
     }
 
     #[must_use]
@@ -513,7 +542,7 @@ impl DynOperand {
     }
 
     fn optimize(&self, graphrecord: &GraphRecord) -> (Self, OptimizationReport) {
-        let optimizer = Optimizer::shared_builtin();
+        let optimizer = Optimizer::builtin();
 
         if optimizer.is_empty() {
             return (self.clone(), OptimizationReport::default());
@@ -534,15 +563,17 @@ impl DynOperand {
         (Self::new(handle, self.descriptor.clone()), report)
     }
 
-    fn verify_descriptor(handle: &DynHandle, descriptor: &OperandDescriptor) {
+    fn verify_descriptor(handle: &DynHandle, descriptor: &ExpressionDescriptor) {
         match (handle, descriptor) {
-            (DynHandle::Lane(handle), OperandDescriptor::Lane { shape, arity }) => {
+            (DynHandle::Lane(handle), ExpressionDescriptor::Lane { shape, arity }) => {
                 Self::verify_lane_shape(handle, shape);
                 Self::verify_lane_arity(handle, *arity);
             }
-            (DynHandle::Group(_), OperandDescriptor::Group { .. }) => {}
+            (DynHandle::Group(_), ExpressionDescriptor::Group { .. }) => {}
             _ => {
-                panic!("registry paired a dynamic operand handle with a different descriptor state")
+                panic!(
+                    "registry paired a dynamic expression handle with a different descriptor state"
+                )
             }
         }
     }
@@ -589,7 +620,7 @@ impl DynOperand {
 
 impl Display for DynExplanation {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}", self.operand.explanation())?;
+        write!(formatter, "{}", self.expression.explanation())?;
 
         if !self.report.phases.is_empty() {
             write!(formatter, "\n\noptimization:\n{}", self.report.display())?;
@@ -601,18 +632,18 @@ impl Display for DynExplanation {
 
 #[cfg(test)]
 mod test {
-    use super::{query_edges, query_nodes};
+    use super::{edges, groups, nodes};
     use crate::{
         Mask, Scalar,
-        dynamic::{DynInvokeArgument, DynTerminal, DynTerminalArity, DynTerminalLane, DynValue},
+        dynamic::{DynArityContainer, DynInvokeArgument, DynTerminal, DynTerminalLane, DynValue},
         registry::{
-            ArityDescriptor, IndexDescriptor, LaneShapeDescriptor, OperandDescriptor,
+            ArityDescriptor, ExpressionDescriptor, IndexDescriptor, LaneShapeDescriptor,
             OrderDescriptor, ValueDescriptor,
         },
     };
     use graphrecords_core::{
         GraphRecord,
-        graphrecord::{AttributeMap, EdgeIndex, NodeIndex, Value},
+        graphrecord::{AttributeMap, EdgeIndex, Group, NodeIndex, Value},
     };
     use std::collections::HashMap;
 
@@ -653,11 +684,15 @@ mod test {
         let nodes = create_nodes();
         let edges = create_edges();
 
-        GraphRecord::from_tuples(nodes, Some(edges), None).unwrap()
+        GraphRecord::new()
+            .add_nodes(nodes)
+            .unwrap()
+            .add_edges(edges)
+            .unwrap()
     }
 
-    fn create_unit_node_descriptor() -> OperandDescriptor {
-        OperandDescriptor::Lane {
+    fn create_unit_node_descriptor() -> ExpressionDescriptor {
+        ExpressionDescriptor::Lane {
             shape: LaneShapeDescriptor::Indexed {
                 index: IndexDescriptor::domain::<NodeIndex>(),
                 value: ValueDescriptor::unit(),
@@ -668,8 +703,8 @@ mod test {
         }
     }
 
-    fn create_unit_edge_descriptor() -> OperandDescriptor {
-        OperandDescriptor::Lane {
+    fn create_unit_edge_descriptor() -> ExpressionDescriptor {
+        ExpressionDescriptor::Lane {
             shape: LaneShapeDescriptor::Indexed {
                 index: IndexDescriptor::domain::<EdgeIndex>(),
                 value: ValueDescriptor::unit(),
@@ -680,8 +715,20 @@ mod test {
         }
     }
 
-    fn create_scalar_node_descriptor() -> OperandDescriptor {
-        OperandDescriptor::Lane {
+    fn create_unit_group_descriptor() -> ExpressionDescriptor {
+        ExpressionDescriptor::Lane {
+            shape: LaneShapeDescriptor::Indexed {
+                index: IndexDescriptor::domain::<Group>(),
+                value: ValueDescriptor::unit(),
+            },
+            arity: ArityDescriptor::Multiple {
+                order: OrderDescriptor::Unordered,
+            },
+        }
+    }
+
+    fn create_scalar_node_descriptor() -> ExpressionDescriptor {
+        ExpressionDescriptor::Lane {
             shape: LaneShapeDescriptor::Indexed {
                 index: IndexDescriptor::domain::<NodeIndex>(),
                 value: ValueDescriptor::value::<Scalar>(),
@@ -692,8 +739,8 @@ mod test {
         }
     }
 
-    fn create_mask_node_descriptor() -> OperandDescriptor {
-        OperandDescriptor::Lane {
+    fn create_mask_node_descriptor() -> ExpressionDescriptor {
+        ExpressionDescriptor::Lane {
             shape: LaneShapeDescriptor::Indexed {
                 index: IndexDescriptor::domain::<NodeIndex>(),
                 value: ValueDescriptor::value::<Mask>(),
@@ -704,8 +751,8 @@ mod test {
         }
     }
 
-    fn create_scalar_count_descriptor() -> OperandDescriptor {
-        OperandDescriptor::Lane {
+    fn create_scalar_count_descriptor() -> ExpressionDescriptor {
+        ExpressionDescriptor::Lane {
             shape: LaneShapeDescriptor::Bare {
                 value: ValueDescriptor::value::<Scalar>(),
             },
@@ -714,25 +761,28 @@ mod test {
     }
 
     #[test]
-    fn test_query_nodes() {
-        assert_eq!(&create_unit_node_descriptor(), query_nodes().descriptor());
+    fn test_nodes() {
+        assert_eq!(&create_unit_node_descriptor(), nodes().descriptor());
     }
 
     #[test]
-    fn test_query_edges() {
-        assert_eq!(&create_unit_edge_descriptor(), query_edges().descriptor());
+    fn test_edges() {
+        assert_eq!(&create_unit_edge_descriptor(), edges().descriptor());
+    }
+
+    #[test]
+    fn test_groups() {
+        assert_eq!(&create_unit_group_descriptor(), groups().descriptor());
     }
 
     #[test]
     fn test_cache() {
-        let nodes = query_nodes();
-
-        assert_eq!(nodes.descriptor(), nodes.cache().descriptor());
+        assert_eq!(&create_unit_node_descriptor(), nodes().cache().descriptor());
     }
 
     #[test]
     fn test_invoke() {
-        let attribute = query_nodes()
+        let attribute = nodes()
             .invoke("attribute", &[DynInvokeArgument::Attribute("lorem".into())])
             .unwrap();
 
@@ -742,24 +792,17 @@ mod test {
 
         assert_eq!(&create_mask_node_descriptor(), is_null.descriptor());
 
-        let count = query_nodes().invoke("count", &[]).unwrap();
+        let count = nodes().invoke("count", &[]).unwrap();
 
         assert_eq!(&create_scalar_count_descriptor(), count.descriptor());
     }
 
     #[test]
     fn test_invalid_invoke() {
-        // Invoking a method that is not registered should fail
-        assert!(query_nodes().invoke("lorem", &[]).is_err());
-
-        // Summing a lane that carries no values should fail
-        assert!(query_nodes().invoke("sum", &[]).is_err());
-
-        // Reading an attribute without naming one should fail
-        assert!(query_nodes().invoke("attribute", &[]).is_err());
-
-        // Taking the first element of an unordered lane should fail
-        assert!(query_nodes().invoke("first", &[]).is_err());
+        assert!(nodes().invoke("lorem", &[]).is_err());
+        assert!(nodes().invoke("sum", &[]).is_err());
+        assert!(nodes().invoke("attribute", &[]).is_err());
+        assert!(nodes().invoke("first", &[]).is_err());
     }
 
     #[test]
@@ -767,35 +810,35 @@ mod test {
         let graphrecord = create_graphrecord();
 
         assert!(matches!(
-            query_nodes().evaluate(&graphrecord).unwrap(),
+            nodes().evaluate(&graphrecord).unwrap(),
             DynTerminal::Lane(DynTerminalLane::IndexedUnit(
-                DynTerminalArity::MultipleUnordered(elements)
+                DynArityContainer::MultipleUnordered(elements)
             )) if elements.len() == 4
         ));
         assert!(matches!(
-            query_edges().evaluate(&graphrecord).unwrap(),
+            edges().evaluate(&graphrecord).unwrap(),
             DynTerminal::Lane(DynTerminalLane::IndexedUnit(
-                DynTerminalArity::MultipleUnordered(elements)
+                DynArityContainer::MultipleUnordered(elements)
             )) if elements.len() == 2
         ));
 
-        let count = query_nodes().invoke("count", &[]).unwrap();
+        let count = nodes().invoke("count", &[]).unwrap();
 
         assert!(matches!(
             count.evaluate(&graphrecord).unwrap(),
-            DynTerminal::Lane(DynTerminalLane::BareValue(DynTerminalArity::Definite(Ok(
+            DynTerminal::Lane(DynTerminalLane::BareValue(DynArityContainer::Definite(Ok(
                 DynValue::Scalar(Value::Int(4))
             ))))
         ));
 
-        let attribute = query_nodes()
+        let attribute = nodes()
             .invoke("attribute", &[DynInvokeArgument::Attribute("lorem".into())])
             .unwrap();
 
         assert!(matches!(
             attribute.evaluate(&graphrecord).unwrap(),
             DynTerminal::Lane(DynTerminalLane::IndexedValue(
-                DynTerminalArity::MultipleUnordered(elements)
+                DynArityContainer::MultipleUnordered(elements)
             )) if elements.len() == 4
                 && elements.iter().filter(|element| element.1.is_ok()).count() == 1
         ));

@@ -119,10 +119,10 @@ impl Display for ReportDisplay<'_> {
             write!(formatter, "{:?}: ", outcome.label)?;
 
             match &outcome.stop {
+                StopReason::CompletedOnce => formatter.write_str("completed once")?,
                 StopReason::Converged { iterations } => {
                     write!(formatter, "converged ({iterations} iterations)")?;
                 }
-                StopReason::CompletedOnce => formatter.write_str("completed once")?,
                 StopReason::Oscillation { iterations } => {
                     write!(formatter, "oscillation after {iterations} iterations")?;
                 }

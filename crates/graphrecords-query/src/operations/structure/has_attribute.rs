@@ -1,9 +1,9 @@
 use crate::{
-    EntityReference, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult, Unit,
+    EntityRef, EntityReference, Explain, IndexDomain, Indexed, Mask, QueryResult, Unit,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
     index::EntityAttributes,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     registry::operation_manifest,
     traits::HasAttribute,
@@ -25,7 +25,7 @@ impl Prepare for HasAttributeOperation {
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(&self.attribute)
     }
@@ -39,13 +39,17 @@ impl<E: EntityAttributes> ElementKernel<Indexed<E, Unit>> for HasAttributeOperat
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<E, Unit>, Self>> {
-        Ok(Pipeline::keyed(move |index, membership: QueryResult<_>| {
-            membership.map(|()| {
-                E::attributes(graphrecord, &index)
-                    .expect("Entity must exist")
-                    .contains_key(prepared)
-            })
-        }))
+        let attribute_address = E::resolve_attribute_address(graphrecord, prepared);
+
+        Ok(Pipeline::keyed(
+            move |address, membership: QueryResult<_>| {
+                membership.map(|()| {
+                    attribute_address.is_some_and(|attribute_address| {
+                        E::attribute(graphrecord, &address, attribute_address).is_some()
+                    })
+                })
+            },
+        ))
     }
 }
 
@@ -59,24 +63,23 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
+        let attribute_address = E::resolve_attribute_address(graphrecord, prepared);
+
         Ok(Pipeline::unkeyed(move |reference: QueryResult<_>| {
-            reference.map(|entity| {
-                E::attributes(graphrecord, &entity)
-                    .expect("Entity must exist")
-                    .contains_key(prepared)
+            reference.map(|entity: EntityRef<'a, E>| {
+                attribute_address.is_some_and(|attribute_address| {
+                    E::attribute(graphrecord, entity.address(), attribute_address).is_some()
+                })
             })
         }))
     }
 }
 
-impl<O: Apply<HasAttributeOperation>> HasAttribute for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<HasAttributeOperation>> HasAttribute for E {
+    type Output = E::Output;
 
-    fn has_attribute(&self, attribute: AttributeName) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            HasAttributeOperation { attribute },
-        ))
+    fn has_attribute(&self, attribute: AttributeName) -> Self::Output {
+        self.build(HasAttributeOperation { attribute })
     }
 }
 

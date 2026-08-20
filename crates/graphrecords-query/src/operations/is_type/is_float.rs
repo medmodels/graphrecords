@@ -1,36 +1,21 @@
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Mask, QueryResult,
     capabilities::{PayloadKind, ValueScalarKindTest},
     element::{Pipeline, Preserving},
-    execution::EvaluationCache,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     registry::operation_manifest,
     traits::IsFloat,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "IsFloat")]
-#[plan(optimizer_hints(
-    commutes_with_filter,
-    allows_limit_pushdown,
-    empty = if_any
-))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct IsFloatOperation;
-
-impl Prepare for IsFloatOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<I: IndexDomain, V: ValueScalarKindTest> ElementKernel<Indexed<I, V>> for IsFloatOperation {
     type Emission = Preserving;
@@ -60,11 +45,11 @@ impl<V: ValueScalarKindTest + BareValueDomain> ElementKernel<Bare<V>> for IsFloa
     }
 }
 
-impl<O: Apply<IsFloatOperation>> IsFloat for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<IsFloatOperation>> IsFloat for E {
+    type Output = E::Output;
 
-    fn is_float(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), IsFloatOperation))
+    fn is_float(&self) -> Self::Output {
+        self.build(IsFloatOperation)
     }
 }
 

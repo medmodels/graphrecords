@@ -2,12 +2,10 @@ use super::{
     BucketErrorPolicy, BucketErrorPolicyIn, BucketErrorPolicyOf, BucketErrorPolicyWithCause,
 };
 use crate::{
-    Bare, Definite, Diagnostic, ElementShape, ErrorGroup, EvaluateOperand, Explain, IndexDomain,
-    Indexed, Multiple, Operand, QueryResult, Single,
-    execution::EvaluationCache,
+    Bare, Definite, Diagnostic, ElementShape, ErrorGroup, EvaluateExpression, Explain, Expression,
+    IndexDomain, Indexed, Labeled, Multiple, QueryResult, Single,
     explain::ExplainFormatter,
-    index::GroupKey,
-    operands::{BucketChange, GroupOperand, OperandHandle, Partition},
+    expressions::{BucketChange, ExpressionHandle, GroupedExpression, Partition},
     operations::{
         Apply, BucketFailureArity, GroupKernel, Operation, OperationContext, Prepare, policy::Drop,
     },
@@ -23,17 +21,23 @@ use std::{
     marker::PhantomData,
 };
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Group)]
 #[explain(label = "DropBucketErrors")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct DropBucketErrors;
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Group)]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct DropBucketErrorsOf<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
+}
+
+impl<D: Diagnostic> Labeled for DropBucketErrorsOf<D> {
+    const LABEL: &'static str = "DropBucketErrorsOf";
 }
 
 impl<D: Diagnostic> DropBucketErrorsOf<D> {
@@ -52,15 +56,19 @@ impl<D: Diagnostic> Clone for DropBucketErrorsOf<D> {
 
 impl<D: Diagnostic> Explain for DropBucketErrorsOf<D> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "DropBucketErrorsOf kind={}", D::name())
+        write!(formatter, "{} kind={}", Self::LABEL, D::name())
     }
 }
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Group)]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct DropBucketErrorsIn<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
+}
+
+impl<G: ErrorGroup> Labeled for DropBucketErrorsIn<G> {
+    const LABEL: &'static str = "DropBucketErrorsIn";
 }
 
 impl<G: ErrorGroup> DropBucketErrorsIn<G> {
@@ -79,15 +87,19 @@ impl<G: ErrorGroup> Clone for DropBucketErrorsIn<G> {
 
 impl<G: ErrorGroup> Explain for DropBucketErrorsIn<G> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "DropBucketErrorsIn group={}", G::name())
+        write!(formatter, "{} group={}", Self::LABEL, G::name())
     }
 }
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Group)]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct DropBucketErrorsWithCause<E: Error + 'static> {
     marker: PhantomData<fn() -> E>,
+}
+
+impl<E: Error + 'static> Labeled for DropBucketErrorsWithCause<E> {
+    const LABEL: &'static str = "DropBucketErrorsWithCause";
 }
 
 impl<E: Error + 'static> DropBucketErrorsWithCause<E> {
@@ -106,74 +118,22 @@ impl<E: Error + 'static> Clone for DropBucketErrorsWithCause<E> {
 
 impl<E: Error + 'static> Explain for DropBucketErrorsWithCause<E> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(
-            formatter,
-            "DropBucketErrorsWithCause cause={}",
-            type_name::<E>()
-        )
+        write!(formatter, "{} cause={}", Self::LABEL, type_name::<E>())
     }
 }
 
-impl Prepare for DropBucketErrors {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<D: Diagnostic> Prepare for DropBucketErrorsOf<D> {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<G: ErrorGroup> Prepare for DropBucketErrorsIn<G> {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<E: Error + 'static> Prepare for DropBucketErrorsWithCause<E> {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: BucketFailureArity<S>>
-    GroupKernel<M, K, OperandHandle<S, C>> for DropBucketErrors
+impl<M: IndexDomain, K: IndexDomain, S: ElementShape, B: BucketFailureArity<S>>
+    GroupKernel<M, K, ExpressionHandle<S, B>> for DropBucketErrors
 {
-    type Output = GroupOperand<M, K, OperandHandle<S, C>>;
+    type Output = GroupedExpression<M, K, ExpressionHandle<S, B>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, OperandHandle<S, C>>,
+        partition: Partition<'a, M, K, ExpressionHandle<S, B>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(partition.change_buckets(|bucket| {
-            C::bucket_failure(bucket.payload()).map(|_| BucketChange::Drop)
+            B::bucket_failure(bucket.payload()).map(|_| BucketChange::Drop)
         }))
     }
 
@@ -185,18 +145,18 @@ impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: BucketFailureArity<S>>
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: BucketFailureArity<S>, D: Diagnostic>
-    GroupKernel<M, K, OperandHandle<S, C>> for DropBucketErrorsOf<D>
+impl<M: IndexDomain, K: IndexDomain, S: ElementShape, B: BucketFailureArity<S>, D: Diagnostic>
+    GroupKernel<M, K, ExpressionHandle<S, B>> for DropBucketErrorsOf<D>
 {
-    type Output = GroupOperand<M, K, OperandHandle<S, C>>;
+    type Output = GroupedExpression<M, K, ExpressionHandle<S, B>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, OperandHandle<S, C>>,
+        partition: Partition<'a, M, K, ExpressionHandle<S, B>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(
-            partition.change_buckets(|bucket| match C::bucket_failure(bucket.payload()) {
+            partition.change_buckets(|bucket| match B::bucket_failure(bucket.payload()) {
                 Some(failure) if failure.is_kind::<D>() => Some(BucketChange::Drop),
                 None | Some(_) => None,
             }),
@@ -211,18 +171,18 @@ impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: BucketFailureArity<S>, D: 
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: BucketFailureArity<S>, G: ErrorGroup>
-    GroupKernel<M, K, OperandHandle<S, C>> for DropBucketErrorsIn<G>
+impl<M: IndexDomain, K: IndexDomain, S: ElementShape, B: BucketFailureArity<S>, G: ErrorGroup>
+    GroupKernel<M, K, ExpressionHandle<S, B>> for DropBucketErrorsIn<G>
 {
-    type Output = GroupOperand<M, K, OperandHandle<S, C>>;
+    type Output = GroupedExpression<M, K, ExpressionHandle<S, B>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, OperandHandle<S, C>>,
+        partition: Partition<'a, M, K, ExpressionHandle<S, B>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(
-            partition.change_buckets(|bucket| match C::bucket_failure(bucket.payload()) {
+            partition.change_buckets(|bucket| match B::bucket_failure(bucket.payload()) {
                 Some(failure) if G::contains(&failure.kind()) => Some(BucketChange::Drop),
                 None | Some(_) => None,
             }),
@@ -237,18 +197,18 @@ impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: BucketFailureArity<S>, G: 
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: BucketFailureArity<S>, E: Error + 'static>
-    GroupKernel<M, K, OperandHandle<S, C>> for DropBucketErrorsWithCause<E>
+impl<M: IndexDomain, K: IndexDomain, S: ElementShape, B: BucketFailureArity<S>, E: Error + 'static>
+    GroupKernel<M, K, ExpressionHandle<S, B>> for DropBucketErrorsWithCause<E>
 {
-    type Output = GroupOperand<M, K, OperandHandle<S, C>>;
+    type Output = GroupedExpression<M, K, ExpressionHandle<S, B>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, OperandHandle<S, C>>,
+        partition: Partition<'a, M, K, ExpressionHandle<S, B>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(
-            partition.change_buckets(|bucket| match C::bucket_failure(bucket.payload()) {
+            partition.change_buckets(|bucket| match B::bucket_failure(bucket.payload()) {
                 Some(failure) if failure.has_cause::<E>() => Some(BucketChange::Drop),
                 None | Some(_) => None,
             }),
@@ -263,36 +223,36 @@ impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: BucketFailureArity<S>, E: 
     }
 }
 
-impl<I: Apply<DropBucketErrors>> BucketErrorPolicy<I> for Drop {
-    type Output = I::Output;
+impl<E: Apply<DropBucketErrors>> BucketErrorPolicy<E> for Drop {
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(input, DropBucketErrors))
     }
 }
 
-impl<I: Apply<DropBucketErrorsOf<D>>, D: Diagnostic> BucketErrorPolicyOf<I, D> for Drop {
-    type Output = I::Output;
+impl<E: Apply<DropBucketErrorsOf<D>>, D: Diagnostic> BucketErrorPolicyOf<E, D> for Drop {
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(input, DropBucketErrorsOf::new()))
     }
 }
 
-impl<I: Apply<DropBucketErrorsIn<G>>, G: ErrorGroup> BucketErrorPolicyIn<I, G> for Drop {
-    type Output = I::Output;
+impl<E: Apply<DropBucketErrorsIn<G>>, G: ErrorGroup> BucketErrorPolicyIn<E, G> for Drop {
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(input, DropBucketErrorsIn::new()))
     }
 }
 
-impl<I: Apply<DropBucketErrorsWithCause<E>>, E: Error + 'static> BucketErrorPolicyWithCause<I, E>
+impl<E: Apply<DropBucketErrorsWithCause<C>>, C: Error + 'static> BucketErrorPolicyWithCause<E, C>
     for Drop
 {
-    type Output = I::Output;
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(
             input,
             DropBucketErrorsWithCause::new(),
@@ -307,45 +267,45 @@ operation_manifest! {
         scope: group;
 
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <I: IndexDomain, V: ValueDomain, O: OrderState>;
-            input: OperandHandle<Indexed<I, V>, Multiple<O>>;
-            output: GroupOperand<M, K, OperandHandle<Indexed<I, V>, Multiple<O>>>;
+            input: ExpressionHandle<Indexed<I, V>, Multiple<O>>;
+            output: GroupedExpression<M, K, ExpressionHandle<Indexed<I, V>, Multiple<O>>>;
         }
 
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <I: IndexDomain, V: ValueDomain>;
-            input: OperandHandle<Indexed<I, V>, Single>;
-            output: GroupOperand<M, K, OperandHandle<Indexed<I, V>, Single>>;
+            input: ExpressionHandle<Indexed<I, V>, Single>;
+            output: GroupedExpression<M, K, ExpressionHandle<Indexed<I, V>, Single>>;
         }
 
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <I: IndexDomain, V: ValueDomain>;
-            input: OperandHandle<Indexed<I, V>, Definite>;
-            output: GroupOperand<M, K, OperandHandle<Indexed<I, V>, Definite>>;
+            input: ExpressionHandle<Indexed<I, V>, Definite>;
+            output: GroupedExpression<M, K, ExpressionHandle<Indexed<I, V>, Definite>>;
         }
 
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <V: BareValueDomain, O: OrderState>;
-            input: OperandHandle<Bare<V>, Multiple<O>>;
-            output: GroupOperand<M, K, OperandHandle<Bare<V>, Multiple<O>>>;
+            input: ExpressionHandle<Bare<V>, Multiple<O>>;
+            output: GroupedExpression<M, K, ExpressionHandle<Bare<V>, Multiple<O>>>;
         }
 
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <V: BareValueDomain>;
-            input: OperandHandle<Bare<V>, Single>;
-            output: GroupOperand<M, K, OperandHandle<Bare<V>, Single>>;
+            input: ExpressionHandle<Bare<V>, Single>;
+            output: GroupedExpression<M, K, ExpressionHandle<Bare<V>, Single>>;
         }
 
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <V: BareValueDomain>;
-            input: OperandHandle<Bare<V>, Definite>;
-            output: GroupOperand<M, K, OperandHandle<Bare<V>, Definite>>;
+            input: ExpressionHandle<Bare<V>, Definite>;
+            output: GroupedExpression<M, K, ExpressionHandle<Bare<V>, Definite>>;
         }
     }
 }

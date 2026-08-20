@@ -1,10 +1,10 @@
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, QueryResult,
     capabilities::ValueCast,
     cast::{Bool, CastTarget, DateTime, Duration, Float, Int, String},
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Cast,
@@ -29,28 +29,26 @@ impl<T: CastTarget> Prepare for CastOperation<T> {
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(&self.target)
     }
 }
 
-impl<I, V, T> ElementKernel<Indexed<I, V>> for CastOperation<T>
-where
-    I: IndexDomain,
-    V: ValueCast<T>,
-    T: CastTarget,
+impl<I: IndexDomain, V: ValueCast<T>, T: CastTarget> ElementKernel<Indexed<I, V>>
+    for CastOperation<T>
 {
     type Emission = Preserving;
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(Pipeline::keyed(move |index, outcome: QueryResult<_>| {
+        Ok(Pipeline::keyed(move |address, outcome: QueryResult<_>| {
             outcome.and_then(|value| {
-                V::cast(Self::LABEL, value, prepared).map_err(|failure| failure.at::<I>(&index))
+                V::cast(value, prepared, Self::LABEL)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))
             })
         }))
     }
@@ -60,11 +58,7 @@ where
     }
 }
 
-impl<V, T> ElementKernel<Bare<V>> for CastOperation<T>
-where
-    V: ValueCast<T> + BareValueDomain,
-    T: CastTarget,
-{
+impl<V: ValueCast<T> + BareValueDomain, T: CastTarget> ElementKernel<Bare<V>> for CastOperation<T> {
     type Emission = Preserving;
     type OutShape = Bare<V>;
 
@@ -73,7 +67,7 @@ where
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         Ok(Pipeline::new(move |outcome: QueryResult<_>| {
-            outcome.and_then(|value| V::cast(Self::LABEL, value, prepared))
+            outcome.and_then(|value| V::cast(value, prepared, Self::LABEL))
         }))
     }
 
@@ -82,19 +76,16 @@ where
     }
 }
 
-impl<O, T> Cast<T> for O
+impl<E, T> Cast<T> for E
 where
     CastOperation<T>: Operation,
-    O: Apply<CastOperation<T>>,
+    E: Build<CastOperation<T>>,
     T: CastTarget,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn cast(&self, target: T) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            CastOperation { target },
-        ))
+    fn cast(&self, target: T) -> Self::Output {
+        self.build(CastOperation { target })
     }
 }
 

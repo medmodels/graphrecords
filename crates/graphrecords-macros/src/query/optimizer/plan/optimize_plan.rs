@@ -8,19 +8,18 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
         ident,
         generics,
         crate_path,
-        operand,
+        expression,
         inputs,
         arguments,
         argument_types,
         payload,
-        is_unit,
         ..
     } = PlanModel::parse(input)?;
 
-    let Some(operand) = operand else {
+    let Some(expression) = expression else {
         return Err(Error::new_spanned(
             input,
-            "`OptimizePlan` requires the operand, e.g. `#[plan(operand = ...)]`",
+            "missing `#[plan(expression = ...)]`",
         ));
     };
 
@@ -36,7 +35,7 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
     let arguments = &arguments;
     let payload = &payload;
 
-    let body = if is_unit {
+    let body = if inputs.is_empty() && arguments.is_empty() {
         quote! {
             #crate_path::optimizer::Transformed::unchanged(::core::clone::Clone::clone(original))
         }
@@ -68,7 +67,7 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
             }
 
             #crate_path::optimizer::Transformed::changed(
-                <#operand as #crate_path::Operand>::from_context(::std::sync::Arc::new(Self {
+                <#expression as #crate_path::Expression>::from_context(::std::sync::Arc::new(Self {
                     #( #inputs: #input_locals.into_parts().0, )*
                     #( #arguments: #argument_locals.into_parts().0, )*
                     #( #payload: ::core::clone::Clone::clone(&self.#payload), )*
@@ -80,7 +79,7 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics #crate_path::optimizer::OptimizePlan for #ident #type_generics #where_clause {
-            type Output = #operand;
+            type Output = #expression;
 
             fn optimize(
                 &self,

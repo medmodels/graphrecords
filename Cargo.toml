@@ -44,6 +44,7 @@ strip = "symbols"
 pedantic = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
 option_if_let_else = "allow"
+tuple_array_conversions = "allow"
 used_underscore_items = "allow"
 cast_precision_loss = "allow"
 cast_possible_wrap = "allow"

@@ -1,36 +1,21 @@
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Mask, QueryResult,
     capabilities::{PayloadKind, ValueKindTest},
     element::{Pipeline, Preserving},
-    execution::EvaluationCache,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     registry::operation_manifest,
     traits::IsString,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "IsString")]
-#[plan(optimizer_hints(
-    commutes_with_filter,
-    allows_limit_pushdown,
-    empty = if_any
-))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct IsStringOperation;
-
-impl Prepare for IsStringOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<I: IndexDomain, V: ValueKindTest> ElementKernel<Indexed<I, V>> for IsStringOperation {
     type Emission = Preserving;
@@ -60,11 +45,11 @@ impl<V: ValueKindTest + BareValueDomain> ElementKernel<Bare<V>> for IsStringOper
     }
 }
 
-impl<O: Apply<IsStringOperation>> IsString for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<IsStringOperation>> IsString for E {
+    type Output = E::Output;
 
-    fn is_string(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), IsStringOperation))
+    fn is_string(&self) -> Self::Output {
+        self.build(IsStringOperation)
     }
 }
 

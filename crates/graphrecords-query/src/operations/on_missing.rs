@@ -4,7 +4,7 @@ use crate::{
     element::{Dropping, ElementEmission, Retention},
     execution::EvaluationCache,
     explain::ExplainFormatter,
-    operands::OperandHandle,
+    expressions::ExpressionHandle,
     operations::{
         Alignment, ArgumentSource, Keyed, Lookup, Prepare, SourceDomain,
         policy::{Drop, Replace},
@@ -18,123 +18,96 @@ use std::{
     marker::PhantomData,
 };
 
-pub trait MaybeAbsent<A: Alignment>: ArgumentSource<A> {
+pub trait OnMissing<A: Alignment>: ArgumentSource<A> {
     fn on_missing<P>(self, policy: P) -> WithMissing<A, Self, P>
     where
         Self: Sized,
-        P: MissingPolicy<A, Self>,
+        P: MissingPolicy<A, Self::ValueDomain>,
     {
         WithMissing::new(self, policy)
     }
 }
 
-pub trait MissingPolicy<A: Alignment, S: SourceDomain>:
-    Send + Sync + Clone + 'static + Explain + PlanIdentity + PlanInputs
+pub trait MissingPolicy<A: Alignment, V: ValueDomain>:
+    Prepare + Clone + Explain + PlanIdentity + PlanInputs
 {
     type Retention: Retention;
 
-    type Prepared<'a>: Clone + 'a
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>>;
-
     fn resolve_absent<'a>(
+        graphrecord: &'a GraphRecord,
         prepared: &Self::Prepared<'a>,
-        address: &A::Address<'a>,
+        address: &A::Address,
         label: &'static str,
-    ) -> <Self::Retention as ElementEmission>::Step<
-        QueryResult<<S::ValueDomain as ValueDomain>::Value<'a>>,
-    >
+    ) -> <Self::Retention as ElementEmission>::Step<QueryResult<V::Value<'a>>>
     where
-        S: 'a;
+        V: 'a;
 }
 
-impl<A: Alignment, S: SourceDomain> MissingPolicy<A, S> for Drop {
-    type Prepared<'a> = ();
+impl<A: Alignment, V: ValueDomain> MissingPolicy<A, V> for Drop {
     type Retention = Dropping;
 
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-
     fn resolve_absent<'a>(
+        _graphrecord: &'a GraphRecord,
         _prepared: &Self::Prepared<'a>,
-        _address: &A::Address<'a>,
+        _address: &A::Address,
         _label: &'static str,
-    ) -> <Self::Retention as ElementEmission>::Step<
-        QueryResult<<S::ValueDomain as ValueDomain>::Value<'a>>,
-    >
+    ) -> <Self::Retention as ElementEmission>::Step<QueryResult<V::Value<'a>>>
     where
-        S: 'a,
+        V: 'a,
     {
         None
     }
 }
 
-impl<A, S, R> MissingPolicy<A, S> for Replace<R>
+impl<A, V, R> MissingPolicy<A, V> for Replace<R>
 where
     A: Alignment,
-    S: SourceDomain,
-    R: ArgumentSource<A, S::ValueDomain> + Clone,
+    V: ValueDomain,
+    R: ArgumentSource<A, V> + Clone,
 {
-    type Prepared<'a> = R::Prepared<'a>;
     type Retention = R::Retention;
 
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.replacement().prepare(graphrecord, cache)
-    }
-
     fn resolve_absent<'a>(
+        graphrecord: &'a GraphRecord,
         prepared: &Self::Prepared<'a>,
-        address: &A::Address<'a>,
+        address: &A::Address,
         label: &'static str,
-    ) -> <Self::Retention as ElementEmission>::Step<
-        QueryResult<<S::ValueDomain as ValueDomain>::Value<'a>>,
-    >
+    ) -> <Self::Retention as ElementEmission>::Step<QueryResult<V::Value<'a>>>
     where
-        S: 'a,
+        V: 'a,
     {
-        R::resolve(prepared, address, label)
+        R::resolve(graphrecord, prepared, address, label)
     }
 }
 
-impl<I: IndexDomain, V: ValueDomain, O: OrderState> MaybeAbsent<Keyed<I>>
-    for OperandHandle<Indexed<I, V>, Multiple<O>>
+impl<I: IndexDomain, V: ValueDomain, O: OrderState> OnMissing<Keyed<I>>
+    for ExpressionHandle<Indexed<I, V>, Multiple<O>>
 {
 }
-impl<A: Alignment, V: BareValueDomain> MaybeAbsent<A> for OperandHandle<Bare<V>, Single> {}
+impl<A: Alignment, V: BareValueDomain> OnMissing<A> for ExpressionHandle<Bare<V>, Single> {}
 
-pub struct WithMissing<A: Alignment, S: MaybeAbsent<A>, P> {
+pub struct WithMissing<A: Alignment, S: OnMissing<A>, P> {
     inner: S,
     policy: P,
     alignment: PhantomData<fn() -> A>,
 }
 
-impl<A: Alignment, S: MaybeAbsent<A>, P> WithMissing<A, S, P> {
+impl<A: Alignment, S: OnMissing<A>, P> WithMissing<A, S, P> {
     #[must_use]
-    pub fn new(inner: S, policy: P) -> Self {
+    pub const fn new(inner: S, policy: P) -> Self {
         Self {
             inner,
             policy,
             alignment: PhantomData,
         }
     }
+
+    pub(crate) fn into_inner(self) -> S {
+        self.inner
+    }
 }
 
-impl<A: Alignment, S: MaybeAbsent<A> + Clone, P: Clone> Clone for WithMissing<A, S, P> {
+impl<A: Alignment, S: OnMissing<A> + Clone, P: Clone> Clone for WithMissing<A, S, P> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -144,7 +117,7 @@ impl<A: Alignment, S: MaybeAbsent<A> + Clone, P: Clone> Clone for WithMissing<A,
     }
 }
 
-impl<A: Alignment, S: MaybeAbsent<A>, P: Explain> Explain for WithMissing<A, S, P> {
+impl<A: Alignment, S: OnMissing<A>, P: Explain> Explain for WithMissing<A, S, P> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         self.inner.describe(formatter)?;
         formatter.write_str(" on_missing(")?;
@@ -153,7 +126,7 @@ impl<A: Alignment, S: MaybeAbsent<A>, P: Explain> Explain for WithMissing<A, S, 
     }
 }
 
-impl<A: Alignment, S: MaybeAbsent<A>, P: PlanIdentity> PlanIdentity for WithMissing<A, S, P> {
+impl<A: Alignment, S: OnMissing<A>, P: PlanIdentity> PlanIdentity for WithMissing<A, S, P> {
     fn identity_eq(&self, other: &Self) -> bool {
         self.inner.identity_eq(&other.inner) && self.policy.identity_eq(&other.policy)
     }
@@ -164,7 +137,7 @@ impl<A: Alignment, S: MaybeAbsent<A>, P: PlanIdentity> PlanIdentity for WithMiss
     }
 }
 
-impl<A: Alignment, S: MaybeAbsent<A>, P: PlanInputs> PlanInputs for WithMissing<A, S, P> {
+impl<A: Alignment, S: OnMissing<A>, P: PlanInputs> PlanInputs for WithMissing<A, S, P> {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         let mut inputs = self.inner.inputs();
         inputs.extend(self.policy.inputs());
@@ -173,7 +146,7 @@ impl<A: Alignment, S: MaybeAbsent<A>, P: PlanInputs> PlanInputs for WithMissing<
     }
 }
 
-impl<A: Alignment, S: MaybeAbsent<A>, P: MissingPolicy<A, S>> Prepare for WithMissing<A, S, P> {
+impl<A: Alignment, S: OnMissing<A>, P: Prepare> Prepare for WithMissing<A, S, P> {
     type Prepared<'a>
         = (S::Prepared<'a>, P::Prepared<'a>)
     where
@@ -182,7 +155,7 @@ impl<A: Alignment, S: MaybeAbsent<A>, P: MissingPolicy<A, S>> Prepare for WithMi
     fn prepare<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok((
             self.inner.prepare(graphrecord, cache)?,
@@ -191,34 +164,37 @@ impl<A: Alignment, S: MaybeAbsent<A>, P: MissingPolicy<A, S>> Prepare for WithMi
     }
 }
 
-impl<A: Alignment, S: MaybeAbsent<A>, P> Estimated for WithMissing<A, S, P> {
+impl<A: Alignment, S: OnMissing<A>, P> Estimated for WithMissing<A, S, P> {
     fn estimate(&self, stats: &Stats) -> Estimate {
         self.inner.estimate(stats)
     }
 }
 
-impl<A: Alignment, S: MaybeAbsent<A>, P> SourceDomain for WithMissing<A, S, P> {
+impl<A: Alignment, S: OnMissing<A>, P> SourceDomain for WithMissing<A, S, P> {
     type ValueDomain = S::ValueDomain;
 }
 
-impl<A: Alignment, S: MaybeAbsent<A>, P: MissingPolicy<A, S>> ArgumentSource<A>
+impl<A: Alignment, S: OnMissing<A>, P: MissingPolicy<A, S::ValueDomain>> ArgumentSource<A>
     for WithMissing<A, S, P>
 {
     type Retention = P::Retention;
 
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<<S::ValueDomain as ValueDomain>::Value<'a>>>
+    fn lookup<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        address: &A::Address,
+        label: &'static str,
+    ) -> Lookup<QueryResult<<S::ValueDomain as ValueDomain>::Value<'a>>>
     where
         Self: 'a,
     {
-        S::lookup(&prepared.0, address)
+        S::lookup(graphrecord, &prepared.0, address, label)
     }
 
     fn resolve<'a>(
+        graphrecord: &'a GraphRecord,
         prepared: &Self::Prepared<'a>,
-        address: &A::Address<'a>,
+        address: &A::Address,
         label: &'static str,
     ) -> <Self::Retention as ElementEmission>::Step<
         QueryResult<<S::ValueDomain as ValueDomain>::Value<'a>>,
@@ -226,9 +202,9 @@ impl<A: Alignment, S: MaybeAbsent<A>, P: MissingPolicy<A, S>> ArgumentSource<A>
     where
         Self: 'a,
     {
-        match S::lookup(&prepared.0, address) {
-            Lookup::Present(wrapped) => P::Retention::keep(wrapped.clone()),
-            Lookup::Absent(_) => P::resolve_absent(&prepared.1, address, label),
+        match S::lookup(graphrecord, &prepared.0, address, label) {
+            Lookup::Present(wrapped) => P::Retention::keep(wrapped),
+            Lookup::Absent(_) => P::resolve_absent(graphrecord, &prepared.1, address, label),
         }
     }
 }

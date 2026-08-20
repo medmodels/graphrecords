@@ -1,17 +1,17 @@
 use crate::{
-    EvaluateOperand, Explain, IndexDomain, Labeled, Mask, Operand, QueryResult,
+    EvaluateExpression, Explain, Expression, IndexDomain, Labeled, Mask, QueryResult,
     element::Retention,
-    execution::EvaluationCache,
-    index::GroupKey,
-    operands::{BucketChange, GroupOperand, Partition},
-    operations::{Apply, ArgumentSource, GroupKernel, Keyed, Operation, OperationContext, Prepare},
+    expressions::{BucketChange, GroupedExpression, Partition},
+    operations::{ArgumentSource, Build, GroupKernel, Keyed, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Having,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Group)]
 #[explain(label = "Having")]
 #[plan(optimizer_hints(empty = if_all))]
@@ -20,47 +20,32 @@ pub struct HavingOperation<P> {
     predicate: P,
 }
 
-impl<P: Prepare> Prepare for HavingOperation<P> {
-    type Prepared<'a>
-        = P::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.predicate.prepare(graphrecord, cache)
-    }
-}
-
-impl<M, K, O, P> GroupKernel<M, K, O> for HavingOperation<P>
+impl<M, K, E, P> GroupKernel<M, K, E> for HavingOperation<P>
 where
     M: IndexDomain,
-    K: GroupKey,
-    O: Operand,
+    K: IndexDomain,
+    E: Expression,
     P: ArgumentSource<Keyed<K>, Mask>,
 {
-    type Output = GroupOperand<M, K, O>;
+    type Output = GroupedExpression<M, K, E>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, O>,
+        partition: Partition<'a, M, K, E>,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(partition.change_buckets(|bucket| {
             if bucket.payload().is_err() {
                 return None;
             }
 
-            let key = match K::resolve_key(Self::LABEL, graphrecord, bucket.key()) {
-                Ok(key) => key,
+            let address = match K::resolve(graphrecord, bucket.key(), Self::LABEL) {
+                Ok(address) => address,
                 Err(failure) => {
                     return Some(BucketChange::ReplacePayload(Err(failure)));
                 }
             };
-            let step = P::resolve(&prepared, &key, Self::LABEL);
+            let step = P::resolve(graphrecord, &prepared, &address, Self::LABEL);
 
             match P::Retention::collapse(step) {
                 None | Some(Ok(false)) => Some(BucketChange::Drop),
@@ -78,18 +63,15 @@ where
     }
 }
 
-impl<O, P> Having<P> for O
+impl<E, P> Having<P> for E
 where
-    O: Apply<HavingOperation<P>>,
+    E: Build<HavingOperation<P>>,
     HavingOperation<P>: Operation,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn having(&self, predicate: P) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            HavingOperation { predicate },
-        ))
+    fn having(&self, predicate: P) -> Self::Output {
+        self.build(HavingOperation { predicate })
     }
 }
 
@@ -99,11 +81,11 @@ operation_manifest! {
         scope: group;
 
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
-            parameters: <O: Lane>;
+            group: <M: IndexDomain, K: IndexDomain>;
+            parameters: <E: Lane>;
             argument: P: ArgumentSource<Keyed<K>, Mask>;
-            input: O;
-            output: GroupOperand<M, K, O>;
+            input: E;
+            output: GroupedExpression<M, K, E>;
         }
     }
 }

@@ -1,19 +1,18 @@
 use crate::{
-    Bare, Definite, EntityDomain, EntityReference, EvaluateOperand, Explain, IndexDomain, Indexed,
-    Multiple, Operand, OrderState, QueryResult, Single, Unordered,
-    execution::EvaluationCache,
-    operands::{DefiniteElementOperand, ElementOperand, ElementsOperand},
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    Bare, Definite, EntityDomain, EntityReference, EvaluateExpression, Explain, IndexDomain,
+    Indexed, Multiple, OrderState, QueryResult, Single, Unordered,
+    expressions::{DefiniteElementExpression, ElementExpression, ElementsExpression},
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Select,
 };
 use graphrecords_core::GraphRecord;
-use graphrecords_utils::aliases::GrHashSet;
+use graphrecords_utils::distinct::Distinct;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "Select")]
 #[plan(optimizer_hints(empty = if_any))]
@@ -37,31 +36,20 @@ const fn single_estimate(input: &Estimate) -> Estimate {
     }
 }
 
-impl Prepare for SelectOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
 impl<E: EntityDomain, I: IndexDomain, O: OrderState>
     LaneKernel<Indexed<I, EntityReference<E>>, Multiple<O>> for SelectOperation
 {
-    type Output = ElementsOperand<E, Unordered>;
+    type Output = ElementsExpression<E, Unordered>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, EntityReference<E>, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let targets: GrHashSet<_> = values
-            .map(|(_, reference)| reference)
-            .collect::<QueryResult<_>>()?;
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let targets: Vec<_> = values
+            .map(|value| value.1.map(|reference| reference.address().clone()))
+            .collect::<QueryResult<Distinct<_>>>()?
+            .into();
 
         Ok(Box::new(targets.into_iter().map(|target| (target, Ok(())))))
     }
@@ -74,17 +62,17 @@ impl<E: EntityDomain, I: IndexDomain, O: OrderState>
 impl<E: EntityDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>, Single>
     for SelectOperation
 {
-    type Output = ElementOperand<E>;
+    type Output = ElementExpression<E>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         value: KeyedStream<'a, I, EntityReference<E>, Single>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let Some((_, reference)) = value else {
             return Ok(None);
         };
-        let target = reference?;
+        let target = reference?.address().clone();
 
         Ok(Some((target, Ok(()))))
     }
@@ -97,14 +85,14 @@ impl<E: EntityDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>,
 impl<E: EntityDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>, Definite>
     for SelectOperation
 {
-    type Output = DefiniteElementOperand<E>;
+    type Output = DefiniteElementExpression<E>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         value: KeyedStream<'a, I, EntityReference<E>, Definite>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let target = value.1?;
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let target = value.1?.address().clone();
 
         Ok((target, Ok(())))
     }
@@ -117,14 +105,17 @@ impl<E: EntityDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>,
 impl<E: EntityDomain, O: OrderState> LaneKernel<Bare<EntityReference<E>>, Multiple<O>>
     for SelectOperation
 {
-    type Output = ElementsOperand<E, Unordered>;
+    type Output = ElementsExpression<E, Unordered>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: BareStream<'a, EntityReference<E>, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let targets: GrHashSet<_> = values.collect::<QueryResult<_>>()?;
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let targets: Vec<_> = values
+            .map(|value| value.map(|reference| reference.address().clone()))
+            .collect::<QueryResult<Distinct<_>>>()?
+            .into();
 
         Ok(Box::new(targets.into_iter().map(|target| (target, Ok(())))))
     }
@@ -135,14 +126,16 @@ impl<E: EntityDomain, O: OrderState> LaneKernel<Bare<EntityReference<E>>, Multip
 }
 
 impl<E: EntityDomain> LaneKernel<Bare<EntityReference<E>>, Single> for SelectOperation {
-    type Output = ElementOperand<E>;
+    type Output = ElementExpression<E>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         value: BareStream<'a, EntityReference<E>, Single>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok(value.transpose()?.map(|target| (target, Ok(()))))
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        Ok(value
+            .transpose()?
+            .map(|target| (target.address().clone(), Ok(()))))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -151,14 +144,14 @@ impl<E: EntityDomain> LaneKernel<Bare<EntityReference<E>>, Single> for SelectOpe
 }
 
 impl<E: EntityDomain> LaneKernel<Bare<EntityReference<E>>, Definite> for SelectOperation {
-    type Output = DefiniteElementOperand<E>;
+    type Output = DefiniteElementExpression<E>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         value: BareStream<'a, EntityReference<E>, Definite>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        Ok((value?, Ok(())))
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        Ok((value?.address().clone(), Ok(())))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
@@ -166,11 +159,11 @@ impl<E: EntityDomain> LaneKernel<Bare<EntityReference<E>>, Definite> for SelectO
     }
 }
 
-impl<O: Apply<SelectOperation>> Select for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<SelectOperation>> Select for E {
+    type Output = E::Output;
 
-    fn select(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), SelectOperation))
+    fn select(&self) -> Self::Output {
+        self.build(SelectOperation)
     }
 }
 
@@ -182,32 +175,37 @@ operation_manifest! {
         kernel {
             parameters: <E: EntityDomain, I: IndexDomain, O: OrderState>;
             input: (Indexed<I, EntityReference<E>>, Multiple<O>);
-            output: ElementsOperand<E, Unordered>;
+            output: ElementsExpression<E, Unordered>;
         }
+
         kernel {
             parameters: <E: EntityDomain, I: IndexDomain>;
             input: (Indexed<I, EntityReference<E>>, Single);
-            output: ElementOperand<E>;
+            output: ElementExpression<E>;
         }
+
         kernel {
             parameters: <E: EntityDomain, I: IndexDomain>;
             input: (Indexed<I, EntityReference<E>>, Definite);
-            output: DefiniteElementOperand<E>;
+            output: DefiniteElementExpression<E>;
         }
+
         kernel {
             parameters: <E: EntityDomain, O: OrderState>;
             input: (Bare<EntityReference<E>>, Multiple<O>);
-            output: ElementsOperand<E, Unordered>;
+            output: ElementsExpression<E, Unordered>;
         }
+
         kernel {
             parameters: <E: EntityDomain>;
             input: (Bare<EntityReference<E>>, Single);
-            output: ElementOperand<E>;
+            output: ElementExpression<E>;
         }
+
         kernel {
             parameters: <E: EntityDomain>;
             input: (Bare<EntityReference<E>>, Definite);
-            output: DefiniteElementOperand<E>;
+            output: DefiniteElementExpression<E>;
         }
     }
 }

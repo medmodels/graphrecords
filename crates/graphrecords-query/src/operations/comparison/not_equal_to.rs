@@ -1,11 +1,9 @@
 use super::{equality_bare, equality_indexed};
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Mask, QueryResult,
     capabilities::ValueEquality,
-    execution::EvaluationCache,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
-        Prepare, Unaligned,
+        ArgumentSource, Build, ElementKernel, ElementPipeline, Keyed, Operation, Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::{describe::ArgumentRetention, operation_manifest},
@@ -13,7 +11,9 @@ use crate::{
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "NotEqualTo")]
 #[plan(optimizer_hints(empty = if_all))]
@@ -22,38 +22,21 @@ pub struct NotEqualToOperation<A> {
     argument: A,
 }
 
-impl<A: Prepare> Prepare for NotEqualToOperation<A> {
-    type Prepared<'a>
-        = A::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.argument.prepare(graphrecord, cache)
-    }
-}
-
-impl<I, V, A> ElementKernel<Indexed<I, V>> for NotEqualToOperation<A>
-where
-    I: IndexDomain,
-    V: ValueEquality,
-    A: ArgumentSource<Keyed<I>, V>,
+impl<I: IndexDomain, V: ValueEquality, A: ArgumentSource<Keyed<I>, V>> ElementKernel<Indexed<I, V>>
+    for NotEqualToOperation<A>
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, Mask>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         Ok(equality_indexed::<_, V, A>(
+            graphrecord,
             prepared,
-            Self::LABEL,
             |value, argument| !V::equal(value, argument),
+            Self::LABEL,
         ))
     }
 
@@ -69,22 +52,21 @@ where
     }
 }
 
-impl<V, A> ElementKernel<Bare<V>> for NotEqualToOperation<A>
-where
-    V: ValueEquality + BareValueDomain,
-    A: ArgumentSource<Unaligned, V>,
+impl<V: ValueEquality + BareValueDomain, A: ArgumentSource<Unaligned, V>> ElementKernel<Bare<V>>
+    for NotEqualToOperation<A>
 {
     type Emission = A::Retention;
     type OutShape = Bare<Mask>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         Ok(equality_bare::<V, A>(
+            graphrecord,
             prepared,
-            Self::LABEL,
             |value, argument| !V::equal(value, argument),
+            Self::LABEL,
         ))
     }
 
@@ -100,18 +82,15 @@ where
     }
 }
 
-impl<O, A> NotEqualTo<A> for O
+impl<E, A> NotEqualTo<A> for E
 where
     NotEqualToOperation<A>: Operation,
-    O: Apply<NotEqualToOperation<A>>,
+    E: Build<NotEqualToOperation<A>>,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn not_equal_to(&self, argument: A) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            NotEqualToOperation { argument },
-        ))
+    fn not_equal_to(&self, argument: A) -> Self::Output {
+        self.build(NotEqualToOperation { argument })
     }
 }
 

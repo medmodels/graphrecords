@@ -97,7 +97,7 @@ impl PyOperand {
     }
 
     pub(super) fn dropping_argument(&self) -> PyArgument {
-        PyArgument::new(DynArgumentSource::drop_missing(self.operand().clone()))
+        PyArgument::new(DynArgumentSource::operand(self.operand().clone()))
     }
 
     pub(super) fn replacing_argument(

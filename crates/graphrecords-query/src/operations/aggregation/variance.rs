@@ -1,36 +1,26 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, OrderState, QueryResult,
+    Bare, BareValueDomain, EvaluateExpression, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Multiple, OrderState, QueryResult,
     capabilities::ValueScalar,
     error::aggregation::InvalidVarianceValue,
-    execution::EvaluationCache,
-    operands::BareValueOperand,
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    expressions::BareValueExpression,
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Variance,
 };
-use graphrecords_core::{GraphRecord, graphrecord::Value};
+use graphrecords_core::{
+    GraphRecord,
+    graphrecord::{Value, ValueView},
+};
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
-#[explain(label = "Var")]
+#[explain(label = "Variance")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct VarianceOperation;
-
-impl Prepare for VarianceOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 fn update_state(
     (count, mean, squared_deviation): (usize, f64, f64),
@@ -45,31 +35,29 @@ fn update_state(
     (count, mean, squared_deviation)
 }
 
-impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for VarianceOperation
-where
-    I: IndexDomain,
-    V: ValueScalar + BareValueDomain,
-    O: OrderState,
+impl<I: IndexDomain, V: ValueScalar + BareValueDomain, O: OrderState>
+    LaneKernel<Indexed<I, V>, Multiple<O>> for VarianceOperation
 {
-    type Output = BareValueOperand;
+    type Output = BareValueExpression;
 
     fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         mut values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let variance = values
-            .try_fold((0, 0.0, 0.0), |state, (index, value)| {
-                let value = V::into_scalar(Self::LABEL, value?)
-                    .map_err(|failure| failure.at::<I>(&index))?;
+            .try_fold((0, 0.0, 0.0), |state, (address, value)| {
+                let value = V::into_scalar(value?, Self::LABEL)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
                 let value = match value {
                     Value::Int(value) => value as f64,
                     Value::Float(value) => value,
                     value => {
-                        return Err(Failure::new_at::<I, _>(
-                            Self::LABEL,
+                        return Err(Failure::new_at_address::<I, _>(
                             InvalidVarianceValue::new(value),
-                            &index,
+                            graphrecord,
+                            &address,
+                            Self::LABEL,
                         ));
                     }
                 };
@@ -77,7 +65,7 @@ where
                 Ok(update_state(state, value))
             })
             .map(|(count, _, squared_deviation)| {
-                (count > 1).then(|| Value::Float(squared_deviation / (count - 1) as f64))
+                (count > 1).then(|| ValueView::Float(squared_deviation / (count - 1) as f64))
             });
 
         Ok(variance.transpose())
@@ -88,33 +76,31 @@ where
     }
 }
 
-impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for VarianceOperation
-where
-    V: ValueScalar + BareValueDomain,
-    O: OrderState,
+impl<V: ValueScalar + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+    for VarianceOperation
 {
-    type Output = BareValueOperand;
+    type Output = BareValueExpression;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         mut values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let variance = values
             .try_fold((0, 0.0, 0.0), |state, value| {
-                let value = V::into_scalar(Self::LABEL, value?)?;
+                let value = V::into_scalar(value?, Self::LABEL)?;
                 let value = match value {
                     Value::Int(value) => value as f64,
                     Value::Float(value) => value,
                     value => {
-                        return Err(Failure::new(Self::LABEL, InvalidVarianceValue::new(value)));
+                        return Err(Failure::new(InvalidVarianceValue::new(value), Self::LABEL));
                     }
                 };
 
                 Ok(update_state(state, value))
             })
             .map(|(count, _, squared_deviation)| {
-                (count > 1).then(|| Value::Float(squared_deviation / (count - 1) as f64))
+                (count > 1).then(|| ValueView::Float(squared_deviation / (count - 1) as f64))
             });
 
         Ok(variance.transpose())
@@ -125,11 +111,11 @@ where
     }
 }
 
-impl<O: Apply<VarianceOperation>> Variance for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<VarianceOperation>> Variance for E {
+    type Output = E::Output;
 
-    fn var(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), VarianceOperation))
+    fn var(&self) -> Self::Output {
+        self.build(VarianceOperation)
     }
 }
 
@@ -145,7 +131,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Indexed<I, V>, Multiple<O>);
-            output: BareValueOperand;
+            output: BareValueExpression;
         }
 
         kernel {
@@ -154,7 +140,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Bare<V>, Multiple<O>);
-            output: BareValueOperand;
+            output: BareValueExpression;
         }
     }
 }

@@ -1,8 +1,8 @@
 use crate::{
-    EdgeEndpointRole, EntityReference, Explain, IndexDomain, Indexed, Operand, QueryResult, Unit,
+    EdgeEndpointRole, EntityRef, EntityReference, Explain, IndexDomain, Indexed, QueryResult, Unit,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{
         Count, CountKind, Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs,
         Stats,
@@ -12,7 +12,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, NodeIndex},
+    graphrecord::{EdgeIndex, NodeIndex, StateView},
 };
 
 fn endpoint_estimate(input: Estimate, stats: &Stats) -> Estimate {
@@ -34,7 +34,7 @@ fn endpoint_estimate(input: Estimate, stats: &Stats) -> Estimate {
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
 #[explain(label = "Endpoint")]
-#[plan(optimizer_hints(empty = if_any))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct EndpointOperation {
     #[explain(label)]
     role: EdgeEndpointRole,
@@ -46,7 +46,7 @@ impl Prepare for EndpointOperation {
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(self.role)
     }
@@ -62,11 +62,11 @@ impl ElementKernel<Indexed<EdgeIndex, Unit>> for EndpointOperation {
     ) -> QueryResult<ElementPipeline<'a, Indexed<EdgeIndex, Unit>, Self>> {
         Ok(Pipeline::keyed(move |edge, membership: QueryResult<_>| {
             membership.map(|()| {
-                let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
+                let (source, target) = StateView::of(graphrecord).edge_endpoints(edge);
 
                 match prepared {
-                    EdgeEndpointRole::Source => source,
-                    EdgeEndpointRole::Target => target,
+                    EdgeEndpointRole::Source => EntityRef::new(graphrecord, source),
+                    EdgeEndpointRole::Target => EntityRef::new(graphrecord, target),
                 }
             })
         }))
@@ -85,16 +85,19 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<EdgeIndex>>> for E
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<EdgeIndex>>, Self>> {
-        Ok(Pipeline::unkeyed(move |edge: QueryResult<_>| {
-            edge.map(|edge| {
-                let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
+        Ok(Pipeline::unkeyed(
+            move |edge: QueryResult<EntityRef<'a, EdgeIndex>>| {
+                edge.map(|edge| {
+                    let (source, target) =
+                        StateView::of(graphrecord).edge_endpoints(*edge.address());
 
-                match prepared {
-                    EdgeEndpointRole::Source => source,
-                    EdgeEndpointRole::Target => target,
-                }
-            })
-        }))
+                    match prepared {
+                        EdgeEndpointRole::Source => EntityRef::new(graphrecord, source),
+                        EdgeEndpointRole::Target => EntityRef::new(graphrecord, target),
+                    }
+                })
+            },
+        ))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
@@ -102,52 +105,46 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<EdgeIndex>>> for E
     }
 }
 
-impl<O: Apply<EndpointOperation>> ViaSourceNode for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<EndpointOperation>> ViaSourceNode for E {
+    type Output = E::Output;
 
-    fn via_source_node(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            EndpointOperation {
-                role: EdgeEndpointRole::Source,
-            },
-        ))
+    fn via_source_node(&self) -> Self::Output {
+        self.build(EndpointOperation {
+            role: EdgeEndpointRole::Source,
+        })
     }
 }
 
-impl<O: Apply<EndpointOperation>> ViaTargetNode for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<EndpointOperation>> ViaTargetNode for E {
+    type Output = E::Output;
 
-    fn via_target_node(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            EndpointOperation {
-                role: EdgeEndpointRole::Target,
-            },
-        ))
+    fn via_target_node(&self) -> Self::Output {
+        self.build(EndpointOperation {
+            role: EdgeEndpointRole::Target,
+        })
     }
 }
 
-impl<O> SourceNode for O
+impl<E> SourceNode for E
 where
-    O: ViaSourceNode,
-    O::ReturnOperand: Select,
+    E: ViaSourceNode,
+    E::Output: Select,
 {
-    type ReturnOperand = <O::ReturnOperand as Select>::ReturnOperand;
+    type Output = <E::Output as Select>::Output;
 
-    fn source_node(&self) -> Self::ReturnOperand {
+    fn source_node(&self) -> Self::Output {
         self.via_source_node().select()
     }
 }
 
-impl<O> TargetNode for O
+impl<E> TargetNode for E
 where
-    O: ViaTargetNode,
-    O::ReturnOperand: Select,
+    E: ViaTargetNode,
+    E::Output: Select,
 {
-    type ReturnOperand = <O::ReturnOperand as Select>::ReturnOperand;
+    type Output = <E::Output as Select>::Output;
 
-    fn target_node(&self) -> Self::ReturnOperand {
+    fn target_node(&self) -> Self::Output {
         self.via_target_node().select()
     }
 }
@@ -169,6 +166,7 @@ pub(super) mod via_source_node {
                 output: Indexed<EdgeIndex, EntityReference<NodeIndex>>;
                 emission: Preserving;
             }
+
             kernel {
                 parameters: <I: IndexDomain>;
                 input: Indexed<I, EntityReference<EdgeIndex>>;
@@ -196,6 +194,7 @@ pub(super) mod via_target_node {
                 output: Indexed<EdgeIndex, EntityReference<NodeIndex>>;
                 emission: Preserving;
             }
+
             kernel {
                 parameters: <I: IndexDomain>;
                 input: Indexed<I, EntityReference<EdgeIndex>>;

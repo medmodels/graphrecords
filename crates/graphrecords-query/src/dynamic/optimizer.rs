@@ -3,10 +3,10 @@ use super::{
     DynLaneOperation, DynPayloadOutput, DynStreamShape, DynValue,
 };
 use crate::{
-    Bare, Definite, ElementShape, Indexed, Mask, Multiple, Operand, Ordered, Single, Unit,
+    Bare, Definite, ElementShape, Expression, Indexed, Mask, Multiple, Ordered, Single, Unit,
     Unordered,
     element::{ElementTransition, Preserving},
-    operands::OperandHandle,
+    expressions::ExpressionHandle,
     operations::{
         Apply, DiscardIndexOperation, DiscardValueOperation, ElementKernel, NotOperation,
         OperationContext, TakeOperation,
@@ -19,17 +19,17 @@ use crate::{
 
 type ErasedPreserving<P, S, T> = DynElementOperation<P, S, T, Preserving>;
 
-type ErasedTake<S, C> = DynLaneOperation<TakeOperation, S, C, OperandHandle<S, C>>;
+type ErasedTake<S, C> = DynLaneOperation<TakeOperation, S, C, ExpressionHandle<S, C>>;
 
-fn eliminate_erased_double_negation<S, C>() -> impl Rule<OperandHandle<S, C>>
+fn eliminate_erased_double_negation<S, C>() -> impl Rule<ExpressionHandle<S, C>>
 where
     S: ElementShape + ElementTransition<S, Preserving>,
     C: DynArity,
     ErasedPreserving<NotOperation, S, S>: ElementKernel<S, Emission = Preserving, OutShape = S>
-        + for<'a> OperationInputs<Inputs<'a, OperandHandle<S, C>> = (&'a OperandHandle<S, C>,)>,
+        + for<'a> OperationInputs<Inputs<'a, ExpressionHandle<S, C>> = (&'a ExpressionHandle<S, C>,)>,
 {
-    matching::<OperationContext<OperandHandle<S, C>, ErasedPreserving<NotOperation, S, S>>, _>((
-        matching::<OperationContext<OperandHandle<S, C>, ErasedPreserving<NotOperation, S, S>>, _>(
+    matching::<OperationContext<ExpressionHandle<S, C>, ErasedPreserving<NotOperation, S, S>>, _>((
+        matching::<OperationContext<ExpressionHandle<S, C>, ErasedPreserving<NotOperation, S, S>>, _>(
             (capture(),),
         ),
     ))
@@ -42,7 +42,7 @@ where
     C: DynArity,
     ErasedPreserving<NotOperation, S, S>: ElementKernel<S, Emission = Preserving, OutShape = S>
         + for<'a> OperationInputs<Inputs<'a, DynGroupHandle> = (&'a DynGroupHandle,)>,
-    OperandHandle<S, C>: DynPayloadOutput,
+    ExpressionHandle<S, C>: DynPayloadOutput,
 {
     matching::<DynGroupedOperationContext<ErasedPreserving<NotOperation, S, S>, S, C>, _>((
         matching::<DynGroupedOperationContext<ErasedPreserving<NotOperation, S, S>, S, C>, _>((
@@ -52,39 +52,40 @@ where
     .rewrite(|((inner,),), _| Some(inner))
 }
 
-fn push_down_erased_take<S, T, C, P>() -> impl Rule<OperandHandle<T, C>>
+fn push_down_erased_take<S, T, C, P>() -> impl Rule<ExpressionHandle<T, C>>
 where
     S: ElementShape + ElementTransition<T, Preserving>,
     T: ElementShape,
     C: DynArity,
     ErasedPreserving<P, S, T>: ElementKernel<S, Emission = Preserving, OutShape = T>
-        + for<'a> OperationInputs<Inputs<'a, OperandHandle<S, C>> = (&'a OperandHandle<S, C>,)>,
-    OperandHandle<S, C>: Apply<ErasedTake<S, C>, Output = OperandHandle<S, C>>,
-    OperandHandle<T, C>: Apply<ErasedTake<T, C>, Output = OperandHandle<T, C>>,
+        + for<'a> OperationInputs<Inputs<'a, ExpressionHandle<S, C>> = (&'a ExpressionHandle<S, C>,)>,
+    ExpressionHandle<S, C>: Apply<ErasedTake<S, C>, Output = ExpressionHandle<S, C>>,
+    ExpressionHandle<T, C>: Apply<ErasedTake<T, C>, Output = ExpressionHandle<T, C>>,
 {
     rule(
-        |outer: &OperationContext<OperandHandle<T, C>, ErasedTake<T, C>>, _| {
-            let (operand,) = MatchInputs::inputs(outer);
-            let inner = operand
+        |outer: &OperationContext<ExpressionHandle<T, C>, ErasedTake<T, C>>, _| {
+            let (expression,) = MatchInputs::inputs(outer);
+            let inner = expression
                 .as_plan_node()
-                .downcast::<OperationContext<OperandHandle<S, C>, ErasedPreserving<P, S, T>>>()?;
+                .downcast::<OperationContext<ExpressionHandle<S, C>, ErasedPreserving<P, S, T>>>(
+                )?;
 
             if !inner.operation().allows_limit_pushdown() {
                 return None;
             }
 
             let (input,) = MatchInputs::inputs(inner);
-            let taken = Operand::new(OperationContext::new(
+            let taken = Expression::new(OperationContext::new(
                 input.clone(),
                 ErasedTake::new(outer.operation().operation().clone()),
             ));
 
-            let pushed = OperationContext::<OperandHandle<S, C>, ErasedPreserving<P, S, T>>::new(
+            let pushed = OperationContext::<ExpressionHandle<S, C>, ErasedPreserving<P, S, T>>::new(
                 taken,
                 inner.operation().clone(),
             );
 
-            Some(Operand::new(pushed))
+            Some(Expression::new(pushed))
         },
     )
 }

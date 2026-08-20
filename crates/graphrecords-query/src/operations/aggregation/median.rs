@@ -1,13 +1,10 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, OrderState, QueryResult, Single,
+    Bare, BareValueDomain, EvaluateExpression, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Multiple, OrderState, QueryResult, Single,
     capabilities::ValueMedian,
     error::comparison::{IncomparableValues, IncomparableValuesAt},
-    execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    expressions::ExpressionHandle,
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Median,
@@ -18,23 +15,13 @@ use std::{
     fmt::{Debug, Display},
 };
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "Median")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct MedianOperation;
-
-impl Prepare for MedianOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 fn middle_values<T, F>(mut values: Vec<T>, compare: F) -> Option<(T, Option<T>)>
 where
@@ -70,20 +57,20 @@ where
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {
-    type Output = OperandHandle<Bare<V>, Single>;
+    type Output = ExpressionHandle<Bare<V>, Single>;
 
     fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let collected = match values
-            .map(|(index, value)| {
+            .map(|(address, value)| {
                 let value = value?;
-                V::validate_median(Self::LABEL, &value)
-                    .map_err(|failure| failure.at::<I>(&index))?;
+                V::validate_median(&value, Self::LABEL)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
 
-                Ok((index, value))
+                Ok((address, value))
             })
             .collect::<QueryResult<Vec<_>>>()
         {
@@ -94,36 +81,37 @@ where
         if let Some((first_position, second_position)) =
             V::find_incomparable_median_values(collected.iter().map(|(_, value)| value))
         {
-            let (first_index, first) = &collected[first_position];
-            let (second_index, second) = &collected[second_position];
-            let failure = Failure::new_at::<I, _>(
-                Self::LABEL,
+            let (first_address, first) = &collected[first_position];
+            let (second_address, second) = &collected[second_position];
+            let failure = Failure::new_at_address::<I, _>(
                 IncomparableValuesAt::new(
                     V::into_owned(first.clone()),
                     V::into_owned(second.clone()),
-                    I::to_owned(first_index),
-                    I::to_owned(second_index),
+                    I::own_index(&I::index(graphrecord, first_address)),
+                    I::own_index(&I::index(graphrecord, second_address)),
                 ),
-                second_index,
+                graphrecord,
+                second_address,
+                Self::LABEL,
             );
 
             return Ok(Some(Err(failure)));
         }
 
-        let Some(((lower_index, lower), upper)) = middle_values(collected, |left, right| {
+        let Some(((lower_address, lower), upper)) = middle_values(collected, |left, right| {
             V::ordering(&left.1, &right.1).expect("median values were checked for comparability")
         }) else {
             return Ok(None);
         };
-        let (upper_index, upper) = match upper {
-            Some((index, value)) => (Some(index), Some(value)),
+        let (upper_address, upper) = match upper {
+            Some((address, value)) => (Some(address), Some(value)),
             None => (None, None),
         };
-        let failure_index = upper_index.as_ref().unwrap_or(&lower_index);
+        let failure_address = upper_address.as_ref().unwrap_or(&lower_address);
 
-        Ok(Some(
-            V::median(Self::LABEL, lower, upper).map_err(|failure| failure.at::<I>(failure_index)),
-        ))
+        Ok(Some(V::median(lower, upper, Self::LABEL).map_err(
+            |failure| failure.at_address::<I>(graphrecord, failure_address),
+        )))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -137,17 +125,17 @@ where
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {
-    type Output = OperandHandle<Bare<V>, Single>;
+    type Output = ExpressionHandle<Bare<V>, Single>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let collected = match values
             .map(|value| {
                 let value = value?;
-                V::validate_median(Self::LABEL, &value)?;
+                V::validate_median(&value, Self::LABEL)?;
 
                 Ok(value)
             })
@@ -161,11 +149,11 @@ where
             V::find_incomparable_median_values(collected.iter())
         {
             let failure = Failure::new(
-                Self::LABEL,
                 IncomparableValues::new(
                     V::into_owned(collected[first_position].clone()),
                     V::into_owned(collected[second_position].clone()),
                 ),
+                Self::LABEL,
             );
 
             return Ok(Some(Err(failure)));
@@ -177,7 +165,7 @@ where
             return Ok(None);
         };
 
-        Ok(Some(V::median(Self::LABEL, lower, upper)))
+        Ok(Some(V::median(lower, upper, Self::LABEL)))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -185,11 +173,11 @@ where
     }
 }
 
-impl<O: Apply<MedianOperation>> Median for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<MedianOperation>> Median for E {
+    type Output = E::Output;
 
-    fn median(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), MedianOperation))
+    fn median(&self) -> Self::Output {
+        self.build(MedianOperation)
     }
 }
 
@@ -205,7 +193,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Indexed<I, V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Single>;
+            output: ExpressionHandle<Bare<V>, Single>;
             where V::Owned: Debug + Display + Send + Sync;
         }
 
@@ -215,7 +203,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Bare<V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Single>;
+            output: ExpressionHandle<Bare<V>, Single>;
             where V::Owned: Debug + Display + Send + Sync;
         }
     }

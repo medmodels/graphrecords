@@ -1,4 +1,4 @@
-use super::{ValueEquivalence, ValueOrdering, incomparable_with_first};
+use super::{ValueEquivalence, ValueOrdering, incomparable_with_first, value_into_view};
 use crate::{
     Failure, IndexDomain, IndexValue, Mask, QueryResult, Scalar, ValueDomain,
     error::aggregation::InvalidMedianValue,
@@ -9,37 +9,35 @@ use graphrecords_core::graphrecord::{AttributeName, Value};
 const NANOSECONDS_PER_SECOND: i128 = 1_000_000_000;
 
 pub trait ValueMedian: ValueOrdering {
-    fn validate_median(label: &'static str, value: &Self::Value<'_>) -> QueryResult<()>;
+    fn validate_median(value: &Self::Value<'_>, label: &'static str) -> QueryResult<()>;
 
-    fn find_incomparable_median_values<'a, 'b>(
+    fn find_incomparable_median_values<'a, 'b: 'a>(
         values: impl Iterator<Item = &'a Self::Value<'b>>,
-    ) -> Option<(usize, usize)>
-    where
-        Self::Value<'b>: 'a;
+    ) -> Option<(usize, usize)>;
 
     fn median<'a>(
-        label: &'static str,
         lower: Self::Value<'a>,
         upper: Option<Self::Value<'a>>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>>;
 }
 
 pub trait ValueMode: ValueEquivalence {}
 
 pub trait ValueScalar: ValueDomain {
-    fn into_scalar(label: &'static str, value: Self::Value<'_>) -> QueryResult<Value>;
+    fn into_scalar(value: Self::Value<'_>, label: &'static str) -> QueryResult<Value>;
 
-    fn from_scalar<'a>(role: &Self::Value<'_>, value: Value) -> Self::Value<'a>;
+    fn from_scalar<'a>(original: &Self::Value<'_>, value: Value) -> Self::Value<'a>;
 }
 
-fn validate_median_value(label: &'static str, value: &Value) -> QueryResult<()> {
+fn validate_median_value(value: &Value, label: &'static str) -> QueryResult<()> {
     if matches!(
         value,
         Value::Int(_) | Value::Float(_) | Value::DateTime(_) | Value::Duration(_)
     ) {
         Ok(())
     } else {
-        Err(Failure::new(label, InvalidMedianValue::new(value.clone())))
+        Err(Failure::new(InvalidMedianValue::new(value.clone()), label))
     }
 }
 
@@ -94,35 +92,35 @@ fn median_value(lower: Value, upper: Option<Value>) -> Value {
 }
 
 impl ValueMedian for Scalar {
-    fn validate_median(label: &'static str, value: &Self::Value<'_>) -> QueryResult<()> {
-        validate_median_value(label, value)
+    fn validate_median(value: &Self::Value<'_>, label: &'static str) -> QueryResult<()> {
+        validate_median_value(&Value::from(value.clone()), label)
     }
 
-    fn find_incomparable_median_values<'a, 'b>(
+    fn find_incomparable_median_values<'a, 'b: 'a>(
         values: impl Iterator<Item = &'a Self::Value<'b>>,
-    ) -> Option<(usize, usize)>
-    where
-        Self::Value<'b>: 'a,
-    {
+    ) -> Option<(usize, usize)> {
         incomparable_with_first(values)
     }
 
     fn median<'a>(
-        _label: &'static str,
         lower: Self::Value<'a>,
         upper: Option<Self::Value<'a>>,
+        _label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        Ok(median_value(lower, upper))
+        Ok(value_into_view(median_value(
+            Value::from(lower),
+            upper.map(Value::from),
+        )))
     }
 }
 
 impl ValueScalar for Scalar {
-    fn into_scalar(_label: &'static str, value: Self::Value<'_>) -> QueryResult<Value> {
-        Ok(value)
+    fn into_scalar(value: Self::Value<'_>, _label: &'static str) -> QueryResult<Value> {
+        Ok(Value::from(value))
     }
 
-    fn from_scalar<'a>(_role: &Self::Value<'_>, value: Value) -> Self::Value<'a> {
-        value
+    fn from_scalar<'a>(_original: &Self::Value<'_>, value: Value) -> Self::Value<'a> {
+        value_into_view(value)
     }
 }
 
@@ -133,34 +131,31 @@ impl ValueMode for Mask {}
 impl ValueMode for AttributeName {}
 
 impl ValueMedian for IndexValue<Value> {
-    fn validate_median(label: &'static str, value: &Self::Value<'_>) -> QueryResult<()> {
-        validate_median_value(label, value)
+    fn validate_median(value: &Self::Value<'_>, label: &'static str) -> QueryResult<()> {
+        validate_median_value(value, label)
     }
 
-    fn find_incomparable_median_values<'a, 'b>(
+    fn find_incomparable_median_values<'a, 'b: 'a>(
         values: impl Iterator<Item = &'a Self::Value<'b>>,
-    ) -> Option<(usize, usize)>
-    where
-        Self::Value<'b>: 'a,
-    {
+    ) -> Option<(usize, usize)> {
         incomparable_with_first(values)
     }
 
     fn median<'a>(
-        _label: &'static str,
         lower: Self::Value<'a>,
         upper: Option<Self::Value<'a>>,
+        _label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
         Ok(median_value(lower, upper))
     }
 }
 
 impl ValueScalar for IndexValue<Value> {
-    fn into_scalar(_label: &'static str, value: Self::Value<'_>) -> QueryResult<Value> {
+    fn into_scalar(value: Self::Value<'_>, _label: &'static str) -> QueryResult<Value> {
         Ok(value)
     }
 
-    fn from_scalar<'a>(_role: &Self::Value<'_>, value: Value) -> Self::Value<'a> {
+    fn from_scalar<'a>(_original: &Self::Value<'_>, value: Value) -> Self::Value<'a> {
         value
     }
 }

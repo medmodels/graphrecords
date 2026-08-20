@@ -1,34 +1,41 @@
-use super::{DynIndex, DynIndexOwned};
+use super::{DynIndex, DynIndexAddress, DynIndexOwned, DynIndexView};
 use crate::{
     BareValueDomain, Failure, FailureKind, FailureKindValue, FailureValue, IndexDomain, IndexValue,
     Mask, Positional, QueryResult, ReturnValueDomain, Scalar, ValueDomain,
     capabilities::{
-        EnsureSortable, GroupingValue, IntValue, PayloadKind, StringValue, ValueAbsolute, ValueAdd,
-        ValueCast, ValueCeil, ValueClip, ValueCubeRoot, ValueDivide, ValueEquality,
-        ValueEquivalence, ValueExponential, ValueFloor, ValueKindTest, ValueLogarithm, ValueMedian,
-        ValueMode, ValueModulo, ValueMultiply, ValueNegate, ValueOrdering, ValuePower, ValueRound,
-        ValueScalar, ValueScalarKindTest, ValueSign, ValueSquareRoot, ValueSubtract,
+        EnsureSortable, PayloadKind, ValueAbsolute, ValueAdd, ValueCast, ValueCeil, ValueClip,
+        ValueCubeRoot, ValueDivide, ValueEquality, ValueEquivalence, ValueExponential, ValueFloor,
+        ValueGrouping, ValueInt, ValueKindTest, ValueLogarithm, ValueMedian, ValueMode,
+        ValueModulo, ValueMultiply, ValueNegate, ValueOrdering, ValuePower, ValueRound,
+        ValueScalar, ValueScalarKindTest, ValueSign, ValueSquareRoot, ValueString, ValueSubtract,
         ValueTransition,
     },
     cast::{
         Bool as BoolTarget, DateTime as DateTimeTarget, Duration as DurationTarget,
         Float as FloatTarget, Int as IntTarget, String as StringTarget,
     },
-    error::dispatch::UnsupportedValueRole,
+    error::{conversion::InvalidTransition, dispatch::UnsupportedValueRole},
     registry::ValueDescriptor,
 };
-use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
+use graphrecords_core::{
+    GraphRecord,
+    graphrecord::{
+        AttributeName, AttributeNameView, EdgeIndex, Group, NodeIndex, Value, ValueView,
+    },
+};
 use std::{
     cmp::Ordering,
     fmt::{self, Display, Formatter},
     hash::{Hash, Hasher},
     mem::discriminant,
+    ptr,
 };
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 enum DynEntityReferenceKind {
     Node(NodeIndex),
     Edge(EdgeIndex),
+    Group(Group),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -52,18 +59,65 @@ impl DynEntityReference {
     }
 
     #[must_use]
+    pub(crate) const fn group(index: Group) -> Self {
+        Self {
+            kind: DynEntityReferenceKind::Group(index),
+        }
+    }
+
+    #[must_use]
     pub const fn node_index(&self) -> Option<&NodeIndex> {
         match &self.kind {
             DynEntityReferenceKind::Node(index) => Some(index),
-            DynEntityReferenceKind::Edge(_) => None,
+            DynEntityReferenceKind::Edge(_) | DynEntityReferenceKind::Group(_) => None,
         }
     }
 
     #[must_use]
     pub const fn edge_index(&self) -> Option<&EdgeIndex> {
         match &self.kind {
-            DynEntityReferenceKind::Node(_) => None,
             DynEntityReferenceKind::Edge(index) => Some(index),
+            DynEntityReferenceKind::Node(_) | DynEntityReferenceKind::Group(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn group_index(&self) -> Option<&Group> {
+        match &self.kind {
+            DynEntityReferenceKind::Group(index) => Some(index),
+            DynEntityReferenceKind::Node(_) | DynEntityReferenceKind::Edge(_) => None,
+        }
+    }
+
+    fn from_index(index: &DynIndexView<'_>) -> Self {
+        match index {
+            DynIndexView::Node(index) => Self::node(NodeIndex::own_index(index)),
+            DynIndexView::Edge(index) => Self::edge(EdgeIndex::own_index(index)),
+            DynIndexView::Group(index) => Self::group(Group::own_index(index)),
+            index => {
+                let index_domain = index.description();
+                panic!(
+                    "registry admitted an entity reference over dynamic index domain {index_domain}"
+                )
+            }
+        }
+    }
+
+    fn resolve(
+        &self,
+        graphrecord: &GraphRecord,
+        label: &'static str,
+    ) -> QueryResult<DynIndexAddress> {
+        match &self.kind {
+            DynEntityReferenceKind::Node(index) => {
+                NodeIndex::resolve(graphrecord, index, label).map(DynIndexAddress::Node)
+            }
+            DynEntityReferenceKind::Edge(index) => {
+                EdgeIndex::resolve(graphrecord, index, label).map(DynIndexAddress::Edge)
+            }
+            DynEntityReferenceKind::Group(index) => {
+                Group::resolve(graphrecord, index, label).map(DynIndexAddress::Group)
+            }
         }
     }
 
@@ -71,13 +125,7 @@ impl DynEntityReference {
         match self.kind {
             DynEntityReferenceKind::Node(_) => ValueDescriptor::entity_reference::<NodeIndex>(),
             DynEntityReferenceKind::Edge(_) => ValueDescriptor::entity_reference::<EdgeIndex>(),
-        }
-    }
-
-    const fn description(&self) -> &'static str {
-        match self.kind {
-            DynEntityReferenceKind::Node(_) => "node entity reference",
-            DynEntityReferenceKind::Edge(_) => "edge entity reference",
+            DynEntityReferenceKind::Group(_) => ValueDescriptor::entity_reference::<Group>(),
         }
     }
 }
@@ -87,29 +135,83 @@ impl Display for DynEntityReference {
         match &self.kind {
             DynEntityReferenceKind::Node(node) => node.fmt(formatter),
             DynEntityReferenceKind::Edge(edge) => edge.fmt(formatter),
+            DynEntityReferenceKind::Group(group) => group.fmt(formatter),
         }
     }
 }
 
-impl PartialOrd for DynEntityReference {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (&self.kind, &other.kind) {
-            (DynEntityReferenceKind::Node(first), DynEntityReferenceKind::Node(second)) => {
-                first.partial_cmp(second)
-            }
-            (DynEntityReferenceKind::Edge(first), DynEntityReferenceKind::Edge(second)) => {
-                first.partial_cmp(second)
-            }
-            _ => None,
+pub struct DynEntityRef<'a> {
+    graphrecord: &'a GraphRecord,
+    address: DynIndexAddress,
+}
+
+impl<'a> DynEntityRef<'a> {
+    #[must_use]
+    pub const fn new(graphrecord: &'a GraphRecord, address: DynIndexAddress) -> Self {
+        Self {
+            graphrecord,
+            address,
         }
+    }
+
+    #[must_use]
+    pub const fn graphrecord(&self) -> &'a GraphRecord {
+        self.graphrecord
+    }
+
+    #[must_use]
+    pub const fn address(&self) -> &DynIndexAddress {
+        &self.address
+    }
+
+    #[must_use]
+    pub fn index(&self) -> DynIndexView<'a> {
+        DynIndex::index(self.graphrecord, &self.address)
+    }
+
+    #[must_use]
+    pub fn into_owned(self) -> DynEntityReference {
+        DynEntityReference::from_index(&self.index())
+    }
+
+    const fn description(&self) -> &'static str {
+        match self.address {
+            DynIndexAddress::Node(_) => "node entity reference",
+            DynIndexAddress::Edge(_) => "edge entity reference",
+            _ => panic!("registry admitted an entity reference over a non-entity index domain"),
+        }
+    }
+}
+
+impl Clone for DynEntityRef<'_> {
+    fn clone(&self) -> Self {
+        Self {
+            graphrecord: self.graphrecord,
+            address: self.address.clone(),
+        }
+    }
+}
+
+impl PartialEq for DynEntityRef<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        ptr::eq(self.graphrecord, other.graphrecord) && self.address == other.address
+    }
+}
+
+impl Eq for DynEntityRef<'_> {}
+
+impl Hash for DynEntityRef<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        ptr::from_ref(self.graphrecord).hash(state);
+        self.address.hash(state);
     }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum DynEquivalenceKey {
-    Scalar(Value),
-    Attribute(AttributeName),
-    Index(DynIndexOwned),
+pub enum DynEquivalenceKey<'a> {
+    Scalar(ValueView<'a>),
+    Attribute(AttributeNameView<'a>),
+    Index(DynIndexView<'a>),
     FailureKind(FailureKind),
 }
 
@@ -123,51 +225,67 @@ pub enum DynValue {
     FailureKind(FailureKind),
 }
 
+#[derive(Clone)]
+pub enum DynValueView<'a> {
+    Scalar(ValueView<'a>),
+    Attribute(AttributeNameView<'a>),
+    Index(DynIndexView<'a>),
+    EntityReference(DynEntityRef<'a>),
+    Failure(Box<Failure>),
+    FailureKind(FailureKind),
+}
+
+#[derive(Clone, Debug)]
+pub enum DynCachedValue {
+    Scalar(Value),
+    Attribute(AttributeName),
+    Index(DynIndexOwned),
+    EntityReference(DynIndexAddress),
+    Failure(Box<Failure>),
+    FailureKind(FailureKind),
+}
+
 macro_rules! implement_arithmetic_capability {
     ($trait:ident, $method:ident) => {
         impl $trait for DynValue {
             fn $method<'a>(
-                label: &'static str,
                 value: Self::Value<'a>,
                 argument: Self::Value<'a>,
+                label: &'static str,
             ) -> QueryResult<Self::Value<'a>> {
                 match (value, argument) {
-                    (Self::Scalar(value), Self::Scalar(argument)) => {
-                        <Scalar as $trait>::$method(label, value, argument).map(Self::Scalar)
+                    (DynValueView::Scalar(value), DynValueView::Scalar(argument)) => {
+                        <Scalar as $trait>::$method(value, argument, label)
+                            .map(DynValueView::Scalar)
                     }
-                    (Self::Attribute(value), Self::Attribute(argument)) => {
-                        <AttributeName as $trait>::$method(label, value, argument)
-                            .map(Self::Attribute)
+                    (DynValueView::Attribute(value), DynValueView::Attribute(argument)) => {
+                        <AttributeName as $trait>::$method(value, argument, label)
+                            .map(DynValueView::Attribute)
                     }
-                    (Self::Index(value), Self::Index(argument)) => {
+                    (DynValueView::Index(value), DynValueView::Index(argument)) => {
                         let result = match (value, argument) {
                             (
-                                DynIndexOwned::Positional(value),
-                                DynIndexOwned::Positional(argument),
+                                DynIndexView::Positional(value),
+                                DynIndexView::Positional(argument),
                             ) => {
-                                <IndexValue<Positional> as $trait>::$method(label, value, argument)
-                                    .map(DynIndexOwned::Positional)
+                                <IndexValue<Positional> as $trait>::$method(value, argument, label)
+                                    .map(DynIndexView::Positional)
                             }
-                            (DynIndexOwned::Node(value), DynIndexOwned::Node(argument)) => {
-                                <IndexValue<NodeIndex> as $trait>::$method(label, value, argument)
-                                    .map(DynIndexOwned::Node)
+                            (DynIndexView::Node(value), DynIndexView::Node(argument)) => {
+                                <IndexValue<NodeIndex> as $trait>::$method(value, argument, label)
+                                    .map(DynIndexView::Node)
                             }
-                            (DynIndexOwned::Edge(value), DynIndexOwned::Edge(argument)) => {
-                                <IndexValue<EdgeIndex> as $trait>::$method(label, value, argument)
-                                    .map(DynIndexOwned::Edge)
-                            }
-                            (
-                                DynIndexOwned::Attribute(value),
-                                DynIndexOwned::Attribute(argument),
-                            ) => <IndexValue<AttributeName> as $trait>::$method(
-                                label, value, argument,
-                            )
-                            .map(DynIndexOwned::Attribute),
-                            (DynIndexOwned::Value(value), DynIndexOwned::Value(argument)) => {
-                                <IndexValue<Value> as $trait>::$method(
-                                    label, value, argument,
+                            (DynIndexView::Attribute(value), DynIndexView::Attribute(argument)) => {
+                                <IndexValue<AttributeName> as $trait>::$method(
+                                    value,
+                                    argument,
+                                    label,
                                 )
-                                .map(DynIndexOwned::Value)
+                                .map(DynIndexView::Attribute)
+                            }
+                            (DynIndexView::Value(value), DynIndexView::Value(argument)) => {
+                                <IndexValue<Value> as $trait>::$method(value, argument, label)
+                                    .map(DynIndexView::Value)
                             }
                             (value, argument) => {
                                 let capability = stringify!($trait);
@@ -179,7 +297,7 @@ macro_rules! implement_arithmetic_capability {
                             }
                         }?;
 
-                        Ok(Self::Index(result))
+                        Ok(DynValueView::Index(result))
                     }
                     (value, argument) => {
                         let capability = stringify!($trait);
@@ -199,20 +317,21 @@ macro_rules! implement_value_binary_capability {
     ($trait:ident, $method:ident) => {
         impl $trait for DynValue {
             fn $method<'a>(
-                label: &'static str,
                 value: Self::Value<'a>,
                 argument: Self::Value<'a>,
+                label: &'static str,
             ) -> QueryResult<Self::Value<'a>> {
                 match (value, argument) {
-                    (Self::Scalar(value), Self::Scalar(argument)) => {
-                        <Scalar as $trait>::$method(label, value, argument).map(Self::Scalar)
+                    (DynValueView::Scalar(value), DynValueView::Scalar(argument)) => {
+                        <Scalar as $trait>::$method(value, argument, label)
+                            .map(DynValueView::Scalar)
                     }
                     (
-                        Self::Index(DynIndexOwned::Value(value)),
-                        Self::Index(DynIndexOwned::Value(argument)),
-                    ) => <IndexValue<Value> as $trait>::$method(label, value, argument)
-                        .map(DynIndexOwned::Value)
-                        .map(Self::Index),
+                        DynValueView::Index(DynIndexView::Value(value)),
+                        DynValueView::Index(DynIndexView::Value(argument)),
+                    ) => <IndexValue<Value> as $trait>::$method(value, argument, label)
+                        .map(DynIndexView::Value)
+                        .map(DynValueView::Index),
                     (value, argument) => {
                         let capability = stringify!($trait);
                         let value_role = value.description();
@@ -231,30 +350,31 @@ macro_rules! implement_attribute_numeric_capability {
     ($trait:ident, $method:ident) => {
         impl $trait for DynValue {
             fn $method<'a>(
-                label: &'static str,
                 value: Self::Value<'a>,
+                label: &'static str,
             ) -> QueryResult<Self::Value<'a>> {
                 match value {
-                    Self::Scalar(value) => {
-                        <Scalar as $trait>::$method(label, value).map(Self::Scalar)
+                    DynValueView::Scalar(value) => {
+                        <Scalar as $trait>::$method(value, label).map(DynValueView::Scalar)
                     }
-                    Self::Attribute(value) => {
-                        <AttributeName as $trait>::$method(label, value).map(Self::Attribute)
+                    DynValueView::Attribute(value) => {
+                        <AttributeName as $trait>::$method(value, label)
+                            .map(DynValueView::Attribute)
                     }
-                    Self::Index(DynIndexOwned::Node(value)) => {
-                        <IndexValue<NodeIndex> as $trait>::$method(label, value)
-                            .map(DynIndexOwned::Node)
-                            .map(Self::Index)
+                    DynValueView::Index(DynIndexView::Node(value)) => {
+                        <IndexValue<NodeIndex> as $trait>::$method(value, label)
+                            .map(DynIndexView::Node)
+                            .map(DynValueView::Index)
                     }
-                    Self::Index(DynIndexOwned::Attribute(value)) => {
-                        <IndexValue<AttributeName> as $trait>::$method(label, value)
-                            .map(DynIndexOwned::Attribute)
-                            .map(Self::Index)
+                    DynValueView::Index(DynIndexView::Attribute(value)) => {
+                        <IndexValue<AttributeName> as $trait>::$method(value, label)
+                            .map(DynIndexView::Attribute)
+                            .map(DynValueView::Index)
                     }
-                    Self::Index(DynIndexOwned::Value(value)) => {
-                        <IndexValue<Value> as $trait>::$method(label, value)
-                            .map(DynIndexOwned::Value)
-                            .map(Self::Index)
+                    DynValueView::Index(DynIndexView::Value(value)) => {
+                        <IndexValue<Value> as $trait>::$method(value, label)
+                            .map(DynIndexView::Value)
+                            .map(DynValueView::Index)
                     }
                     value => {
                         let capability = stringify!($trait);
@@ -271,17 +391,17 @@ macro_rules! implement_value_unary_capability {
     ($trait:ident, $method:ident) => {
         impl $trait for DynValue {
             fn $method<'a>(
-                label: &'static str,
                 value: Self::Value<'a>,
+                label: &'static str,
             ) -> QueryResult<Self::Value<'a>> {
                 match value {
-                    Self::Scalar(value) => {
-                        <Scalar as $trait>::$method(label, value).map(Self::Scalar)
+                    DynValueView::Scalar(value) => {
+                        <Scalar as $trait>::$method(value, label).map(DynValueView::Scalar)
                     }
-                    Self::Index(DynIndexOwned::Value(value)) => {
-                        <IndexValue<Value> as $trait>::$method(label, value)
-                            .map(DynIndexOwned::Value)
-                            .map(Self::Index)
+                    DynValueView::Index(DynIndexView::Value(value)) => {
+                        <IndexValue<Value> as $trait>::$method(value, label)
+                            .map(DynIndexView::Value)
+                            .map(DynValueView::Index)
                     }
                     value => {
                         let capability = stringify!($trait);
@@ -298,20 +418,19 @@ macro_rules! implement_value_cast {
     ($target:ty) => {
         impl ValueCast<$target> for DynValue {
             fn cast<'a>(
-                label: &'static str,
                 value: Self::Value<'a>,
                 target: &$target,
+                label: &'static str,
             ) -> QueryResult<Self::Value<'a>> {
                 match value {
-                    Self::Scalar(value) => {
-                        <Scalar as ValueCast<$target>>::cast(label, value, target).map(Self::Scalar)
+                    DynValueView::Scalar(value) => {
+                        <Scalar as ValueCast<$target>>::cast(value, target, label)
+                            .map(DynValueView::Scalar)
                     }
-                    Self::Index(DynIndexOwned::Value(value)) => {
-                        <IndexValue<Value> as ValueCast<$target>>::cast(
-                            label, value, target,
-                        )
-                        .map(DynIndexOwned::Value)
-                        .map(Self::Index)
+                    DynValueView::Index(DynIndexView::Value(value)) => {
+                        <IndexValue<Value> as ValueCast<$target>>::cast(value, target, label)
+                            .map(DynIndexView::Value)
+                            .map(DynValueView::Index)
                     }
                     value => {
                         let value_role = value.description();
@@ -329,36 +448,37 @@ macro_rules! implement_value_and_attribute_cast {
     ($target:ty) => {
         impl ValueCast<$target> for DynValue {
             fn cast<'a>(
-                label: &'static str,
                 value: Self::Value<'a>,
                 target: &$target,
+                label: &'static str,
             ) -> QueryResult<Self::Value<'a>> {
                 match value {
-                    Self::Scalar(value) => {
-                        <Scalar as ValueCast<$target>>::cast(label, value, target).map(Self::Scalar)
+                    DynValueView::Scalar(value) => {
+                        <Scalar as ValueCast<$target>>::cast(value, target, label)
+                            .map(DynValueView::Scalar)
                     }
-                    Self::Attribute(value) => {
-                        <AttributeName as ValueCast<$target>>::cast(label, value, target)
-                            .map(Self::Attribute)
+                    DynValueView::Attribute(value) => {
+                        <AttributeName as ValueCast<$target>>::cast(value, target, label)
+                            .map(DynValueView::Attribute)
                     }
-                    Self::Index(DynIndexOwned::Node(value)) => {
-                        <IndexValue<NodeIndex> as ValueCast<$target>>::cast(label, value, target)
-                            .map(DynIndexOwned::Node)
-                            .map(Self::Index)
+                    DynValueView::Index(DynIndexView::Node(value)) => {
+                        <IndexValue<NodeIndex> as ValueCast<$target>>::cast(value, target, label)
+                            .map(DynIndexView::Node)
+                            .map(DynValueView::Index)
                     }
-                    Self::Index(DynIndexOwned::Attribute(value)) => {
+                    DynValueView::Index(DynIndexView::Attribute(value)) => {
                         <IndexValue<AttributeName> as ValueCast<$target>>::cast(
-                            label, value, target,
+                            value,
+                            target,
+                            label,
                         )
-                        .map(DynIndexOwned::Attribute)
-                        .map(Self::Index)
+                        .map(DynIndexView::Attribute)
+                        .map(DynValueView::Index)
                     }
-                    Self::Index(DynIndexOwned::Value(value)) => {
-                        <IndexValue<Value> as ValueCast<$target>>::cast(
-                            label, value, target,
-                        )
-                        .map(DynIndexOwned::Value)
-                        .map(Self::Index)
+                    DynValueView::Index(DynIndexView::Value(value)) => {
+                        <IndexValue<Value> as ValueCast<$target>>::cast(value, target, label)
+                            .map(DynIndexView::Value)
+                            .map(DynValueView::Index)
                     }
                     value => {
                         let value_role = value.description();
@@ -383,7 +503,9 @@ impl DynValue {
             Self::FailureKind(_) => ValueDescriptor::value::<FailureKindValue>(),
         }
     }
+}
 
+impl DynValueView<'_> {
     pub(crate) const fn description(&self) -> &'static str {
         match self {
             Self::Scalar(_) => "scalar",
@@ -398,8 +520,8 @@ impl DynValue {
     pub(crate) fn into_groupable(self) -> QueryResult<Self> {
         if matches!(self, Self::Failure(_)) {
             return Err(Failure::new(
-                "grouping key",
                 UnsupportedValueRole::new("grouping", self.description()),
+                "grouping key",
             ));
         }
 
@@ -452,30 +574,125 @@ impl Display for DynValue {
     }
 }
 
-impl PartialOrd for DynValue {
+impl PartialEq for DynValueView<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Scalar(first), Self::Scalar(second)) => first == second,
+            (Self::Attribute(first), Self::Attribute(second)) => first == second,
+            (Self::Index(first), Self::Index(second)) => first == second,
+            (Self::EntityReference(first), Self::EntityReference(second)) => first == second,
+            (Self::Failure(_), Self::Failure(_)) => {
+                panic!("registry admitted equality for a dynamic failure-value lane")
+            }
+            (Self::FailureKind(first), Self::FailureKind(second)) => first == second,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for DynValueView<'_> {}
+
+impl Hash for DynValueView<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        discriminant(self).hash(state);
+        match self {
+            Self::Scalar(value) => value.hash(state),
+            Self::Attribute(value) => value.hash(state),
+            Self::Index(index) => index.hash(state),
+            Self::EntityReference(reference) => reference.hash(state),
+            Self::Failure(_) => {}
+            Self::FailureKind(kind) => kind.hash(state),
+        }
+    }
+}
+
+impl PartialOrd for DynValueView<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
             (Self::Scalar(first), Self::Scalar(second)) => first.partial_cmp(second),
             (Self::Attribute(first), Self::Attribute(second)) => first.partial_cmp(second),
             (Self::Index(first), Self::Index(second)) => first.partial_cmp(second),
-            (Self::EntityReference(first), Self::EntityReference(second)) => {
-                first.partial_cmp(second)
-            }
             _ => None,
         }
     }
 }
 
 impl ValueDomain for DynValue {
+    type Cached = DynCachedValue;
     type Owned = Self;
-    type Value<'a> = Self;
+    type Value<'a> = DynValueView<'a>;
 
     fn into_owned(value: Self::Value<'_>) -> Self::Owned {
-        value
+        match value {
+            DynValueView::Scalar(value) => Self::Scalar(Scalar::into_owned(value)),
+            DynValueView::Attribute(value) => Self::Attribute(AttributeName::into_owned(value)),
+            DynValueView::Index(index) => Self::Index(IndexValue::<DynIndex>::into_owned(index)),
+            DynValueView::EntityReference(reference) => {
+                Self::EntityReference(reference.into_owned())
+            }
+            DynValueView::Failure(failure) => Self::Failure(failure),
+            DynValueView::FailureKind(kind) => Self::FailureKind(kind),
+        }
     }
 
-    fn from_owned(owned: &Self::Owned) -> Self::Value<'_> {
-        owned.clone()
+    fn from_owned<'a>(
+        graphrecord: &'a GraphRecord,
+        owned: &'a Self::Owned,
+        label: &'static str,
+    ) -> QueryResult<Self::Value<'a>> {
+        match owned {
+            Self::Scalar(value) => {
+                Scalar::from_owned(graphrecord, value, label).map(DynValueView::Scalar)
+            }
+            Self::Attribute(value) => {
+                AttributeName::from_owned(graphrecord, value, label).map(DynValueView::Attribute)
+            }
+            Self::Index(index) => IndexValue::<DynIndex>::from_owned(graphrecord, index, label)
+                .map(DynValueView::Index),
+            Self::EntityReference(reference) => {
+                reference.resolve(graphrecord, label).map(|address| {
+                    DynValueView::EntityReference(DynEntityRef::new(graphrecord, address))
+                })
+            }
+            Self::Failure(failure) => Ok(DynValueView::Failure(failure.clone())),
+            Self::FailureKind(kind) => Ok(DynValueView::FailureKind(*kind)),
+        }
+    }
+
+    fn into_cached(value: Self::Value<'_>) -> Self::Cached {
+        match value {
+            DynValueView::Scalar(value) => DynCachedValue::Scalar(Scalar::into_cached(value)),
+            DynValueView::Attribute(value) => {
+                DynCachedValue::Attribute(AttributeName::into_cached(value))
+            }
+            DynValueView::Index(index) => {
+                DynCachedValue::Index(IndexValue::<DynIndex>::into_cached(index))
+            }
+            DynValueView::EntityReference(reference) => {
+                DynCachedValue::EntityReference(reference.address)
+            }
+            DynValueView::Failure(failure) => DynCachedValue::Failure(failure),
+            DynValueView::FailureKind(kind) => DynCachedValue::FailureKind(kind),
+        }
+    }
+
+    fn from_cached<'a>(graphrecord: &'a GraphRecord, cached: &'a Self::Cached) -> Self::Value<'a> {
+        match cached {
+            DynCachedValue::Scalar(value) => {
+                DynValueView::Scalar(Scalar::from_cached(graphrecord, value))
+            }
+            DynCachedValue::Attribute(value) => {
+                DynValueView::Attribute(AttributeName::from_cached(graphrecord, value))
+            }
+            DynCachedValue::Index(index) => {
+                DynValueView::Index(IndexValue::<DynIndex>::from_cached(graphrecord, index))
+            }
+            DynCachedValue::EntityReference(address) => {
+                DynValueView::EntityReference(DynEntityRef::new(graphrecord, address.clone()))
+            }
+            DynCachedValue::Failure(failure) => DynValueView::Failure(failure.clone()),
+            DynCachedValue::FailureKind(kind) => DynValueView::FailureKind(*kind),
+        }
     }
 }
 
@@ -484,11 +701,11 @@ impl BareValueDomain for DynValue {}
 impl ReturnValueDomain for DynValue {}
 
 impl ValueMedian for DynValue {
-    fn validate_median(label: &'static str, value: &Self::Value<'_>) -> QueryResult<()> {
+    fn validate_median(value: &Self::Value<'_>, label: &'static str) -> QueryResult<()> {
         match value {
-            Self::Scalar(value) => Scalar::validate_median(label, value),
-            Self::Index(DynIndexOwned::Value(value)) => {
-                IndexValue::<Value>::validate_median(label, value)
+            DynValueView::Scalar(value) => Scalar::validate_median(value, label),
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                IndexValue::<Value>::validate_median(value, label)
             }
             value => {
                 let value_role = value.description();
@@ -497,50 +714,52 @@ impl ValueMedian for DynValue {
         }
     }
 
-    fn find_incomparable_median_values<'a, 'b>(
+    fn find_incomparable_median_values<'a, 'b: 'a>(
         values: impl Iterator<Item = &'a Self::Value<'b>>,
-    ) -> Option<(usize, usize)>
-    where
-        Self::Value<'b>: 'a,
-    {
+    ) -> Option<(usize, usize)> {
         let values: Vec<_> = values.collect();
         let first = values.first()?;
 
         match first {
-            Self::Scalar(_) if values.iter().all(|value| matches!(value, Self::Scalar(_))) => {
+            DynValueView::Scalar(_)
+                if values
+                    .iter()
+                    .all(|value| matches!(value, DynValueView::Scalar(_))) =>
+            {
                 Scalar::find_incomparable_median_values(values.into_iter().map(|value| {
-                    let Self::Scalar(value) = value else {
+                    let DynValueView::Scalar(value) = value else {
                         unreachable!("median values were checked as scalar dynamic values")
                     };
                     value
                 }))
             }
-            Self::Index(DynIndexOwned::Value(_))
-                if values.iter().all(|value| {
-                    matches!(value, Self::Index(DynIndexOwned::Value(_)))
-                }) => IndexValue::<Value>::find_incomparable_median_values(
-                values.into_iter().map(|value| {
-                    let Self::Index(DynIndexOwned::Value(value)) = value else {
-                        unreachable!(
-                            "median values were checked as graphrecord-value index dynamic values"
-                        )
-                    };
-                    value
-                }),
-            ),
+            DynValueView::Index(DynIndexView::Value(_))
+                if values
+                    .iter()
+                    .all(|value| matches!(value, DynValueView::Index(DynIndexView::Value(_)))) =>
+            {
+                IndexValue::<Value>::find_incomparable_median_values(values.into_iter().map(
+                    |value| {
+                        let DynValueView::Index(DynIndexView::Value(value)) = value else {
+                            unreachable!("median values were checked as value index dynamic values")
+                        };
+                        value
+                    },
+                ))
+            }
             _ => panic!("registry admitted ValueMedian for mixed dynamic value roles"),
         }
     }
 
     fn median<'a>(
-        label: &'static str,
         lower: Self::Value<'a>,
         upper: Option<Self::Value<'a>>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
         match (lower, upper) {
-            (Self::Scalar(lower), upper) => {
+            (DynValueView::Scalar(lower), upper) => {
                 let upper = match upper {
-                    Some(Self::Scalar(upper)) => Some(upper),
+                    Some(DynValueView::Scalar(upper)) => Some(upper),
                     None => None,
                     Some(upper) => {
                         let upper_role = upper.description();
@@ -550,23 +769,23 @@ impl ValueMedian for DynValue {
                     }
                 };
 
-                Scalar::median(label, lower, upper).map(Self::Scalar)
+                Scalar::median(lower, upper, label).map(DynValueView::Scalar)
             }
-            (Self::Index(DynIndexOwned::Value(lower)), upper) => {
+            (DynValueView::Index(DynIndexView::Value(lower)), upper) => {
                 let upper = match upper {
-                    Some(Self::Index(DynIndexOwned::Value(upper))) => Some(upper),
+                    Some(DynValueView::Index(DynIndexView::Value(upper))) => Some(upper),
                     None => None,
                     Some(upper) => {
                         let upper_role = upper.description();
                         panic!(
-                            "registry admitted ValueMedian for incompatible dynamic value roles graphrecord-value index and {upper_role}"
+                            "registry admitted ValueMedian for incompatible dynamic value roles value index and {upper_role}"
                         )
                     }
                 };
 
-                IndexValue::<Value>::median(label, lower, upper)
-                    .map(DynIndexOwned::Value)
-                    .map(Self::Index)
+                IndexValue::<Value>::median(lower, upper, label)
+                    .map(DynIndexView::Value)
+                    .map(DynValueView::Index)
             }
             (lower, _) => {
                 let lower_role = lower.description();
@@ -579,11 +798,11 @@ impl ValueMedian for DynValue {
 impl ValueMode for DynValue {}
 
 impl ValueScalar for DynValue {
-    fn into_scalar(label: &'static str, value: Self::Value<'_>) -> QueryResult<Value> {
+    fn into_scalar(value: Self::Value<'_>, label: &'static str) -> QueryResult<Value> {
         match value {
-            Self::Scalar(value) => Scalar::into_scalar(label, value),
-            Self::Index(DynIndexOwned::Value(value)) => {
-                IndexValue::<Value>::into_scalar(label, value)
+            DynValueView::Scalar(value) => Scalar::into_scalar(value, label),
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                IndexValue::<Value>::into_scalar(value, label)
             }
             value => {
                 let value_role = value.description();
@@ -592,15 +811,17 @@ impl ValueScalar for DynValue {
         }
     }
 
-    fn from_scalar<'a>(role: &Self::Value<'_>, value: Value) -> Self::Value<'a> {
-        match role {
-            Self::Scalar(role) => Self::Scalar(Scalar::from_scalar(role, value)),
-            Self::Index(DynIndexOwned::Value(role)) => Self::Index(DynIndexOwned::Value(
-                IndexValue::<Value>::from_scalar(role, value),
-            )),
-            role => {
-                let role = role.description();
-                panic!("registry supplied ValueScalar::from_scalar with dynamic role {role}")
+    fn from_scalar<'a>(original: &Self::Value<'_>, value: Value) -> Self::Value<'a> {
+        match original {
+            DynValueView::Scalar(original) => {
+                DynValueView::Scalar(Scalar::from_scalar(original, value))
+            }
+            DynValueView::Index(DynIndexView::Value(original)) => DynValueView::Index(
+                DynIndexView::Value(IndexValue::<Value>::from_scalar(original, value)),
+            ),
+            original => {
+                let original = original.description();
+                panic!("registry supplied ValueScalar::from_scalar with dynamic role {original}")
             }
         }
     }
@@ -616,14 +837,16 @@ implement_arithmetic_capability!(ValueSubtract, subtract);
 impl ValueEquality for DynValue {
     fn equal<'a>(value: &Self::Value<'a>, argument: &Self::Value<'a>) -> bool {
         match (value, argument) {
-            (Self::Scalar(value), Self::Scalar(argument)) => Scalar::equal(value, argument),
-            (Self::Attribute(value), Self::Attribute(argument)) => {
+            (DynValueView::Scalar(value), DynValueView::Scalar(argument)) => {
+                Scalar::equal(value, argument)
+            }
+            (DynValueView::Attribute(value), DynValueView::Attribute(argument)) => {
                 AttributeName::equal(value, argument)
             }
-            (Self::Index(value), Self::Index(argument)) => {
+            (DynValueView::Index(value), DynValueView::Index(argument)) => {
                 IndexValue::<DynIndex>::equal(value, argument)
             }
-            (Self::FailureKind(value), Self::FailureKind(argument)) => {
+            (DynValueView::FailureKind(value), DynValueView::FailureKind(argument)) => {
                 FailureKindValue::equal(value, argument)
             }
             _ => {
@@ -640,11 +863,13 @@ impl ValueEquality for DynValue {
 impl ValueOrdering for DynValue {
     fn ordering<'a>(value: &Self::Value<'a>, argument: &Self::Value<'a>) -> Option<Ordering> {
         match (value, argument) {
-            (Self::Scalar(value), Self::Scalar(argument)) => Scalar::ordering(value, argument),
-            (Self::Attribute(value), Self::Attribute(argument)) => {
+            (DynValueView::Scalar(value), DynValueView::Scalar(argument)) => {
+                Scalar::ordering(value, argument)
+            }
+            (DynValueView::Attribute(value), DynValueView::Attribute(argument)) => {
                 AttributeName::ordering(value, argument)
             }
-            (Self::Index(value), Self::Index(argument))
+            (DynValueView::Index(value), DynValueView::Index(argument))
                 if value.supports_value_ordering()
                     && argument.supports_value_ordering()
                     && value.has_same_domain(argument) =>
@@ -670,15 +895,21 @@ implement_value_and_attribute_cast!(IntTarget);
 implement_value_and_attribute_cast!(StringTarget);
 
 impl ValueEquivalence for DynValue {
-    type Key = DynEquivalenceKey;
+    type Key<'a> = DynEquivalenceKey<'a>;
 
-    fn equivalence_key(value: &Self::Value<'_>) -> Self::Key {
+    fn equivalence_key<'a>(value: &Self::Value<'a>) -> Self::Key<'a> {
         match value {
-            Self::Scalar(value) => Self::Key::Scalar(Scalar::equivalence_key(value)),
-            Self::Attribute(value) => Self::Key::Attribute(AttributeName::equivalence_key(value)),
-            Self::Index(value) => Self::Key::Index(IndexValue::<DynIndex>::equivalence_key(value)),
-            Self::FailureKind(value) => {
-                Self::Key::FailureKind(FailureKindValue::equivalence_key(value))
+            DynValueView::Scalar(value) => {
+                DynEquivalenceKey::Scalar(Scalar::equivalence_key(value))
+            }
+            DynValueView::Attribute(value) => {
+                DynEquivalenceKey::Attribute(AttributeName::equivalence_key(value))
+            }
+            DynValueView::Index(value) => {
+                DynEquivalenceKey::Index(IndexValue::<DynIndex>::equivalence_key(value))
+            }
+            DynValueView::FailureKind(value) => {
+                DynEquivalenceKey::FailureKind(FailureKindValue::equivalence_key(value))
             }
             value => {
                 let value_role = value.description();
@@ -688,58 +919,47 @@ impl ValueEquivalence for DynValue {
     }
 }
 
-impl GroupingValue for DynValue {
-    type Key = DynIndex;
+impl ValueGrouping for DynValue {
+    type KeyDomain = DynIndex;
 
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
+    fn to_group_key(value: &Self::Value<'_>) -> <Self::KeyDomain as IndexDomain>::Owned {
         match value {
-            Self::Scalar(value) => DynIndexOwned::Value(Scalar::to_group_key(value)),
-            Self::Attribute(value) => DynIndexOwned::Attribute(AttributeName::to_group_key(value)),
-            Self::Index(value) => IndexValue::<DynIndex>::to_group_key(value),
-            Self::EntityReference(reference) => match &reference.kind {
-                DynEntityReferenceKind::Node(value) => DynIndexOwned::Node(value.clone()),
-                DynEntityReferenceKind::Edge(value) => DynIndexOwned::Edge(*value),
-            },
-            Self::FailureKind(value) => {
+            DynValueView::Scalar(value) => DynIndexOwned::Value(Scalar::to_group_key(value)),
+            DynValueView::Attribute(value) => {
+                DynIndexOwned::Attribute(AttributeName::to_group_key(value))
+            }
+            DynValueView::Index(value) => IndexValue::<DynIndex>::to_group_key(value),
+            DynValueView::EntityReference(reference) => DynIndex::own_index(&reference.index()),
+            DynValueView::FailureKind(value) => {
                 DynIndexOwned::FailureKind(FailureKindValue::to_group_key(value))
             }
-            Self::Failure(_) => {
-                panic!("registry admitted GroupingValue for a dynamic failure-value lane")
+            DynValueView::Failure(_) => {
+                panic!("registry admitted ValueGrouping for a dynamic failure-value lane")
             }
         }
     }
 }
 
-impl ValueTransition<DynValue> for Mask {
-    fn transition<'a>(
-        _label: &'static str,
-        value: Self::Value<'a>,
-    ) -> QueryResult<<DynValue as ValueDomain>::Value<'a>> {
-        Ok(DynValue::Index(DynIndexOwned::Bool(value)))
-    }
-}
-
-impl IntValue for DynValue {
-    fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
+impl ValueInt for DynValue {
+    fn into_int(value: Self::Value<'_>, label: &'static str) -> QueryResult<i64> {
         match value {
-            Self::Scalar(value) => Scalar::into_int(label, value),
-            Self::Attribute(value) => AttributeName::into_int(label, value),
-            Self::Index(DynIndexOwned::Positional(value)) => {
-                IndexValue::<Positional>::into_int(label, value)
+            DynValueView::Scalar(value) => Scalar::into_int(value, label),
+            DynValueView::Attribute(value) => AttributeName::into_int(value, label),
+            DynValueView::Index(DynIndexView::Positional(value)) => {
+                IndexValue::<Positional>::into_int(value, label)
             }
-            Self::Index(DynIndexOwned::Node(value)) => {
-                IndexValue::<NodeIndex>::into_int(label, value)
+            DynValueView::Index(DynIndexView::Node(value)) => {
+                IndexValue::<NodeIndex>::into_int(value, label)
             }
-            Self::Index(DynIndexOwned::Edge(value)) => {
-                IndexValue::<EdgeIndex>::into_int(label, value)
+            DynValueView::Index(DynIndexView::Attribute(value)) => {
+                IndexValue::<AttributeName>::into_int(value, label)
             }
-            Self::Index(DynIndexOwned::Attribute(value)) => {
-                IndexValue::<AttributeName>::into_int(label, value)
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                IndexValue::<Value>::into_int(value, label)
             }
-            Self::Index(DynIndexOwned::Value(value)) => IndexValue::<Value>::into_int(label, value),
             value => {
                 let value_role = value.description();
-                panic!("registry admitted IntValue for dynamic value role {value_role}")
+                panic!("registry admitted ValueInt for dynamic value role {value_role}")
             }
         }
     }
@@ -748,13 +968,13 @@ impl IntValue for DynValue {
 impl ValueKindTest for DynValue {
     fn kind(value: &Self::Value<'_>) -> PayloadKind {
         match value {
-            Self::Scalar(value) => Scalar::kind(value),
-            Self::Attribute(value) => AttributeName::kind(value),
-            Self::Index(DynIndexOwned::Node(value)) => IndexValue::<NodeIndex>::kind(value),
-            Self::Index(DynIndexOwned::Attribute(value)) => {
+            DynValueView::Scalar(value) => Scalar::kind(value),
+            DynValueView::Attribute(value) => AttributeName::kind(value),
+            DynValueView::Index(DynIndexView::Node(value)) => IndexValue::<NodeIndex>::kind(value),
+            DynValueView::Index(DynIndexView::Attribute(value)) => {
                 IndexValue::<AttributeName>::kind(value)
             }
-            Self::Index(DynIndexOwned::Value(value)) => IndexValue::<Value>::kind(value),
+            DynValueView::Index(DynIndexView::Value(value)) => IndexValue::<Value>::kind(value),
             value => {
                 let value_role = value.description();
                 panic!("registry admitted ValueKindTest for dynamic value role {value_role}")
@@ -770,53 +990,50 @@ implement_value_unary_capability!(ValueCeil, ceil);
 
 impl ValueClip for DynValue {
     fn clip<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
         match (value, lower, upper) {
-            (Self::Scalar(value), Self::Scalar(lower), Self::Scalar(upper)) => {
-                Scalar::clip(label, value, lower, upper).map(Self::Scalar)
-            }
-            (Self::Attribute(value), Self::Attribute(lower), Self::Attribute(upper)) => {
-                AttributeName::clip(label, value, lower, upper).map(Self::Attribute)
-            }
             (
-                Self::Index(DynIndexOwned::Positional(value)),
-                Self::Index(DynIndexOwned::Positional(lower)),
-                Self::Index(DynIndexOwned::Positional(upper)),
-            ) => IndexValue::<Positional>::clip(label, value, lower, upper)
-                .map(DynIndexOwned::Positional)
-                .map(Self::Index),
+                DynValueView::Scalar(value),
+                DynValueView::Scalar(lower),
+                DynValueView::Scalar(upper),
+            ) => Scalar::clip(value, lower, upper, label).map(DynValueView::Scalar),
             (
-                Self::Index(DynIndexOwned::Node(value)),
-                Self::Index(DynIndexOwned::Node(lower)),
-                Self::Index(DynIndexOwned::Node(upper)),
-            ) => IndexValue::<NodeIndex>::clip(label, value, lower, upper)
-                .map(DynIndexOwned::Node)
-                .map(Self::Index),
+                DynValueView::Attribute(value),
+                DynValueView::Attribute(lower),
+                DynValueView::Attribute(upper),
+            ) => AttributeName::clip(value, lower, upper, label).map(DynValueView::Attribute),
             (
-                Self::Index(DynIndexOwned::Edge(value)),
-                Self::Index(DynIndexOwned::Edge(lower)),
-                Self::Index(DynIndexOwned::Edge(upper)),
-            ) => IndexValue::<EdgeIndex>::clip(label, value, lower, upper)
-                .map(DynIndexOwned::Edge)
-                .map(Self::Index),
+                DynValueView::Index(DynIndexView::Positional(value)),
+                DynValueView::Index(DynIndexView::Positional(lower)),
+                DynValueView::Index(DynIndexView::Positional(upper)),
+            ) => IndexValue::<Positional>::clip(value, lower, upper, label)
+                .map(DynIndexView::Positional)
+                .map(DynValueView::Index),
             (
-                Self::Index(DynIndexOwned::Attribute(value)),
-                Self::Index(DynIndexOwned::Attribute(lower)),
-                Self::Index(DynIndexOwned::Attribute(upper)),
-            ) => IndexValue::<AttributeName>::clip(label, value, lower, upper)
-                .map(DynIndexOwned::Attribute)
-                .map(Self::Index),
+                DynValueView::Index(DynIndexView::Node(value)),
+                DynValueView::Index(DynIndexView::Node(lower)),
+                DynValueView::Index(DynIndexView::Node(upper)),
+            ) => IndexValue::<NodeIndex>::clip(value, lower, upper, label)
+                .map(DynIndexView::Node)
+                .map(DynValueView::Index),
             (
-                Self::Index(DynIndexOwned::Value(value)),
-                Self::Index(DynIndexOwned::Value(lower)),
-                Self::Index(DynIndexOwned::Value(upper)),
-            ) => IndexValue::<Value>::clip(label, value, lower, upper)
-                .map(DynIndexOwned::Value)
-                .map(Self::Index),
+                DynValueView::Index(DynIndexView::Attribute(value)),
+                DynValueView::Index(DynIndexView::Attribute(lower)),
+                DynValueView::Index(DynIndexView::Attribute(upper)),
+            ) => IndexValue::<AttributeName>::clip(value, lower, upper, label)
+                .map(DynIndexView::Attribute)
+                .map(DynValueView::Index),
+            (
+                DynValueView::Index(DynIndexView::Value(value)),
+                DynValueView::Index(DynIndexView::Value(lower)),
+                DynValueView::Index(DynIndexView::Value(upper)),
+            ) => IndexValue::<Value>::clip(value, lower, upper, label)
+                .map(DynIndexView::Value)
+                .map(DynValueView::Index),
             (value, lower, upper) => {
                 let value_role = value.description();
                 let lower_role = lower.description();
@@ -838,14 +1055,17 @@ implement_value_unary_capability!(ValueRound, round);
 implement_attribute_numeric_capability!(ValueSign, sign);
 implement_value_unary_capability!(ValueSquareRoot, square_root);
 
-impl EnsureSortable for DynValue {
-    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
+impl EnsureSortable for DynValueView<'_> {
+    fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
+    where
+        Self: 'a,
+    {
         let values: Vec<_> = values.collect();
         let first = values.first()?;
 
         match first {
             Self::Scalar(_) if values.iter().all(|value| matches!(value, Self::Scalar(_))) => {
-                Value::find_incomparable(values.into_iter().map(|value| {
+                ValueView::find_incomparable(values.into_iter().map(|value| {
                     let Self::Scalar(value) = value else {
                         unreachable!("dynamic values were checked as scalars")
                     };
@@ -857,7 +1077,7 @@ impl EnsureSortable for DynValue {
                     .iter()
                     .all(|value| matches!(value, Self::Attribute(_))) =>
             {
-                AttributeName::find_incomparable(values.into_iter().map(|value| {
+                AttributeNameView::find_incomparable(values.into_iter().map(|value| {
                     let Self::Attribute(value) = value else {
                         unreachable!("dynamic values were checked as attributes")
                     };
@@ -865,7 +1085,7 @@ impl EnsureSortable for DynValue {
                 }))
             }
             Self::Index(_) if values.iter().all(|value| matches!(value, Self::Index(_))) => {
-                DynIndexOwned::find_incomparable(values.into_iter().map(|value| {
+                DynIndexView::find_incomparable(values.into_iter().map(|value| {
                     let Self::Index(value) = value else {
                         unreachable!("dynamic values were checked as indices")
                     };
@@ -880,43 +1100,444 @@ impl EnsureSortable for DynValue {
     }
 }
 
-impl StringValue for DynValue {
-    fn into_string(label: &'static str, value: Self::Value<'_>) -> QueryResult<String> {
+impl ValueString for DynValue {
+    fn as_str<'a>(value: &'a Self::Value<'_>, label: &'static str) -> QueryResult<&'a str> {
         match value {
-            Self::Scalar(value) => Scalar::into_string(label, value),
-            Self::Attribute(value) => AttributeName::into_string(label, value),
-            Self::Index(DynIndexOwned::Node(value)) => {
-                IndexValue::<NodeIndex>::into_string(label, value)
+            DynValueView::Scalar(value) => Scalar::as_str(value, label),
+            DynValueView::Attribute(value) => AttributeName::as_str(value, label),
+            DynValueView::Index(DynIndexView::Node(value)) => {
+                IndexValue::<NodeIndex>::as_str(value, label)
             }
-            Self::Index(DynIndexOwned::Attribute(value)) => {
-                IndexValue::<AttributeName>::into_string(label, value)
+            DynValueView::Index(DynIndexView::Group(value)) => {
+                IndexValue::<Group>::as_str(value, label)
             }
-            Self::Index(DynIndexOwned::Value(value)) => {
-                IndexValue::<Value>::into_string(label, value)
+            DynValueView::Index(DynIndexView::Attribute(value)) => {
+                IndexValue::<AttributeName>::as_str(value, label)
+            }
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                IndexValue::<Value>::as_str(value, label)
             }
             value => {
                 let value_role = value.description();
-                panic!("registry admitted StringValue for dynamic value role {value_role}")
+                panic!("registry admitted ValueString for dynamic value role {value_role}")
             }
         }
     }
 
-    fn from_string<'a>(role: &Self::Value<'_>, value: String) -> Self::Value<'a> {
-        match role {
-            Self::Scalar(role) => Self::Scalar(Scalar::from_string(role, value)),
-            Self::Attribute(role) => Self::Attribute(AttributeName::from_string(role, value)),
-            Self::Index(DynIndexOwned::Node(role)) => Self::Index(DynIndexOwned::Node(
-                IndexValue::<NodeIndex>::from_string(role, value),
-            )),
-            Self::Index(DynIndexOwned::Attribute(role)) => Self::Index(DynIndexOwned::Attribute(
-                IndexValue::<AttributeName>::from_string(role, value),
-            )),
-            Self::Index(DynIndexOwned::Value(role)) => Self::Index(DynIndexOwned::Value(
-                IndexValue::<Value>::from_string(role, value),
-            )),
-            role => {
-                let role = role.description();
-                panic!("registry supplied StringValue::from_string with dynamic role {role}")
+    fn with_string<'a>(original: &Self::Value<'_>, string: String) -> Self::Value<'a> {
+        match original {
+            DynValueView::Scalar(original) => {
+                DynValueView::Scalar(Scalar::with_string(original, string))
+            }
+            DynValueView::Attribute(original) => {
+                DynValueView::Attribute(AttributeName::with_string(original, string))
+            }
+            DynValueView::Index(DynIndexView::Node(original)) => DynValueView::Index(
+                DynIndexView::Node(IndexValue::<NodeIndex>::with_string(original, string)),
+            ),
+            DynValueView::Index(DynIndexView::Group(original)) => DynValueView::Index(
+                DynIndexView::Group(IndexValue::<Group>::with_string(original, string)),
+            ),
+            DynValueView::Index(DynIndexView::Attribute(original)) => DynValueView::Index(
+                DynIndexView::Attribute(IndexValue::<AttributeName>::with_string(original, string)),
+            ),
+            DynValueView::Index(DynIndexView::Value(original)) => DynValueView::Index(
+                DynIndexView::Value(IndexValue::<Value>::with_string(original, string)),
+            ),
+            original => {
+                let original = original.description();
+                panic!("registry supplied ValueString::with_string with dynamic role {original}")
+            }
+        }
+    }
+}
+
+impl ValueTransition<DynValue> for Mask {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        _label: &'static str,
+    ) -> QueryResult<<DynValue as ValueDomain>::Value<'a>> {
+        Ok(DynValueView::Index(DynIndexView::Bool(value)))
+    }
+}
+
+const ATTRIBUTE_NAME_TARGET: &str = "AttributeName";
+const ATTRIBUTE_NAME_INDEX_TARGET: &str = "IndexValue<AttributeName>";
+const BOOL_INDEX_TARGET: &str = "IndexValue<bool>";
+const FAILURE_KIND_INDEX_TARGET: &str = "IndexValue<FailureKind>";
+const FAILURE_KIND_VALUE_TARGET: &str = "FailureKindValue";
+const GROUP_TARGET: &str = "IndexValue<Group>";
+const MASK_TARGET: &str = "Mask";
+const NODE_INDEX_TARGET: &str = "IndexValue<NodeIndex>";
+const POSITIONAL_INDEX_TARGET: &str = "IndexValue<Positional>";
+const SCALAR_TARGET: &str = "Scalar";
+const VALUE_INDEX_TARGET: &str = "IndexValue<Value>";
+
+impl ValueTransition<AttributeName> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<AttributeName as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::Scalar(value) => {
+                <Scalar as ValueTransition<AttributeName>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                <IndexValue<Value> as ValueTransition<AttributeName>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Node(value)) => {
+                <IndexValue<NodeIndex> as ValueTransition<AttributeName>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Group(value)) => {
+                <IndexValue<Group> as ValueTransition<AttributeName>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Attribute(value)) => {
+                <IndexValue<AttributeName> as ValueTransition<AttributeName>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Index(DynIndexView::Positional(value)) => {
+                <IndexValue<Positional> as ValueTransition<AttributeName>>::transition(value, label)
+            }
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, ATTRIBUTE_NAME_TARGET),
+                    label,
+                ))
+            }
+        }
+    }
+}
+
+impl ValueTransition<FailureKindValue> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<FailureKindValue as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::Index(DynIndexView::FailureKind(value)) => {
+                <IndexValue<FailureKind> as ValueTransition<FailureKindValue>>::transition(
+                    value, label,
+                )
+            }
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, FAILURE_KIND_VALUE_TARGET),
+                    label,
+                ))
+            }
+        }
+    }
+}
+
+impl ValueTransition<IndexValue<AttributeName>> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<IndexValue<AttributeName> as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::Scalar(value) => {
+                <Scalar as ValueTransition<IndexValue<AttributeName>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                <IndexValue<Value> as ValueTransition<IndexValue<AttributeName>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Attribute(value) => <AttributeName as ValueTransition<
+                IndexValue<AttributeName>,
+            >>::transition(value, label),
+            DynValueView::Index(DynIndexView::Node(value)) => {
+                <IndexValue<NodeIndex> as ValueTransition<IndexValue<AttributeName>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Index(DynIndexView::Group(value)) => {
+                <IndexValue<Group> as ValueTransition<IndexValue<AttributeName>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Index(DynIndexView::Positional(value)) => {
+                <IndexValue<Positional> as ValueTransition<IndexValue<AttributeName>>>::transition(
+                    value, label,
+                )
+            }
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, ATTRIBUTE_NAME_INDEX_TARGET),
+                    label,
+                ))
+            }
+        }
+    }
+}
+
+impl ValueTransition<IndexValue<bool>> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<IndexValue<bool> as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::Scalar(value) => {
+                <Scalar as ValueTransition<IndexValue<bool>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                <IndexValue<Value> as ValueTransition<IndexValue<bool>>>::transition(value, label)
+            }
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, BOOL_INDEX_TARGET),
+                    label,
+                ))
+            }
+        }
+    }
+}
+
+impl ValueTransition<IndexValue<FailureKind>> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<IndexValue<FailureKind> as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::FailureKind(value) => <FailureKindValue as ValueTransition<
+                IndexValue<FailureKind>,
+            >>::transition(value, label),
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, FAILURE_KIND_INDEX_TARGET),
+                    label,
+                ))
+            }
+        }
+    }
+}
+
+impl ValueTransition<IndexValue<Group>> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<IndexValue<Group> as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::Scalar(value) => {
+                <Scalar as ValueTransition<IndexValue<Group>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                <IndexValue<Value> as ValueTransition<IndexValue<Group>>>::transition(value, label)
+            }
+            DynValueView::Attribute(value) => {
+                <AttributeName as ValueTransition<IndexValue<Group>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Attribute(value)) => {
+                <IndexValue<AttributeName> as ValueTransition<IndexValue<Group>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Index(DynIndexView::Positional(value)) => {
+                <IndexValue<Positional> as ValueTransition<IndexValue<Group>>>::transition(
+                    value, label,
+                )
+            }
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, GROUP_TARGET),
+                    label,
+                ))
+            }
+        }
+    }
+}
+
+impl ValueTransition<IndexValue<NodeIndex>> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<IndexValue<NodeIndex> as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::Scalar(value) => {
+                <Scalar as ValueTransition<IndexValue<NodeIndex>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                <IndexValue<Value> as ValueTransition<IndexValue<NodeIndex>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Attribute(value) => {
+                <AttributeName as ValueTransition<IndexValue<NodeIndex>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Attribute(value)) => {
+                <IndexValue<AttributeName> as ValueTransition<IndexValue<NodeIndex>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Index(DynIndexView::Positional(value)) => {
+                <IndexValue<Positional> as ValueTransition<IndexValue<NodeIndex>>>::transition(
+                    value, label,
+                )
+            }
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, NODE_INDEX_TARGET),
+                    label,
+                ))
+            }
+        }
+    }
+}
+
+impl ValueTransition<IndexValue<Positional>> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<IndexValue<Positional> as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::Scalar(value) => {
+                <Scalar as ValueTransition<IndexValue<Positional>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                <IndexValue<Value> as ValueTransition<IndexValue<Positional>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Attribute(value) => {
+                <AttributeName as ValueTransition<IndexValue<Positional>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Node(value)) => {
+                <IndexValue<NodeIndex> as ValueTransition<IndexValue<Positional>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Index(DynIndexView::Group(value)) => {
+                <IndexValue<Group> as ValueTransition<IndexValue<Positional>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Index(DynIndexView::Attribute(value)) => {
+                <IndexValue<AttributeName> as ValueTransition<IndexValue<Positional>>>::transition(
+                    value, label,
+                )
+            }
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, POSITIONAL_INDEX_TARGET),
+                    label,
+                ))
+            }
+        }
+    }
+}
+
+impl ValueTransition<IndexValue<Value>> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<IndexValue<Value> as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::Scalar(value) => {
+                <Scalar as ValueTransition<IndexValue<Value>>>::transition(value, label)
+            }
+            DynValueView::Attribute(value) => {
+                <AttributeName as ValueTransition<IndexValue<Value>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Node(value)) => {
+                <IndexValue<NodeIndex> as ValueTransition<IndexValue<Value>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Index(DynIndexView::Group(value)) => {
+                <IndexValue<Group> as ValueTransition<IndexValue<Value>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Attribute(value)) => {
+                <IndexValue<AttributeName> as ValueTransition<IndexValue<Value>>>::transition(
+                    value, label,
+                )
+            }
+            DynValueView::Index(DynIndexView::Bool(value)) => {
+                <IndexValue<bool> as ValueTransition<IndexValue<Value>>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Positional(value)) => {
+                <IndexValue<Positional> as ValueTransition<IndexValue<Value>>>::transition(
+                    value, label,
+                )
+            }
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, VALUE_INDEX_TARGET),
+                    label,
+                ))
+            }
+        }
+    }
+}
+
+impl ValueTransition<Mask> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<Mask as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::Scalar(value) => {
+                <Scalar as ValueTransition<Mask>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                <IndexValue<Value> as ValueTransition<Mask>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Bool(value)) => {
+                <IndexValue<bool> as ValueTransition<Mask>>::transition(value, label)
+            }
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, MASK_TARGET),
+                    label,
+                ))
+            }
+        }
+    }
+}
+
+impl ValueTransition<Scalar> for DynValue {
+    fn transition<'a>(
+        value: Self::Value<'a>,
+        label: &'static str,
+    ) -> QueryResult<<Scalar as ValueDomain>::Value<'a>> {
+        match value {
+            DynValueView::Index(DynIndexView::Value(value)) => {
+                <IndexValue<Value> as ValueTransition<Scalar>>::transition(value, label)
+            }
+            DynValueView::Attribute(value) => {
+                <AttributeName as ValueTransition<Scalar>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Node(value)) => {
+                <IndexValue<NodeIndex> as ValueTransition<Scalar>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Group(value)) => {
+                <IndexValue<Group> as ValueTransition<Scalar>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Attribute(value)) => {
+                <IndexValue<AttributeName> as ValueTransition<Scalar>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Bool(value)) => {
+                <IndexValue<bool> as ValueTransition<Scalar>>::transition(value, label)
+            }
+            DynValueView::Index(DynIndexView::Positional(value)) => {
+                <IndexValue<Positional> as ValueTransition<Scalar>>::transition(value, label)
+            }
+            value => {
+                let value_role = value.description();
+                Err(Failure::new(
+                    InvalidTransition::new(value_role, SCALAR_TARGET),
+                    label,
+                ))
             }
         }
     }

@@ -1,31 +1,31 @@
 use graphrecords_core::{graphrecord::Group, prelude::AttributeName};
 
 pub trait Attribute {
-    type ReturnOperand;
+    type Output;
 
-    fn attribute(&self, attribute: AttributeName) -> Self::ReturnOperand;
+    fn attribute(&self, attribute: AttributeName) -> Self::Output;
 }
 
 pub trait Attributes {
-    type ReturnOperand;
+    type Output;
 
-    fn attributes(&self) -> Self::ReturnOperand;
+    fn attributes(&self) -> Self::Output;
 }
 
 pub trait HasAttribute {
-    type ReturnOperand;
+    type Output;
 
-    fn has_attribute(&self, attribute: AttributeName) -> Self::ReturnOperand;
+    fn has_attribute(&self, attribute: AttributeName) -> Self::Output;
 }
 
 pub trait InGroup {
-    type ReturnOperand;
+    type Output;
 
-    fn in_group(&self, group: Group) -> Self::ReturnOperand;
+    fn in_group(&self, group: Group) -> Self::Output;
 }
 
 pub trait Filter<M> {
-    type ReturnOperand;
+    type Output;
 
-    fn filter(&self, mask: M) -> Self::ReturnOperand;
+    fn filter(&self, mask: M) -> Self::Output;
 }

@@ -49,7 +49,7 @@ impl<I: IndexDomain> ValueEquality for IndexValue<I> {
 impl<I> ValueOrdering for IndexValue<I>
 where
     I: IndexDomain,
-    I::Owned: PartialOrd,
+    for<'a> I::Index<'a>: PartialOrd,
 {
     fn ordering<'a>(value: &Self::Value<'a>, argument: &Self::Value<'a>) -> Option<Ordering> {
         value.partial_cmp(argument)

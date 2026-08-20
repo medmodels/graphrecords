@@ -3,19 +3,20 @@ use crate::{
     BareValueDomain, EdgeEndpointRole, EntityDomain, FailureKind, FailureKindValue, FailureValue,
     IndexDomain, IndexValue, Mask, Positional, Scalar, ValueDomain,
     capabilities::{
-        EnsureSortable, GroupingValue, IntValue, StringValue, ValueAbsolute, ValueAdd, ValueCast,
-        ValueCeil, ValueClip, ValueCubeRoot, ValueDivide, ValueEquality, ValueEquivalence,
-        ValueExponential, ValueFloor, ValueKindTest, ValueLogarithm, ValueMedian, ValueMode,
-        ValueModulo, ValueMultiply, ValueNegate, ValueOrdering, ValuePower, ValueRound,
-        ValueScalar, ValueScalarKindTest, ValueSign, ValueSquareRoot, ValueSubtract,
+        EnsureSortable, ValueAbsolute, ValueAdd, ValueCast, ValueCeil, ValueClip, ValueCubeRoot,
+        ValueDivide, ValueEquality, ValueEquivalence, ValueExponential, ValueFloor, ValueGrouping,
+        ValueInt, ValueKindTest, ValueLogarithm, ValueMedian, ValueMode, ValueModulo,
+        ValueMultiply, ValueNegate, ValueOrdering, ValuePower, ValueRound, ValueScalar,
+        ValueScalarKindTest, ValueSign, ValueSquareRoot, ValueString, ValueSubtract,
+        ValueTransition,
     },
     cast::{
         Bool as BoolTarget, DateTime as DateTimeTarget, Duration as DurationTarget,
         Float as FloatTarget, Int as IntTarget, String as StringTarget,
     },
-    index::{EntityAttributes, GroupKey, IndicesInGroup},
+    index::{EntityAttributes, GroupMembership},
 };
-use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, Group, NodeIndex, Value};
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -41,7 +42,7 @@ pub enum CapabilityIdentifier {
     Floor,
     Grouping,
     GroupKey,
-    IndicesInGroup,
+    GroupMembership,
     Int,
     KindTest,
     Logarithm,
@@ -60,6 +61,17 @@ pub enum CapabilityIdentifier {
     SquareRoot,
     String,
     Subtract,
+    TransitionAttributeName,
+    TransitionAttributeNameIndex,
+    TransitionBoolIndex,
+    TransitionFailureKindIndex,
+    TransitionFailureKindValue,
+    TransitionGroupIndex,
+    TransitionMask,
+    TransitionNodeIndex,
+    TransitionPositionalIndex,
+    TransitionScalar,
+    TransitionValueIndex,
 }
 
 enum ValueCapabilityMember {
@@ -102,7 +114,159 @@ pub struct CapabilityRegistry {
     group_keys: GrHashMap<DomainDescriptor, IndexDescriptor>,
 }
 
+macro_rules! register_value_capability {
+    (domain $($method:ident => $capability:ident: $bound:path),+ $(,)?) => {
+        $(
+            fn $method<V: $bound>(&mut self) {
+                self.value_members
+                    .entry(CapabilityIdentifier::$capability)
+                    .or_default()
+                    .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
+            }
+        )+
+    };
+    (index $($method:ident => $capability:ident: $bound:path),+ $(,)?) => {
+        $(
+            fn $method<I: IndexDomain>(&mut self)
+            where
+                IndexValue<I>: $bound,
+            {
+                self.value_members
+                    .entry(CapabilityIdentifier::$capability)
+                    .or_default()
+                    .push(ValueCapabilityMember::Index(Some(
+                        DomainDescriptor::of::<I>(),
+                    )));
+            }
+        )+
+    };
+    (indices $($method:ident => $capability:ident),+ $(,)?) => {
+        $(
+            fn $method(&mut self) {
+                self.value_members
+                    .entry(CapabilityIdentifier::$capability)
+                    .or_default()
+                    .push(ValueCapabilityMember::Index(None));
+            }
+        )+
+    };
+    (capable_indices $($method:ident => $capability:ident: $required:ident),+ $(,)?) => {
+        $(
+            fn $method(&mut self) {
+                self.value_members
+                    .entry(CapabilityIdentifier::$capability)
+                    .or_default()
+                    .push(ValueCapabilityMember::IndexCapable(
+                        CapabilityIdentifier::$required,
+                    ));
+            }
+        )+
+    };
+}
+
 impl CapabilityRegistry {
+    register_value_capability! { domain
+        register_bare_value_domain => BareValue: BareValueDomain,
+        register_value_absolute_domain => Absolute: ValueAbsolute,
+        register_value_add_domain => Add: ValueAdd,
+        register_value_cast_bool_domain => CastBool: ValueCast<BoolTarget>,
+        register_value_cast_date_time_domain => CastDateTime: ValueCast<DateTimeTarget>,
+        register_value_cast_duration_domain => CastDuration: ValueCast<DurationTarget>,
+        register_value_cast_float_domain => CastFloat: ValueCast<FloatTarget>,
+        register_value_cast_int_domain => CastInt: ValueCast<IntTarget>,
+        register_value_cast_string_domain => CastString: ValueCast<StringTarget>,
+        register_value_ceil_domain => Ceil: ValueCeil,
+        register_value_clip_domain => Clip: ValueClip,
+        register_value_cube_root_domain => CubeRoot: ValueCubeRoot,
+        register_value_divide_domain => Divide: ValueDivide,
+        register_value_equality_domain => Equality: ValueEquality,
+        register_value_equivalence_domain => Equivalence: ValueEquivalence,
+        register_value_exponential_domain => Exponential: ValueExponential,
+        register_value_floor_domain => Floor: ValueFloor,
+        register_value_int_domain => Int: ValueInt,
+        register_value_kind_test_domain => KindTest: ValueKindTest,
+        register_value_logarithm_domain => Logarithm: ValueLogarithm,
+        register_value_median_domain => Median: ValueMedian,
+        register_value_mode_domain => Mode: ValueMode,
+        register_value_modulo_domain => Modulo: ValueModulo,
+        register_value_multiply_domain => Multiply: ValueMultiply,
+        register_value_negate_domain => Negate: ValueNegate,
+        register_value_ordering_domain => Ordering: ValueOrdering,
+        register_value_power_domain => Power: ValuePower,
+        register_value_round_domain => Round: ValueRound,
+        register_value_scalar_domain => Scalar: ValueScalar,
+        register_value_scalar_kind_test_domain => ScalarKindTest: ValueScalarKindTest,
+        register_value_sign_domain => Sign: ValueSign,
+        register_value_square_root_domain => SquareRoot: ValueSquareRoot,
+        register_value_string_domain => String: ValueString,
+        register_value_subtract_domain => Subtract: ValueSubtract,
+        register_value_transition_attribute_name_domain => TransitionAttributeName: ValueTransition<AttributeName>,
+        register_value_transition_attribute_name_index_domain => TransitionAttributeNameIndex: ValueTransition<IndexValue<AttributeName>>,
+        register_value_transition_bool_index_domain => TransitionBoolIndex: ValueTransition<IndexValue<bool>>,
+        register_value_transition_failure_kind_index_domain => TransitionFailureKindIndex: ValueTransition<IndexValue<FailureKind>>,
+        register_value_transition_group_index_domain => TransitionGroupIndex: ValueTransition<IndexValue<Group>>,
+        register_value_transition_mask_domain => TransitionMask: ValueTransition<Mask>,
+        register_value_transition_node_index_domain => TransitionNodeIndex: ValueTransition<IndexValue<NodeIndex>>,
+        register_value_transition_positional_index_domain => TransitionPositionalIndex: ValueTransition<IndexValue<Positional>>,
+        register_value_transition_scalar_domain => TransitionScalar: ValueTransition<Scalar>,
+        register_value_transition_value_index_domain => TransitionValueIndex: ValueTransition<IndexValue<Value>>,
+    }
+
+    register_value_capability! { index
+        register_value_absolute_index => Absolute: ValueAbsolute,
+        register_value_add_index => Add: ValueAdd,
+        register_value_cast_bool_index => CastBool: ValueCast<BoolTarget>,
+        register_value_cast_date_time_index => CastDateTime: ValueCast<DateTimeTarget>,
+        register_value_cast_duration_index => CastDuration: ValueCast<DurationTarget>,
+        register_value_cast_float_index => CastFloat: ValueCast<FloatTarget>,
+        register_value_cast_int_index => CastInt: ValueCast<IntTarget>,
+        register_value_cast_string_index => CastString: ValueCast<StringTarget>,
+        register_value_ceil_index => Ceil: ValueCeil,
+        register_value_clip_index => Clip: ValueClip,
+        register_value_cube_root_index => CubeRoot: ValueCubeRoot,
+        register_value_divide_index => Divide: ValueDivide,
+        register_value_exponential_index => Exponential: ValueExponential,
+        register_value_floor_index => Floor: ValueFloor,
+        register_value_int_index => Int: ValueInt,
+        register_value_kind_test_index => KindTest: ValueKindTest,
+        register_value_logarithm_index => Logarithm: ValueLogarithm,
+        register_value_median_index => Median: ValueMedian,
+        register_value_modulo_index => Modulo: ValueModulo,
+        register_value_multiply_index => Multiply: ValueMultiply,
+        register_value_negate_index => Negate: ValueNegate,
+        register_value_power_index => Power: ValuePower,
+        register_value_round_index => Round: ValueRound,
+        register_value_scalar_index => Scalar: ValueScalar,
+        register_value_scalar_kind_test_index => ScalarKindTest: ValueScalarKindTest,
+        register_value_sign_index => Sign: ValueSign,
+        register_value_square_root_index => SquareRoot: ValueSquareRoot,
+        register_value_string_index => String: ValueString,
+        register_value_subtract_index => Subtract: ValueSubtract,
+        register_value_transition_attribute_name_index => TransitionAttributeName: ValueTransition<AttributeName>,
+        register_value_transition_attribute_name_index_index => TransitionAttributeNameIndex: ValueTransition<IndexValue<AttributeName>>,
+        register_value_transition_bool_index_index => TransitionBoolIndex: ValueTransition<IndexValue<bool>>,
+        register_value_transition_failure_kind_value_index => TransitionFailureKindValue: ValueTransition<FailureKindValue>,
+        register_value_transition_group_index_index => TransitionGroupIndex: ValueTransition<IndexValue<Group>>,
+        register_value_transition_mask_index => TransitionMask: ValueTransition<Mask>,
+        register_value_transition_node_index_index => TransitionNodeIndex: ValueTransition<IndexValue<NodeIndex>>,
+        register_value_transition_positional_index_index => TransitionPositionalIndex: ValueTransition<IndexValue<Positional>>,
+        register_value_transition_scalar_index => TransitionScalar: ValueTransition<Scalar>,
+        register_value_transition_value_index_index => TransitionValueIndex: ValueTransition<IndexValue<Value>>,
+    }
+
+    register_value_capability! { indices
+        register_bare_indices => BareValue,
+        register_value_equality_indices => Equality,
+        register_value_equivalence_indices => Equivalence,
+        register_value_mode_indices => Mode,
+    }
+
+    register_value_capability! { capable_indices
+        register_value_grouping_indices => Grouping: GroupKey,
+        register_value_ordering_indices => Ordering: Ordering,
+        register_value_sortable_indices => Sortable: Sortable,
+    }
+
     #[must_use]
     pub fn builtins() -> Self {
         let mut registry = Self::default();
@@ -114,6 +278,7 @@ impl CapabilityRegistry {
         registry.register_index_domain::<Positional>();
         registry.register_index_domain::<NodeIndex>();
         registry.register_index_domain::<EdgeIndex>();
+        registry.register_index_domain::<Group>();
         registry.register_index_domain::<EdgeEndpointRole>();
 
         registry.register_value_domain::<Scalar>();
@@ -127,7 +292,6 @@ impl CapabilityRegistry {
         registry.register_value_add_index::<Positional>();
         registry.register_value_add_index::<NodeIndex>();
         registry.register_value_add_index::<AttributeName>();
-        registry.register_value_add_index::<EdgeIndex>();
         registry.register_value_add_index::<Value>();
 
         registry.register_value_multiply_domain::<Scalar>();
@@ -135,7 +299,6 @@ impl CapabilityRegistry {
         registry.register_value_multiply_index::<Positional>();
         registry.register_value_multiply_index::<NodeIndex>();
         registry.register_value_multiply_index::<AttributeName>();
-        registry.register_value_multiply_index::<EdgeIndex>();
         registry.register_value_multiply_index::<Value>();
 
         registry.register_value_scalar_domain::<Scalar>();
@@ -157,24 +320,24 @@ impl CapabilityRegistry {
 
         registry.register_value_ordering_domain::<Scalar>();
         registry.register_value_ordering_domain::<AttributeName>();
-        registry.register_value_ordering_index::<Positional>();
-        registry.register_value_ordering_index::<NodeIndex>();
-        registry.register_value_ordering_index::<AttributeName>();
-        registry.register_value_ordering_index::<EdgeIndex>();
-        registry.register_value_ordering_index::<Value>();
-        registry.register_value_ordering_index::<bool>();
+        registry.register_index_ordering::<Positional>();
+        registry.register_index_ordering::<NodeIndex>();
+        registry.register_index_ordering::<AttributeName>();
+        registry.register_index_ordering::<Value>();
+        registry.register_index_ordering::<bool>();
         registry.register_value_ordering_indices();
 
         registry.register_bare_value_domain::<Scalar>();
         registry.register_bare_value_domain::<Mask>();
         registry.register_bare_value_domain::<AttributeName>();
-        registry.register_bare_index_values();
+        registry.register_bare_indices();
         registry.register_bare_entity_references();
         registry.register_bare_value_domain::<FailureValue>();
         registry.register_bare_value_domain::<FailureKindValue>();
 
         registry.register_entity_domain::<EdgeIndex>();
         registry.register_entity_domain::<NodeIndex>();
+        registry.register_entity_domain::<Group>();
 
         registry.register_group_key::<Value>();
         registry.register_group_key::<bool>();
@@ -183,20 +346,21 @@ impl CapabilityRegistry {
         registry.register_group_key::<Positional>();
         registry.register_group_key::<NodeIndex>();
         registry.register_group_key::<EdgeIndex>();
+        registry.register_group_key::<Group>();
         registry.register_group_key::<EdgeEndpointRole>();
 
         registry.register_entity_attributes::<NodeIndex>();
         registry.register_entity_attributes::<EdgeIndex>();
 
-        registry.register_indices_in_group::<NodeIndex>();
-        registry.register_indices_in_group::<EdgeIndex>();
+        registry.register_group_membership::<NodeIndex>();
+        registry.register_group_membership::<EdgeIndex>();
 
         registry.register_index_sortable::<Value>();
         registry.register_index_sortable::<bool>();
         registry.register_index_sortable::<AttributeName>();
         registry.register_index_sortable::<Positional>();
         registry.register_index_sortable::<NodeIndex>();
-        registry.register_index_sortable::<EdgeIndex>();
+        registry.register_index_sortable::<Group>();
 
         registry.register_value_absolute_domain::<Scalar>();
         registry.register_value_absolute_domain::<AttributeName>();
@@ -236,7 +400,6 @@ impl CapabilityRegistry {
         registry.register_value_clip_index::<Positional>();
         registry.register_value_clip_index::<NodeIndex>();
         registry.register_value_clip_index::<AttributeName>();
-        registry.register_value_clip_index::<EdgeIndex>();
         registry.register_value_clip_index::<Value>();
 
         registry.register_value_cube_root_domain::<Scalar>();
@@ -269,7 +432,6 @@ impl CapabilityRegistry {
         registry.register_value_int_index::<Value>();
         registry.register_value_int_index::<NodeIndex>();
         registry.register_value_int_index::<AttributeName>();
-        registry.register_value_int_index::<EdgeIndex>();
         registry.register_value_int_index::<Positional>();
 
         registry.register_value_kind_test_domain::<Scalar>();
@@ -286,7 +448,6 @@ impl CapabilityRegistry {
         registry.register_value_modulo_index::<Positional>();
         registry.register_value_modulo_index::<NodeIndex>();
         registry.register_value_modulo_index::<AttributeName>();
-        registry.register_value_modulo_index::<EdgeIndex>();
         registry.register_value_modulo_index::<Value>();
 
         registry.register_value_negate_domain::<Scalar>();
@@ -300,7 +461,6 @@ impl CapabilityRegistry {
         registry.register_value_power_index::<Positional>();
         registry.register_value_power_index::<NodeIndex>();
         registry.register_value_power_index::<AttributeName>();
-        registry.register_value_power_index::<EdgeIndex>();
         registry.register_value_power_index::<Value>();
 
         registry.register_value_round_domain::<Scalar>();
@@ -327,6 +487,7 @@ impl CapabilityRegistry {
         registry.register_value_string_domain::<AttributeName>();
         registry.register_value_string_index::<Value>();
         registry.register_value_string_index::<NodeIndex>();
+        registry.register_value_string_index::<Group>();
         registry.register_value_string_index::<AttributeName>();
 
         registry.register_value_subtract_domain::<Scalar>();
@@ -334,8 +495,70 @@ impl CapabilityRegistry {
         registry.register_value_subtract_index::<Positional>();
         registry.register_value_subtract_index::<NodeIndex>();
         registry.register_value_subtract_index::<AttributeName>();
-        registry.register_value_subtract_index::<EdgeIndex>();
         registry.register_value_subtract_index::<Value>();
+
+        registry.register_value_transition_attribute_name_domain::<Scalar>();
+        registry.register_value_transition_attribute_name_index::<AttributeName>();
+        registry.register_value_transition_attribute_name_index::<Group>();
+        registry.register_value_transition_attribute_name_index::<NodeIndex>();
+        registry.register_value_transition_attribute_name_index::<Positional>();
+        registry.register_value_transition_attribute_name_index::<Value>();
+
+        registry.register_value_transition_attribute_name_index_domain::<AttributeName>();
+        registry.register_value_transition_attribute_name_index_domain::<Scalar>();
+        registry.register_value_transition_attribute_name_index_index::<Group>();
+        registry.register_value_transition_attribute_name_index_index::<NodeIndex>();
+        registry.register_value_transition_attribute_name_index_index::<Positional>();
+        registry.register_value_transition_attribute_name_index_index::<Value>();
+
+        registry.register_value_transition_bool_index_domain::<Mask>();
+        registry.register_value_transition_bool_index_domain::<Scalar>();
+        registry.register_value_transition_bool_index_index::<Value>();
+
+        registry.register_value_transition_failure_kind_index_domain::<FailureKindValue>();
+
+        registry.register_value_transition_failure_kind_value_index::<FailureKind>();
+
+        registry.register_value_transition_group_index_domain::<AttributeName>();
+        registry.register_value_transition_group_index_domain::<Scalar>();
+        registry.register_value_transition_group_index_index::<AttributeName>();
+        registry.register_value_transition_group_index_index::<Positional>();
+        registry.register_value_transition_group_index_index::<Value>();
+
+        registry.register_value_transition_mask_domain::<Scalar>();
+        registry.register_value_transition_mask_index::<Value>();
+        registry.register_value_transition_mask_index::<bool>();
+
+        registry.register_value_transition_node_index_domain::<AttributeName>();
+        registry.register_value_transition_node_index_domain::<Scalar>();
+        registry.register_value_transition_node_index_index::<AttributeName>();
+        registry.register_value_transition_node_index_index::<Positional>();
+        registry.register_value_transition_node_index_index::<Value>();
+
+        registry.register_value_transition_positional_index_domain::<AttributeName>();
+        registry.register_value_transition_positional_index_domain::<Scalar>();
+        registry.register_value_transition_positional_index_index::<AttributeName>();
+        registry.register_value_transition_positional_index_index::<Group>();
+        registry.register_value_transition_positional_index_index::<NodeIndex>();
+        registry.register_value_transition_positional_index_index::<Value>();
+
+        registry.register_value_transition_scalar_domain::<AttributeName>();
+        registry.register_value_transition_scalar_domain::<Mask>();
+        registry.register_value_transition_scalar_index::<AttributeName>();
+        registry.register_value_transition_scalar_index::<Group>();
+        registry.register_value_transition_scalar_index::<NodeIndex>();
+        registry.register_value_transition_scalar_index::<Positional>();
+        registry.register_value_transition_scalar_index::<Value>();
+        registry.register_value_transition_scalar_index::<bool>();
+
+        registry.register_value_transition_value_index_domain::<AttributeName>();
+        registry.register_value_transition_value_index_domain::<Mask>();
+        registry.register_value_transition_value_index_domain::<Scalar>();
+        registry.register_value_transition_value_index_index::<AttributeName>();
+        registry.register_value_transition_value_index_index::<Group>();
+        registry.register_value_transition_value_index_index::<NodeIndex>();
+        registry.register_value_transition_value_index_index::<Positional>();
+        registry.register_value_transition_value_index_index::<bool>();
 
         registry
     }
@@ -346,150 +569,6 @@ impl CapabilityRegistry {
 
     fn register_value_domain<V: ValueDomain>(&mut self) {
         self.value_domains.insert(DomainDescriptor::of::<V>());
-    }
-
-    fn register_value_add_domain<V: ValueAdd>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Add)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_add_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueAdd,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Add)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_multiply_domain<V: ValueMultiply>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Multiply)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_multiply_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueMultiply,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Multiply)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_scalar_domain<V: ValueScalar>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Scalar)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_scalar_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueScalar,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Scalar)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_equivalence_domain<V: ValueEquivalence>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Equivalence)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_equivalence_indices(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Equivalence)
-            .or_default()
-            .push(ValueCapabilityMember::Index(None));
-    }
-
-    fn register_value_median_domain<V: ValueMedian>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Median)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_median_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueMedian,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Median)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_mode_domain<V: ValueMode>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Mode)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_mode_indices(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Mode)
-            .or_default()
-            .push(ValueCapabilityMember::Index(None));
-    }
-
-    fn register_value_ordering_domain<V: ValueOrdering>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Ordering)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_ordering_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueOrdering,
-    {
-        self.index_members
-            .entry(CapabilityIdentifier::Ordering)
-            .or_default()
-            .insert(DomainDescriptor::of::<I>());
-    }
-
-    fn register_value_ordering_indices(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Ordering)
-            .or_default()
-            .push(ValueCapabilityMember::IndexCapable(
-                CapabilityIdentifier::Ordering,
-            ));
-    }
-
-    fn register_bare_value_domain<V: BareValueDomain>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::BareValue)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_bare_index_values(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::BareValue)
-            .or_default()
-            .push(ValueCapabilityMember::Index(None));
     }
 
     fn register_bare_entity_references(&mut self) {
@@ -506,7 +585,7 @@ impl CapabilityRegistry {
             .insert(DomainDescriptor::of::<I>());
     }
 
-    fn register_group_key<I: GroupKey>(&mut self) {
+    fn register_group_key<I: IndexDomain>(&mut self) {
         self.index_members
             .entry(CapabilityIdentifier::GroupKey)
             .or_default()
@@ -520,9 +599,19 @@ impl CapabilityRegistry {
             .insert(DomainDescriptor::of::<I>());
     }
 
-    fn register_indices_in_group<I: IndicesInGroup>(&mut self) {
+    fn register_group_membership<I: GroupMembership>(&mut self) {
         self.index_members
-            .entry(CapabilityIdentifier::IndicesInGroup)
+            .entry(CapabilityIdentifier::GroupMembership)
+            .or_default()
+            .insert(DomainDescriptor::of::<I>());
+    }
+
+    fn register_index_ordering<I: IndexDomain>(&mut self)
+    where
+        IndexValue<I>: ValueOrdering,
+    {
+        self.index_members
+            .entry(CapabilityIdentifier::Ordering)
             .or_default()
             .insert(DomainDescriptor::of::<I>());
     }
@@ -537,285 +626,15 @@ impl CapabilityRegistry {
             .insert(DomainDescriptor::of::<I>());
     }
 
-    fn register_value_absolute_domain<V: ValueAbsolute>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Absolute)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_absolute_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueAbsolute,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Absolute)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_cast_bool_domain<V: ValueCast<BoolTarget>>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::CastBool)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_cast_bool_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueCast<BoolTarget>,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::CastBool)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_cast_date_time_domain<V: ValueCast<DateTimeTarget>>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::CastDateTime)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_cast_date_time_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueCast<DateTimeTarget>,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::CastDateTime)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_cast_duration_domain<V: ValueCast<DurationTarget>>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::CastDuration)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_cast_duration_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueCast<DurationTarget>,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::CastDuration)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_cast_float_domain<V: ValueCast<FloatTarget>>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::CastFloat)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_cast_float_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueCast<FloatTarget>,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::CastFloat)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_cast_int_domain<V: ValueCast<IntTarget>>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::CastInt)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_cast_int_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueCast<IntTarget>,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::CastInt)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_cast_string_domain<V: ValueCast<StringTarget>>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::CastString)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_cast_string_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueCast<StringTarget>,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::CastString)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_ceil_domain<V: ValueCeil>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Ceil)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_ceil_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueCeil,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Ceil)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_clip_domain<V: ValueClip>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Clip)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_clip_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueClip,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Clip)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_cube_root_domain<V: ValueCubeRoot>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::CubeRoot)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_cube_root_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueCubeRoot,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::CubeRoot)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_divide_domain<V: ValueDivide>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Divide)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_divide_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueDivide,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Divide)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_equality_domain<V: ValueEquality>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Equality)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_equality_indices(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Equality)
-            .or_default()
-            .push(ValueCapabilityMember::Index(None));
-    }
-
-    fn register_value_exponential_domain<V: ValueExponential>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Exponential)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_exponential_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueExponential,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Exponential)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_floor_domain<V: ValueFloor>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Floor)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_floor_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueFloor,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Floor)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_grouping_domain<V: GroupingValue>(&mut self) {
+    fn register_value_grouping_domain<V: ValueGrouping>(&mut self) {
         self.value_members
             .entry(CapabilityIdentifier::Grouping)
             .or_default()
             .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
         self.group_keys.insert(
             DomainDescriptor::of::<V>(),
-            IndexDescriptor::domain::<V::Key>(),
+            IndexDescriptor::domain::<V::KeyDomain>(),
         );
-    }
-
-    fn register_value_grouping_indices(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Grouping)
-            .or_default()
-            .push(ValueCapabilityMember::IndexCapable(
-                CapabilityIdentifier::GroupKey,
-            ));
     }
 
     fn register_value_grouping_entity_references(&mut self) {
@@ -827,177 +646,6 @@ impl CapabilityRegistry {
             ));
     }
 
-    fn register_value_int_domain<V: IntValue>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Int)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_int_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: IntValue,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Int)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_kind_test_domain<V: ValueKindTest>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::KindTest)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_kind_test_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueKindTest,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::KindTest)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_logarithm_domain<V: ValueLogarithm>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Logarithm)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_logarithm_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueLogarithm,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Logarithm)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_modulo_domain<V: ValueModulo>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Modulo)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_modulo_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueModulo,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Modulo)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_negate_domain<V: ValueNegate>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Negate)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_negate_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueNegate,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Negate)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_power_domain<V: ValuePower>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Power)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_power_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValuePower,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Power)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_round_domain<V: ValueRound>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Round)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_round_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueRound,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Round)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_scalar_kind_test_domain<V: ValueScalarKindTest>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::ScalarKindTest)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_scalar_kind_test_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueScalarKindTest,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::ScalarKindTest)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_sign_domain<V: ValueSign>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Sign)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_sign_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueSign,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Sign)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
     fn register_value_sortable_domain<V: ValueDomain>(&mut self)
     where
         for<'a> V::Value<'a>: EnsureSortable,
@@ -1006,72 +654,6 @@ impl CapabilityRegistry {
             .entry(CapabilityIdentifier::Sortable)
             .or_default()
             .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_sortable_indices(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Sortable)
-            .or_default()
-            .push(ValueCapabilityMember::IndexCapable(
-                CapabilityIdentifier::Sortable,
-            ));
-    }
-
-    fn register_value_square_root_domain<V: ValueSquareRoot>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::SquareRoot)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_square_root_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueSquareRoot,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::SquareRoot)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_string_domain<V: StringValue>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::String)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_string_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: StringValue,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::String)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
-    }
-
-    fn register_value_subtract_domain<V: ValueSubtract>(&mut self) {
-        self.value_members
-            .entry(CapabilityIdentifier::Subtract)
-            .or_default()
-            .push(ValueCapabilityMember::Value(DomainDescriptor::of::<V>()));
-    }
-
-    fn register_value_subtract_index<I: IndexDomain>(&mut self)
-    where
-        IndexValue<I>: ValueSubtract,
-    {
-        self.value_members
-            .entry(CapabilityIdentifier::Subtract)
-            .or_default()
-            .push(ValueCapabilityMember::Index(Some(
-                DomainDescriptor::of::<I>(),
-            )));
     }
 
     #[must_use]
@@ -1099,7 +681,7 @@ impl CapabilityRegistry {
                 | CapabilityIdentifier::Sortable,
                 IndexDescriptor::Expanded { parent, child },
             ) => self.index_has(capability, parent) && self.index_has(capability, child),
-            (_, IndexDescriptor::Expanded { .. } | IndexDescriptor::ExpandedSource { .. }) => false,
+            (_, IndexDescriptor::Expanded { .. } | IndexDescriptor::ExpandedParent { .. }) => false,
             (_, IndexDescriptor::Domain(domain)) => self
                 .index_members
                 .get(&capability)
@@ -1113,7 +695,7 @@ impl CapabilityRegistry {
             IndexDescriptor::Expanded { parent, child } => {
                 self.contains_index(parent) && self.contains_index(child)
             }
-            IndexDescriptor::ExpandedSource { .. } => false,
+            IndexDescriptor::ExpandedParent { .. } => false,
         }
     }
 

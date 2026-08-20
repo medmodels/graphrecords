@@ -1,6 +1,6 @@
 use super::{
-    ArityDescriptor, Bindings, CapabilityRegistry, EmissionSpec, IndexDescriptor,
-    LaneShapeDescriptor, OperandDescriptor, OrderDescriptor, OutArityTable, ValueDescriptor,
+    ArityDescriptor, Bindings, CapabilityRegistry, EmissionSpec, ExpressionDescriptor,
+    IndexDescriptor, LaneShapeDescriptor, OrderDescriptor, OutArityTable, ValueDescriptor,
     VariableIdentifier,
 };
 
@@ -163,7 +163,7 @@ impl ArityDescriptorTemplate {
 }
 
 #[derive(Clone, Debug)]
-pub enum OperandDescriptorTemplate {
+pub enum ExpressionDescriptorTemplate {
     Lane {
         shape: LaneShapeDescriptorTemplate,
         arity: ArityDescriptorTemplate,
@@ -176,15 +176,15 @@ pub enum OperandDescriptorTemplate {
     Variable(VariableIdentifier),
 }
 
-impl OperandDescriptorTemplate {
+impl ExpressionDescriptorTemplate {
     pub(super) fn fill(
         &self,
         bindings: &Bindings,
         capabilities: &CapabilityRegistry,
         arities: &OutArityTable,
-    ) -> OperandDescriptor {
+    ) -> ExpressionDescriptor {
         match self {
-            Self::Lane { shape, arity } => OperandDescriptor::Lane {
+            Self::Lane { shape, arity } => ExpressionDescriptor::Lane {
                 shape: shape.fill(bindings, capabilities),
                 arity: arity.fill(bindings, arities),
             },
@@ -192,15 +192,15 @@ impl OperandDescriptorTemplate {
                 member,
                 key,
                 payload,
-            } => OperandDescriptor::Group {
+            } => ExpressionDescriptor::Group {
                 member: member.fill(bindings, capabilities),
                 key: key.fill(bindings, capabilities),
                 payload: Box::new(payload.fill(bindings, capabilities, arities)),
             },
             Self::Variable(variable) => bindings
-                .operand(*variable)
+                .expression(*variable)
                 .unwrap_or_else(|| {
-                    panic!("registry output has no binding for operand variable {variable}")
+                    panic!("registry output has no binding for expression variable {variable}")
                 })
                 .clone(),
         }

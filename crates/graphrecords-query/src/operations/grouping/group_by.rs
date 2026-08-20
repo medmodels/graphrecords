@@ -1,42 +1,28 @@
 use crate::{
-    Definite, EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple, Operand,
-    QueryResult, Single, ValueDomain,
-    capabilities::GroupingValue,
+    Definite, EvaluateExpression, Explain, IndexDomain, Indexed, Labeled, Multiple, QueryResult,
+    Single, ValueDomain,
+    capabilities::ValueGrouping,
     element::Retention,
-    execution::EvaluationCache,
-    operands::{
-        GroupOperand, OperandHandle, PartitionArity, PartitionBuilder, PartitionClassification,
+    expressions::{
+        ExpressionHandle, GroupedExpression, PartitionArity, PartitionBuilder,
+        PartitionClassification,
     },
-    operations::{
-        Apply, ArgumentSource, Keyed, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    operations::{ArgumentSource, Build, Keyed, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::GroupBy,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "GroupBy")]
+#[plan(optimizer_hints(empty = if_all))]
 pub struct GroupByOperation<K> {
     #[argument]
     key: K,
-}
-
-impl<K: Prepare> Prepare for GroupByOperation<K> {
-    type Prepared<'a>
-        = K::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.key.prepare(graphrecord, cache)
-    }
 }
 
 impl<I, V, K, C> LaneKernel<Indexed<I, V>, C> for GroupByOperation<K>
@@ -44,22 +30,25 @@ where
     I: IndexDomain,
     V: ValueDomain,
     K: ArgumentSource<Keyed<I>>,
-    K::ValueDomain: GroupingValue,
+    K::ValueDomain: ValueGrouping,
     C: PartitionArity<Indexed<I, V>>,
 {
-    type Output =
-        GroupOperand<I, <K::ValueDomain as GroupingValue>::Key, OperandHandle<Indexed<I, V>, C>>;
+    type Output = GroupedExpression<
+        I,
+        <K::ValueDomain as ValueGrouping>::KeyDomain,
+        ExpressionHandle<Indexed<I, V>, C>,
+    >;
 
     fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, V, C>,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let label = Self::LABEL;
 
-        PartitionBuilder::<_, _, _, C>::new(values).build(|element| {
+        PartitionBuilder::<_, _, _, C>::new(values).build(graphrecord, |element| {
             let member = &element.0;
-            let step = K::resolve(&prepared, member, label);
+            let step = K::resolve(graphrecord, &prepared, member, label);
 
             match K::Retention::collapse(step) {
                 None => PartitionClassification::Omit,
@@ -103,18 +92,15 @@ where
     }
 }
 
-impl<O, K> GroupBy<K> for O
+impl<E, K> GroupBy<K> for E
 where
-    O: Apply<GroupByOperation<K>>,
+    E: Build<GroupByOperation<K>>,
     GroupByOperation<K>: Operation,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn group_by(&self, key: K) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            GroupByOperation { key },
-        ))
+    fn group_by(&self, key: K) -> Self::Output {
+        self.build(GroupByOperation { key })
     }
 }
 
@@ -124,35 +110,35 @@ operation_manifest! {
         scope: lane;
 
         kernel {
-            parameters: <I: IndexDomain, V: ValueDomain, X: GroupingValue, O: OrderState>;
+            parameters: <I: IndexDomain, V: ValueDomain, X: ValueGrouping, O: OrderState>;
             argument: K: ArgumentSource<Keyed<I>, X>;
             input: (Indexed<I, V>, Multiple<O>);
-            output: GroupOperand<
+            output: GroupedExpression<
                 I,
-                <X as GroupingValue>::Key,
-                OperandHandle<Indexed<I, V>, Multiple<O>>,
+                <X as ValueGrouping>::KeyDomain,
+                ExpressionHandle<Indexed<I, V>, Multiple<O>>,
             >;
         }
 
         kernel {
-            parameters: <I: IndexDomain, V: ValueDomain, X: GroupingValue>;
+            parameters: <I: IndexDomain, V: ValueDomain, X: ValueGrouping>;
             argument: K: ArgumentSource<Keyed<I>, X>;
             input: (Indexed<I, V>, Single);
-            output: GroupOperand<
+            output: GroupedExpression<
                 I,
-                <X as GroupingValue>::Key,
-                OperandHandle<Indexed<I, V>, Single>,
+                <X as ValueGrouping>::KeyDomain,
+                ExpressionHandle<Indexed<I, V>, Single>,
             >;
         }
 
         kernel {
-            parameters: <I: IndexDomain, V: ValueDomain, X: GroupingValue>;
+            parameters: <I: IndexDomain, V: ValueDomain, X: ValueGrouping>;
             argument: K: ArgumentSource<Keyed<I>, X>;
             input: (Indexed<I, V>, Definite);
-            output: GroupOperand<
+            output: GroupedExpression<
                 I,
-                <X as GroupingValue>::Key,
-                OperandHandle<Indexed<I, V>, Definite>,
+                <X as ValueGrouping>::KeyDomain,
+                ExpressionHandle<Indexed<I, V>, Definite>,
             >;
         }
     }

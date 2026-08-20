@@ -6,7 +6,7 @@ use graphrecords_core::GraphRecord;
 use graphrecords_query::{
     QueryResult,
     dynamic::{
-        DynIndexOwned, DynOperand, DynTerminal, DynTerminalArity, DynTerminalLane, DynValue,
+        DynArityContainer, DynIndexOwned, DynOperand, DynTerminal, DynTerminalLane, DynValue,
         query_edges, query_nodes,
     },
 };
@@ -114,7 +114,7 @@ impl TerminalConversion for DynTerminalLane {
     }
 }
 
-impl<T: TerminalConversion> TerminalConversion for DynTerminalArity<T> {
+impl<T: TerminalConversion> TerminalConversion for DynArityContainer<T> {
     fn into_python(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match self {
             Self::MultipleOrdered(elements) | Self::MultipleUnordered(elements) => {

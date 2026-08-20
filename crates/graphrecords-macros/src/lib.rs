@@ -55,7 +55,7 @@ pub fn derive_operation_inputs(input: TokenStream) -> TokenStream {
 pub fn derive_optimize_plan(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    query::optimizer::plan::optimize_inputs::expand(&input)
+    query::optimizer::plan::optimize_plan::expand(&input)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }
@@ -87,11 +87,29 @@ pub fn derive_operation(input: TokenStream) -> TokenStream {
         .into()
 }
 
+#[proc_macro_derive(Prepare, attributes(plan, input, argument))]
+pub fn derive_prepare(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    query::prepare::expand(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
 #[proc_macro_derive(PhaseLabel, attributes(phase_label))]
 pub fn derive_phase_label(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     query::optimizer::phase_label::expand(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro]
+pub fn operation_manifest(input: TokenStream) -> TokenStream {
+    let manifest = parse_macro_input!(input as query::manifest::Manifest);
+
+    query::manifest::expand(&manifest)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }

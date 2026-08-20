@@ -1,65 +1,65 @@
 pub trait Absolute {
-    type ReturnOperand;
+    type Output;
 
-    fn abs(&self) -> Self::ReturnOperand;
+    fn abs(&self) -> Self::Output;
 }
 
 pub trait Ceil {
-    type ReturnOperand;
+    type Output;
 
-    fn ceil(&self) -> Self::ReturnOperand;
+    fn ceil(&self) -> Self::Output;
 }
 
 pub trait Clip<L, U> {
-    type ReturnOperand;
+    type Output;
 
-    fn clip(&self, lower: L, upper: U) -> Self::ReturnOperand;
+    fn clip(&self, lower: L, upper: U) -> Self::Output;
 }
 
 pub trait CubeRoot {
-    type ReturnOperand;
+    type Output;
 
-    fn cbrt(&self) -> Self::ReturnOperand;
+    fn cbrt(&self) -> Self::Output;
 }
 
 pub trait Exponential {
-    type ReturnOperand;
+    type Output;
 
-    fn exp(&self) -> Self::ReturnOperand;
+    fn exp(&self) -> Self::Output;
 }
 
 pub trait Floor {
-    type ReturnOperand;
+    type Output;
 
-    fn floor(&self) -> Self::ReturnOperand;
+    fn floor(&self) -> Self::Output;
 }
 
 pub trait Logarithm {
-    type ReturnOperand;
+    type Output;
 
-    fn log(&self) -> Self::ReturnOperand;
+    fn log(&self) -> Self::Output;
 }
 
 pub trait Negate {
-    type ReturnOperand;
+    type Output;
 
-    fn neg(&self) -> Self::ReturnOperand;
+    fn neg(&self) -> Self::Output;
 }
 
 pub trait Round {
-    type ReturnOperand;
+    type Output;
 
-    fn round(&self) -> Self::ReturnOperand;
+    fn round(&self) -> Self::Output;
 }
 
 pub trait Sign {
-    type ReturnOperand;
+    type Output;
 
-    fn sign(&self) -> Self::ReturnOperand;
+    fn sign(&self) -> Self::Output;
 }
 
 pub trait SquareRoot {
-    type ReturnOperand;
+    type Output;
 
-    fn sqrt(&self) -> Self::ReturnOperand;
+    fn sqrt(&self) -> Self::Output;
 }

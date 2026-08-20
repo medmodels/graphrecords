@@ -1,20 +1,23 @@
 mod edge_endpoint;
 mod entity;
 mod expanded;
-mod key;
 
-use crate::FailureKind;
+use crate::{Failure, FailureKind, QueryResult, error::index::UnresolvedIndex};
 pub use edge_endpoint::EdgeEndpointRole;
-pub use entity::{EntityAttributes, IndicesInGroup};
-pub use expanded::{ExpandedChild, ExpandedIndex, ExpandedIndexOwned, ExpandedIndexReference};
+pub use entity::{EntityAttributes, GroupMembership};
+pub use expanded::{
+    ExpandedChild, ExpandedIndex, ExpandedIndexAddress, ExpandedIndexOwned, ExpandedIndexReference,
+};
 use graphrecords_core::{
     GraphRecord,
-    errors::GraphRecordResult,
-    graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value},
+    graphrecord::{
+        AttributeName, AttributeNameView, EdgeAddress, EdgeIndex, Group, GroupAddress, GroupView,
+        Identifier, IdentifierView, NodeAddress, NodeIndex, NodeIndexView, StateView, Value,
+    },
 };
-pub use key::GroupKey;
 use std::{
     any::Any,
+    borrow::Cow,
     fmt::{Debug, Display},
     hash::Hash,
 };
@@ -28,130 +31,263 @@ impl<T: Any + Debug + Display + Send + Sync> OwnedIndex for T {}
 pub trait IndexDomain: 'static + Clone {
     type Owned: 'static + Clone + Eq + Hash + OwnedIndex;
 
-    type Index<'a>: Clone + Eq + Hash
+    type Index<'a>: Clone + Eq + Hash + 'a
     where
         Self: 'a;
 
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned;
+    type Address: 'static + Clone + Debug + Eq + Hash + Send + Sync;
 
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_>;
+    fn index<'a>(graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a>;
+
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned;
+
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_>;
+
+    fn resolve(
+        graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        label: &'static str,
+    ) -> QueryResult<Self::Address>;
 }
 
-pub trait EntityDomain: IndexDomain {
-    fn resolve_index<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Owned,
-    ) -> GraphRecordResult<Self::Index<'a>>;
-}
+pub trait EntityDomain: IndexDomain {}
 
 #[derive(Clone, Debug)]
 pub struct Positional;
 
 impl IndexDomain for Positional {
+    type Address = Position;
     type Index<'a> = Position;
     type Owned = Position;
 
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        *address
+    }
+
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
         *index
     }
 
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
         *owned
     }
-}
 
-impl IndexDomain for EdgeIndex {
-    type Index<'a> = &'a Self;
-    type Owned = Self;
-
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        **index
-    }
-
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
-        owned
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        Ok(*owned)
     }
 }
 
 impl IndexDomain for NodeIndex {
-    type Index<'a> = &'a Self;
+    type Address = NodeAddress;
+    type Index<'a> = NodeIndexView<'a>;
     type Owned = Self;
 
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        (*index).clone()
+    fn index<'a>(graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        StateView::of(graphrecord).node_index(*address)
     }
 
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
-        owned
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
+        Self::from(index.clone())
+    }
+
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
+        NodeIndexView::from(owned.identifier())
+    }
+
+    fn resolve(
+        graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        StateView::of(graphrecord)
+            .resolve_node_address(owned)
+            .ok_or_else(|| {
+                Failure::new_at::<Self, _>(
+                    UnresolvedIndex::<Self>::new(owned.clone()),
+                    &Self::borrow_index(owned),
+                    label,
+                )
+            })
+    }
+}
+
+impl IndexDomain for EdgeIndex {
+    type Address = EdgeAddress;
+    type Index<'a> = Self;
+    type Owned = Self;
+
+    fn index<'a>(graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        StateView::of(graphrecord).edge_index(*address)
+    }
+
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
+        *index
+    }
+
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
+        *owned
+    }
+
+    fn resolve(
+        graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        StateView::of(graphrecord)
+            .resolve_edge_address(owned)
+            .ok_or_else(|| {
+                Failure::new_at::<Self, _>(UnresolvedIndex::<Self>::new(*owned), owned, label)
+            })
+    }
+}
+
+impl IndexDomain for Group {
+    type Address = GroupAddress;
+    type Index<'a> = GroupView<'a>;
+    type Owned = Self;
+
+    fn index<'a>(graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        GroupView::from(StateView::of(graphrecord).group_name(*address).identifier())
+    }
+
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
+        Self::from(index.clone())
+    }
+
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
+        GroupView::from(owned.identifier())
+    }
+
+    fn resolve(
+        graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        StateView::of(graphrecord)
+            .resolve_group_address(owned)
+            .ok_or_else(|| {
+                Failure::new_at::<Self, _>(
+                    UnresolvedIndex::<Self>::new(owned.clone()),
+                    &Self::borrow_index(owned),
+                    label,
+                )
+            })
     }
 }
 
 impl IndexDomain for FailureKind {
+    type Address = Self;
     type Index<'a> = Self;
     type Owned = Self;
 
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        *address
+    }
+
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
         *index
     }
 
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
         *owned
+    }
+
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        Ok(*owned)
     }
 }
 
 impl IndexDomain for Value {
+    type Address = Self;
     type Index<'a> = Self;
     type Owned = Self;
 
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        address.clone()
+    }
+
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
         index.clone()
     }
 
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
         owned.clone()
+    }
+
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        Ok(owned.clone())
     }
 }
 
 impl IndexDomain for AttributeName {
-    type Index<'a> = Self;
+    type Address = Self;
+    type Index<'a> = AttributeNameView<'a>;
     type Owned = Self;
 
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        index.clone()
+    fn index<'a>(_graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        AttributeNameView::from(match address.identifier() {
+            Identifier::Int(value) => IdentifierView::Int(*value),
+            Identifier::String(value) => IdentifierView::String(Cow::Owned(value.clone())),
+        })
     }
 
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
-        owned.clone()
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
+        Self::from(index.clone())
+    }
+
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
+        AttributeNameView::from(owned.identifier())
+    }
+
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        Ok(owned.clone())
     }
 }
 
 impl IndexDomain for bool {
+    type Address = Self;
     type Index<'a> = Self;
     type Owned = Self;
 
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        *address
+    }
+
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
         *index
     }
 
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
         *owned
     }
-}
 
-impl EntityDomain for EdgeIndex {
-    fn resolve_index<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Owned,
-    ) -> GraphRecordResult<Self::Index<'a>> {
-        graphrecord.resolve_edge_index(index)
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        Ok(*owned)
     }
 }
 
-impl EntityDomain for NodeIndex {
-    fn resolve_index<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Owned,
-    ) -> GraphRecordResult<Self::Index<'a>> {
-        graphrecord.resolve_node_index(index)
-    }
-}
+impl EntityDomain for NodeIndex {}
+
+impl EntityDomain for EdgeIndex {}
+
+impl EntityDomain for Group {}

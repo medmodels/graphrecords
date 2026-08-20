@@ -1,9 +1,8 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, Multiple, Operand, OrderState, QueryResult,
+    Bare, BareValueDomain, EvaluateExpression, Explain, Multiple, OrderState, QueryResult,
     capabilities::ValueEquivalence,
-    execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{Apply, BareStream, LaneKernel, Operation, OperationContext, Prepare},
+    expressions::ExpressionHandle,
+    operations::{BareStream, Build, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Unique,
@@ -11,34 +10,24 @@ use crate::{
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashSet;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "Unique")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct UniqueOperation;
 
-impl Prepare for UniqueOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
 impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
     for UniqueOperation
 {
-    type Output = OperandHandle<Bare<V>, Multiple<O>>;
+    type Output = ExpressionHandle<Bare<V>, Multiple<O>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let mut seen = GrHashSet::default();
 
         Ok(Box::new(values.filter_map(move |outcome| match outcome {
@@ -58,11 +47,11 @@ impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, M
     }
 }
 
-impl<O: Apply<UniqueOperation>> Unique for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<UniqueOperation>> Unique for E {
+    type Output = E::Output;
 
-    fn unique(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), UniqueOperation))
+    fn unique(&self) -> Self::Output {
+        self.build(UniqueOperation)
     }
 }
 
@@ -77,7 +66,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Bare<V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Multiple<O>>;
+            output: ExpressionHandle<Bare<V>, Multiple<O>>;
         }
     }
 }

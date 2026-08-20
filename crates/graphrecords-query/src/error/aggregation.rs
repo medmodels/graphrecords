@@ -26,7 +26,7 @@ impl Display for InvalidMedianValue {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "value `{}` cannot be included in a median calculation",
+            "cannot calculate the median of value `{}`",
             self.value
         )
     }

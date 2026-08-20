@@ -47,7 +47,7 @@ impl<T: 'static + Send + Sync> Prepare for Vec<T> {
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(self)
     }
@@ -65,13 +65,21 @@ impl<T> Estimated for Vec<T> {
 impl<T, V> SetSource<V> for Vec<T>
 where
     T: 'static + Clone + Eq + Hash + Display + Send + Sync,
-    for<'a> V: ValueDomain<Value<'a> = T>,
+    V: ValueDomain<Owned = T>,
 {
-    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<V::Value<'a>>>
+    fn set<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+        label: &'static str,
+    ) -> QueryResult<GrHashSet<V::Value<'a>>>
     where
         Self: 'a,
+        V::Value<'a>: Eq + Hash,
     {
-        Ok(prepared.iter().cloned().collect())
+        prepared
+            .iter()
+            .map(|owned| V::from_owned(graphrecord, owned, label))
+            .collect()
     }
 }
 
@@ -109,7 +117,7 @@ impl<T: 'static + Send + Sync, const N: usize> Prepare for [T; N] {
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(self)
     }
@@ -127,13 +135,21 @@ impl<T, const N: usize> Estimated for [T; N] {
 impl<T, V, const N: usize> SetSource<V> for [T; N]
 where
     T: 'static + Clone + Eq + Hash + Display + Send + Sync,
-    for<'a> V: ValueDomain<Value<'a> = T>,
+    V: ValueDomain<Owned = T>,
 {
-    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<V::Value<'a>>>
+    fn set<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+        label: &'static str,
+    ) -> QueryResult<GrHashSet<V::Value<'a>>>
     where
         Self: 'a,
+        V::Value<'a>: Eq + Hash,
     {
-        Ok(prepared.iter().cloned().collect())
+        prepared
+            .iter()
+            .map(|owned| V::from_owned(graphrecord, owned, label))
+            .collect()
     }
 }
 
@@ -185,7 +201,7 @@ impl<T: 'static + Send + Sync> Prepare for GrHashSet<T> {
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(self)
     }
@@ -200,13 +216,21 @@ impl<T> Estimated for GrHashSet<T> {
 impl<T, V> SetSource<V> for GrHashSet<T>
 where
     T: 'static + Clone + Eq + Hash + Display + Send + Sync,
-    for<'a> V: ValueDomain<Value<'a> = T>,
+    V: ValueDomain<Owned = T>,
 {
-    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<V::Value<'a>>>
+    fn set<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+        label: &'static str,
+    ) -> QueryResult<GrHashSet<V::Value<'a>>>
     where
         Self: 'a,
+        V::Value<'a>: Eq + Hash,
     {
-        Ok(prepared.clone())
+        prepared
+            .iter()
+            .map(|owned| V::from_owned(graphrecord, owned, label))
+            .collect()
     }
 }
 
@@ -258,7 +282,7 @@ impl<T: 'static + Send + Sync, S: 'static + Send + Sync> Prepare for HashSet<T, 
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(self)
     }
@@ -273,13 +297,21 @@ impl<T, S> Estimated for HashSet<T, S> {
 impl<T, S, V> SetSource<V> for HashSet<T, S>
 where
     T: 'static + Clone + Eq + Hash + Display + Send + Sync,
-    for<'a> V: ValueDomain<Value<'a> = T>,
+    V: ValueDomain<Owned = T>,
     S: 'static + Clone + BuildHasher + Send + Sync,
 {
-    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<V::Value<'a>>>
+    fn set<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+        label: &'static str,
+    ) -> QueryResult<GrHashSet<V::Value<'a>>>
     where
         Self: 'a,
+        V::Value<'a>: Eq + Hash,
     {
-        Ok(prepared.iter().cloned().collect())
+        prepared
+            .iter()
+            .map(|owned| V::from_owned(graphrecord, owned, label))
+            .collect()
     }
 }

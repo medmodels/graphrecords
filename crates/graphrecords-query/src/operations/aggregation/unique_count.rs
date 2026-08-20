@@ -1,46 +1,33 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
-    OrderState, QueryResult,
+    Bare, BareValueDomain, EvaluateExpression, Explain, IndexDomain, Indexed, Multiple, OrderState,
+    QueryResult,
     capabilities::ValueEquivalence,
-    execution::EvaluationCache,
-    operands::DefiniteBareValueOperand,
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    expressions::DefiniteBareValueExpression,
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::UniqueCount,
 };
-use graphrecords_core::{GraphRecord, graphrecord::Value};
+use graphrecords_core::{GraphRecord, graphrecord::ValueView};
 use graphrecords_utils::aliases::GrHashSet;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
-#[explain(label = "NUnique")]
+#[explain(label = "UniqueCount")]
 pub struct UniqueCountOperation;
-
-impl Prepare for UniqueCountOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
     for UniqueCountOperation
 {
-    type Output = DefiniteBareValueOperand;
+    type Output = DefiniteBareValueExpression;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         mut values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let count = values.try_fold(
             (GrHashSet::default(), 0),
             |(mut unique, count), (_, value)| {
@@ -51,7 +38,7 @@ impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V
             },
         );
 
-        Ok(count.map(|(_, count)| Value::Int(count)))
+        Ok(count.map(|(_, count)| ValueView::Int(count)))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
@@ -62,13 +49,13 @@ impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V
 impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
     for UniqueCountOperation
 {
-    type Output = DefiniteBareValueOperand;
+    type Output = DefiniteBareValueExpression;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         mut values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let count = values.try_fold((GrHashSet::default(), 0), |(mut unique, count), value| {
             let value = value?;
             let inserted = unique.insert(V::equivalence_key(&value));
@@ -76,7 +63,7 @@ impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, M
             Ok((unique, count + i64::from(inserted)))
         });
 
-        Ok(count.map(|(_, count)| Value::Int(count)))
+        Ok(count.map(|(_, count)| ValueView::Int(count)))
     }
 
     fn estimate(&self, _input: Estimate, _stats: &Stats) -> Estimate {
@@ -84,11 +71,11 @@ impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, M
     }
 }
 
-impl<O: Apply<UniqueCountOperation>> UniqueCount for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<UniqueCountOperation>> UniqueCount for E {
+    type Output = E::Output;
 
-    fn n_unique(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), UniqueCountOperation))
+    fn n_unique(&self) -> Self::Output {
+        self.build(UniqueCountOperation)
     }
 }
 
@@ -104,7 +91,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Indexed<I, V>, Multiple<O>);
-            output: DefiniteBareValueOperand;
+            output: DefiniteBareValueExpression;
         }
 
         kernel {
@@ -113,7 +100,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Bare<V>, Multiple<O>);
-            output: DefiniteBareValueOperand;
+            output: DefiniteBareValueExpression;
         }
     }
 }

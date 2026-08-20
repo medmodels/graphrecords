@@ -1,8 +1,9 @@
 use super::{
-    DynArityHandle, DynHandle, DynIndex, DynLaneHandle, DynOperand, DynValue, DynValueTarget,
+    DynArityHandle, DynExpression, DynHandle, DynIndex, DynLaneHandle, DynValue, DynValueView,
 };
 use crate::{
-    Arity, EdgeDirection, Explain, Mask, QueryResult, Unit, ValueDomain,
+    Arity, EdgeDirection, Explain, FailureKind, FailureKindValue, IndexValue, Mask, Positional,
+    QueryResult, Scalar, Unit, ValueDomain,
     cast::{
         Bool as BoolTarget, DateTime as DateTimeTarget, Duration as DurationTarget,
         Float as FloatTarget, Int as IntTarget, String as StringTarget,
@@ -25,7 +26,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, Group},
+    graphrecord::{AttributeName, EdgeIndex, Group, NodeIndex, Value},
 };
 use std::{
     fmt::{self, Display, Write},
@@ -42,11 +43,27 @@ pub enum DynCastTarget {
     String,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum DynValueTarget {
+    Value,
+    ValueIndex,
+    AttributeName,
+    AttributeNameIndex,
+    NodeIndex,
+    EdgeIndex,
+    Group,
+    PositionalIndex,
+    BoolIndex,
+    Mask,
+    FailureKind,
+    FailureKindIndex,
+}
+
 #[derive(Clone)]
 enum DynArgumentReplacement {
     Value(DynValue),
     Mask(bool),
-    Operand(DynOperand),
+    Expression(DynExpression),
 }
 
 #[derive(Clone)]
@@ -55,10 +72,10 @@ enum DynArgumentSourceKind {
     Values(Vec<DynValue>),
     MaskValues(Vec<bool>),
     Mask(bool),
-    Operand(DynOperand),
-    DropMissing(DynOperand),
+    Expression(DynExpression),
+    DropMissing(DynExpression),
     ReplaceMissing {
-        source: DynOperand,
+        source: DynExpression,
         replacement: DynArgumentReplacement,
     },
 }
@@ -88,7 +105,7 @@ pub trait DynArgumentBuilder<A: Alignment, R: Retention>: ValueDomain {
 #[derive(Clone)]
 pub enum DynInvokeArgument {
     Source(DynArgumentSource),
-    Operand(DynOperand),
+    Expression(DynExpression),
     CastTarget(DynCastTarget),
     ValueTarget(DynValueTarget),
     Attribute(AttributeName),
@@ -102,14 +119,16 @@ impl DynArgumentReplacement {
         match self {
             Self::Value(value) => ArgumentValueSource::Literal(value.descriptor()),
             Self::Mask(_) => ArgumentValueSource::Literal(ValueDescriptor::value::<Mask>()),
-            Self::Operand(operand) => ArgumentValueSource::Operand(operand.descriptor().clone()),
+            Self::Expression(expression) => {
+                ArgumentValueSource::Expression(expression.descriptor().clone())
+            }
         }
     }
 
     fn keyed_value(&self) -> Argument<Keyed<DynIndex>, DynValue, Preserving> {
         match self {
             Self::Value(value) => value.clone().into_argument(),
-            Self::Operand(operand) => match &operand.handle {
+            Self::Expression(expression) => match &expression.handle {
                 DynHandle::Lane(DynLaneHandle::IndexedValue(DynArityHandle::MultipleOrdered(
                     handle,
                 ))) => handle.clone().into_argument(),
@@ -133,7 +152,7 @@ impl DynArgumentReplacement {
     fn unaligned_value(&self) -> Argument<Unaligned, DynValue, Preserving> {
         match self {
             Self::Value(value) => value.clone().into_argument(),
-            Self::Operand(operand) => match &operand.handle {
+            Self::Expression(expression) => match &expression.handle {
                 DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) => {
                     handle.clone().into_argument()
                 }
@@ -153,7 +172,7 @@ impl DynArgumentReplacement {
     fn keyed_mask(&self) -> Argument<Keyed<DynIndex>, Mask, Preserving> {
         match self {
             Self::Mask(value) => (*value).into_argument(),
-            Self::Operand(operand) => match &operand.handle {
+            Self::Expression(expression) => match &expression.handle {
                 DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleOrdered(
                     handle,
                 ))) => handle.clone().into_argument(),
@@ -177,7 +196,7 @@ impl DynArgumentReplacement {
     fn unaligned_mask(&self) -> Argument<Unaligned, Mask, Preserving> {
         match self {
             Self::Mask(value) => (*value).into_argument(),
-            Self::Operand(operand) => match &operand.handle {
+            Self::Expression(expression) => match &expression.handle {
                 DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) => {
                     handle.clone().into_argument()
                 }
@@ -223,21 +242,21 @@ impl DynArgumentSource {
     }
 
     #[must_use]
-    pub fn operand(operand: DynOperand) -> Self {
+    pub fn expression(expression: DynExpression) -> Self {
         Self {
-            kind: Box::new(DynArgumentSourceKind::Operand(operand)),
+            kind: Box::new(DynArgumentSourceKind::Expression(expression)),
         }
     }
 
     #[must_use]
-    pub fn drop_missing(source: DynOperand) -> Self {
+    pub fn drop_missing(source: DynExpression) -> Self {
         Self {
             kind: Box::new(DynArgumentSourceKind::DropMissing(source)),
         }
     }
 
     #[must_use]
-    pub fn replace_missing_with_value(source: DynOperand, replacement: DynValue) -> Self {
+    pub fn replace_missing_with_value(source: DynExpression, replacement: DynValue) -> Self {
         Self {
             kind: Box::new(DynArgumentSourceKind::ReplaceMissing {
                 source,
@@ -247,7 +266,7 @@ impl DynArgumentSource {
     }
 
     #[must_use]
-    pub fn replace_missing_with_mask(source: DynOperand, replacement: bool) -> Self {
+    pub fn replace_missing_with_mask(source: DynExpression, replacement: bool) -> Self {
         Self {
             kind: Box::new(DynArgumentSourceKind::ReplaceMissing {
                 source,
@@ -257,11 +276,14 @@ impl DynArgumentSource {
     }
 
     #[must_use]
-    pub fn replace_missing_with_operand(source: DynOperand, replacement: DynOperand) -> Self {
+    pub fn replace_missing_with_expression(
+        source: DynExpression,
+        replacement: DynExpression,
+    ) -> Self {
         Self {
             kind: Box::new(DynArgumentSourceKind::ReplaceMissing {
                 source,
-                replacement: DynArgumentReplacement::Operand(replacement),
+                replacement: DynArgumentReplacement::Expression(replacement),
             }),
         }
     }
@@ -280,17 +302,17 @@ impl DynArgumentSource {
                     .first()
                     .map_or_else(ValueDescriptor::unit, DynValue::descriptor),
             ),
-            DynArgumentSourceKind::Operand(operand) => {
-                ValueArgumentDescriptor::operand(operand.descriptor().clone())
+            DynArgumentSourceKind::Expression(expression) => {
+                ValueArgumentDescriptor::expression(expression.descriptor().clone())
             }
-            DynArgumentSourceKind::DropMissing(operand) => {
-                ValueArgumentDescriptor::operand(operand.descriptor().clone())
+            DynArgumentSourceKind::DropMissing(expression) => {
+                ValueArgumentDescriptor::expression(expression.descriptor().clone())
                     .with_missing(ArgumentMissingPolicy::Drop)
             }
             DynArgumentSourceKind::ReplaceMissing {
                 source,
                 replacement,
-            } => ValueArgumentDescriptor::operand(source.descriptor().clone())
+            } => ValueArgumentDescriptor::expression(source.descriptor().clone())
                 .with_missing(ArgumentMissingPolicy::Replace(replacement.source())),
         }
     }
@@ -302,12 +324,12 @@ impl DynArgumentSource {
         )
     }
 
-    pub(crate) fn as_operand(&self) -> &DynOperand {
-        let DynArgumentSourceKind::Operand(operand) = self.kind.as_ref() else {
-            panic!("argument conversion violated the operand-backed dynamic set-source corner")
+    pub(crate) fn as_expression(&self) -> &DynExpression {
+        let DynArgumentSourceKind::Expression(expression) = self.kind.as_ref() else {
+            panic!("argument conversion violated the expression-backed dynamic set-source corner")
         };
 
-        operand
+        expression
     }
 
     #[must_use]
@@ -326,7 +348,9 @@ impl DynInvokeArgument {
     pub fn descriptor(&self) -> ArgumentDescriptor {
         match self {
             Self::Source(source) => ArgumentDescriptor::Value(source.descriptor()),
-            Self::Operand(operand) => ArgumentDescriptor::Operand(operand.descriptor().clone()),
+            Self::Expression(expression) => {
+                ArgumentDescriptor::Expression(expression.descriptor().clone())
+            }
             Self::CastTarget(target) => match target {
                 DynCastTarget::Bool => ArgumentDescriptor::selector::<BoolTarget>(),
                 DynCastTarget::DateTime => ArgumentDescriptor::selector::<DateTimeTarget>(),
@@ -335,7 +359,30 @@ impl DynInvokeArgument {
                 DynCastTarget::Int => ArgumentDescriptor::selector::<IntTarget>(),
                 DynCastTarget::String => ArgumentDescriptor::selector::<StringTarget>(),
             },
-            Self::ValueTarget(target) => target.argument_descriptor(),
+            Self::ValueTarget(target) => match target {
+                DynValueTarget::Value => ArgumentDescriptor::selector::<Scalar>(),
+                DynValueTarget::ValueIndex => ArgumentDescriptor::selector::<IndexValue<Value>>(),
+                DynValueTarget::AttributeName => ArgumentDescriptor::selector::<AttributeName>(),
+                DynValueTarget::AttributeNameIndex => {
+                    ArgumentDescriptor::selector::<IndexValue<AttributeName>>()
+                }
+                DynValueTarget::NodeIndex => {
+                    ArgumentDescriptor::selector::<IndexValue<NodeIndex>>()
+                }
+                DynValueTarget::EdgeIndex => {
+                    ArgumentDescriptor::selector::<IndexValue<EdgeIndex>>()
+                }
+                DynValueTarget::Group => ArgumentDescriptor::selector::<IndexValue<Group>>(),
+                DynValueTarget::PositionalIndex => {
+                    ArgumentDescriptor::selector::<IndexValue<Positional>>()
+                }
+                DynValueTarget::BoolIndex => ArgumentDescriptor::selector::<IndexValue<bool>>(),
+                DynValueTarget::Mask => ArgumentDescriptor::selector::<Mask>(),
+                DynValueTarget::FailureKind => ArgumentDescriptor::selector::<FailureKindValue>(),
+                DynValueTarget::FailureKindIndex => {
+                    ArgumentDescriptor::selector::<IndexValue<FailureKind>>()
+                }
+            },
             Self::Attribute(_) => ArgumentDescriptor::field::<AttributeName>(),
             Self::Group(_) => ArgumentDescriptor::field::<Group>(),
             Self::Direction(_) => ArgumentDescriptor::field::<EdgeDirection>(),
@@ -350,8 +397,8 @@ impl DynArgumentBuilder<Keyed<DynIndex>, Preserving> for DynValue {
     fn build(source: &DynArgumentSource) -> Argument<Keyed<DynIndex>, Self::Dynamic, Preserving> {
         match source.kind.as_ref() {
             DynArgumentSourceKind::Value(value) => value.clone().into_argument(),
-            DynArgumentSourceKind::Operand(operand) => {
-                DynArgumentReplacement::Operand(operand.clone()).keyed_value()
+            DynArgumentSourceKind::Expression(expression) => {
+                DynArgumentReplacement::Expression(expression.clone()).keyed_value()
             }
             DynArgumentSourceKind::ReplaceMissing {
                 source,
@@ -388,10 +435,10 @@ impl DynArgumentBuilder<Keyed<DynIndex>, Dropping> for DynValue {
     type Dynamic = Self;
 
     fn build(source: &DynArgumentSource) -> Argument<Keyed<DynIndex>, Self::Dynamic, Dropping> {
-        let DynArgumentSourceKind::DropMissing(operand) = source.kind.as_ref() else {
+        let DynArgumentSourceKind::DropMissing(expression) = source.kind.as_ref() else {
             panic!("argument conversion violated the dropping keyed dynamic-value corner")
         };
-        match &operand.handle {
+        match &expression.handle {
             DynHandle::Lane(DynLaneHandle::IndexedValue(DynArityHandle::MultipleOrdered(
                 handle,
             ))) => WithMissing::new(handle.clone(), Drop).into_argument(),
@@ -409,8 +456,8 @@ impl DynArgumentBuilder<Unaligned, Preserving> for DynValue {
     fn build(source: &DynArgumentSource) -> Argument<Unaligned, Self::Dynamic, Preserving> {
         match source.kind.as_ref() {
             DynArgumentSourceKind::Value(value) => value.clone().into_argument(),
-            DynArgumentSourceKind::Operand(operand) => {
-                DynArgumentReplacement::Operand(operand.clone()).unaligned_value()
+            DynArgumentSourceKind::Expression(expression) => {
+                DynArgumentReplacement::Expression(expression.clone()).unaligned_value()
             }
             DynArgumentSourceKind::ReplaceMissing {
                 source,
@@ -440,11 +487,11 @@ impl DynArgumentBuilder<Unaligned, Dropping> for DynValue {
     type Dynamic = Self;
 
     fn build(source: &DynArgumentSource) -> Argument<Unaligned, Self::Dynamic, Dropping> {
-        let DynArgumentSourceKind::DropMissing(operand) = source.kind.as_ref() else {
+        let DynArgumentSourceKind::DropMissing(expression) = source.kind.as_ref() else {
             panic!("argument conversion violated the dropping unaligned dynamic-value corner")
         };
         let DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) =
-            &operand.handle
+            &expression.handle
         else {
             panic!("argument conversion violated the droppable unaligned dynamic-value roster")
         };
@@ -458,8 +505,8 @@ impl DynArgumentBuilder<Keyed<DynIndex>, Preserving> for Mask {
     fn build(source: &DynArgumentSource) -> Argument<Keyed<DynIndex>, Self::Dynamic, Preserving> {
         match source.kind.as_ref() {
             DynArgumentSourceKind::Mask(value) => (*value).into_argument(),
-            DynArgumentSourceKind::Operand(operand) => {
-                DynArgumentReplacement::Operand(operand.clone()).keyed_mask()
+            DynArgumentSourceKind::Expression(expression) => {
+                DynArgumentReplacement::Expression(expression.clone()).keyed_mask()
             }
             DynArgumentSourceKind::ReplaceMissing {
                 source,
@@ -496,10 +543,10 @@ impl DynArgumentBuilder<Keyed<DynIndex>, Dropping> for Mask {
     type Dynamic = Self;
 
     fn build(source: &DynArgumentSource) -> Argument<Keyed<DynIndex>, Self::Dynamic, Dropping> {
-        let DynArgumentSourceKind::DropMissing(operand) = source.kind.as_ref() else {
+        let DynArgumentSourceKind::DropMissing(expression) = source.kind.as_ref() else {
             panic!("argument conversion violated the dropping keyed mask corner")
         };
-        match &operand.handle {
+        match &expression.handle {
             DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleOrdered(
                 handle,
             ))) => WithMissing::new(handle.clone(), Drop).into_argument(),
@@ -517,8 +564,8 @@ impl DynArgumentBuilder<Unaligned, Preserving> for Mask {
     fn build(source: &DynArgumentSource) -> Argument<Unaligned, Self::Dynamic, Preserving> {
         match source.kind.as_ref() {
             DynArgumentSourceKind::Mask(value) => (*value).into_argument(),
-            DynArgumentSourceKind::Operand(operand) => {
-                DynArgumentReplacement::Operand(operand.clone()).unaligned_mask()
+            DynArgumentSourceKind::Expression(expression) => {
+                DynArgumentReplacement::Expression(expression.clone()).unaligned_mask()
             }
             DynArgumentSourceKind::ReplaceMissing {
                 source,
@@ -548,11 +595,11 @@ impl DynArgumentBuilder<Unaligned, Dropping> for Mask {
     type Dynamic = Self;
 
     fn build(source: &DynArgumentSource) -> Argument<Unaligned, Self::Dynamic, Dropping> {
-        let DynArgumentSourceKind::DropMissing(operand) = source.kind.as_ref() else {
+        let DynArgumentSourceKind::DropMissing(expression) = source.kind.as_ref() else {
             panic!("argument conversion violated the dropping unaligned mask corner")
         };
         let DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) =
-            &operand.handle
+            &expression.handle
         else {
             panic!("argument conversion violated the droppable unaligned mask roster")
         };
@@ -622,25 +669,6 @@ impl<S> Keyable<S> {
     }
 }
 
-impl<S: SourceDomain<ValueDomain = DynValue>> SourceDomain for Keyable<S> {
-    type ValueDomain = DynValue;
-}
-
-impl<S: Prepare> Prepare for Keyable<S> {
-    type Prepared<'a>
-        = S::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.inner.prepare(graphrecord, cache)
-    }
-}
-
 impl<S: Explain> Explain for Keyable<S> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         self.inner.describe(formatter)
@@ -674,10 +702,29 @@ impl<S: PlanInputs> PlanInputs for Keyable<S> {
     }
 }
 
+impl<S: Prepare> Prepare for Keyable<S> {
+    type Prepared<'a>
+        = S::Prepared<'a>
+    where
+        Self: 'a;
+
+    fn prepare<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        self.inner.prepare(graphrecord, cache)
+    }
+}
+
 impl<S: Estimated> Estimated for Keyable<S> {
     fn estimate(&self, stats: &Stats) -> Estimate {
         self.inner.estimate(stats)
     }
+}
+
+impl<S: SourceDomain<ValueDomain = DynValue>> SourceDomain for Keyable<S> {
+    type ValueDomain = DynValue;
 }
 
 impl<A, S> ArgumentSource<A> for Keyable<S>
@@ -687,27 +734,31 @@ where
 {
     type Retention = S::Retention;
 
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<DynValue>>
+    fn lookup<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        address: &A::Address,
+        label: &'static str,
+    ) -> Lookup<QueryResult<DynValueView<'a>>>
     where
         Self: 'a,
     {
-        S::lookup(prepared, address)
+        S::lookup(graphrecord, prepared, address, label)
     }
 
     fn resolve<'a>(
+        graphrecord: &'a GraphRecord,
         prepared: &Self::Prepared<'a>,
-        address: &A::Address<'a>,
+        address: &A::Address,
         label: &'static str,
-    ) -> <Self::Retention as ElementEmission>::Step<QueryResult<DynValue>>
+    ) -> <Self::Retention as ElementEmission>::Step<QueryResult<DynValueView<'a>>>
     where
         Self: 'a,
     {
-        <S::Retention as Retention>::map_step(S::resolve(prepared, address, label), |outcome| {
-            outcome.and_then(DynValue::into_groupable)
-        })
+        <S::Retention as Retention>::map_step(
+            S::resolve(graphrecord, prepared, address, label),
+            |outcome| outcome.and_then(DynValueView::into_groupable),
+        )
     }
 }
 
@@ -720,12 +771,12 @@ where
 
     fn elements<'a>(
         prepared: Self::Prepared<'a>,
-    ) -> IndexedElementContainer<'a, Self::IndexDomain, DynValue, Self::Arity>
+    ) -> IndexedElementContainer<'a, Self::IndexDomain, DynValueView<'a>, Self::Arity>
     where
         Self: 'a,
     {
-        Self::Arity::map_elements(S::elements(prepared), |(index, outcome)| {
-            (index, outcome.and_then(DynValue::into_groupable))
+        Self::Arity::map_elements(S::elements(prepared), |(address, outcome)| {
+            (address, outcome.and_then(DynValueView::into_groupable))
         })
     }
 }
@@ -749,14 +800,14 @@ impl PlanIdentity for DynValue {
 impl PlanInputs for DynValue {}
 
 impl Prepare for DynValue {
-    type Prepared<'a> = QueryResult<Self>;
+    type Prepared<'a> = &'a Self;
 
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(Ok(self.clone()))
+        Ok(self)
     }
 }
 
@@ -773,13 +824,15 @@ impl SourceDomain for DynValue {
 impl<A: Alignment> ArgumentSource<A> for DynValue {
     type Retention = Preserving;
 
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<Self>>
+    fn lookup<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        _address: &A::Address,
+        label: &'static str,
+    ) -> Lookup<QueryResult<DynValueView<'a>>>
     where
         Self: 'a,
     {
-        Lookup::Present(prepared)
+        Lookup::Present(Self::from_owned(graphrecord, prepared, label))
     }
 }

@@ -1,3 +1,4 @@
+use super::value_into_view;
 use crate::{
     Failure, IndexValue, QueryResult, Scalar, ValueDomain,
     cast::{
@@ -8,26 +9,30 @@ use crate::{
 };
 use chrono::{DateTime, NaiveDateTime, TimeDelta};
 use graphrecords_core::graphrecord::{
-    AttributeName, Identifier, NodeIndex, Value, datatypes::DataType,
+    AttributeName, Identifier, IdentifierView, NodeIndex, NodeIndexView, Value,
+    datatypes::{AttributeNameView, DataType},
 };
 use std::{
     fmt::{Debug, Display},
     time::Duration as StandardDuration,
 };
 
+const MILLISECONDS_PER_SECOND: u32 = 1_000;
+const NANOSECONDS_PER_MILLISECOND: u32 = 1_000_000;
+
 pub trait ValueCast<T: CastTarget>: ValueDomain {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         target: &T,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>>;
 }
 
-fn invalid_cast<T, U>(label: &'static str, value: T, target: DataType) -> QueryResult<U>
+fn invalid_cast<T, U>(value: T, target: DataType, label: &'static str) -> QueryResult<U>
 where
     T: Debug + Display + Send + Sync + 'static,
 {
-    Err(Failure::new(label, InvalidCast::new(value, target)))
+    Err(Failure::new(InvalidCast::new(value, target), label))
 }
 
 fn duration_from_parts(seconds: u64, nanoseconds: u32, negative: bool) -> Option<TimeDelta> {
@@ -40,8 +45,9 @@ fn duration_from_milliseconds(milliseconds: i64) -> Option<TimeDelta> {
     let magnitude = milliseconds.unsigned_abs();
 
     duration_from_parts(
-        magnitude / 1_000,
-        ((magnitude % 1_000) * 1_000_000) as u32,
+        magnitude / u64::from(MILLISECONDS_PER_SECOND),
+        ((magnitude % u64::from(MILLISECONDS_PER_SECOND)) * u64::from(NANOSECONDS_PER_MILLISECOND))
+            as u32,
         milliseconds.is_negative(),
     )
 }
@@ -51,7 +57,10 @@ fn duration_from_fractional_milliseconds(milliseconds: f64) -> Option<TimeDelta>
         return None;
     }
 
-    let duration = StandardDuration::try_from_secs_f64(milliseconds.abs() / 1_000.0).ok()?;
+    let duration = StandardDuration::try_from_secs_f64(
+        milliseconds.abs() / f64::from(MILLISECONDS_PER_SECOND),
+    )
+    .ok()?;
     let duration = TimeDelta::from_std(duration).ok()?;
 
     Some(if milliseconds.is_sign_negative() {
@@ -100,34 +109,34 @@ fn parse_duration(value: &str) -> Option<TimeDelta> {
     duration_from_parts(seconds.parse().ok()?, nanoseconds, negative)
 }
 
-fn cast_value_to_bool(label: &'static str, value: Value) -> QueryResult<Value> {
+fn cast_value_to_bool(value: Value, label: &'static str) -> QueryResult<Value> {
     match value {
         Value::String(value) => match value.parse() {
             Ok(value) => Ok(Value::Bool(value)),
-            Err(_) => invalid_cast(label, Value::String(value), DataType::Bool),
+            Err(_) => invalid_cast(Value::String(value), DataType::Bool, label),
         },
         Value::Int(value) => Ok(Value::Bool(value != 0)),
         Value::Float(value) => Ok(Value::Bool(value != 0.0)),
         Value::Bool(_) => Ok(value),
         value @ (Value::DateTime(_) | Value::Duration(_) | Value::Null) => {
-            invalid_cast(label, value, DataType::Bool)
+            invalid_cast(value, DataType::Bool, label)
         }
     }
 }
 
-fn cast_value_to_datetime(label: &'static str, value: Value) -> QueryResult<Value> {
+fn cast_value_to_datetime(value: Value, label: &'static str) -> QueryResult<Value> {
     match value {
         Value::String(value) => match value.parse().map(Value::DateTime) {
             Ok(value) => Ok(value),
-            Err(_) => invalid_cast(label, Value::String(value), DataType::DateTime),
+            Err(_) => invalid_cast(Value::String(value), DataType::DateTime, label),
         },
         Value::Int(value) => duration_from_milliseconds(value)
             .and_then(datetime_from_duration)
             .map(Value::DateTime)
             .ok_or_else(|| {
                 Failure::new(
-                    label,
                     InvalidCast::new(Value::Int(value), DataType::DateTime),
+                    label,
                 )
             }),
         Value::Float(value) => duration_from_fractional_milliseconds(value)
@@ -135,53 +144,53 @@ fn cast_value_to_datetime(label: &'static str, value: Value) -> QueryResult<Valu
             .map(Value::DateTime)
             .ok_or_else(|| {
                 Failure::new(
-                    label,
                     InvalidCast::new(Value::Float(value), DataType::DateTime),
+                    label,
                 )
             }),
         Value::DateTime(_) => Ok(value),
         value @ (Value::Bool(_) | Value::Duration(_) | Value::Null) => {
-            invalid_cast(label, value, DataType::DateTime)
+            invalid_cast(value, DataType::DateTime, label)
         }
     }
 }
 
-fn cast_value_to_duration(label: &'static str, value: Value) -> QueryResult<Value> {
+fn cast_value_to_duration(value: Value, label: &'static str) -> QueryResult<Value> {
     match value {
         Value::String(value) => parse_duration(&value).map(Value::Duration).ok_or_else(|| {
             Failure::new(
-                label,
                 InvalidCast::new(Value::String(value), DataType::Duration),
+                label,
             )
         }),
         Value::Int(value) => duration_from_milliseconds(value)
             .map(Value::Duration)
             .ok_or_else(|| {
                 Failure::new(
-                    label,
                     InvalidCast::new(Value::Int(value), DataType::Duration),
+                    label,
                 )
             }),
         Value::Float(value) => duration_from_fractional_milliseconds(value)
             .map(Value::Duration)
             .ok_or_else(|| {
                 Failure::new(
-                    label,
                     InvalidCast::new(Value::Float(value), DataType::Duration),
+                    label,
                 )
             }),
         Value::Duration(_) => Ok(value),
         value @ (Value::Bool(_) | Value::DateTime(_) | Value::Null) => {
-            invalid_cast(label, value, DataType::Duration)
+            invalid_cast(value, DataType::Duration, label)
         }
     }
 }
 
-fn cast_value_to_float(label: &'static str, value: Value) -> QueryResult<Value> {
+fn cast_value_to_float(value: Value, label: &'static str) -> QueryResult<Value> {
     match value {
         Value::String(value) => match value.parse() {
             Ok(value) => Ok(Value::Float(value)),
-            Err(_) => invalid_cast(label, Value::String(value), DataType::Float),
+            Err(_) => invalid_cast(Value::String(value), DataType::Float, label),
         },
         Value::Int(value) => Ok(Value::Float(value as f64)),
         Value::Float(_) => Ok(value),
@@ -189,20 +198,23 @@ fn cast_value_to_float(label: &'static str, value: Value) -> QueryResult<Value> 
         Value::DateTime(value) => {
             let datetime = value.and_utc();
             let milliseconds = datetime.timestamp_millis() as f64
-                + f64::from(datetime.timestamp_subsec_nanos() % 1_000_000) / 1_000_000.0;
+                + f64::from(datetime.timestamp_subsec_nanos() % NANOSECONDS_PER_MILLISECOND)
+                    / f64::from(NANOSECONDS_PER_MILLISECOND);
 
             Ok(Value::Float(milliseconds))
         }
-        Value::Duration(value) => Ok(Value::Float(value.as_seconds_f64() * 1_000.0)),
-        Value::Null => invalid_cast(label, Value::Null, DataType::Float),
+        Value::Duration(value) => Ok(Value::Float(
+            value.as_seconds_f64() * f64::from(MILLISECONDS_PER_SECOND),
+        )),
+        Value::Null => invalid_cast(Value::Null, DataType::Float, label),
     }
 }
 
-fn cast_value_to_int(label: &'static str, value: Value) -> QueryResult<Value> {
+fn cast_value_to_int(value: Value, label: &'static str) -> QueryResult<Value> {
     match value {
         Value::String(value) => match value.parse() {
             Ok(value) => Ok(Value::Int(value)),
-            Err(_) => invalid_cast(label, Value::String(value), DataType::Int),
+            Err(_) => invalid_cast(Value::String(value), DataType::Int, label),
         },
         Value::Int(_) => Ok(value),
         Value::Float(value)
@@ -210,11 +222,11 @@ fn cast_value_to_int(label: &'static str, value: Value) -> QueryResult<Value> {
         {
             Ok(Value::Int(value as i64))
         }
-        Value::Float(value) => invalid_cast(label, Value::Float(value), DataType::Int),
+        Value::Float(value) => invalid_cast(Value::Float(value), DataType::Int, label),
         Value::Bool(value) => Ok(Value::Int(i64::from(value))),
         Value::DateTime(value) => Ok(Value::Int(value.and_utc().timestamp_millis())),
         Value::Duration(value) => Ok(Value::Int(value.num_milliseconds())),
-        Value::Null => invalid_cast(label, Value::Null, DataType::Int),
+        Value::Null => invalid_cast(Value::Null, DataType::Int, label),
     }
 }
 
@@ -232,148 +244,152 @@ fn cast_value_to_string(value: Value) -> Value {
 
 impl ValueCast<BoolTarget> for Scalar {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &BoolTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        cast_value_to_bool(label, value)
+        cast_value_to_bool(Value::from(value), label).map(value_into_view)
     }
 }
 
 impl ValueCast<DateTimeTarget> for Scalar {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &DateTimeTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        cast_value_to_datetime(label, value)
+        cast_value_to_datetime(Value::from(value), label).map(value_into_view)
     }
 }
 
 impl ValueCast<DurationTarget> for Scalar {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &DurationTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        cast_value_to_duration(label, value)
+        cast_value_to_duration(Value::from(value), label).map(value_into_view)
     }
 }
 
 impl ValueCast<FloatTarget> for Scalar {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &FloatTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        cast_value_to_float(label, value)
+        cast_value_to_float(Value::from(value), label).map(value_into_view)
     }
 }
 
 impl ValueCast<IntTarget> for Scalar {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &IntTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        cast_value_to_int(label, value)
+        cast_value_to_int(Value::from(value), label).map(value_into_view)
     }
 }
 
 impl ValueCast<StringTarget> for Scalar {
     fn cast<'a>(
-        _label: &'static str,
         value: Self::Value<'a>,
         _target: &StringTarget,
+        _label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        Ok(cast_value_to_string(value))
+        Ok(value_into_view(cast_value_to_string(Value::from(value))))
     }
 }
 
 impl ValueCast<IntTarget> for AttributeName {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &IntTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        match value.identifier() {
-            Identifier::String(string) => match string.parse::<i64>() {
-                Ok(integer) => Ok(Self::from(integer)),
-                Err(_) => invalid_cast(label, value, DataType::Int),
+        match value.identifier_view() {
+            IdentifierView::String(string) => match string.parse::<i64>() {
+                Ok(integer) => Ok(AttributeNameView::from(IdentifierView::Int(integer))),
+                Err(_) => invalid_cast(Self::from(value), DataType::Int, label),
             },
-            Identifier::Int(_) => Ok(value),
+            IdentifierView::Int(_) => Ok(value),
         }
     }
 }
 
 impl ValueCast<StringTarget> for AttributeName {
     fn cast<'a>(
-        _label: &'static str,
         value: Self::Value<'a>,
         _target: &StringTarget,
+        _label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        Ok(match Identifier::from(value) {
-            Identifier::String(string) => Self::from(string),
-            Identifier::Int(integer) => Self::from(integer.to_string()),
+        Ok(match Identifier::from(Self::from(value)) {
+            Identifier::String(string) => {
+                AttributeNameView::from(IdentifierView::String(string.into()))
+            }
+            Identifier::Int(integer) => {
+                AttributeNameView::from(IdentifierView::String(integer.to_string().into()))
+            }
         })
     }
 }
 
 impl ValueCast<BoolTarget> for IndexValue<Value> {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &BoolTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        cast_value_to_bool(label, value)
+        cast_value_to_bool(value, label)
     }
 }
 
 impl ValueCast<DateTimeTarget> for IndexValue<Value> {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &DateTimeTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        cast_value_to_datetime(label, value)
+        cast_value_to_datetime(value, label)
     }
 }
 
 impl ValueCast<DurationTarget> for IndexValue<Value> {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &DurationTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        cast_value_to_duration(label, value)
+        cast_value_to_duration(value, label)
     }
 }
 
 impl ValueCast<FloatTarget> for IndexValue<Value> {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &FloatTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        cast_value_to_float(label, value)
+        cast_value_to_float(value, label)
     }
 }
 
 impl ValueCast<IntTarget> for IndexValue<Value> {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &IntTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        cast_value_to_int(label, value)
+        cast_value_to_int(value, label)
     }
 }
 
 impl ValueCast<StringTarget> for IndexValue<Value> {
     fn cast<'a>(
-        _label: &'static str,
         value: Self::Value<'a>,
         _target: &StringTarget,
+        _label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
         Ok(cast_value_to_string(value))
     }
@@ -381,58 +397,66 @@ impl ValueCast<StringTarget> for IndexValue<Value> {
 
 impl ValueCast<IntTarget> for IndexValue<NodeIndex> {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &IntTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        match value.identifier() {
-            Identifier::String(string) => match string.parse::<i64>() {
-                Ok(integer) => Ok(NodeIndex::from(integer)),
-                Err(_) => invalid_cast(label, value, DataType::Int),
+        match value.identifier_view() {
+            IdentifierView::String(string) => match string.parse::<i64>() {
+                Ok(integer) => Ok(NodeIndexView::from(IdentifierView::Int(integer))),
+                Err(_) => invalid_cast(NodeIndex::from(value), DataType::Int, label),
             },
-            Identifier::Int(_) => Ok(value),
+            IdentifierView::Int(_) => Ok(value),
         }
     }
 }
 
 impl ValueCast<StringTarget> for IndexValue<NodeIndex> {
     fn cast<'a>(
-        _label: &'static str,
         value: Self::Value<'a>,
         _target: &StringTarget,
+        _label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        Ok(match Identifier::from(value) {
-            Identifier::String(string) => NodeIndex::from(string),
-            Identifier::Int(integer) => NodeIndex::from(integer.to_string()),
+        Ok(match Identifier::from(NodeIndex::from(value)) {
+            Identifier::String(string) => {
+                NodeIndexView::from(IdentifierView::String(string.into()))
+            }
+            Identifier::Int(integer) => {
+                NodeIndexView::from(IdentifierView::String(integer.to_string().into()))
+            }
         })
     }
 }
 
 impl ValueCast<IntTarget> for IndexValue<AttributeName> {
     fn cast<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         _target: &IntTarget,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        match value.identifier() {
-            Identifier::String(string) => match string.parse::<i64>() {
-                Ok(integer) => Ok(AttributeName::from(integer)),
-                Err(_) => invalid_cast(label, value, DataType::Int),
+        match value.identifier_view() {
+            IdentifierView::String(string) => match string.parse::<i64>() {
+                Ok(integer) => Ok(AttributeNameView::from(IdentifierView::Int(integer))),
+                Err(_) => invalid_cast(AttributeName::from(value), DataType::Int, label),
             },
-            Identifier::Int(_) => Ok(value),
+            IdentifierView::Int(_) => Ok(value),
         }
     }
 }
 
 impl ValueCast<StringTarget> for IndexValue<AttributeName> {
     fn cast<'a>(
-        _label: &'static str,
         value: Self::Value<'a>,
         _target: &StringTarget,
+        _label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        Ok(match Identifier::from(value) {
-            Identifier::String(string) => AttributeName::from(string),
-            Identifier::Int(integer) => AttributeName::from(integer.to_string()),
+        Ok(match Identifier::from(AttributeName::from(value)) {
+            Identifier::String(string) => {
+                AttributeNameView::from(IdentifierView::String(string.into()))
+            }
+            Identifier::Int(integer) => {
+                AttributeNameView::from(IdentifierView::String(integer.to_string().into()))
+            }
         })
     }
 }

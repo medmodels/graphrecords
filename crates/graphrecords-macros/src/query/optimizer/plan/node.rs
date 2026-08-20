@@ -1,4 +1,4 @@
-use super::PlanModel;
+use super::{PlanModel, with_bounds};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Result};
@@ -9,23 +9,33 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
         generics,
         crate_path,
         inputs,
+        arguments,
+        argument_types,
         payload,
         ..
     } = PlanModel::parse(input)?;
 
-    let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
+    let generics = with_bounds(
+        &generics,
+        &argument_types,
+        &quote!(#crate_path::optimizer::PlanInputs),
+    );
 
-    let payload_eq = payload.clone();
-    let payload_hash = payload;
+    let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics #crate_path::optimizer::PlanNode for #ident #type_generics #where_clause {
             fn inputs(&self) -> ::std::vec::Vec<&dyn #crate_path::optimizer::PlanNode> {
-                let mut inputs: ::std::vec::Vec<&dyn #crate_path::optimizer::PlanNode> =
-                    ::std::vec::Vec::new();
-                #( inputs.push(#crate_path::Operand::context(&self.#inputs)); )*
-                inputs
+                let mut nodes: ::std::vec::Vec<&dyn #crate_path::optimizer::PlanNode> =
+                    ::std::vec![ #( #crate_path::Expression::as_plan_node(&self.#inputs), )* ];
+                #(
+                    nodes.extend(
+                        #crate_path::optimizer::PlanInputs::inputs(&self.#arguments),
+                    );
+                )*
+
+                nodes
             }
 
             fn dyn_eq(&self, other: &dyn #crate_path::optimizer::PlanNode) -> bool {
@@ -34,7 +44,7 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
                 };
 
                 #(
-                    if self.#payload_eq != other.#payload_eq {
+                    if self.#payload != other.#payload {
                         return false;
                     }
                 )*
@@ -49,7 +59,7 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
 
             fn dyn_hash(&self, mut state: &mut dyn ::core::hash::Hasher) {
                 ::core::hash::Hash::hash(&::core::any::Any::type_id(self), &mut state);
-                #( ::core::hash::Hash::hash(&self.#payload_hash, &mut state); )*
+                #( ::core::hash::Hash::hash(&self.#payload, &mut state); )*
 
                 for input in #crate_path::optimizer::PlanNode::inputs(self) {
                     #crate_path::optimizer::PlanNode::dyn_hash(input, state);

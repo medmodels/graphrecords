@@ -1,11 +1,10 @@
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, QueryResult,
     capabilities::ValueClip,
     element::{Pipeline, Retention},
     execution::EvaluationCache,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
-        Prepare, Unaligned,
+        ArgumentSource, Build, ElementKernel, ElementPipeline, Keyed, Operation, Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::{describe::ArgumentRetention, operation_manifest},
@@ -33,7 +32,7 @@ impl<L: Prepare, U: Prepare> Prepare for ClipOperation<L, U> {
     fn prepare<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok((
             self.lower.prepare(graphrecord, cache)?,
@@ -53,10 +52,10 @@ where
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(Pipeline::keyed(move |index, item| {
+        Ok(Pipeline::keyed(move |address, item| {
             let value = match item {
                 Ok(value) => value,
                 Err(failure) => {
@@ -64,15 +63,15 @@ where
                 }
             };
 
-            let lower = L::resolve(&prepared.0, &index, Self::LABEL);
+            let lower = L::resolve(graphrecord, &prepared.0, &address, Self::LABEL);
 
             L::Retention::and_then(lower, |lower| {
-                let upper = U::resolve(&prepared.1, &index, Self::LABEL);
+                let upper = U::resolve(graphrecord, &prepared.1, &address, Self::LABEL);
 
                 U::Retention::map_step(upper, |upper| {
                     upper.and_then(|upper| {
-                        V::clip(Self::LABEL, value, lower, upper)
-                            .map_err(|failure| failure.at::<I>(&index))
+                        V::clip(value, lower, upper, Self::LABEL)
+                            .map_err(|failure| failure.at_address::<I>(graphrecord, &address))
                     })
                 })
             })
@@ -94,7 +93,7 @@ where
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         Ok(Pipeline::new(move |item| {
@@ -105,13 +104,13 @@ where
                 }
             };
 
-            let lower = L::resolve(&prepared.0, &(), Self::LABEL);
+            let lower = L::resolve(graphrecord, &prepared.0, &(), Self::LABEL);
 
             L::Retention::and_then(lower, |lower| {
-                let upper = U::resolve(&prepared.1, &(), Self::LABEL);
+                let upper = U::resolve(graphrecord, &prepared.1, &(), Self::LABEL);
 
                 U::Retention::map_step(upper, |upper| {
-                    upper.and_then(|upper| V::clip(Self::LABEL, value, lower, upper))
+                    upper.and_then(|upper| V::clip(value, lower, upper, Self::LABEL))
                 })
             })
         }))
@@ -122,18 +121,15 @@ where
     }
 }
 
-impl<O, L, U> Clip<L, U> for O
+impl<E, L, U> Clip<L, U> for E
 where
     ClipOperation<L, U>: Operation,
-    O: Apply<ClipOperation<L, U>>,
+    E: Build<ClipOperation<L, U>>,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn clip(&self, lower: L, upper: U) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            ClipOperation { lower, upper },
-        ))
+    fn clip(&self, lower: L, upper: U) -> Self::Output {
+        self.build(ClipOperation { lower, upper })
     }
 }
 

@@ -34,7 +34,7 @@ impl DomainDescriptor {
 pub enum IndexDescriptor {
     Domain(DomainDescriptor),
     Expanded { parent: Box<Self>, child: Box<Self> },
-    ExpandedSource { parent: Box<Self> },
+    ExpandedParent { parent: Box<Self> },
 }
 
 impl IndexDescriptor {
@@ -52,8 +52,8 @@ impl IndexDescriptor {
     }
 
     #[must_use]
-    pub fn expanded_source(parent: Self) -> Self {
-        Self::ExpandedSource {
+    pub fn expanded_parent(parent: Self) -> Self {
+        Self::ExpandedParent {
             parent: Box::new(parent),
         }
     }
@@ -159,7 +159,7 @@ pub enum ArityDescriptor {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum OperandDescriptor {
+pub enum ExpressionDescriptor {
     Lane {
         shape: LaneShapeDescriptor,
         arity: ArityDescriptor,
@@ -171,7 +171,7 @@ pub enum OperandDescriptor {
     },
 }
 
-impl OperandDescriptor {
+impl ExpressionDescriptor {
     #[must_use]
     pub fn lane_shape(&self) -> &LaneShapeDescriptor {
         match self {
@@ -232,7 +232,7 @@ pub enum RetentionDescriptor {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ArgumentValueSource {
     Literal(ValueDescriptor),
-    Operand(OperandDescriptor),
+    Expression(ExpressionDescriptor),
 }
 
 impl ArgumentValueSource {
@@ -240,7 +240,7 @@ impl ArgumentValueSource {
     pub fn value(&self) -> &ValueDescriptor {
         match self {
             Self::Literal(value) => value,
-            Self::Operand(operand) => operand.lane_shape().value(),
+            Self::Expression(expression) => expression.lane_shape().value(),
         }
     }
 }
@@ -268,9 +268,9 @@ impl ValueArgumentDescriptor {
     }
 
     #[must_use]
-    pub const fn operand(operand: OperandDescriptor) -> Self {
+    pub const fn expression(expression: ExpressionDescriptor) -> Self {
         Self {
-            source: ArgumentValueSource::Operand(operand),
+            source: ArgumentValueSource::Expression(expression),
             missing: ArgumentMissingPolicy::None,
         }
     }
@@ -314,7 +314,7 @@ pub enum ArgumentDescriptor {
     Value(ValueArgumentDescriptor),
     Field(DomainDescriptor),
     Selector(DomainDescriptor),
-    Operand(OperandDescriptor),
+    Expression(ExpressionDescriptor),
 }
 
 impl ArgumentDescriptor {

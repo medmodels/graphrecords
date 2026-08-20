@@ -1,8 +1,7 @@
 use crate::{
-    Bare, BareValueDomain, Diagnostic, ErrorGroup, Explain, IndexDomain, Indexed, Labeled, Operand,
-    QueryResult, ValueDomain,
+    Bare, BareValueDomain, Diagnostic, ErrorGroup, Explain, Expression, IndexDomain, Indexed,
+    Labeled, QueryResult, ValueDomain,
     element::{Pipeline, Retention},
-    execution::EvaluationCache,
     explain::ExplainFormatter,
     operations::{
         Apply, ArgumentSource, ElementKernel, ElementPipeline, ErrorPolicy, ErrorPolicyIn,
@@ -21,30 +20,35 @@ use std::{
     marker::PhantomData,
 };
 
-#[derive(Clone, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(Clone, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Element)]
 #[plan(optimizer_hints(empty = if_all))]
-pub struct Replace<A> {
+pub struct Replace<R> {
     #[argument]
-    replacement: A,
+    replacement: R,
 }
 
-impl<A> Replace<A> {
+impl<R> Replace<R> {
     #[must_use]
-    pub const fn new(replacement: A) -> Self {
+    pub const fn new(replacement: R) -> Self {
         Self { replacement }
     }
-
-    pub(crate) const fn replacement(&self) -> &A {
-        &self.replacement
-    }
 }
 
-impl<A> Labeled for Replace<A> {
+impl<R> Labeled for Replace<R> {
     const LABEL: &'static str = "Replace";
 }
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+impl<R: Explain> Explain for Replace<R> {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        formatter.write_str(Self::LABEL)?;
+        formatter.labeled_child(&self.replacement, "replacement");
+
+        Ok(())
+    }
+}
+
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Element)]
 #[plan(optimizer_hints(empty = if_all))]
 pub struct ReplaceErrorsOf<D: Diagnostic, R> {
@@ -78,13 +82,13 @@ impl<D: Diagnostic, R: Clone> Clone for ReplaceErrorsOf<D, R> {
 impl<D: Diagnostic, R: Explain> Explain for ReplaceErrorsOf<D, R> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         write!(formatter, "{} kind={}", Self::LABEL, D::name())?;
-        formatter.labeled_child("replacement", &self.replacement);
+        formatter.labeled_child(&self.replacement, "replacement");
 
         Ok(())
     }
 }
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Element)]
 #[plan(optimizer_hints(empty = if_all))]
 pub struct ReplaceErrorsIn<G: ErrorGroup, R> {
@@ -118,26 +122,26 @@ impl<G: ErrorGroup, R: Clone> Clone for ReplaceErrorsIn<G, R> {
 impl<G: ErrorGroup, R: Explain> Explain for ReplaceErrorsIn<G, R> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         write!(formatter, "{} group={}", Self::LABEL, G::name())?;
-        formatter.labeled_child("replacement", &self.replacement);
+        formatter.labeled_child(&self.replacement, "replacement");
 
         Ok(())
     }
 }
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Element)]
 #[plan(optimizer_hints(empty = if_all))]
-pub struct ReplaceErrorsWithCause<C: Error + 'static, R> {
+pub struct ReplaceErrorsWithCause<E: Error + 'static, R> {
     #[argument]
     replacement: R,
-    marker: PhantomData<fn() -> C>,
+    marker: PhantomData<fn() -> E>,
 }
 
-impl<C: Error + 'static, R> Labeled for ReplaceErrorsWithCause<C, R> {
+impl<E: Error + 'static, R> Labeled for ReplaceErrorsWithCause<E, R> {
     const LABEL: &'static str = "ReplaceErrorsWithCause";
 }
 
-impl<C: Error + 'static, R> ReplaceErrorsWithCause<C, R> {
+impl<E: Error + 'static, R> ReplaceErrorsWithCause<E, R> {
     const fn new(replacement: R) -> Self {
         Self {
             replacement,
@@ -146,7 +150,7 @@ impl<C: Error + 'static, R> ReplaceErrorsWithCause<C, R> {
     }
 }
 
-impl<C: Error + 'static, R: Clone> Clone for ReplaceErrorsWithCause<C, R> {
+impl<E: Error + 'static, R: Clone> Clone for ReplaceErrorsWithCause<E, R> {
     fn clone(&self) -> Self {
         Self {
             replacement: self.replacement.clone(),
@@ -155,81 +159,12 @@ impl<C: Error + 'static, R: Clone> Clone for ReplaceErrorsWithCause<C, R> {
     }
 }
 
-impl<C: Error + 'static, R: Explain> Explain for ReplaceErrorsWithCause<C, R> {
+impl<E: Error + 'static, R: Explain> Explain for ReplaceErrorsWithCause<E, R> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "{} cause={}", Self::LABEL, type_name::<C>())?;
-        formatter.labeled_child("replacement", &self.replacement);
+        write!(formatter, "{} cause={}", Self::LABEL, type_name::<E>())?;
+        formatter.labeled_child(&self.replacement, "replacement");
 
         Ok(())
-    }
-}
-
-impl<A: Explain> Explain for Replace<A> {
-    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        formatter.write_str(Self::LABEL)?;
-        formatter.labeled_child("replacement", &self.replacement);
-
-        Ok(())
-    }
-}
-
-impl<R: Prepare> Prepare for Replace<R> {
-    type Prepared<'a>
-        = R::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.replacement.prepare(graphrecord, cache)
-    }
-}
-
-impl<D: Diagnostic, R: Prepare> Prepare for ReplaceErrorsOf<D, R> {
-    type Prepared<'a>
-        = R::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.replacement.prepare(graphrecord, cache)
-    }
-}
-
-impl<G: ErrorGroup, R: Prepare> Prepare for ReplaceErrorsIn<G, R> {
-    type Prepared<'a>
-        = R::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.replacement.prepare(graphrecord, cache)
-    }
-}
-
-impl<C: Error + 'static, R: Prepare> Prepare for ReplaceErrorsWithCause<C, R> {
-    type Prepared<'a>
-        = R::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.replacement.prepare(graphrecord, cache)
     }
 }
 
@@ -243,15 +178,15 @@ where
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
-        Ok(Pipeline::keyed(move |index, result| match result {
+        Ok(Pipeline::keyed(move |address, result| match result {
             Ok(value) => Self::Emission::keep(Ok(value)),
             Err(original) => {
-                let step = R::resolve(&prepared, &index, label);
+                let step = R::resolve(graphrecord, &prepared, &address, label);
 
                 Self::Emission::map_step(step, |replacement| match replacement {
                     Ok(value) => Ok(value),
@@ -271,7 +206,7 @@ where
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
@@ -279,7 +214,7 @@ where
         Ok(Pipeline::new(move |result| match result {
             Ok(value) => Self::Emission::keep(Ok(value)),
             Err(original) => {
-                let step = R::resolve(&prepared, &(), label);
+                let step = R::resolve(graphrecord, &prepared, &(), label);
 
                 Self::Emission::map_step(step, |replacement| match replacement {
                     Ok(value) => Ok(value),
@@ -301,15 +236,15 @@ where
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::keyed(
-            move |index, result: QueryResult<_>| match result {
+            move |address, result: QueryResult<_>| match result {
                 Err(original) if original.is_kind::<D>() => {
-                    let step = R::resolve(&prepared, &index, label);
+                    let step = R::resolve(graphrecord, &prepared, &address, label);
 
                     Self::Emission::map_step(step, |replacement| match replacement {
                         Ok(value) => Ok(value),
@@ -332,14 +267,14 @@ where
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::new(move |result: QueryResult<_>| match result {
             Err(original) if original.is_kind::<D>() => {
-                let step = R::resolve(&prepared, &(), label);
+                let step = R::resolve(graphrecord, &prepared, &(), label);
 
                 Self::Emission::map_step(step, |replacement| match replacement {
                     Ok(value) => Ok(value),
@@ -362,15 +297,15 @@ where
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::keyed(
-            move |index, result: QueryResult<_>| match result {
+            move |address, result: QueryResult<_>| match result {
                 Err(original) if G::contains(&original.kind()) => {
-                    let step = R::resolve(&prepared, &index, label);
+                    let step = R::resolve(graphrecord, &prepared, &address, label);
 
                     Self::Emission::map_step(step, |replacement| match replacement {
                         Ok(value) => Ok(value),
@@ -393,14 +328,14 @@ where
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::new(move |result: QueryResult<_>| match result {
             Err(original) if G::contains(&original.kind()) => {
-                let step = R::resolve(&prepared, &(), label);
+                let step = R::resolve(graphrecord, &prepared, &(), label);
 
                 Self::Emission::map_step(step, |replacement| match replacement {
                     Ok(value) => Ok(value),
@@ -412,26 +347,26 @@ where
     }
 }
 
-impl<I, V, C, R> ElementKernel<Indexed<I, V>> for ReplaceErrorsWithCause<C, R>
+impl<I, V, E, R> ElementKernel<Indexed<I, V>> for ReplaceErrorsWithCause<E, R>
 where
     I: IndexDomain,
     V: ValueDomain,
-    C: Error + 'static,
+    E: Error + 'static,
     R: ArgumentSource<Keyed<I>, V>,
 {
     type Emission = R::Retention;
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::keyed(
-            move |index, result: QueryResult<_>| match result {
-                Err(original) if original.has_cause::<C>() => {
-                    let step = R::resolve(&prepared, &index, label);
+            move |address, result: QueryResult<_>| match result {
+                Err(original) if original.has_cause::<E>() => {
+                    let step = R::resolve(graphrecord, &prepared, &address, label);
 
                     Self::Emission::map_step(step, |replacement| match replacement {
                         Ok(value) => Ok(value),
@@ -444,24 +379,24 @@ where
     }
 }
 
-impl<V, C, R> ElementKernel<Bare<V>> for ReplaceErrorsWithCause<C, R>
+impl<V, E, R> ElementKernel<Bare<V>> for ReplaceErrorsWithCause<E, R>
 where
     V: BareValueDomain,
-    C: Error + 'static,
+    E: Error + 'static,
     R: ArgumentSource<Unaligned, V>,
 {
     type Emission = R::Retention;
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
         let label = Self::LABEL;
 
         Ok(Pipeline::new(move |result: QueryResult<_>| match result {
-            Err(original) if original.has_cause::<C>() => {
-                let step = R::resolve(&prepared, &(), label);
+            Err(original) if original.has_cause::<E>() => {
+                let step = R::resolve(graphrecord, &prepared, &(), label);
 
                 Self::Emission::map_step(step, |replacement| match replacement {
                     Ok(value) => Ok(value),
@@ -473,29 +408,29 @@ where
     }
 }
 
-impl<I, A> ErrorPolicy<I> for Replace<A>
+impl<E, R> ErrorPolicy<E> for Replace<R>
 where
-    A: Clone + 'static,
+    R: Clone + 'static,
     Self: Operation,
-    I: Apply<Self>,
+    E: Apply<Self>,
 {
-    type Output = I::Output;
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(input, self.clone()))
     }
 }
 
-impl<I, D, A> ErrorPolicyOf<I, D> for Replace<A>
+impl<E, D, R> ErrorPolicyOf<E, D> for Replace<R>
 where
     D: Diagnostic,
-    A: Clone + 'static,
-    ReplaceErrorsOf<D, A>: Operation,
-    I: Apply<ReplaceErrorsOf<D, A>>,
+    R: Clone + 'static,
+    ReplaceErrorsOf<D, R>: Operation,
+    E: Apply<ReplaceErrorsOf<D, R>>,
 {
-    type Output = I::Output;
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(
             input,
             ReplaceErrorsOf::new(self.replacement.clone()),
@@ -503,16 +438,16 @@ where
     }
 }
 
-impl<I, G, A> ErrorPolicyIn<I, G> for Replace<A>
+impl<E, G, R> ErrorPolicyIn<E, G> for Replace<R>
 where
     G: ErrorGroup,
-    A: Clone + 'static,
-    ReplaceErrorsIn<G, A>: Operation,
-    I: Apply<ReplaceErrorsIn<G, A>>,
+    R: Clone + 'static,
+    ReplaceErrorsIn<G, R>: Operation,
+    E: Apply<ReplaceErrorsIn<G, R>>,
 {
-    type Output = I::Output;
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(
             input,
             ReplaceErrorsIn::new(self.replacement.clone()),
@@ -520,16 +455,16 @@ where
     }
 }
 
-impl<I, C, A> ErrorPolicyWithCause<I, C> for Replace<A>
+impl<E, C, R> ErrorPolicyWithCause<E, C> for Replace<R>
 where
     C: Error + 'static,
-    A: Clone + 'static,
-    ReplaceErrorsWithCause<C, A>: Operation,
-    I: Apply<ReplaceErrorsWithCause<C, A>>,
+    R: Clone + 'static,
+    ReplaceErrorsWithCause<C, R>: Operation,
+    E: Apply<ReplaceErrorsWithCause<C, R>>,
 {
-    type Output = I::Output;
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(
             input,
             ReplaceErrorsWithCause::new(self.replacement.clone()),

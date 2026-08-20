@@ -1,47 +1,36 @@
 use super::{numeric_bare, numeric_indexed};
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, QueryResult,
     capabilities::ValueAbsolute,
     element::Preserving,
-    execution::EvaluationCache,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Absolute,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "Absolute")]
 #[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct AbsoluteOperation;
 
-impl Prepare for AbsoluteOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<I, V> ElementKernel<Indexed<I, V>> for AbsoluteOperation
-where
-    I: IndexDomain,
-    V: ValueAbsolute,
-{
+impl<I: IndexDomain, V: ValueAbsolute> ElementKernel<Indexed<I, V>> for AbsoluteOperation {
     type Emission = Preserving;
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(numeric_indexed::<I, V, _>(Self::LABEL, V::absolute))
+        Ok(numeric_indexed::<I, V>(
+            graphrecord,
+            V::absolute,
+            Self::LABEL,
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -49,10 +38,7 @@ where
     }
 }
 
-impl<V> ElementKernel<Bare<V>> for AbsoluteOperation
-where
-    V: ValueAbsolute + BareValueDomain,
-{
+impl<V: ValueAbsolute + BareValueDomain> ElementKernel<Bare<V>> for AbsoluteOperation {
     type Emission = Preserving;
     type OutShape = Bare<V>;
 
@@ -60,7 +46,7 @@ where
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(numeric_bare::<V, _>(Self::LABEL, V::absolute))
+        Ok(numeric_bare::<V>(V::absolute, Self::LABEL))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -68,11 +54,11 @@ where
     }
 }
 
-impl<O: Apply<AbsoluteOperation>> Absolute for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<AbsoluteOperation>> Absolute for E {
+    type Output = E::Output;
 
-    fn abs(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), AbsoluteOperation))
+    fn abs(&self) -> Self::Output {
+        self.build(AbsoluteOperation)
     }
 }
 

@@ -1,61 +1,61 @@
 use crate::operations::EdgeDirection;
 
 pub trait Edges {
-    type ReturnOperand;
+    type Output;
 
-    fn edges(&self, direction: EdgeDirection) -> Self::ReturnOperand;
+    fn edges(&self, direction: EdgeDirection) -> Self::Output;
 }
 
 pub trait Neighbors {
-    type ReturnOperand;
+    type Output;
 
-    fn neighbors(&self, direction: EdgeDirection) -> Self::ReturnOperand;
+    fn neighbors(&self, direction: EdgeDirection) -> Self::Output;
 }
 
 pub trait Nodes {
-    type ReturnOperand;
+    type Output;
 
-    fn nodes(&self) -> Self::ReturnOperand;
+    fn nodes(&self) -> Self::Output;
 }
 
 pub trait SourceNode {
-    type ReturnOperand;
+    type Output;
 
-    fn source_node(&self) -> Self::ReturnOperand;
+    fn source_node(&self) -> Self::Output;
 }
 
 pub trait TargetNode {
-    type ReturnOperand;
+    type Output;
 
-    fn target_node(&self) -> Self::ReturnOperand;
+    fn target_node(&self) -> Self::Output;
 }
 
 pub trait ViaEdges {
-    type ReturnOperand;
+    type Output;
 
-    fn via_edges(&self, direction: EdgeDirection) -> Self::ReturnOperand;
+    fn via_edges(&self, direction: EdgeDirection) -> Self::Output;
 }
 
 pub trait ViaNeighbors {
-    type ReturnOperand;
+    type Output;
 
-    fn via_neighbors(&self, direction: EdgeDirection) -> Self::ReturnOperand;
+    fn via_neighbors(&self, direction: EdgeDirection) -> Self::Output;
 }
 
 pub trait ViaNodes {
-    type ReturnOperand;
+    type Output;
 
-    fn via_nodes(&self) -> Self::ReturnOperand;
+    fn via_nodes(&self) -> Self::Output;
 }
 
 pub trait ViaSourceNode {
-    type ReturnOperand;
+    type Output;
 
-    fn via_source_node(&self) -> Self::ReturnOperand;
+    fn via_source_node(&self) -> Self::Output;
 }
 
 pub trait ViaTargetNode {
-    type ReturnOperand;
+    type Output;
 
-    fn via_target_node(&self) -> Self::ReturnOperand;
+    fn via_target_node(&self) -> Self::Output;
 }

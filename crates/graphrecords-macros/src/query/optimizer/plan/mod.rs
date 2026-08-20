@@ -1,7 +1,7 @@
 pub mod match_inputs;
 pub mod node;
 pub mod operation_inputs;
-pub mod optimize_inputs;
+pub mod optimize_plan;
 pub mod optimizer_hints;
 pub mod plan_identity;
 pub mod plan_inputs;
@@ -10,7 +10,7 @@ use crate::{attribute::FromAttributes, query::resolve_query_crate_path};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    Data, DeriveInput, Error, Fields, Generics, Ident, Index, LitStr, Path, Result, Type,
+    Data, DeriveInput, Error, Generics, Ident, Index, LitStr, Path, Result, Type,
     meta::ParseNestedMeta, parse_quote,
 };
 
@@ -72,14 +72,13 @@ pub struct PlanModel {
     pub ident: Ident,
     pub generics: Generics,
     pub crate_path: Path,
-    pub operand: Option<Type>,
+    pub expression: Option<Type>,
     pub hints: Hints,
     pub inputs: Vec<TokenStream>,
     pub input_types: Vec<Type>,
     pub arguments: Vec<TokenStream>,
     pub argument_types: Vec<Type>,
     pub payload: Vec<TokenStream>,
-    pub is_unit: bool,
 }
 
 impl PlanModel {
@@ -135,14 +134,13 @@ impl PlanModel {
             ident: input.ident.clone(),
             generics: input.generics.clone(),
             crate_path,
-            operand: attribute.operand,
+            expression: attribute.expression,
             hints: attribute.hints,
             inputs,
             input_types,
             arguments,
             argument_types,
             payload,
-            is_unit: matches!(data.fields, Fields::Unit),
         })
     }
 }
@@ -165,7 +163,7 @@ pub fn with_bounds(generics: &Generics, types: &[Type], bound: &TokenStream) -> 
 
 #[derive(Default)]
 struct PlanAttribute {
-    operand: Option<Type>,
+    expression: Option<Type>,
     crate_path: Option<Path>,
     hints: Hints,
 }
@@ -174,8 +172,8 @@ impl FromAttributes for PlanAttribute {
     const NAMESPACE: &'static str = "plan";
 
     fn parse_meta(&mut self, meta: ParseNestedMeta) -> Result<()> {
-        if meta.path.is_ident("operand") {
-            self.operand = Some(meta.value()?.parse::<Type>()?);
+        if meta.path.is_ident("expression") {
+            self.expression = Some(meta.value()?.parse::<Type>()?);
             Ok(())
         } else if meta.path.is_ident("crate") {
             self.crate_path = Some(meta.value()?.parse::<LitStr>()?.parse()?);

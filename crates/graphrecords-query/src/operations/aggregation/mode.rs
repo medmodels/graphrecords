@@ -1,36 +1,23 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
-    OrderState, QueryResult,
+    Bare, BareValueDomain, EvaluateExpression, Explain, IndexDomain, Indexed, Multiple, OrderState,
+    QueryResult,
     capabilities::ValueMode,
-    execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
-    optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
+    expressions::ExpressionHandle,
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
+    optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Mode,
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "Mode")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct ModeOperation;
-
-impl Prepare for ModeOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 fn modal_values<'a, V: ValueMode>(
     values: impl Iterator<Item = QueryResult<V::Value<'a>>>,
@@ -68,38 +55,56 @@ fn modal_values<'a, V: ValueMode>(
 impl<I: IndexDomain, V: ValueMode + BareValueDomain, O: OrderState>
     LaneKernel<Indexed<I, V>, Multiple<O>> for ModeOperation
 {
-    type Output = OperandHandle<Bare<V>, Multiple<O>>;
+    type Output = ExpressionHandle<Bare<V>, Multiple<O>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(Box::new(
             modal_values::<V>(values.map(|(_, value)| value)).into_iter(),
         ))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            elements: None,
+            distinct: input.distinct,
+            selectivity: None,
+            per_group: None,
+        }
     }
 }
 
 impl<V: ValueMode + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
     for ModeOperation
 {
-    type Output = OperandHandle<Bare<V>, Multiple<O>>;
+    type Output = ExpressionHandle<Bare<V>, Multiple<O>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(Box::new(modal_values::<V>(values).into_iter()))
+    }
+
+    fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
+        Estimate {
+            elements: None,
+            distinct: input.distinct,
+            selectivity: None,
+            per_group: None,
+        }
     }
 }
 
-impl<O: Apply<ModeOperation>> Mode for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<ModeOperation>> Mode for E {
+    type Output = E::Output;
 
-    fn mode(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), ModeOperation))
+    fn mode(&self) -> Self::Output {
+        self.build(ModeOperation)
     }
 }
 
@@ -115,7 +120,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Indexed<I, V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Multiple<O>>;
+            output: ExpressionHandle<Bare<V>, Multiple<O>>;
         }
 
         kernel {
@@ -124,7 +129,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Bare<V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Multiple<O>>;
+            output: ExpressionHandle<Bare<V>, Multiple<O>>;
         }
     }
 }

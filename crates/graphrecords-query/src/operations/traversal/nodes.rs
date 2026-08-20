@@ -1,50 +1,44 @@
 use crate::{
-    Definite, EntityReference, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
+    Definite, EntityReference, EvaluateExpression, Explain, IndexDomain, Indexed, Multiple,
     OrderState, QueryResult, Single, Unit, Unordered,
-    execution::EvaluationCache,
-    operands::NodesOperand,
-    operations::{Apply, KeyedStream, LaneKernel, Operation, OperationContext, Prepare},
+    expressions::NodesExpression,
+    index::GroupMembership,
+    operations::{Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     registry::operation_manifest,
     traits::Nodes,
 };
-use graphrecords_core::{GraphRecord, graphrecord::EdgeIndex};
-use graphrecords_utils::aliases::GrHashSet;
-use std::iter::{empty, once};
+use graphrecords_core::{
+    GraphRecord,
+    graphrecord::{EdgeIndex, Group, NodeIndex, StateView},
+};
+use graphrecords_utils::distinct::Distinct;
+use std::iter::empty;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "Nodes")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct NodesOperation;
 
-impl Prepare for NodesOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
 impl<O: OrderState> LaneKernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesOperation {
-    type Output = NodesOperand<Unordered>;
+    type Output = NodesExpression<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, EdgeIndex, Unit, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let mut nodes = GrHashSet::default();
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let state = StateView::of(graphrecord);
+        let mut nodes = Distinct::default();
 
         for (edge, membership) in values {
             membership?;
-            let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
-            nodes.insert(source);
-            nodes.insert(target);
+            let (source, target) = state.edge_endpoints(edge);
+
+            nodes.extend([source, target]);
         }
 
         Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
@@ -52,38 +46,38 @@ impl<O: OrderState> LaneKernel<Indexed<EdgeIndex, Unit>, Multiple<O>> for NodesO
 }
 
 impl LaneKernel<Indexed<EdgeIndex, Unit>, Single> for NodesOperation {
-    type Output = NodesOperand<Unordered>;
+    type Output = NodesExpression<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
         value: KeyedStream<'a, EdgeIndex, Unit, Single>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let Some((edge, membership)) = value else {
             return Ok(Box::new(empty()));
         };
         membership?;
 
-        let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
-        let nodes: GrHashSet<_> = once(source).chain(once(target)).collect();
+        let (source, target) = StateView::of(graphrecord).edge_endpoints(edge);
+        let nodes: Vec<_> = [source, target].into_iter().collect::<Distinct<_>>().into();
 
         Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
     }
 }
 
 impl LaneKernel<Indexed<EdgeIndex, Unit>, Definite> for NodesOperation {
-    type Output = NodesOperand<Unordered>;
+    type Output = NodesExpression<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
         value: KeyedStream<'a, EdgeIndex, Unit, Definite>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let (edge, membership) = value;
         membership?;
 
-        let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
-        let nodes: GrHashSet<_> = once(source).chain(once(target)).collect();
+        let (source, target) = StateView::of(graphrecord).edge_endpoints(edge);
+        let nodes: Vec<_> = [source, target].into_iter().collect::<Distinct<_>>().into();
 
         Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
     }
@@ -92,20 +86,21 @@ impl LaneKernel<Indexed<EdgeIndex, Unit>, Definite> for NodesOperation {
 impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, EntityReference<EdgeIndex>>, Multiple<O>>
     for NodesOperation
 {
-    type Output = NodesOperand<Unordered>;
+    type Output = NodesExpression<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, EntityReference<EdgeIndex>, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let mut nodes = GrHashSet::default();
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let state = StateView::of(graphrecord);
+        let mut nodes = Distinct::default();
 
         for value in values {
             let edge = value.1?;
-            let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
-            nodes.insert(source);
-            nodes.insert(target);
+            let (source, target) = state.edge_endpoints(*edge.address());
+
+            nodes.extend([source, target]);
         }
 
         Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
@@ -113,19 +108,19 @@ impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, EntityReference<EdgeIn
 }
 
 impl<I: IndexDomain> LaneKernel<Indexed<I, EntityReference<EdgeIndex>>, Single> for NodesOperation {
-    type Output = NodesOperand<Unordered>;
+    type Output = NodesExpression<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
         value: KeyedStream<'a, I, EntityReference<EdgeIndex>, Single>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let Some(value) = value else {
             return Ok(Box::new(empty()));
         };
         let edge = value.1?;
-        let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
-        let nodes: GrHashSet<_> = once(source).chain(once(target)).collect();
+        let (source, target) = StateView::of(graphrecord).edge_endpoints(*edge.address());
+        let nodes: Vec<_> = [source, target].into_iter().collect::<Distinct<_>>().into();
 
         Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
     }
@@ -134,26 +129,137 @@ impl<I: IndexDomain> LaneKernel<Indexed<I, EntityReference<EdgeIndex>>, Single> 
 impl<I: IndexDomain> LaneKernel<Indexed<I, EntityReference<EdgeIndex>>, Definite>
     for NodesOperation
 {
-    type Output = NodesOperand<Unordered>;
+    type Output = NodesExpression<Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
         value: KeyedStream<'a, I, EntityReference<EdgeIndex>, Definite>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let edge = value.1?;
-        let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
-        let nodes: GrHashSet<_> = once(source).chain(once(target)).collect();
+        let (source, target) = StateView::of(graphrecord).edge_endpoints(*edge.address());
+        let nodes: Vec<_> = [source, target].into_iter().collect::<Distinct<_>>().into();
 
         Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
     }
 }
 
-impl<O: Apply<NodesOperation>> Nodes for O {
-    type ReturnOperand = O::Output;
+impl<O: OrderState> LaneKernel<Indexed<Group, Unit>, Multiple<O>> for NodesOperation {
+    type Output = NodesExpression<Unordered>;
 
-    fn nodes(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), NodesOperation))
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, Group, Unit, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let mut nodes = Distinct::default();
+
+        for (group, membership) in values {
+            membership?;
+            nodes.extend(NodeIndex::addresses_in_group(graphrecord, group));
+        }
+
+        Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
+    }
+}
+
+impl LaneKernel<Indexed<Group, Unit>, Single> for NodesOperation {
+    type Output = NodesExpression<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, Group, Unit, Single>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let Some((group, membership)) = value else {
+            return Ok(Box::new(empty()));
+        };
+        membership?;
+
+        Ok(Box::new(
+            NodeIndex::addresses_in_group(graphrecord, group).map(|node| (node, Ok(()))),
+        ))
+    }
+}
+
+impl LaneKernel<Indexed<Group, Unit>, Definite> for NodesOperation {
+    type Output = NodesExpression<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, Group, Unit, Definite>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let (group, membership) = value;
+        membership?;
+
+        Ok(Box::new(
+            NodeIndex::addresses_in_group(graphrecord, group).map(|node| (node, Ok(()))),
+        ))
+    }
+}
+
+impl<I: IndexDomain, O: OrderState> LaneKernel<Indexed<I, EntityReference<Group>>, Multiple<O>>
+    for NodesOperation
+{
+    type Output = NodesExpression<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        values: KeyedStream<'a, I, EntityReference<Group>, Multiple<O>>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let mut nodes = Distinct::default();
+
+        for value in values {
+            let group = value.1?;
+            nodes.extend(NodeIndex::addresses_in_group(graphrecord, *group.address()));
+        }
+
+        Ok(Box::new(nodes.into_iter().map(|node| (node, Ok(())))))
+    }
+}
+
+impl<I: IndexDomain> LaneKernel<Indexed<I, EntityReference<Group>>, Single> for NodesOperation {
+    type Output = NodesExpression<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, I, EntityReference<Group>, Single>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let Some(value) = value else {
+            return Ok(Box::new(empty()));
+        };
+        let group = value.1?;
+
+        Ok(Box::new(
+            NodeIndex::addresses_in_group(graphrecord, *group.address()).map(|node| (node, Ok(()))),
+        ))
+    }
+}
+
+impl<I: IndexDomain> LaneKernel<Indexed<I, EntityReference<Group>>, Definite> for NodesOperation {
+    type Output = NodesExpression<Unordered>;
+
+    fn execute<'a>(
+        graphrecord: &'a GraphRecord,
+        value: KeyedStream<'a, I, EntityReference<Group>, Definite>,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let group = value.1?;
+
+        Ok(Box::new(
+            NodeIndex::addresses_in_group(graphrecord, *group.address()).map(|node| (node, Ok(()))),
+        ))
+    }
+}
+
+impl<E: Build<NodesOperation>> Nodes for E {
+    type Output = E::Output;
+
+    fn nodes(&self) -> Self::Output {
+        self.build(NodesOperation)
     }
 }
 
@@ -165,32 +271,73 @@ operation_manifest! {
         kernel {
             parameters: <O: OrderState>;
             input: (Indexed<EdgeIndex, Unit>, Multiple<O>);
-            output: NodesOperand<Unordered>;
+            output: NodesExpression<Unordered>;
         }
+
         kernel {
             parameters: <>;
             input: (Indexed<EdgeIndex, Unit>, Single);
-            output: NodesOperand<Unordered>;
+            output: NodesExpression<Unordered>;
         }
+
         kernel {
             parameters: <>;
             input: (Indexed<EdgeIndex, Unit>, Definite);
-            output: NodesOperand<Unordered>;
+            output: NodesExpression<Unordered>;
         }
+
         kernel {
             parameters: <I: IndexDomain, O: OrderState>;
             input: (Indexed<I, EntityReference<EdgeIndex>>, Multiple<O>);
-            output: NodesOperand<Unordered>;
+            output: NodesExpression<Unordered>;
         }
+
         kernel {
             parameters: <I: IndexDomain>;
             input: (Indexed<I, EntityReference<EdgeIndex>>, Single);
-            output: NodesOperand<Unordered>;
+            output: NodesExpression<Unordered>;
         }
+
         kernel {
             parameters: <I: IndexDomain>;
             input: (Indexed<I, EntityReference<EdgeIndex>>, Definite);
-            output: NodesOperand<Unordered>;
+            output: NodesExpression<Unordered>;
+        }
+
+        kernel {
+            parameters: <O: OrderState>;
+            input: (Indexed<Group, Unit>, Multiple<O>);
+            output: NodesExpression<Unordered>;
+        }
+
+        kernel {
+            parameters: <>;
+            input: (Indexed<Group, Unit>, Single);
+            output: NodesExpression<Unordered>;
+        }
+
+        kernel {
+            parameters: <>;
+            input: (Indexed<Group, Unit>, Definite);
+            output: NodesExpression<Unordered>;
+        }
+
+        kernel {
+            parameters: <I: IndexDomain, O: OrderState>;
+            input: (Indexed<I, EntityReference<Group>>, Multiple<O>);
+            output: NodesExpression<Unordered>;
+        }
+
+        kernel {
+            parameters: <I: IndexDomain>;
+            input: (Indexed<I, EntityReference<Group>>, Single);
+            output: NodesExpression<Unordered>;
+        }
+
+        kernel {
+            parameters: <I: IndexDomain>;
+            input: (Indexed<I, EntityReference<Group>>, Definite);
+            output: NodesExpression<Unordered>;
         }
     }
 }

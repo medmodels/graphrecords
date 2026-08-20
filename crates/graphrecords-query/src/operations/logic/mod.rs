@@ -11,6 +11,7 @@ use crate::{
 };
 pub use and::AndOperation;
 pub use exclusive_or::ExclusiveOrOperation;
+use graphrecords_core::GraphRecord;
 pub use not::NotOperation;
 pub use or::OrOperation;
 
@@ -24,19 +25,20 @@ pub(super) fn operation_manifests() -> Vec<OperationManifest> {
 }
 
 fn combine_masks_indexed<'a, I, M>(
+    graphrecord: &'a GraphRecord,
     prepared: M::Prepared<'a>,
-    label: &'static str,
     operation: fn(bool, bool) -> bool,
+    label: &'static str,
 ) -> IndexedValuePipeline<'a, I, Mask, Mask, M::Retention>
 where
     I: IndexDomain,
     M: ArgumentSource<Keyed<I>, Mask>,
     M::Prepared<'a>: 'a,
 {
-    Pipeline::keyed(move |index, left| match left {
+    Pipeline::keyed(move |address, left| match left {
         Err(failure) => M::Retention::keep(Err(failure)),
         Ok(left) => {
-            let step = M::resolve(&prepared, &index, label);
+            let step = M::resolve(graphrecord, &prepared, &address, label);
 
             M::Retention::map_step(step, |resolved| {
                 resolved.map(|right| operation(left, right))
@@ -46,9 +48,10 @@ where
 }
 
 fn combine_masks_bare<'a, M>(
+    graphrecord: &'a GraphRecord,
     prepared: M::Prepared<'a>,
-    label: &'static str,
     operation: fn(bool, bool) -> bool,
+    label: &'static str,
 ) -> BarePipeline<'a, Mask, Mask, M::Retention>
 where
     M: ArgumentSource<Unaligned, Mask>,
@@ -57,7 +60,7 @@ where
     Pipeline::new(move |left| match left {
         Err(failure) => M::Retention::keep(Err(failure)),
         Ok(left) => {
-            let step = M::resolve(&prepared, &(), label);
+            let step = M::resolve(graphrecord, &prepared, &(), label);
 
             M::Retention::map_step(step, |resolved| {
                 resolved.map(|right| operation(left, right))

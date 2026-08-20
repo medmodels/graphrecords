@@ -1,35 +1,25 @@
 use crate::{
-    EdgeEndpointRole, EntityReference, ExpandedChild, ExpandedIndex, Explain, IndexDomain, Indexed,
-    Operand, Ordered, QueryResult, Unit,
+    EdgeEndpointRole, EntityRef, EntityReference, ExpandedChild, ExpandedIndex, Explain,
+    IndexDomain, Indexed, Ordered, QueryResult, Unit, Unordered,
     element::{Expanding, Pipeline},
-    execution::EvaluationCache,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    index::GroupMembership,
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     registry::operation_manifest,
     traits::ViaNodes,
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, NodeIndex},
+    graphrecord::{EdgeIndex, Group, NodeIndex, StateView},
 };
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "ViaNodes")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct ViaNodesOperation;
-
-impl Prepare for ViaNodesOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl ElementKernel<Indexed<EdgeIndex, Unit>> for ViaNodesOperation {
     type Emission = Expanding<Ordered>;
@@ -39,14 +29,18 @@ impl ElementKernel<Indexed<EdgeIndex, Unit>> for ViaNodesOperation {
         graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<EdgeIndex, Unit>, Self>> {
-        Ok(Pipeline::keyed(move |parent_index, ()| {
-            let (source, target) = graphrecord
-                .edge_endpoints(parent_index)
-                .expect("Edge must exist");
+        Ok(Pipeline::keyed(move |parent_address, ()| {
+            let (source, target) = StateView::of(graphrecord).edge_endpoints(parent_address);
 
             Ok(vec![
-                ExpandedChild::success(EdgeEndpointRole::Source, source),
-                ExpandedChild::success(EdgeEndpointRole::Target, target),
+                ExpandedChild::success(
+                    EdgeEndpointRole::Source,
+                    EntityRef::new(graphrecord, source),
+                ),
+                ExpandedChild::success(
+                    EdgeEndpointRole::Target,
+                    EntityRef::new(graphrecord, target),
+                ),
             ])
         }))
     }
@@ -60,22 +54,60 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<EdgeIndex>>> for V
         graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<EdgeIndex>>, Self>> {
-        Ok(Pipeline::unkeyed(move |edge| {
-            let (source, target) = graphrecord.edge_endpoints(edge).expect("Edge must exist");
+        Ok(Pipeline::unkeyed(move |edge: EntityRef<'a, EdgeIndex>| {
+            let (source, target) = StateView::of(graphrecord).edge_endpoints(*edge.address());
 
             Ok(vec![
-                ExpandedChild::success(EdgeEndpointRole::Source, source),
-                ExpandedChild::success(EdgeEndpointRole::Target, target),
+                ExpandedChild::success(
+                    EdgeEndpointRole::Source,
+                    EntityRef::new(graphrecord, source),
+                ),
+                ExpandedChild::success(
+                    EdgeEndpointRole::Target,
+                    EntityRef::new(graphrecord, target),
+                ),
             ])
         }))
     }
 }
 
-impl<O: Apply<ViaNodesOperation>> ViaNodes for O {
-    type ReturnOperand = O::Output;
+impl ElementKernel<Indexed<Group, Unit>> for ViaNodesOperation {
+    type Emission = Expanding<Unordered>;
+    type OutShape = Indexed<ExpandedIndex<Group, NodeIndex>, EntityReference<NodeIndex>>;
 
-    fn via_nodes(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), ViaNodesOperation))
+    fn pipeline<'a>(
+        graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<Group, Unit>, Self>> {
+        Ok(Pipeline::keyed(move |parent_address, ()| {
+            Ok(NodeIndex::addresses_in_group(graphrecord, parent_address)
+                .map(|node| ExpandedChild::success(node, EntityRef::new(graphrecord, node)))
+                .collect())
+        }))
+    }
+}
+
+impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<Group>>> for ViaNodesOperation {
+    type Emission = Expanding<Unordered>;
+    type OutShape = Indexed<ExpandedIndex<I, NodeIndex>, EntityReference<NodeIndex>>;
+
+    fn pipeline<'a>(
+        graphrecord: &'a GraphRecord,
+        _prepared: Self::Prepared<'a>,
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<Group>>, Self>> {
+        Ok(Pipeline::unkeyed(move |group: EntityRef<'a, Group>| {
+            Ok(NodeIndex::addresses_in_group(graphrecord, *group.address())
+                .map(|node| ExpandedChild::success(node, EntityRef::new(graphrecord, node)))
+                .collect())
+        }))
+    }
+}
+
+impl<E: Build<ViaNodesOperation>> ViaNodes for E {
+    type Output = E::Output;
+
+    fn via_nodes(&self) -> Self::Output {
+        self.build(ViaNodesOperation)
     }
 }
 
@@ -96,6 +128,20 @@ operation_manifest! {
             input: Indexed<I, EntityReference<EdgeIndex>>;
             output: Indexed<ExpandedIndex<I, EdgeEndpointRole>, EntityReference<NodeIndex>>;
             emission: Expanding<Ordered>;
+        }
+
+        kernel {
+            parameters: <>;
+            input: Indexed<Group, Unit>;
+            output: Indexed<ExpandedIndex<Group, NodeIndex>, EntityReference<NodeIndex>>;
+            emission: Expanding<Unordered>;
+        }
+
+        kernel {
+            parameters: <I: IndexDomain>;
+            input: Indexed<I, EntityReference<Group>>;
+            output: Indexed<ExpandedIndex<I, NodeIndex>, EntityReference<NodeIndex>>;
+            emission: Expanding<Unordered>;
         }
     }
 }

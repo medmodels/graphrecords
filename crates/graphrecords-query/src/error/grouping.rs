@@ -46,6 +46,27 @@ impl Diagnostic for InvalidPartitionBucketArity {
 }
 
 #[derive(Debug)]
+pub struct MissingGroupBucket;
+
+impl Display for MissingGroupBucket {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str("no group for the element's key")
+    }
+}
+
+impl Error for MissingGroupBucket {}
+
+impl Diagnostic for MissingGroupBucket {
+    fn name() -> &'static str {
+        "MissingGroupBucket"
+    }
+
+    fn help(&self) -> Option<String> {
+        Some("broadcast over keys the partition holds".to_string())
+    }
+}
+
+#[derive(Debug)]
 pub struct MissingGroupAggregate;
 
 impl Display for MissingGroupAggregate {
