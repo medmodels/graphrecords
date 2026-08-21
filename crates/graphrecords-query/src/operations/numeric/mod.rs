@@ -22,6 +22,7 @@ pub use clip::ClipOperation;
 pub use cube_root::CubeRootOperation;
 pub use exponential::ExponentialOperation;
 pub use floor::FloorOperation;
+use graphrecords_core::GraphRecord;
 pub use logarithm::LogarithmOperation;
 pub use negate::NegateOperation;
 pub use round::RoundOperation;
@@ -44,24 +45,32 @@ pub(super) fn operation_manifests() -> Vec<OperationManifest> {
     ]
 }
 
-fn numeric_indexed<'a, I, V, F>(
+type NumericFunction<'a, V> =
+    fn(<V as ValueDomain>::Value<'a>, &'static str) -> QueryResult<<V as ValueDomain>::Value<'a>>;
+
+fn numeric_indexed<'a, I, V>(
+    graphrecord: &'a GraphRecord,
+    operation: NumericFunction<'a, V>,
     label: &'static str,
-    operation: F,
 ) -> IndexedValuePipeline<'a, I, V, V, Preserving>
 where
     I: IndexDomain,
     V: ValueDomain,
-    F: Fn(&'static str, V::Value<'a>) -> QueryResult<V::Value<'a>> + 'a,
 {
-    Pipeline::keyed(move |index, item: QueryResult<_>| {
-        item.and_then(|value| operation(label, value).map_err(|failure| failure.at::<I>(&index)))
+    Pipeline::keyed(move |address, item: QueryResult<_>| {
+        item.and_then(|value| {
+            operation(value, label)
+                .map_err(|failure| failure.at_address::<I>(graphrecord, &address))
+        })
     })
 }
 
-fn numeric_bare<'a, V, F>(label: &'static str, operation: F) -> BarePipeline<'a, V, V, Preserving>
+fn numeric_bare<'a, V>(
+    operation: NumericFunction<'a, V>,
+    label: &'static str,
+) -> BarePipeline<'a, V, V, Preserving>
 where
     V: ValueDomain,
-    F: Fn(&'static str, V::Value<'a>) -> QueryResult<V::Value<'a>> + 'a,
 {
-    Pipeline::new(move |item: QueryResult<_>| item.and_then(|value| operation(label, value)))
+    Pipeline::new(move |item: QueryResult<_>| item.and_then(|value| operation(value, label)))
 }

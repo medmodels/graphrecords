@@ -1,56 +1,40 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Labeled, Multiple,
-    Operand, OrderState, QueryResult, Single,
+    Bare, BareValueDomain, EvaluateExpression, Explain, IndexDomain, Indexed, Labeled, Multiple,
+    OrderState, QueryResult, Single,
     capabilities::ValueMultiply,
-    execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    expressions::ExpressionHandle,
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Product,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "Product")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct ProductOperation;
 
-impl Prepare for ProductOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for ProductOperation
-where
-    I: IndexDomain,
-    V: ValueMultiply + BareValueDomain,
-    O: OrderState,
+impl<I: IndexDomain, V: ValueMultiply + BareValueDomain, O: OrderState>
+    LaneKernel<Indexed<I, V>, Multiple<O>> for ProductOperation
 {
-    type Output = OperandHandle<Bare<V>, Single>;
+    type Output = ExpressionHandle<Bare<V>, Single>;
 
     fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         mut values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let product = values.try_fold(None, |product, (index, value)| {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let product = values.try_fold(None, |product, (address, value)| {
             let value = value?;
 
             match product {
-                Some(product) => V::multiply(Self::LABEL, product, value)
+                Some(product) => V::multiply(product, value, Self::LABEL)
                     .map(Some)
-                    .map_err(|failure| failure.at::<I>(&index)),
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address)),
                 None => Ok(Some(value)),
             }
         });
@@ -63,23 +47,21 @@ where
     }
 }
 
-impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for ProductOperation
-where
-    V: ValueMultiply + BareValueDomain,
-    O: OrderState,
+impl<V: ValueMultiply + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+    for ProductOperation
 {
-    type Output = OperandHandle<Bare<V>, Single>;
+    type Output = ExpressionHandle<Bare<V>, Single>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         mut values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let product = values.try_fold(None, |product, value| {
             let value = value?;
 
             match product {
-                Some(product) => V::multiply(Self::LABEL, product, value).map(Some),
+                Some(product) => V::multiply(product, value, Self::LABEL).map(Some),
                 None => Ok(Some(value)),
             }
         });
@@ -92,11 +74,11 @@ where
     }
 }
 
-impl<O: Apply<ProductOperation>> Product for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<ProductOperation>> Product for E {
+    type Output = E::Output;
 
-    fn product(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), ProductOperation))
+    fn product(&self) -> Self::Output {
+        self.build(ProductOperation)
     }
 }
 
@@ -112,7 +94,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Indexed<I, V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Single>;
+            output: ExpressionHandle<Bare<V>, Single>;
         }
 
         kernel {
@@ -121,7 +103,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Bare<V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Single>;
+            output: ExpressionHandle<Bare<V>, Single>;
         }
     }
 }

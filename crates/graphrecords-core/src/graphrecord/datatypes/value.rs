@@ -5,7 +5,7 @@ use super::{
 use crate::errors::{GraphRecordError, GraphRecordResult, ValueOperation};
 use chrono::{DateTime, NaiveDateTime, TimeDelta};
 use graphrecords_utils::implement_from_for_wrapper;
-#[cfg(feature = "serde")]
+#[cfg(any(feature = "serde", feature = "io"))]
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
@@ -15,8 +15,8 @@ use std::{
 };
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum GraphRecordValue {
+#[cfg_attr(any(feature = "serde", feature = "io"), derive(Serialize, Deserialize))]
+pub enum Value {
     String(String),
     Int(i64),
     Float(f64),
@@ -27,21 +27,21 @@ pub enum GraphRecordValue {
     Null,
 }
 
-impl From<&str> for GraphRecordValue {
+impl From<&str> for Value {
     fn from(value: &str) -> Self {
         value.to_string().into()
     }
 }
 
 // TODO: Add tests for Duration
-implement_from_for_wrapper!(GraphRecordValue, String, String);
-implement_from_for_wrapper!(GraphRecordValue, i64, Int);
-implement_from_for_wrapper!(GraphRecordValue, f64, Float);
-implement_from_for_wrapper!(GraphRecordValue, bool, Bool);
-implement_from_for_wrapper!(GraphRecordValue, NaiveDateTime, DateTime);
-implement_from_for_wrapper!(GraphRecordValue, TimeDelta, Duration);
+implement_from_for_wrapper!(Value, String, String);
+implement_from_for_wrapper!(Value, i64, Int);
+implement_from_for_wrapper!(Value, f64, Float);
+implement_from_for_wrapper!(Value, bool, Bool);
+implement_from_for_wrapper!(Value, NaiveDateTime, DateTime);
+implement_from_for_wrapper!(Value, TimeDelta, Duration);
 
-impl<T> From<Option<T>> for GraphRecordValue
+impl<T> From<Option<T>> for Value
 where
     T: Into<Self>,
 {
@@ -53,7 +53,7 @@ where
     }
 }
 
-fn canonicalize_float(value: f64) -> f64 {
+pub(super) fn collapse_nan_and_negative_zero(value: f64) -> f64 {
     if value.is_nan() {
         f64::NAN
     } else if value == 0.0 {
@@ -63,13 +63,13 @@ fn canonicalize_float(value: f64) -> f64 {
     }
 }
 
-fn int_float_eq(int_value: i64, float_value: f64) -> bool {
-    let converted = int_value as f64;
+pub(super) fn int_float_eq(int_value: i64, float_value: f64) -> bool {
+    let int_as_float = int_value as f64;
 
-    converted == float_value && converted as i64 == int_value
+    int_as_float == float_value && int_as_float as i64 == int_value
 }
 
-fn int_float_cmp(int_value: i64, float_value: f64) -> Option<Ordering> {
+pub(super) fn int_float_cmp(int_value: i64, float_value: f64) -> Option<Ordering> {
     if float_value.is_nan() {
         return None;
     }
@@ -80,7 +80,7 @@ fn int_float_cmp(int_value: i64, float_value: f64) -> Option<Ordering> {
     }
 }
 
-impl PartialEq for GraphRecordValue {
+impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::String(value), Self::String(other)) => value == other,
@@ -105,9 +105,9 @@ impl PartialEq for GraphRecordValue {
     }
 }
 
-impl Eq for GraphRecordValue {}
+impl Eq for Value {}
 
-impl GraphRecordValue {
+impl Value {
     const fn variant_rank(&self) -> u8 {
         match self {
             Self::Null => 0,
@@ -147,15 +147,17 @@ impl GraphRecordValue {
     }
 }
 
-impl Hash for GraphRecordValue {
+impl Hash for Value {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.hash_discriminant(state);
         match self {
             Self::Int(value) => {
-                canonicalize_float(*value as f64).to_bits().hash(state);
+                collapse_nan_and_negative_zero(*value as f64)
+                    .to_bits()
+                    .hash(state);
             }
             Self::Float(value) => {
-                canonicalize_float(*value).to_bits().hash(state);
+                collapse_nan_and_negative_zero(*value).to_bits().hash(state);
             }
             Self::String(value) => value.hash(state),
             Self::Bool(value) => value.hash(state),
@@ -167,7 +169,7 @@ impl Hash for GraphRecordValue {
 }
 
 // TODO: Add tests for Duration
-impl PartialOrd for GraphRecordValue {
+impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
             (Self::String(value), Self::String(other)) => Some(value.cmp(other)),
@@ -193,7 +195,7 @@ impl PartialOrd for GraphRecordValue {
 }
 
 // TODO: Add tests for Duration
-impl Display for GraphRecordValue {
+impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::String(value) => write!(f, "\"{value}\""),
@@ -208,7 +210,7 @@ impl Display for GraphRecordValue {
 }
 
 // TODO: Add tests for Duration
-impl Add for GraphRecordValue {
+impl Add for Value {
     type Output = GraphRecordResult<Self>;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -218,9 +220,8 @@ impl Add for GraphRecordValue {
             (Self::Int(value), Self::Float(rhs)) => Ok(Self::Float(value as f64 + rhs)),
             (Self::Float(value), Self::Int(rhs)) => Ok(Self::Float(value + rhs as f64)),
             (Self::Float(value), Self::Float(rhs)) => Ok(Self::Float(value + rhs)),
-            (Self::DateTime(value), Self::DateTime(rhs)) => Ok(DateTime::from_timestamp(
-                value.and_utc().timestamp() + rhs.and_utc().timestamp(),
-                0,
+            (Self::DateTime(value), Self::DateTime(rhs)) => Ok(DateTime::from_timestamp_micros(
+                value.and_utc().timestamp_micros() + rhs.and_utc().timestamp_micros(),
             )
             .ok_or(GraphRecordError::InvalidTimestamp)?
             .naive_utc()
@@ -237,7 +238,7 @@ impl Add for GraphRecordValue {
 }
 
 // TODO: Add tests for Duration
-impl Sub for GraphRecordValue {
+impl Sub for Value {
     type Output = GraphRecordResult<Self>;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -262,17 +263,27 @@ impl Sub for GraphRecordValue {
     }
 }
 
-impl Mul for GraphRecordValue {
+impl Mul for Value {
     type Output = GraphRecordResult<Self>;
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::String(value), Self::Int(other)) => Ok(Self::String(
-                value.repeat(usize::try_from(other).unwrap_or(0)),
-            )),
-            (Self::Int(value), Self::String(other)) => Ok(Self::String(
-                other.repeat(usize::try_from(value).unwrap_or(0)),
-            )),
+            (Self::String(value), Self::Int(other)) => match usize::try_from(other) {
+                Ok(count) => Ok(Self::String(value.repeat(count))),
+                Err(_) => Err(GraphRecordError::IncompatibleValueOperands {
+                    operation: ValueOperation::Multiply,
+                    left: Self::String(value),
+                    right: Self::Int(other),
+                }),
+            },
+            (Self::Int(value), Self::String(other)) => match usize::try_from(value) {
+                Ok(count) => Ok(Self::String(other.repeat(count))),
+                Err(_) => Err(GraphRecordError::IncompatibleValueOperands {
+                    operation: ValueOperation::Multiply,
+                    left: Self::Int(value),
+                    right: Self::String(other),
+                }),
+            },
             (Self::Int(value), Self::Int(other)) => Ok(Self::Int(value * other)),
             (Self::Int(value), Self::Float(other)) => Ok(Self::Float(value as f64 * other)),
             (Self::Int(value), Self::Duration(other)) => Ok((other * (value as i32)).into()),
@@ -288,7 +299,7 @@ impl Mul for GraphRecordValue {
     }
 }
 
-impl Div for GraphRecordValue {
+impl Div for Value {
     type Output = GraphRecordResult<Self>;
 
     fn div(self, rhs: Self) -> Self::Output {
@@ -307,13 +318,17 @@ impl Div for GraphRecordValue {
     }
 }
 
-impl Pow for GraphRecordValue {
-    fn pow(self, exp: Self) -> GraphRecordResult<Self> {
-        match (self, exp) {
-            (Self::Int(value), Self::Int(exp)) => Ok(Self::Int(value.pow(exp as u32))),
-            (Self::Int(value), Self::Float(exp)) => Ok(Self::Float((value as f64).powf(exp))),
-            (Self::Float(value), Self::Int(exp)) => Ok(Self::Float(value.powi(exp as i32))),
-            (Self::Float(value), Self::Float(exp)) => Ok(Self::Float(value.powf(exp))),
+impl Pow for Value {
+    fn pow(self, exponent: Self) -> GraphRecordResult<Self> {
+        match (self, exponent) {
+            (Self::Int(value), Self::Int(exponent)) => Ok(Self::Int(value.pow(exponent as u32))),
+            (Self::Int(value), Self::Float(exponent)) => {
+                Ok(Self::Float((value as f64).powf(exponent)))
+            }
+            (Self::Float(value), Self::Int(exponent)) => {
+                Ok(Self::Float(value.powi(exponent as i32)))
+            }
+            (Self::Float(value), Self::Float(exponent)) => Ok(Self::Float(value.powf(exponent))),
             (left, right) => Err(GraphRecordError::IncompatibleValueOperands {
                 operation: ValueOperation::Power,
                 left,
@@ -323,7 +338,7 @@ impl Pow for GraphRecordValue {
     }
 }
 
-impl Mod for GraphRecordValue {
+impl Mod for Value {
     fn r#mod(self, other: Self) -> GraphRecordResult<Self> {
         match (self, other) {
             (Self::Int(value), Self::Int(other)) => Ok(Self::Int(value % other)),
@@ -339,7 +354,7 @@ impl Mod for GraphRecordValue {
     }
 }
 
-impl Round for GraphRecordValue {
+impl Round for Value {
     fn round(self) -> Self {
         match self {
             Self::Float(value) => Self::Float(value.round()),
@@ -348,7 +363,7 @@ impl Round for GraphRecordValue {
     }
 }
 
-impl Ceil for GraphRecordValue {
+impl Ceil for Value {
     fn ceil(self) -> Self {
         match self {
             Self::Float(value) => Self::Float(value.ceil()),
@@ -357,7 +372,7 @@ impl Ceil for GraphRecordValue {
     }
 }
 
-impl Floor for GraphRecordValue {
+impl Floor for Value {
     fn floor(self) -> Self {
         match self {
             Self::Float(value) => Self::Float(value.floor()),
@@ -366,7 +381,7 @@ impl Floor for GraphRecordValue {
     }
 }
 
-impl Abs for GraphRecordValue {
+impl Abs for Value {
     fn abs(self) -> Self {
         match self {
             Self::Int(value) => Self::Int(value.abs()),
@@ -376,7 +391,7 @@ impl Abs for GraphRecordValue {
     }
 }
 
-impl Sqrt for GraphRecordValue {
+impl Sqrt for Value {
     fn sqrt(self) -> Self {
         match self {
             Self::Int(value) => Self::Float((value as f64).sqrt()),
@@ -386,7 +401,7 @@ impl Sqrt for GraphRecordValue {
     }
 }
 
-impl StartsWith for GraphRecordValue {
+impl StartsWith for Value {
     fn starts_with(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::String(value), Self::String(other)) => value.starts_with(other),
@@ -411,7 +426,7 @@ impl StartsWith for GraphRecordValue {
     }
 }
 
-impl EndsWith for GraphRecordValue {
+impl EndsWith for Value {
     fn ends_with(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::String(value), Self::String(other)) => value.ends_with(other),
@@ -434,7 +449,7 @@ impl EndsWith for GraphRecordValue {
     }
 }
 
-impl Contains for GraphRecordValue {
+impl Contains for Value {
     fn contains(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::String(value), Self::String(other)) => value.contains(other),
@@ -457,7 +472,7 @@ impl Contains for GraphRecordValue {
     }
 }
 
-impl Slice for GraphRecordValue {
+impl Slice for Value {
     fn slice(self, range: Range<usize>) -> Self {
         match self {
             Self::String(value) => value[range].into(),
@@ -469,7 +484,7 @@ impl Slice for GraphRecordValue {
     }
 }
 
-impl Trim for GraphRecordValue {
+impl Trim for Value {
     fn trim(self) -> Self {
         match self {
             Self::String(value) => Self::String(value.trim().to_string()),
@@ -478,7 +493,7 @@ impl Trim for GraphRecordValue {
     }
 }
 
-impl TrimStart for GraphRecordValue {
+impl TrimStart for Value {
     fn trim_start(self) -> Self {
         match self {
             Self::String(value) => Self::String(value.trim_start().to_string()),
@@ -487,7 +502,7 @@ impl TrimStart for GraphRecordValue {
     }
 }
 
-impl TrimEnd for GraphRecordValue {
+impl TrimEnd for Value {
     fn trim_end(self) -> Self {
         match self {
             Self::String(value) => Self::String(value.trim_end().to_string()),
@@ -496,7 +511,7 @@ impl TrimEnd for GraphRecordValue {
     }
 }
 
-impl Lowercase for GraphRecordValue {
+impl Lowercase for Value {
     fn lowercase(self) -> Self {
         match self {
             Self::String(value) => Self::String(value.to_lowercase()),
@@ -505,7 +520,7 @@ impl Lowercase for GraphRecordValue {
     }
 }
 
-impl Uppercase for GraphRecordValue {
+impl Uppercase for Value {
     fn uppercase(self) -> Self {
         match self {
             Self::String(value) => Self::String(value.to_uppercase()),
@@ -516,7 +531,7 @@ impl Uppercase for GraphRecordValue {
 
 #[cfg(test)]
 mod test {
-    use super::{Contains, EndsWith, GraphRecordValue, StartsWith};
+    use super::{Contains, EndsWith, StartsWith, Value};
     use crate::{
         errors::GraphRecordError,
         graphrecord::datatypes::{
@@ -529,2171 +544,2150 @@ mod test {
 
     #[test]
     fn test_default() {
-        let value = GraphRecordValue::default();
+        let value = Value::default();
 
-        assert_eq!(GraphRecordValue::Null, value);
+        assert_eq!(Value::Null, value);
     }
 
     #[test]
     fn test_from_str() {
-        let value = GraphRecordValue::from("value");
+        let value = Value::from("value");
 
-        assert_eq!(GraphRecordValue::String("value".to_string()), value);
+        assert_eq!(Value::String("value".to_string()), value);
     }
 
     #[test]
     fn test_from_string() {
-        let value = GraphRecordValue::from("value".to_string());
+        let value = Value::from("value".to_string());
 
-        assert_eq!(GraphRecordValue::String("value".to_string()), value);
+        assert_eq!(Value::String("value".to_string()), value);
     }
 
     #[test]
     fn test_from_int() {
-        let value = GraphRecordValue::from(0);
+        let value = Value::from(0);
 
-        assert_eq!(GraphRecordValue::Int(0), value);
+        assert_eq!(Value::Int(0), value);
     }
 
     #[test]
     fn test_from_f64() {
-        let value = GraphRecordValue::from(0_f64);
+        let value = Value::from(0_f64);
 
-        assert_eq!(GraphRecordValue::Float(0.0), value);
+        assert_eq!(Value::Float(0.0), value);
     }
 
     #[test]
     fn test_from_bool() {
-        let value = GraphRecordValue::from(false);
+        let value = Value::from(false);
 
-        assert_eq!(GraphRecordValue::Bool(false), value);
+        assert_eq!(Value::Bool(false), value);
     }
 
     #[test]
     fn test_from_datetime() {
-        let value = GraphRecordValue::from(NaiveDateTime::MIN);
+        let value = Value::from(NaiveDateTime::MIN);
 
-        assert_eq!(GraphRecordValue::DateTime(NaiveDateTime::MIN), value);
+        assert_eq!(Value::DateTime(NaiveDateTime::MIN), value);
     }
 
     #[test]
     fn test_from_option() {
-        let value = GraphRecordValue::from(Some("value"));
+        let value = Value::from(Some("value"));
 
-        assert_eq!(GraphRecordValue::String("value".to_string()), value);
+        assert_eq!(Value::String("value".to_string()), value);
 
-        let value = GraphRecordValue::from(None::<String>);
+        let value = Value::from(None::<String>);
 
-        assert_eq!(GraphRecordValue::Null, value);
+        assert_eq!(Value::Null, value);
     }
 
     #[test]
     fn test_partial_eq() {
         assert_eq!(
-            GraphRecordValue::String("value".to_string()),
-            GraphRecordValue::String("value".to_string())
+            Value::String("value".to_string()),
+            Value::String("value".to_string())
         );
         assert_ne!(
-            GraphRecordValue::String("value2".to_string()),
-            GraphRecordValue::String("value".to_string())
+            Value::String("value2".to_string()),
+            Value::String("value".to_string())
         );
 
-        assert_eq!(GraphRecordValue::Int(0), GraphRecordValue::Int(0));
-        assert_ne!(GraphRecordValue::Int(1), GraphRecordValue::Int(0));
+        assert_eq!(Value::Int(0), Value::Int(0));
+        assert_ne!(Value::Int(1), Value::Int(0));
 
-        assert_eq!(GraphRecordValue::Int(0), GraphRecordValue::Float(0_f64));
-        assert_ne!(GraphRecordValue::Int(1), GraphRecordValue::Float(0_f64));
-        assert_eq!(GraphRecordValue::Int(1), GraphRecordValue::Float(1_f64));
+        assert_eq!(Value::Int(0), Value::Float(0_f64));
+        assert_ne!(Value::Int(1), Value::Float(0_f64));
+        assert_eq!(Value::Int(1), Value::Float(1_f64));
 
-        assert_eq!(
-            GraphRecordValue::Float(0_f64),
-            GraphRecordValue::Float(0_f64)
+        assert_eq!(Value::Float(0_f64), Value::Float(0_f64));
+        assert_ne!(Value::Float(1_f64), Value::Float(0_f64));
+
+        assert_eq!(Value::Float(0_f64), Value::Int(0));
+        assert_ne!(Value::Float(1_f64), Value::Int(0));
+
+        assert_eq!(Value::Float(f64::NAN), Value::Float(f64::NAN));
+        assert_eq!(Value::Float(-0.0), Value::Float(0.0));
+
+        let smallest_imprecise_integer = (1_i64 << 53) + 1;
+        assert_ne!(
+            Value::Int(smallest_imprecise_integer),
+            Value::Float(smallest_imprecise_integer as f64)
         );
         assert_ne!(
-            GraphRecordValue::Float(1_f64),
-            GraphRecordValue::Float(0_f64)
+            Value::Float(smallest_imprecise_integer as f64),
+            Value::Int(smallest_imprecise_integer)
         );
 
-        assert_eq!(GraphRecordValue::Float(0_f64), GraphRecordValue::Int(0));
-        assert_ne!(GraphRecordValue::Float(1_f64), GraphRecordValue::Int(0));
-
-        assert_eq!(
-            GraphRecordValue::Float(f64::NAN),
-            GraphRecordValue::Float(f64::NAN)
-        );
-        assert_eq!(GraphRecordValue::Float(-0.0), GraphRecordValue::Float(0.0));
-
-        let large_int = (1_i64 << 53) + 1;
-        assert_ne!(
-            GraphRecordValue::Int(large_int),
-            GraphRecordValue::Float(large_int as f64)
-        );
-        assert_ne!(
-            GraphRecordValue::Float(large_int as f64),
-            GraphRecordValue::Int(large_int)
-        );
-
-        assert_eq!(GraphRecordValue::Bool(false), GraphRecordValue::Bool(false));
-        assert_ne!(GraphRecordValue::Bool(true), GraphRecordValue::Bool(false));
+        assert_eq!(Value::Bool(false), Value::Bool(false));
+        assert_ne!(Value::Bool(true), Value::Bool(false));
 
         assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN)
         );
         assert_ne!(
-            GraphRecordValue::DateTime(NaiveDateTime::MAX),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
+            Value::DateTime(NaiveDateTime::MAX),
+            Value::DateTime(NaiveDateTime::MIN)
         );
 
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null);
+        assert_eq!(Value::Null, Value::Null);
 
+        assert_ne!(Value::String("0".to_string()), Value::Int(0));
+        assert_ne!(Value::String("0".to_string()), Value::Float(0_f64));
+        assert_ne!(Value::String("false".to_string()), Value::Bool(false));
         assert_ne!(
-            GraphRecordValue::String("0".to_string()),
-            GraphRecordValue::Int(0)
+            Value::String("false".to_string()),
+            Value::DateTime(NaiveDateTime::MIN)
         );
-        assert_ne!(
-            GraphRecordValue::String("0".to_string()),
-            GraphRecordValue::Float(0_f64)
-        );
-        assert_ne!(
-            GraphRecordValue::String("false".to_string()),
-            GraphRecordValue::Bool(false)
-        );
-        assert_ne!(
-            GraphRecordValue::String("false".to_string()),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
-        );
-        assert_ne!(
-            GraphRecordValue::String("false".to_string()),
-            GraphRecordValue::Null
-        );
+        assert_ne!(Value::String("false".to_string()), Value::Null);
 
-        assert_ne!(
-            GraphRecordValue::Int(0),
-            GraphRecordValue::String("0".to_string())
-        );
-        assert_ne!(GraphRecordValue::Int(0), GraphRecordValue::Bool(false));
-        assert_ne!(
-            GraphRecordValue::Int(0),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
-        );
-        assert_ne!(GraphRecordValue::Int(0), GraphRecordValue::Null);
+        assert_ne!(Value::Int(0), Value::String("0".to_string()));
+        assert_ne!(Value::Int(0), Value::Bool(false));
+        assert_ne!(Value::Int(0), Value::DateTime(NaiveDateTime::MIN));
+        assert_ne!(Value::Int(0), Value::Null);
 
-        assert_ne!(
-            GraphRecordValue::Float(0_f64),
-            GraphRecordValue::String("0.0".to_string())
-        );
-        assert_ne!(
-            GraphRecordValue::Float(0_f64),
-            GraphRecordValue::Bool(false)
-        );
-        assert_ne!(
-            GraphRecordValue::Float(0_f64),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
-        );
-        assert_ne!(GraphRecordValue::Float(0_f64), GraphRecordValue::Null);
+        assert_ne!(Value::Float(0_f64), Value::String("0.0".to_string()));
+        assert_ne!(Value::Float(0_f64), Value::Bool(false));
+        assert_ne!(Value::Float(0_f64), Value::DateTime(NaiveDateTime::MIN));
+        assert_ne!(Value::Float(0_f64), Value::Null);
 
-        assert_ne!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::String("false".to_string())
-        );
-        assert_ne!(GraphRecordValue::Bool(false), GraphRecordValue::Int(0));
-        assert_ne!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Float(0_f64)
-        );
-        assert_ne!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
-        );
-        assert_ne!(GraphRecordValue::Bool(false), GraphRecordValue::Null);
+        assert_ne!(Value::Bool(false), Value::String("false".to_string()));
+        assert_ne!(Value::Bool(false), Value::Int(0));
+        assert_ne!(Value::Bool(false), Value::Float(0_f64));
+        assert_ne!(Value::Bool(false), Value::DateTime(NaiveDateTime::MIN));
+        assert_ne!(Value::Bool(false), Value::Null);
 
-        assert_ne!(
-            GraphRecordValue::Null,
-            GraphRecordValue::String("false".to_string())
-        );
-        assert_ne!(GraphRecordValue::Null, GraphRecordValue::Int(0));
-        assert_ne!(GraphRecordValue::Null, GraphRecordValue::Float(0_f64));
-        assert_ne!(GraphRecordValue::Null, GraphRecordValue::Bool(false));
-        assert_ne!(
-            GraphRecordValue::Null,
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
-        );
+        assert_ne!(Value::Null, Value::String("false".to_string()));
+        assert_ne!(Value::Null, Value::Int(0));
+        assert_ne!(Value::Null, Value::Float(0_f64));
+        assert_ne!(Value::Null, Value::Bool(false));
+        assert_ne!(Value::Null, Value::DateTime(NaiveDateTime::MIN));
     }
 
     #[test]
     #[allow(clippy::neg_cmp_op_on_partial_ord)]
     fn test_partial_ord() {
-        assert!(
-            GraphRecordValue::String("b".to_string()) > GraphRecordValue::String("a".to_string())
-        );
-        assert!(
-            GraphRecordValue::String("b".to_string()) >= GraphRecordValue::String("a".to_string())
-        );
-        assert!(
-            GraphRecordValue::String("a".to_string()) < GraphRecordValue::String("b".to_string())
-        );
-        assert!(
-            GraphRecordValue::String("a".to_string()) <= GraphRecordValue::String("b".to_string())
-        );
-        assert!(
-            GraphRecordValue::String("a".to_string()) >= GraphRecordValue::String("a".to_string())
-        );
-        assert!(
-            GraphRecordValue::String("a".to_string()) <= GraphRecordValue::String("a".to_string())
-        );
+        assert!(Value::String("b".to_string()) > Value::String("a".to_string()));
+        assert!(Value::String("b".to_string()) >= Value::String("a".to_string()));
+        assert!(Value::String("a".to_string()) < Value::String("b".to_string()));
+        assert!(Value::String("a".to_string()) <= Value::String("b".to_string()));
+        assert!(Value::String("a".to_string()) >= Value::String("a".to_string()));
+        assert!(Value::String("a".to_string()) <= Value::String("a".to_string()));
 
-        assert!(GraphRecordValue::Int(1) > GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::Int(1) >= GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::Int(0) < GraphRecordValue::Int(1));
-        assert!(GraphRecordValue::Int(0) <= GraphRecordValue::Int(1));
-        assert!(GraphRecordValue::Int(0) >= GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::Int(0) <= GraphRecordValue::Int(0));
+        assert!(Value::Int(1) > Value::Int(0));
+        assert!(Value::Int(1) >= Value::Int(0));
+        assert!(Value::Int(0) < Value::Int(1));
+        assert!(Value::Int(0) <= Value::Int(1));
+        assert!(Value::Int(0) >= Value::Int(0));
+        assert!(Value::Int(0) <= Value::Int(0));
 
-        assert!(GraphRecordValue::Int(1) > GraphRecordValue::Float(0_f64));
-        assert!(GraphRecordValue::Int(1) >= GraphRecordValue::Float(0_f64));
-        assert!(GraphRecordValue::Int(0) < GraphRecordValue::Float(1_f64));
-        assert!(GraphRecordValue::Int(0) <= GraphRecordValue::Float(1_f64));
-        assert!(GraphRecordValue::Int(0) >= GraphRecordValue::Float(0_f64));
-        assert!(GraphRecordValue::Int(0) <= GraphRecordValue::Float(0_f64));
+        assert!(Value::Int(1) > Value::Float(0_f64));
+        assert!(Value::Int(1) >= Value::Float(0_f64));
+        assert!(Value::Int(0) < Value::Float(1_f64));
+        assert!(Value::Int(0) <= Value::Float(1_f64));
+        assert!(Value::Int(0) >= Value::Float(0_f64));
+        assert!(Value::Int(0) <= Value::Float(0_f64));
 
-        assert!(GraphRecordValue::Float(1_f64) > GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::Float(1_f64) >= GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::Float(0_f64) < GraphRecordValue::Int(1));
-        assert!(GraphRecordValue::Float(0_f64) <= GraphRecordValue::Int(1));
-        assert!(GraphRecordValue::Float(0_f64) >= GraphRecordValue::Int(0));
-        assert!(GraphRecordValue::Float(0_f64) <= GraphRecordValue::Int(0));
+        assert!(Value::Float(1_f64) > Value::Int(0));
+        assert!(Value::Float(1_f64) >= Value::Int(0));
+        assert!(Value::Float(0_f64) < Value::Int(1));
+        assert!(Value::Float(0_f64) <= Value::Int(1));
+        assert!(Value::Float(0_f64) >= Value::Int(0));
+        assert!(Value::Float(0_f64) <= Value::Int(0));
 
-        assert!(GraphRecordValue::Bool(true) > GraphRecordValue::Bool(false));
-        assert!(GraphRecordValue::Bool(true) >= GraphRecordValue::Bool(false));
-        assert!(GraphRecordValue::Bool(false) < GraphRecordValue::Bool(true));
-        assert!(GraphRecordValue::Bool(false) <= GraphRecordValue::Bool(true));
-        assert!(GraphRecordValue::Bool(false) >= GraphRecordValue::Bool(false));
-        assert!(GraphRecordValue::Bool(false) <= GraphRecordValue::Bool(false));
+        assert!(Value::Bool(true) > Value::Bool(false));
+        assert!(Value::Bool(true) >= Value::Bool(false));
+        assert!(Value::Bool(false) < Value::Bool(true));
+        assert!(Value::Bool(false) <= Value::Bool(true));
+        assert!(Value::Bool(false) >= Value::Bool(false));
+        assert!(Value::Bool(false) <= Value::Bool(false));
 
-        assert!(
-            GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                > GraphRecordValue::DateTime(NaiveDateTime::MIN)
-        );
-        assert!(
-            GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                >= GraphRecordValue::DateTime(NaiveDateTime::MIN)
-        );
-        assert!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                < GraphRecordValue::DateTime(NaiveDateTime::MAX)
-        );
-        assert!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                <= GraphRecordValue::DateTime(NaiveDateTime::MAX)
-        );
-        assert!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                >= GraphRecordValue::DateTime(NaiveDateTime::MIN)
-        );
-        assert!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                <= GraphRecordValue::DateTime(NaiveDateTime::MIN)
-        );
+        assert!(Value::DateTime(NaiveDateTime::MAX) > Value::DateTime(NaiveDateTime::MIN));
+        assert!(Value::DateTime(NaiveDateTime::MAX) >= Value::DateTime(NaiveDateTime::MIN));
+        assert!(Value::DateTime(NaiveDateTime::MIN) < Value::DateTime(NaiveDateTime::MAX));
+        assert!(Value::DateTime(NaiveDateTime::MIN) <= Value::DateTime(NaiveDateTime::MAX));
+        assert!(Value::DateTime(NaiveDateTime::MIN) >= Value::DateTime(NaiveDateTime::MIN));
+        assert!(Value::DateTime(NaiveDateTime::MIN) <= Value::DateTime(NaiveDateTime::MIN));
 
-        assert!(GraphRecordValue::Null <= GraphRecordValue::Null);
-        assert!(GraphRecordValue::Null >= GraphRecordValue::Null);
+        assert!(Value::Null <= Value::Null);
+        assert!(Value::Null >= Value::Null);
 
-        assert!(!(GraphRecordValue::String("a".to_string()) > GraphRecordValue::Int(1)));
-        assert!(!(GraphRecordValue::String("a".to_string()) >= GraphRecordValue::Int(1)));
-        assert!(!(GraphRecordValue::String("a".to_string()) < GraphRecordValue::Int(1)));
-        assert!(!(GraphRecordValue::String("a".to_string()) <= GraphRecordValue::Int(1)));
+        assert!(!(Value::String("a".to_string()) > Value::Int(1)));
+        assert!(!(Value::String("a".to_string()) >= Value::Int(1)));
+        assert!(!(Value::String("a".to_string()) < Value::Int(1)));
+        assert!(!(Value::String("a".to_string()) <= Value::Int(1)));
 
-        assert!(!(GraphRecordValue::String("a".to_string()) > GraphRecordValue::Float(1_f64)));
-        assert!(!(GraphRecordValue::String("a".to_string()) >= GraphRecordValue::Float(1_f64)));
-        assert!(!(GraphRecordValue::String("a".to_string()) < GraphRecordValue::Float(1_f64)));
-        assert!(!(GraphRecordValue::String("a".to_string()) <= GraphRecordValue::Float(1_f64)));
+        assert!(!(Value::String("a".to_string()) > Value::Float(1_f64)));
+        assert!(!(Value::String("a".to_string()) >= Value::Float(1_f64)));
+        assert!(!(Value::String("a".to_string()) < Value::Float(1_f64)));
+        assert!(!(Value::String("a".to_string()) <= Value::Float(1_f64)));
 
-        assert!(!(GraphRecordValue::String("a".to_string()) > GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::String("a".to_string()) >= GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::String("a".to_string()) < GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::String("a".to_string()) <= GraphRecordValue::Bool(true)));
+        assert!(!(Value::String("a".to_string()) > Value::Bool(true)));
+        assert!(!(Value::String("a".to_string()) >= Value::Bool(true)));
+        assert!(!(Value::String("a".to_string()) < Value::Bool(true)));
+        assert!(!(Value::String("a".to_string()) <= Value::Bool(true)));
 
-        assert!(
-            !(GraphRecordValue::String("a".to_string())
-                > GraphRecordValue::DateTime(NaiveDateTime::MAX))
-        );
-        assert!(
-            !(GraphRecordValue::String("a".to_string())
-                >= GraphRecordValue::DateTime(NaiveDateTime::MAX))
-        );
-        assert!(
-            !(GraphRecordValue::String("a".to_string())
-                < GraphRecordValue::DateTime(NaiveDateTime::MAX))
-        );
-        assert!(
-            !(GraphRecordValue::String("a".to_string())
-                <= GraphRecordValue::DateTime(NaiveDateTime::MAX))
-        );
+        assert!(!(Value::String("a".to_string()) > Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::String("a".to_string()) >= Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::String("a".to_string()) < Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::String("a".to_string()) <= Value::DateTime(NaiveDateTime::MAX)));
 
-        assert!(!(GraphRecordValue::String("a".to_string()) > GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::String("a".to_string()) >= GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::String("a".to_string()) < GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::String("a".to_string()) <= GraphRecordValue::Null));
+        assert!(!(Value::String("a".to_string()) > Value::Null));
+        assert!(!(Value::String("a".to_string()) >= Value::Null));
+        assert!(!(Value::String("a".to_string()) < Value::Null));
+        assert!(!(Value::String("a".to_string()) <= Value::Null));
 
-        assert!(!(GraphRecordValue::Int(1) > GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Int(1) >= GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Int(1) < GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Int(1) <= GraphRecordValue::String("a".to_string())));
+        assert!(!(Value::Int(1) > Value::String("a".to_string())));
+        assert!(!(Value::Int(1) >= Value::String("a".to_string())));
+        assert!(!(Value::Int(1) < Value::String("a".to_string())));
+        assert!(!(Value::Int(1) <= Value::String("a".to_string())));
 
-        assert!(!(GraphRecordValue::Int(1) > GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::Int(1) >= GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::Int(1) < GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::Int(1) <= GraphRecordValue::Bool(true)));
+        assert!(!(Value::Int(1) > Value::Bool(true)));
+        assert!(!(Value::Int(1) >= Value::Bool(true)));
+        assert!(!(Value::Int(1) < Value::Bool(true)));
+        assert!(!(Value::Int(1) <= Value::Bool(true)));
 
-        assert!(!(GraphRecordValue::Int(1) > GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(!(GraphRecordValue::Int(1) >= GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(!(GraphRecordValue::Int(1) < GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(!(GraphRecordValue::Int(1) <= GraphRecordValue::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Int(1) > Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Int(1) >= Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Int(1) < Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Int(1) <= Value::DateTime(NaiveDateTime::MAX)));
 
-        assert!(!(GraphRecordValue::Int(1) > GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::Int(1) >= GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::Int(1) < GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::Int(1) <= GraphRecordValue::Null));
+        assert!(!(Value::Int(1) > Value::Null));
+        assert!(!(Value::Int(1) >= Value::Null));
+        assert!(!(Value::Int(1) < Value::Null));
+        assert!(!(Value::Int(1) <= Value::Null));
 
-        assert!(!(GraphRecordValue::Float(1_f64) > GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Float(1_f64) >= GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Float(1_f64) < GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Float(1_f64) <= GraphRecordValue::String("a".to_string())));
+        assert!(!(Value::Float(1_f64) > Value::String("a".to_string())));
+        assert!(!(Value::Float(1_f64) >= Value::String("a".to_string())));
+        assert!(!(Value::Float(1_f64) < Value::String("a".to_string())));
+        assert!(!(Value::Float(1_f64) <= Value::String("a".to_string())));
 
-        assert!(!(GraphRecordValue::Float(1_f64) > GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::Float(1_f64) >= GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::Float(1_f64) < GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::Float(1_f64) <= GraphRecordValue::Bool(true)));
+        assert!(!(Value::Float(1_f64) > Value::Bool(true)));
+        assert!(!(Value::Float(1_f64) >= Value::Bool(true)));
+        assert!(!(Value::Float(1_f64) < Value::Bool(true)));
+        assert!(!(Value::Float(1_f64) <= Value::Bool(true)));
 
-        assert!(!(GraphRecordValue::Float(1_f64) > GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(
-            !(GraphRecordValue::Float(1_f64) >= GraphRecordValue::DateTime(NaiveDateTime::MAX))
-        );
-        assert!(!(GraphRecordValue::Float(1_f64) < GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(
-            !(GraphRecordValue::Float(1_f64) <= GraphRecordValue::DateTime(NaiveDateTime::MAX))
-        );
+        assert!(!(Value::Float(1_f64) > Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Float(1_f64) >= Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Float(1_f64) < Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Float(1_f64) <= Value::DateTime(NaiveDateTime::MAX)));
 
-        assert!(!(GraphRecordValue::Float(1_f64) > GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::Float(1_f64) >= GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::Float(1_f64) < GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::Float(1_f64) <= GraphRecordValue::Null));
+        assert!(!(Value::Float(1_f64) > Value::Null));
+        assert!(!(Value::Float(1_f64) >= Value::Null));
+        assert!(!(Value::Float(1_f64) < Value::Null));
+        assert!(!(Value::Float(1_f64) <= Value::Null));
 
-        assert!(!(GraphRecordValue::Bool(true) > GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Bool(true) >= GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Bool(true) < GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Bool(true) <= GraphRecordValue::String("a".to_string())));
+        assert!(!(Value::Bool(true) > Value::String("a".to_string())));
+        assert!(!(Value::Bool(true) >= Value::String("a".to_string())));
+        assert!(!(Value::Bool(true) < Value::String("a".to_string())));
+        assert!(!(Value::Bool(true) <= Value::String("a".to_string())));
 
-        assert!(!(GraphRecordValue::Bool(true) > GraphRecordValue::Int(1)));
-        assert!(!(GraphRecordValue::Bool(true) >= GraphRecordValue::Int(1)));
-        assert!(!(GraphRecordValue::Bool(true) < GraphRecordValue::Int(1)));
-        assert!(!(GraphRecordValue::Bool(true) <= GraphRecordValue::Int(1)));
+        assert!(!(Value::Bool(true) > Value::Int(1)));
+        assert!(!(Value::Bool(true) >= Value::Int(1)));
+        assert!(!(Value::Bool(true) < Value::Int(1)));
+        assert!(!(Value::Bool(true) <= Value::Int(1)));
 
-        assert!(!(GraphRecordValue::Bool(true) > GraphRecordValue::Float(1_f64)));
-        assert!(!(GraphRecordValue::Bool(true) >= GraphRecordValue::Float(1_f64)));
-        assert!(!(GraphRecordValue::Bool(true) < GraphRecordValue::Float(1_f64)));
-        assert!(!(GraphRecordValue::Bool(true) <= GraphRecordValue::Float(1_f64)));
+        assert!(!(Value::Bool(true) > Value::Float(1_f64)));
+        assert!(!(Value::Bool(true) >= Value::Float(1_f64)));
+        assert!(!(Value::Bool(true) < Value::Float(1_f64)));
+        assert!(!(Value::Bool(true) <= Value::Float(1_f64)));
 
-        assert!(!(GraphRecordValue::Bool(true) > GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(!(GraphRecordValue::Bool(true) >= GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(!(GraphRecordValue::Bool(true) < GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(!(GraphRecordValue::Bool(true) <= GraphRecordValue::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Bool(true) > Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Bool(true) >= Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Bool(true) < Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Bool(true) <= Value::DateTime(NaiveDateTime::MAX)));
 
-        assert!(!(GraphRecordValue::Bool(true) > GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::Bool(true) >= GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::Bool(true) < GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::Bool(true) <= GraphRecordValue::Null));
+        assert!(!(Value::Bool(true) > Value::Null));
+        assert!(!(Value::Bool(true) >= Value::Null));
+        assert!(!(Value::Bool(true) < Value::Null));
+        assert!(!(Value::Bool(true) <= Value::Null));
 
-        assert!(
-            !(GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                > GraphRecordValue::String("a".to_string()))
-        );
-        assert!(
-            !(GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                >= GraphRecordValue::String("a".to_string()))
-        );
-        assert!(
-            !(GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                < GraphRecordValue::String("a".to_string()))
-        );
-        assert!(
-            !(GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                <= GraphRecordValue::String("a".to_string()))
-        );
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) > Value::String("a".to_string())));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) >= Value::String("a".to_string())));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) < Value::String("a".to_string())));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) <= Value::String("a".to_string())));
 
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) > GraphRecordValue::Int(1)));
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) >= GraphRecordValue::Int(1)));
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) < GraphRecordValue::Int(1)));
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) <= GraphRecordValue::Int(1)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) > Value::Int(1)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) >= Value::Int(1)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) < Value::Int(1)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) <= Value::Int(1)));
 
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) > GraphRecordValue::Float(1_f64)));
-        assert!(
-            !(GraphRecordValue::DateTime(NaiveDateTime::MAX) >= GraphRecordValue::Float(1_f64))
-        );
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) < GraphRecordValue::Float(1_f64)));
-        assert!(
-            !(GraphRecordValue::DateTime(NaiveDateTime::MAX) <= GraphRecordValue::Float(1_f64))
-        );
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) > Value::Float(1_f64)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) >= Value::Float(1_f64)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) < Value::Float(1_f64)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) <= Value::Float(1_f64)));
 
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) > GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) >= GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) < GraphRecordValue::Bool(true)));
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) <= GraphRecordValue::Bool(true)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) > Value::Bool(true)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) >= Value::Bool(true)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) < Value::Bool(true)));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) <= Value::Bool(true)));
 
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) > GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) >= GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) < GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::DateTime(NaiveDateTime::MAX) <= GraphRecordValue::Null));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) > Value::Null));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) >= Value::Null));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) < Value::Null));
+        assert!(!(Value::DateTime(NaiveDateTime::MAX) <= Value::Null));
 
-        assert!(!(GraphRecordValue::Null > GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Null >= GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Null < GraphRecordValue::String("a".to_string())));
-        assert!(!(GraphRecordValue::Null <= GraphRecordValue::String("a".to_string())));
+        assert!(!(Value::Null > Value::String("a".to_string())));
+        assert!(!(Value::Null >= Value::String("a".to_string())));
+        assert!(!(Value::Null < Value::String("a".to_string())));
+        assert!(!(Value::Null <= Value::String("a".to_string())));
 
-        assert!(!(GraphRecordValue::Null > GraphRecordValue::Int(0)));
-        assert!(!(GraphRecordValue::Null >= GraphRecordValue::Int(0)));
-        assert!(!(GraphRecordValue::Null < GraphRecordValue::Int(0)));
-        assert!(!(GraphRecordValue::Null <= GraphRecordValue::Int(0)));
+        assert!(!(Value::Null > Value::Int(0)));
+        assert!(!(Value::Null >= Value::Int(0)));
+        assert!(!(Value::Null < Value::Int(0)));
+        assert!(!(Value::Null <= Value::Int(0)));
 
-        assert!(!(GraphRecordValue::Null > GraphRecordValue::Float(0_f64)));
-        assert!(!(GraphRecordValue::Null >= GraphRecordValue::Float(0_f64)));
-        assert!(!(GraphRecordValue::Null < GraphRecordValue::Float(0_f64)));
-        assert!(!(GraphRecordValue::Null <= GraphRecordValue::Float(0_f64)));
+        assert!(!(Value::Null > Value::Float(0_f64)));
+        assert!(!(Value::Null >= Value::Float(0_f64)));
+        assert!(!(Value::Null < Value::Float(0_f64)));
+        assert!(!(Value::Null <= Value::Float(0_f64)));
 
-        assert!(!(GraphRecordValue::Null > GraphRecordValue::Bool(false)));
-        assert!(!(GraphRecordValue::Null >= GraphRecordValue::Bool(false)));
-        assert!(!(GraphRecordValue::Null < GraphRecordValue::Bool(false)));
-        assert!(!(GraphRecordValue::Null <= GraphRecordValue::Bool(false)));
+        assert!(!(Value::Null > Value::Bool(false)));
+        assert!(!(Value::Null >= Value::Bool(false)));
+        assert!(!(Value::Null < Value::Bool(false)));
+        assert!(!(Value::Null <= Value::Bool(false)));
 
-        assert!(!(GraphRecordValue::Null > GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(!(GraphRecordValue::Null >= GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(!(GraphRecordValue::Null < GraphRecordValue::DateTime(NaiveDateTime::MAX)));
-        assert!(!(GraphRecordValue::Null <= GraphRecordValue::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Null > Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Null >= Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Null < Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!(Value::Null <= Value::DateTime(NaiveDateTime::MAX)));
 
-        assert!(!(GraphRecordValue::Null > GraphRecordValue::Null));
-        assert!(!(GraphRecordValue::Null < GraphRecordValue::Null));
+        assert!(!(Value::Null > Value::Null));
+        assert!(!(Value::Null < Value::Null));
     }
 
     #[test]
     fn test_display() {
-        assert_eq!(
-            "\"value\"",
-            GraphRecordValue::String("value".to_string()).to_string()
-        );
+        assert_eq!("\"value\"", Value::String("value".to_string()).to_string());
 
-        assert_eq!("0", GraphRecordValue::Int(0).to_string());
+        assert_eq!("0", Value::Int(0).to_string());
 
-        assert_eq!("0.5", GraphRecordValue::Float(0.5).to_string());
+        assert_eq!("0.5", Value::Float(0.5).to_string());
 
-        assert_eq!("false", GraphRecordValue::Bool(false).to_string());
+        assert_eq!("false", Value::Bool(false).to_string());
 
         assert_eq!(
             "-262143-01-01 00:00:00",
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).to_string()
+            Value::DateTime(NaiveDateTime::MIN).to_string()
         );
 
-        assert_eq!("Null", GraphRecordValue::Null.to_string());
+        assert_eq!("Null", Value::Null.to_string());
     }
 
     #[test]
     fn test_add() {
         assert_eq!(
-            GraphRecordValue::String("value".to_string()),
-            (GraphRecordValue::String("val".to_string())
-                + GraphRecordValue::String("ue".to_string()))
-            .unwrap()
+            Value::String("value".to_string()),
+            (Value::String("val".to_string()) + Value::String("ue".to_string())).unwrap()
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) + GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) + Value::Int(0)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) + GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) + Value::Float(0_f64)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) + Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                + GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) + Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) + Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Int(0) + GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Int(0) + Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert_eq!(Value::Int(10), (Value::Int(5) + Value::Int(5)).unwrap());
+        assert_eq!(
+            Value::Float(10_f64),
+            (Value::Int(5) + Value::Float(5_f64)).unwrap()
+        );
+        assert!(
+            (Value::Int(0) + Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Int(0) + Value::DateTime(NaiveDateTime::MIN)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!((Value::Int(0) + Value::Null).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
+
+        assert!(
+            (Value::Float(0_f64) + Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert_eq!(
-            GraphRecordValue::Int(10),
-            (GraphRecordValue::Int(5) + GraphRecordValue::Int(5)).unwrap()
+            Value::Float(10_f64),
+            (Value::Float(5_f64) + Value::Int(5)).unwrap()
         );
         assert_eq!(
-            GraphRecordValue::Float(10_f64),
-            (GraphRecordValue::Int(5) + GraphRecordValue::Float(5_f64)).unwrap()
+            Value::Float(10_f64),
+            (Value::Float(5_f64) + Value::Float(5_f64)).unwrap()
         );
         assert!(
-            (GraphRecordValue::Int(0) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) + Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Int(0) + GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) + Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Int(0) + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) + Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Float(0_f64) + GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert_eq!(
-            GraphRecordValue::Float(10_f64),
-            (GraphRecordValue::Float(5_f64) + GraphRecordValue::Int(5)).unwrap()
-        );
-        assert_eq!(
-            GraphRecordValue::Float(10_f64),
-            (GraphRecordValue::Float(5_f64) + GraphRecordValue::Float(5_f64)).unwrap()
+            (Value::Bool(false) + Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) + Value::Int(0)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64) + GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) + Value::Float(0_f64)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64) + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) + Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(false) + Value::Bool(true)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(true) + Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(true) + Value::Bool(true)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(false) + Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::Bool(false) + Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Bool(false) + GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) + Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false) + GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) + Value::Int(0)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Bool(false) + GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) + Value::Float(0_f64)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Bool(false) + GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Bool(true) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Bool(true) + GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Bool(false) + GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Bool(false) + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                + GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) + GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) + GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) + Value::Bool(false)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert_eq!(
-            GraphRecordValue::DateTime(
+            Value::DateTime(
                 NaiveDate::from_ymd_opt(1970, 1, 4)
                     .unwrap()
                     .and_time(NaiveTime::MIN)
             ),
-            (GraphRecordValue::DateTime(
+            (Value::DateTime(
                 NaiveDate::from_ymd_opt(1970, 1, 2)
                     .unwrap()
                     .and_time(NaiveTime::MIN)
-            ) + GraphRecordValue::DateTime(
+            ) + Value::DateTime(
                 NaiveDate::from_ymd_opt(1970, 1, 3)
                     .unwrap()
                     .and_time(NaiveTime::MIN)
             ))
             .unwrap()
         );
+        assert_eq!(
+            Value::DateTime(
+                NaiveDate::from_ymd_opt(1970, 1, 1)
+                    .unwrap()
+                    .and_time(NaiveTime::from_hms_milli_opt(0, 0, 0, 500).unwrap())
+            ),
+            (Value::DateTime(
+                NaiveDate::from_ymd_opt(1970, 1, 1)
+                    .unwrap()
+                    .and_time(NaiveTime::from_hms_milli_opt(0, 0, 0, 200).unwrap())
+            ) + Value::DateTime(
+                NaiveDate::from_ymd_opt(1970, 1, 1)
+                    .unwrap()
+                    .and_time(NaiveTime::from_hms_milli_opt(0, 0, 0, 300).unwrap())
+            ))
+            .unwrap()
+        );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) + Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Null + GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null + Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!((Value::Null + Value::Int(0)).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
+        assert!(
+            (Value::Null + Value::Float(0_f64)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Null + GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null + Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Null + GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null + Value::DateTime(NaiveDateTime::MIN)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
-        assert!(
-            (GraphRecordValue::Null + GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null + GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null + GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
+        assert!((Value::Null + Value::Null).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
     }
 
     #[test]
     fn test_sub() {
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                - GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) - Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) - GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) - Value::Int(0)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) - GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) - Value::Float(0_f64)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) - Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) - Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) - Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Int(0) - GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Int(0) - Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert_eq!(Value::Int(0), (Value::Int(5) - Value::Int(5)).unwrap());
+        assert_eq!(
+            Value::Float(0_f64),
+            (Value::Int(5) - Value::Float(5_f64)).unwrap()
+        );
+        assert!(
+            (Value::Int(0) - Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Int(0) - Value::DateTime(NaiveDateTime::MIN)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!((Value::Int(0) - Value::Null).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
+
+        assert!(
+            (Value::Float(0_f64) - Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert_eq!(
-            GraphRecordValue::Int(0),
-            (GraphRecordValue::Int(5) - GraphRecordValue::Int(5)).unwrap()
+            Value::Float(0_f64),
+            (Value::Float(5_f64) - Value::Int(5)).unwrap()
         );
         assert_eq!(
-            GraphRecordValue::Float(0_f64),
-            (GraphRecordValue::Int(5) - GraphRecordValue::Float(5_f64)).unwrap()
+            Value::Float(0_f64),
+            (Value::Float(5_f64) - Value::Float(5_f64)).unwrap()
         );
         assert!(
-            (GraphRecordValue::Int(0) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) - Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Int(0) - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) - Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Int(0) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) - Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Float(0_f64) - GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) - Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(false) - Value::Int(0)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(false) - Value::Float(0_f64)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(false) - Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(false) - Value::Bool(true)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(true) - Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(true) - Value::Bool(true)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(false) - Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::Bool(false) - Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+
+        assert!(
+            (Value::DateTime(NaiveDateTime::MIN) - Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::DateTime(NaiveDateTime::MIN) - Value::Int(0)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::DateTime(NaiveDateTime::MIN) - Value::Float(0_f64)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::DateTime(NaiveDateTime::MIN) - Value::Bool(false)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::DateTime(NaiveDateTime::MIN) - Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+
+        assert!(
+            (Value::Duration(TimeDelta::seconds(5)) - Value::String("value".to_string()))
+                .is_err_and(|error| matches!(
+                    error,
+                    GraphRecordError::IncompatibleValueOperands { .. }
+                ))
+        );
+        assert!(
+            (Value::Duration(TimeDelta::seconds(5)) - Value::Int(0)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Duration(TimeDelta::seconds(5)) - Value::Float(0_f64)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::Duration(TimeDelta::seconds(5)) - Value::Bool(false)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::Duration(TimeDelta::seconds(5)) - Value::DateTime(NaiveDateTime::MIN))
+                .is_err_and(|error| matches!(
+                    error,
+                    GraphRecordError::IncompatibleValueOperands { .. }
+                ))
         );
         assert_eq!(
-            GraphRecordValue::Float(0_f64),
-            (GraphRecordValue::Float(5_f64) - GraphRecordValue::Int(5)).unwrap()
-        );
-        assert_eq!(
-            GraphRecordValue::Float(0_f64),
-            (GraphRecordValue::Float(5_f64) - GraphRecordValue::Float(5_f64)).unwrap()
+            Value::Duration(TimeDelta::seconds(2)),
+            (Value::Duration(TimeDelta::seconds(5)) - Value::Duration(TimeDelta::seconds(3)))
+                .unwrap()
         );
         assert!(
-            (GraphRecordValue::Float(0_f64) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Float(0_f64) - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Float(0_f64) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Duration(TimeDelta::seconds(5)) - Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Bool(false) - GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null - Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!((Value::Null - Value::Int(0)).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
+        assert!(
+            (Value::Null - Value::Float(0_f64)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Bool(false) - GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null - Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Bool(false) - GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null - Value::DateTime(NaiveDateTime::MIN)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
-        assert!(
-            (GraphRecordValue::Bool(false) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Bool(false) - GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Bool(true) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Bool(true) - GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Bool(false) - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Bool(false) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                - GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) - GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) - GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-
-        assert!(
-            (GraphRecordValue::Duration(TimeDelta::seconds(5))
-                - GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Duration(TimeDelta::seconds(5)) - GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Duration(TimeDelta::seconds(5)) - GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Duration(TimeDelta::seconds(5)) - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Duration(TimeDelta::seconds(5))
-                - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert_eq!(
-            GraphRecordValue::Duration(TimeDelta::seconds(2)),
-            (GraphRecordValue::Duration(TimeDelta::seconds(5))
-                - GraphRecordValue::Duration(TimeDelta::seconds(3)))
-            .unwrap()
-        );
-        assert!(
-            (GraphRecordValue::Duration(TimeDelta::seconds(5)) - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-
-        assert!(
-            (GraphRecordValue::Null - GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null - GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null - GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null - GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null - GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null - GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
+        assert!((Value::Null - Value::Null).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
     }
 
     #[test]
     fn test_mul() {
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                * GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) * Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert_eq!(
-            GraphRecordValue::String("valuevaluevalue".to_string()),
-            (GraphRecordValue::String("value".to_string()) * GraphRecordValue::Int(3)).unwrap()
+            Value::String("valuevaluevalue".to_string()),
+            (Value::String("value".to_string()) * Value::Int(3)).unwrap()
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) * GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) * Value::Int(-1)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) * Value::Float(0_f64)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) * Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) * Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::String("value".to_string()) * Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert_eq!(
-            GraphRecordValue::String("valuevaluevalue".to_string()),
-            (GraphRecordValue::Int(3) * GraphRecordValue::String("value".to_string())).unwrap()
+            Value::String("valuevaluevalue".to_string()),
+            (Value::Int(3) * Value::String("value".to_string())).unwrap()
+        );
+        assert!(
+            (Value::Int(-1) * Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert_eq!(Value::Int(25), (Value::Int(5) * Value::Int(5)).unwrap());
+        assert_eq!(
+            Value::Float(25_f64),
+            (Value::Int(5) * Value::Float(5_f64)).unwrap()
+        );
+        assert!(
+            (Value::Int(0) * Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Int(0) * Value::DateTime(NaiveDateTime::MIN)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!((Value::Int(0) * Value::Null).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
+
+        assert!(
+            (Value::Float(0_f64) * Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert_eq!(
-            GraphRecordValue::Int(25),
-            (GraphRecordValue::Int(5) * GraphRecordValue::Int(5)).unwrap()
+            Value::Float(25_f64),
+            (Value::Float(5_f64) * Value::Int(5)).unwrap()
         );
         assert_eq!(
-            GraphRecordValue::Float(25_f64),
-            (GraphRecordValue::Int(5) * GraphRecordValue::Float(5_f64)).unwrap()
+            Value::Float(25_f64),
+            (Value::Float(5_f64) * Value::Float(5_f64)).unwrap()
         );
         assert!(
-            (GraphRecordValue::Int(0) * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) * Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Int(0) * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) * Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Int(0) * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) * Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Float(0_f64) * GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert_eq!(
-            GraphRecordValue::Float(25_f64),
-            (GraphRecordValue::Float(5_f64) * GraphRecordValue::Int(5)).unwrap()
-        );
-        assert_eq!(
-            GraphRecordValue::Float(25_f64),
-            (GraphRecordValue::Float(5_f64) * GraphRecordValue::Float(5_f64)).unwrap()
+            (Value::Bool(false) * Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64) * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) * Value::Int(0)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64) * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) * Value::Float(0_f64)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64) * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) * Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(false) * Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::Bool(false) * Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Bool(false) * GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) * Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false) * GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) * Value::Int(0)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Bool(false) * GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) * Value::Float(0_f64)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false) * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) * Value::Bool(false)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false) * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) * Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false) * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) * Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                * GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null * Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!((Value::Null * Value::Int(0)).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
+        assert!(
+            (Value::Null * Value::Float(0_f64)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) * GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null * Value::Bool(false)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) * GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null * Value::DateTime(NaiveDateTime::MIN)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-
-        assert!(
-            (GraphRecordValue::Null * GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null * GraphRecordValue::Int(0))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null * GraphRecordValue::Float(0_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null * GraphRecordValue::Bool(false))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null * GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null * GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
+        assert!((Value::Null * Value::Null).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
     }
 
     #[test]
     fn test_div() {
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                / GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) / Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) / GraphRecordValue::Int(1))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) / Value::Int(1)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) / GraphRecordValue::Float(1_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) / Value::Float(1_f64)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) / Value::Bool(true)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) / Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()) / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()) / Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Int(0) / GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Int(0) / Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert_eq!(
-            GraphRecordValue::Float(1_f64),
-            (GraphRecordValue::Int(5) / GraphRecordValue::Int(5)).unwrap()
+            Value::Float(1_f64),
+            (Value::Int(5) / Value::Int(5)).unwrap()
         );
         assert_eq!(
-            GraphRecordValue::Float(1_f64),
-            (GraphRecordValue::Int(5) / GraphRecordValue::Float(5_f64)).unwrap()
+            Value::Float(1_f64),
+            (Value::Int(5) / Value::Float(5_f64)).unwrap()
         );
         assert!(
-            (GraphRecordValue::Int(0) / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Int(0) / Value::Bool(true)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Int(0) / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Int(0) / Value::DateTime(NaiveDateTime::MIN)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
-        assert!(
-            (GraphRecordValue::Int(0) / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
+        assert!((Value::Int(0) / Value::Null).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
 
         assert!(
-            (GraphRecordValue::Float(0_f64) / GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) / Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert_eq!(
-            GraphRecordValue::Float(1_f64),
-            (GraphRecordValue::Float(5_f64) / GraphRecordValue::Int(5)).unwrap()
+            Value::Float(1_f64),
+            (Value::Float(5_f64) / Value::Int(5)).unwrap()
         );
         assert_eq!(
-            GraphRecordValue::Float(1_f64),
-            (GraphRecordValue::Float(5_f64) / GraphRecordValue::Float(5_f64)).unwrap()
+            Value::Float(1_f64),
+            (Value::Float(5_f64) / Value::Float(5_f64)).unwrap()
         );
         assert!(
-            (GraphRecordValue::Float(0_f64) / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) / Value::Bool(true)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64) / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) / Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Float(0_f64) / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64) / Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Bool(false) / GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) / Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Bool(false) / GraphRecordValue::Int(1))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) / Value::Int(1)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Bool(false) / GraphRecordValue::Float(1_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) / Value::Float(1_f64)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Bool(false) / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) / Value::Bool(true)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Bool(false) / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) / Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false) / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false) / Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                / GraphRecordValue::String("value".to_string()))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) / Value::String("value".to_string())).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) / GraphRecordValue::Int(1))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) / Value::Int(1)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) / GraphRecordValue::Float(1_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) / Value::Float(1_f64)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) / Value::Bool(true)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) / Value::DateTime(NaiveDateTime::MIN)).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN) / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN) / Value::Null).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Null / GraphRecordValue::String("value".to_string()))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null / Value::String("value".to_string())).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!((Value::Null / Value::Int(1)).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
+        assert!(
+            (Value::Null / Value::Float(1_f64)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Null / GraphRecordValue::Int(1))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null / Value::Bool(true)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Null / GraphRecordValue::Float(1_f64))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null / Value::DateTime(NaiveDateTime::MIN)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
-        assert!(
-            (GraphRecordValue::Null / GraphRecordValue::Bool(true))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null / GraphRecordValue::DateTime(NaiveDateTime::MIN))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null / GraphRecordValue::Null)
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
+        assert!((Value::Null / Value::Null).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
     }
 
     #[test]
     fn test_pow() {
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                .pow(GraphRecordValue::String("value".to_string())))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).pow(Value::String("value".to_string())))
+                .is_err_and(|error| matches!(
+                    error,
+                    GraphRecordError::IncompatibleValueOperands { .. }
+                ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()).pow(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).pow(Value::Int(0))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()).pow(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).pow(Value::Float(0_f64))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()).pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).pow(Value::Bool(false))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                .pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).pow(Value::DateTime(NaiveDateTime::MIN)))
+                .is_err_and(|error| matches!(
+                    error,
+                    GraphRecordError::IncompatibleValueOperands { .. }
+                ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()).pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).pow(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Int(0).pow(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Int(0).pow(Value::String("value".to_string()))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert_eq!(Value::Int(25), (Value::Int(5).pow(Value::Int(2))).unwrap());
+        assert_eq!(
+            Value::Float(25_f64),
+            (Value::Int(5).pow(Value::Float(2_f64))).unwrap()
+        );
+        assert!(
+            (Value::Int(0).pow(Value::Bool(false))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Int(0).pow(Value::DateTime(NaiveDateTime::MIN))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Int(0).pow(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+
+        assert!(
+            (Value::Float(0_f64).pow(Value::String("value".to_string()))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert_eq!(
-            GraphRecordValue::Int(25),
-            (GraphRecordValue::Int(5).pow(GraphRecordValue::Int(2))).unwrap()
+            Value::Float(25_f64),
+            (Value::Float(5_f64).pow(Value::Int(2))).unwrap()
         );
         assert_eq!(
-            GraphRecordValue::Float(25_f64),
-            (GraphRecordValue::Int(5).pow(GraphRecordValue::Float(2_f64))).unwrap()
+            Value::Float(25_f64),
+            (Value::Float(5_f64).pow(Value::Float(2_f64))).unwrap()
         );
         assert!(
-            (GraphRecordValue::Int(0).pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64).pow(Value::Bool(false))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Int(0).pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64).pow(Value::DateTime(NaiveDateTime::MIN))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Int(0).pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64).pow(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Float(0_f64).pow(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert_eq!(
-            GraphRecordValue::Float(25_f64),
-            (GraphRecordValue::Float(5_f64).pow(GraphRecordValue::Int(2))).unwrap()
-        );
-        assert_eq!(
-            GraphRecordValue::Float(25_f64),
-            (GraphRecordValue::Float(5_f64).pow(GraphRecordValue::Float(2_f64))).unwrap()
+            (Value::Bool(false).pow(Value::String("value".to_string()))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Float(0_f64).pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false).pow(Value::Int(0))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64).pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false).pow(Value::Float(0_f64))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64).pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false).pow(Value::Bool(false))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(false).pow(Value::DateTime(NaiveDateTime::MIN))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::Bool(false).pow(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Bool(false).pow(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).pow(Value::String("value".to_string())))
+                .is_err_and(|error| matches!(
+                    error,
+                    GraphRecordError::IncompatibleValueOperands { .. }
+                ))
         );
         assert!(
-            (GraphRecordValue::Bool(false).pow(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).pow(Value::Int(0))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Bool(false).pow(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).pow(Value::Float(0_f64))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false).pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).pow(Value::Bool(false))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false).pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).pow(Value::DateTime(NaiveDateTime::MIN)))
+                .is_err_and(|error| matches!(
+                    error,
+                    GraphRecordError::IncompatibleValueOperands { .. }
+                ))
         );
         assert!(
-            (GraphRecordValue::Bool(false).pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).pow(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                .pow(GraphRecordValue::String("value".to_string())))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.pow(Value::String("value".to_string()))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN).pow(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.pow(Value::Int(0))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN).pow(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.pow(Value::Float(0_f64))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN).pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.pow(Value::Bool(false))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                .pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.pow(Value::DateTime(NaiveDateTime::MIN))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN).pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-
-        assert!(
-            (GraphRecordValue::Null.pow(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null.pow(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null.pow(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null.pow(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null.pow(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::Null.pow(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
+        assert!((Value::Null.pow(Value::Null)).is_err_and(|error| matches!(
+            error,
+            GraphRecordError::IncompatibleValueOperands { .. }
+        )));
     }
 
     #[test]
     fn test_mod() {
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                .r#mod(GraphRecordValue::String("value".to_string())))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).r#mod(Value::String("value".to_string())))
+                .is_err_and(|error| matches!(
+                    error,
+                    GraphRecordError::IncompatibleValueOperands { .. }
+                ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()).r#mod(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).r#mod(Value::Int(0))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()).r#mod(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).r#mod(Value::Float(0_f64))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()).r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).r#mod(Value::Bool(false))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::String("value".to_string())
-                .r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).r#mod(Value::DateTime(NaiveDateTime::MIN)))
+                .is_err_and(|error| matches!(
+                    error,
+                    GraphRecordError::IncompatibleValueOperands { .. }
+                ))
         );
         assert!(
-            (GraphRecordValue::String("value".to_string()).r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::String("value".to_string()).r#mod(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Int(0).r#mod(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Int(0).r#mod(Value::String("value".to_string()))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert_eq!(Value::Int(1), (Value::Int(5).r#mod(Value::Int(2))).unwrap());
+        assert_eq!(
+            Value::Float(1_f64),
+            (Value::Int(5).r#mod(Value::Float(2_f64))).unwrap()
+        );
+        assert!(
+            (Value::Int(0).r#mod(Value::Bool(false))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Int(0).r#mod(Value::DateTime(NaiveDateTime::MIN))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::Int(0).r#mod(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+
+        assert!(
+            (Value::Float(0_f64).r#mod(Value::String("value".to_string()))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert_eq!(
-            GraphRecordValue::Int(1),
-            (GraphRecordValue::Int(5).r#mod(GraphRecordValue::Int(2))).unwrap()
+            Value::Float(1_f64),
+            (Value::Float(5_f64).r#mod(Value::Int(2))).unwrap()
         );
         assert_eq!(
-            GraphRecordValue::Float(1_f64),
-            (GraphRecordValue::Int(5).r#mod(GraphRecordValue::Float(2_f64))).unwrap()
+            Value::Float(1_f64),
+            (Value::Float(5_f64).r#mod(Value::Float(2_f64))).unwrap()
         );
         assert!(
-            (GraphRecordValue::Int(0).r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64).r#mod(Value::Bool(false))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Int(0).r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64).r#mod(Value::DateTime(NaiveDateTime::MIN))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Int(0).r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Float(0_f64).r#mod(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Float(0_f64).r#mod(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert_eq!(
-            GraphRecordValue::Float(1_f64),
-            (GraphRecordValue::Float(5_f64).r#mod(GraphRecordValue::Int(2))).unwrap()
-        );
-        assert_eq!(
-            GraphRecordValue::Float(1_f64),
-            (GraphRecordValue::Float(5_f64).r#mod(GraphRecordValue::Float(2_f64))).unwrap()
+            (Value::Bool(false).r#mod(Value::String("value".to_string()))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Float(0_f64).r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false).r#mod(Value::Int(0))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64).r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false).r#mod(Value::Float(0_f64))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Float(0_f64).r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Bool(false).r#mod(Value::Bool(false))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
+        );
+        assert!(
+            (Value::Bool(false).r#mod(Value::DateTime(NaiveDateTime::MIN))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
+        );
+        assert!(
+            (Value::Bool(false).r#mod(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).r#mod(Value::String("value".to_string())))
+                .is_err_and(|error| matches!(
+                    error,
+                    GraphRecordError::IncompatibleValueOperands { .. }
+                ))
         );
         assert!(
-            (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).r#mod(Value::Int(0))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).r#mod(Value::Float(0_f64))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).r#mod(Value::Bool(false))).is_err_and(
+                |error| matches!(error, GraphRecordError::IncompatibleValueOperands { .. })
+            )
         );
         assert!(
-            (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).r#mod(Value::DateTime(NaiveDateTime::MIN)))
+                .is_err_and(|error| matches!(
+                    error,
+                    GraphRecordError::IncompatibleValueOperands { .. }
+                ))
         );
         assert!(
-            (GraphRecordValue::Bool(false).r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                .r#mod(GraphRecordValue::String("value".to_string())))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN).r#mod(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN).r#mod(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN).r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                .r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-            .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
-        );
-        assert!(
-            (GraphRecordValue::DateTime(NaiveDateTime::MIN).r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::DateTime(NaiveDateTime::MIN).r#mod(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
 
         assert!(
-            (GraphRecordValue::Null.r#mod(GraphRecordValue::String("value".to_string())))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.r#mod(Value::String("value".to_string()))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Null.r#mod(GraphRecordValue::Int(0)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.r#mod(Value::Int(0))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Null.r#mod(GraphRecordValue::Float(0_f64)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.r#mod(Value::Float(0_f64))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Null.r#mod(GraphRecordValue::Bool(false)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.r#mod(Value::Bool(false))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Null.r#mod(GraphRecordValue::DateTime(NaiveDateTime::MIN)))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.r#mod(Value::DateTime(NaiveDateTime::MIN))).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
         assert!(
-            (GraphRecordValue::Null.r#mod(GraphRecordValue::Null))
-                .is_err_and(|e| matches!(e, GraphRecordError::IncompatibleValueOperands { .. }))
+            (Value::Null.r#mod(Value::Null)).is_err_and(|error| matches!(
+                error,
+                GraphRecordError::IncompatibleValueOperands { .. }
+            ))
         );
     }
 
     #[test]
     fn test_starts_with() {
+        assert!(Value::String("value".to_string()).starts_with(&Value::String("val".to_string())));
         assert!(
-            GraphRecordValue::String("value".to_string())
-                .starts_with(&GraphRecordValue::String("val".to_string()))
+            !Value::String("value".to_string()).starts_with(&Value::String("not_val".to_string()))
         );
-        assert!(
-            !GraphRecordValue::String("value".to_string())
-                .starts_with(&GraphRecordValue::String("not_val".to_string()))
-        );
-        assert!(GraphRecordValue::String("10".to_string()).starts_with(&GraphRecordValue::Int(1)));
-        assert!(!GraphRecordValue::String("10".to_string()).starts_with(&GraphRecordValue::Int(0)));
-        assert!(
-            GraphRecordValue::String("10".to_string()).starts_with(&GraphRecordValue::Float(1_f64))
-        );
-        assert!(
-            !GraphRecordValue::String("10".to_string())
-                .starts_with(&GraphRecordValue::Float(0_f64))
-        );
+        assert!(Value::String("10".to_string()).starts_with(&Value::Int(1)));
+        assert!(!Value::String("10".to_string()).starts_with(&Value::Int(0)));
+        assert!(Value::String("10".to_string()).starts_with(&Value::Float(1_f64)));
+        assert!(!Value::String("10".to_string()).starts_with(&Value::Float(0_f64)));
 
-        assert!(GraphRecordValue::Int(10).starts_with(&GraphRecordValue::String("1".to_string())));
-        assert!(!GraphRecordValue::Int(10).starts_with(&GraphRecordValue::String("0".to_string())));
-        assert!(GraphRecordValue::Int(10).starts_with(&GraphRecordValue::Int(1)));
-        assert!(!GraphRecordValue::Int(10).starts_with(&GraphRecordValue::Int(0)));
-        assert!(GraphRecordValue::Int(10).starts_with(&GraphRecordValue::Float(1_f64)));
-        assert!(!GraphRecordValue::Int(10).starts_with(&GraphRecordValue::Float(0_f64)));
+        assert!(Value::Int(10).starts_with(&Value::String("1".to_string())));
+        assert!(!Value::Int(10).starts_with(&Value::String("0".to_string())));
+        assert!(Value::Int(10).starts_with(&Value::Int(1)));
+        assert!(!Value::Int(10).starts_with(&Value::Int(0)));
+        assert!(Value::Int(10).starts_with(&Value::Float(1_f64)));
+        assert!(!Value::Int(10).starts_with(&Value::Float(0_f64)));
 
-        assert!(
-            GraphRecordValue::Float(10_f64).starts_with(&GraphRecordValue::String("1".to_string()))
-        );
-        assert!(
-            !GraphRecordValue::Float(10_f64)
-                .starts_with(&GraphRecordValue::String("0".to_string()))
-        );
-        assert!(GraphRecordValue::Float(10_f64).starts_with(&GraphRecordValue::Int(1)));
-        assert!(!GraphRecordValue::Float(10_f64).starts_with(&GraphRecordValue::Int(0)));
-        assert!(GraphRecordValue::Float(10_f64).starts_with(&GraphRecordValue::Float(1_f64)));
-        assert!(!GraphRecordValue::Float(10_f64).starts_with(&GraphRecordValue::Float(0_f64)));
+        assert!(Value::Float(10_f64).starts_with(&Value::String("1".to_string())));
+        assert!(!Value::Float(10_f64).starts_with(&Value::String("0".to_string())));
+        assert!(Value::Float(10_f64).starts_with(&Value::Int(1)));
+        assert!(!Value::Float(10_f64).starts_with(&Value::Int(0)));
+        assert!(Value::Float(10_f64).starts_with(&Value::Float(1_f64)));
+        assert!(!Value::Float(10_f64).starts_with(&Value::Float(0_f64)));
 
+        assert!(!Value::String("true".to_string()).starts_with(&Value::Bool(true)));
         assert!(
-            !GraphRecordValue::String("true".to_string())
-                .starts_with(&GraphRecordValue::Bool(true))
+            !Value::String("-262143-01-01 00:00:00".to_string())
+                .starts_with(&Value::DateTime(NaiveDateTime::MIN))
         );
-        assert!(
-            !GraphRecordValue::String("-262143-01-01 00:00:00".to_string())
-                .starts_with(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::String("Null".to_string()).starts_with(&GraphRecordValue::Null));
+        assert!(!Value::String("Null".to_string()).starts_with(&Value::Null));
 
-        assert!(!GraphRecordValue::Int(1).starts_with(&GraphRecordValue::Bool(true)));
-        assert!(
-            !GraphRecordValue::Int(-2).starts_with(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::Int(0).starts_with(&GraphRecordValue::Null));
+        assert!(!Value::Int(1).starts_with(&Value::Bool(true)));
+        assert!(!Value::Int(-2).starts_with(&Value::DateTime(NaiveDateTime::MIN)));
+        assert!(!Value::Int(0).starts_with(&Value::Null));
 
-        assert!(!GraphRecordValue::Float(1_f64).starts_with(&GraphRecordValue::Bool(true)));
-        assert!(
-            !GraphRecordValue::Float(-2_f64)
-                .starts_with(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::Float(0_f64).starts_with(&GraphRecordValue::Null));
+        assert!(!Value::Float(1_f64).starts_with(&Value::Bool(true)));
+        assert!(!Value::Float(-2_f64).starts_with(&Value::DateTime(NaiveDateTime::MIN)));
+        assert!(!Value::Float(0_f64).starts_with(&Value::Null));
+
+        assert!(!Value::Bool(true).starts_with(&Value::String("true".to_string())));
+        assert!(!Value::Bool(true).starts_with(&Value::Int(1)));
+        assert!(!Value::Bool(true).starts_with(&Value::Float(1_f64)));
+        assert!(!Value::Bool(true).starts_with(&Value::Bool(true)));
+        assert!(!Value::Bool(true).starts_with(&Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!Value::Bool(false).starts_with(&Value::Null));
 
         assert!(
-            !GraphRecordValue::Bool(true)
-                .starts_with(&GraphRecordValue::String("true".to_string()))
+            !Value::DateTime(NaiveDateTime::MAX)
+                .starts_with(&Value::String("-262143-01-01 00:00:00".to_string()))
         );
-        assert!(!GraphRecordValue::Bool(true).starts_with(&GraphRecordValue::Int(1)));
-        assert!(!GraphRecordValue::Bool(true).starts_with(&GraphRecordValue::Float(1_f64)));
-        assert!(!GraphRecordValue::Bool(true).starts_with(&GraphRecordValue::Bool(true)));
+        assert!(!Value::DateTime(NaiveDateTime::MAX).starts_with(&Value::Int(-2)));
+        assert!(!Value::DateTime(NaiveDateTime::MAX).starts_with(&Value::Float(1_f64)));
+        assert!(!Value::DateTime(NaiveDateTime::MAX).starts_with(&Value::Bool(false)));
         assert!(
-            !GraphRecordValue::Bool(true)
-                .starts_with(&GraphRecordValue::DateTime(NaiveDateTime::MAX))
+            !Value::DateTime(NaiveDateTime::MAX).starts_with(&Value::DateTime(NaiveDateTime::MAX))
         );
-        assert!(!GraphRecordValue::Bool(false).starts_with(&GraphRecordValue::Null));
+        assert!(!Value::DateTime(NaiveDateTime::MIN).starts_with(&Value::Null));
 
-        assert!(!GraphRecordValue::DateTime(NaiveDateTime::MAX).starts_with(
-            &GraphRecordValue::String("-262143-01-01 00:00:00".to_string())
-        ));
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MAX).starts_with(&GraphRecordValue::Int(-2))
-        );
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                .starts_with(&GraphRecordValue::Float(1_f64))
-        );
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                .starts_with(&GraphRecordValue::Bool(false))
-        );
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                .starts_with(&GraphRecordValue::DateTime(NaiveDateTime::MAX))
-        );
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MIN).starts_with(&GraphRecordValue::Null)
-        );
-
-        assert!(!GraphRecordValue::Null.starts_with(&GraphRecordValue::String("Null".to_string())));
-        assert!(!GraphRecordValue::Null.starts_with(&GraphRecordValue::Int(0)));
-        assert!(!GraphRecordValue::Null.starts_with(&GraphRecordValue::Float(0_f64)));
-        assert!(!GraphRecordValue::Null.starts_with(&GraphRecordValue::Bool(false)));
-        assert!(
-            !GraphRecordValue::Null.starts_with(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::Null.starts_with(&GraphRecordValue::Null));
+        assert!(!Value::Null.starts_with(&Value::String("Null".to_string())));
+        assert!(!Value::Null.starts_with(&Value::Int(0)));
+        assert!(!Value::Null.starts_with(&Value::Float(0_f64)));
+        assert!(!Value::Null.starts_with(&Value::Bool(false)));
+        assert!(!Value::Null.starts_with(&Value::DateTime(NaiveDateTime::MIN)));
+        assert!(!Value::Null.starts_with(&Value::Null));
     }
 
     #[test]
     fn test_ends_with() {
+        assert!(Value::String("value".to_string()).ends_with(&Value::String("ue".to_string())));
         assert!(
-            GraphRecordValue::String("value".to_string())
-                .ends_with(&GraphRecordValue::String("ue".to_string()))
+            !Value::String("value".to_string()).ends_with(&Value::String("not_ue".to_string()))
         );
-        assert!(
-            !GraphRecordValue::String("value".to_string())
-                .ends_with(&GraphRecordValue::String("not_ue".to_string()))
-        );
-        assert!(GraphRecordValue::String("10".to_string()).ends_with(&GraphRecordValue::Int(0)));
-        assert!(!GraphRecordValue::String("10".to_string()).ends_with(&GraphRecordValue::Int(1)));
-        assert!(
-            GraphRecordValue::String("10".to_string()).ends_with(&GraphRecordValue::Float(0_f64))
-        );
-        assert!(
-            !GraphRecordValue::String("10".to_string()).ends_with(&GraphRecordValue::Float(1_f64))
-        );
+        assert!(Value::String("10".to_string()).ends_with(&Value::Int(0)));
+        assert!(!Value::String("10".to_string()).ends_with(&Value::Int(1)));
+        assert!(Value::String("10".to_string()).ends_with(&Value::Float(0_f64)));
+        assert!(!Value::String("10".to_string()).ends_with(&Value::Float(1_f64)));
 
-        assert!(GraphRecordValue::Int(10).ends_with(&GraphRecordValue::String("0".to_string())));
-        assert!(!GraphRecordValue::Int(10).ends_with(&GraphRecordValue::String("1".to_string())));
-        assert!(GraphRecordValue::Int(10).ends_with(&GraphRecordValue::Int(0)));
-        assert!(!GraphRecordValue::Int(10).ends_with(&GraphRecordValue::Int(1)));
-        assert!(GraphRecordValue::Int(10).ends_with(&GraphRecordValue::Float(0_f64)));
-        assert!(!GraphRecordValue::Int(10).ends_with(&GraphRecordValue::Float(1_f64)));
+        assert!(Value::Int(10).ends_with(&Value::String("0".to_string())));
+        assert!(!Value::Int(10).ends_with(&Value::String("1".to_string())));
+        assert!(Value::Int(10).ends_with(&Value::Int(0)));
+        assert!(!Value::Int(10).ends_with(&Value::Int(1)));
+        assert!(Value::Int(10).ends_with(&Value::Float(0_f64)));
+        assert!(!Value::Int(10).ends_with(&Value::Float(1_f64)));
 
-        assert!(
-            GraphRecordValue::Float(10_f64).ends_with(&GraphRecordValue::String("0".to_string()))
-        );
-        assert!(
-            !GraphRecordValue::Float(10_f64).ends_with(&GraphRecordValue::String("1".to_string()))
-        );
-        assert!(GraphRecordValue::Float(10_f64).ends_with(&GraphRecordValue::Int(0)));
-        assert!(!GraphRecordValue::Float(10_f64).ends_with(&GraphRecordValue::Int(1)));
-        assert!(GraphRecordValue::Float(10_f64).ends_with(&GraphRecordValue::Float(0_f64)));
-        assert!(!GraphRecordValue::Float(10_f64).ends_with(&GraphRecordValue::Float(1_f64)));
+        assert!(Value::Float(10_f64).ends_with(&Value::String("0".to_string())));
+        assert!(!Value::Float(10_f64).ends_with(&Value::String("1".to_string())));
+        assert!(Value::Float(10_f64).ends_with(&Value::Int(0)));
+        assert!(!Value::Float(10_f64).ends_with(&Value::Int(1)));
+        assert!(Value::Float(10_f64).ends_with(&Value::Float(0_f64)));
+        assert!(!Value::Float(10_f64).ends_with(&Value::Float(1_f64)));
 
+        assert!(!Value::String("true".to_string()).ends_with(&Value::Bool(true)));
         assert!(
-            !GraphRecordValue::String("true".to_string()).ends_with(&GraphRecordValue::Bool(true))
+            !Value::String("-262143-01-01 00:00:00".to_string())
+                .ends_with(&Value::DateTime(NaiveDateTime::MIN))
         );
-        assert!(
-            !GraphRecordValue::String("-262143-01-01 00:00:00".to_string())
-                .ends_with(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::String("Null".to_string()).ends_with(&GraphRecordValue::Null));
+        assert!(!Value::String("Null".to_string()).ends_with(&Value::Null));
 
-        assert!(!GraphRecordValue::Int(1).ends_with(&GraphRecordValue::Bool(true)));
-        assert!(
-            !GraphRecordValue::Int(0).ends_with(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::Int(0).ends_with(&GraphRecordValue::Null));
+        assert!(!Value::Int(1).ends_with(&Value::Bool(true)));
+        assert!(!Value::Int(0).ends_with(&Value::DateTime(NaiveDateTime::MIN)));
+        assert!(!Value::Int(0).ends_with(&Value::Null));
 
-        assert!(!GraphRecordValue::Float(1_f64).ends_with(&GraphRecordValue::Bool(true)));
-        assert!(
-            !GraphRecordValue::Float(0_f64)
-                .ends_with(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::Float(0_f64).ends_with(&GraphRecordValue::Null));
+        assert!(!Value::Float(1_f64).ends_with(&Value::Bool(true)));
+        assert!(!Value::Float(0_f64).ends_with(&Value::DateTime(NaiveDateTime::MIN)));
+        assert!(!Value::Float(0_f64).ends_with(&Value::Null));
+
+        assert!(!Value::Bool(true).ends_with(&Value::String("true".to_string())));
+        assert!(!Value::Bool(true).ends_with(&Value::Int(1)));
+        assert!(!Value::Bool(true).ends_with(&Value::Float(1_f64)));
+        assert!(!Value::Bool(true).ends_with(&Value::Bool(true)));
+        assert!(!Value::Bool(true).ends_with(&Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!Value::Bool(false).ends_with(&Value::Null));
 
         assert!(
-            !GraphRecordValue::Bool(true).ends_with(&GraphRecordValue::String("true".to_string()))
+            !Value::DateTime(NaiveDateTime::MIN)
+                .ends_with(&Value::String("-262143-01-01 00:00:00".to_string()))
         );
-        assert!(!GraphRecordValue::Bool(true).ends_with(&GraphRecordValue::Int(1)));
-        assert!(!GraphRecordValue::Bool(true).ends_with(&GraphRecordValue::Float(1_f64)));
-        assert!(!GraphRecordValue::Bool(true).ends_with(&GraphRecordValue::Bool(true)));
+        assert!(!Value::DateTime(NaiveDateTime::MAX).ends_with(&Value::Int(0)));
+        assert!(!Value::DateTime(NaiveDateTime::MAX).ends_with(&Value::Float(0_f64)));
+        assert!(!Value::DateTime(NaiveDateTime::MAX).ends_with(&Value::Bool(false)));
         assert!(
-            !GraphRecordValue::Bool(true)
-                .ends_with(&GraphRecordValue::DateTime(NaiveDateTime::MAX))
+            !Value::DateTime(NaiveDateTime::MAX).ends_with(&Value::DateTime(NaiveDateTime::MAX))
         );
-        assert!(!GraphRecordValue::Bool(false).ends_with(&GraphRecordValue::Null));
+        assert!(!Value::DateTime(NaiveDateTime::MAX).ends_with(&Value::Null));
 
-        assert!(!GraphRecordValue::DateTime(NaiveDateTime::MIN).ends_with(
-            &GraphRecordValue::String("-262143-01-01 00:00:00".to_string())
-        ));
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MAX).ends_with(&GraphRecordValue::Int(0))
-        );
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                .ends_with(&GraphRecordValue::Float(0_f64))
-        );
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                .ends_with(&GraphRecordValue::Bool(false))
-        );
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MAX)
-                .ends_with(&GraphRecordValue::DateTime(NaiveDateTime::MAX))
-        );
-        assert!(!GraphRecordValue::DateTime(NaiveDateTime::MAX).ends_with(&GraphRecordValue::Null));
-
-        assert!(!GraphRecordValue::Null.ends_with(&GraphRecordValue::String("true".to_string())));
-        assert!(!GraphRecordValue::Null.ends_with(&GraphRecordValue::Int(1)));
-        assert!(!GraphRecordValue::Null.ends_with(&GraphRecordValue::Float(1_f64)));
-        assert!(!GraphRecordValue::Null.ends_with(&GraphRecordValue::Bool(false)));
-        assert!(!GraphRecordValue::Null.ends_with(&GraphRecordValue::DateTime(NaiveDateTime::MIN)));
-        assert!(!GraphRecordValue::Null.ends_with(&GraphRecordValue::Null));
+        assert!(!Value::Null.ends_with(&Value::String("true".to_string())));
+        assert!(!Value::Null.ends_with(&Value::Int(1)));
+        assert!(!Value::Null.ends_with(&Value::Float(1_f64)));
+        assert!(!Value::Null.ends_with(&Value::Bool(false)));
+        assert!(!Value::Null.ends_with(&Value::DateTime(NaiveDateTime::MIN)));
+        assert!(!Value::Null.ends_with(&Value::Null));
     }
 
     #[test]
     fn test_contains() {
-        assert!(
-            GraphRecordValue::String("value".to_string())
-                .contains(&GraphRecordValue::String("al".to_string()))
-        );
-        assert!(
-            !GraphRecordValue::String("value".to_string())
-                .contains(&GraphRecordValue::String("not_al".to_string()))
-        );
-        assert!(GraphRecordValue::String("10".to_string()).contains(&GraphRecordValue::Int(0)));
-        assert!(!GraphRecordValue::String("10".to_string()).contains(&GraphRecordValue::Int(2)));
-        assert!(
-            GraphRecordValue::String("10".to_string()).contains(&GraphRecordValue::Float(0_f64))
-        );
-        assert!(
-            !GraphRecordValue::String("10".to_string()).contains(&GraphRecordValue::Float(2_f64))
-        );
+        assert!(Value::String("value".to_string()).contains(&Value::String("al".to_string())));
+        assert!(!Value::String("value".to_string()).contains(&Value::String("not_al".to_string())));
+        assert!(Value::String("10".to_string()).contains(&Value::Int(0)));
+        assert!(!Value::String("10".to_string()).contains(&Value::Int(2)));
+        assert!(Value::String("10".to_string()).contains(&Value::Float(0_f64)));
+        assert!(!Value::String("10".to_string()).contains(&Value::Float(2_f64)));
 
-        assert!(GraphRecordValue::Int(10).contains(&GraphRecordValue::String("0".to_string())));
-        assert!(!GraphRecordValue::Int(10).contains(&GraphRecordValue::String("2".to_string())));
-        assert!(GraphRecordValue::Int(10).contains(&GraphRecordValue::Int(0)));
-        assert!(!GraphRecordValue::Int(10).contains(&GraphRecordValue::Int(2)));
-        assert!(GraphRecordValue::Int(10).contains(&GraphRecordValue::Float(0_f64)));
-        assert!(!GraphRecordValue::Int(10).contains(&GraphRecordValue::Float(2_f64)));
+        assert!(Value::Int(10).contains(&Value::String("0".to_string())));
+        assert!(!Value::Int(10).contains(&Value::String("2".to_string())));
+        assert!(Value::Int(10).contains(&Value::Int(0)));
+        assert!(!Value::Int(10).contains(&Value::Int(2)));
+        assert!(Value::Int(10).contains(&Value::Float(0_f64)));
+        assert!(!Value::Int(10).contains(&Value::Float(2_f64)));
 
-        assert!(
-            GraphRecordValue::Float(10_f64).contains(&GraphRecordValue::String("0".to_string()))
-        );
-        assert!(
-            !GraphRecordValue::Float(10_f64).contains(&GraphRecordValue::String("2".to_string()))
-        );
-        assert!(GraphRecordValue::Float(10_f64).contains(&GraphRecordValue::Int(0)));
-        assert!(!GraphRecordValue::Float(10_f64).contains(&GraphRecordValue::Int(2)));
-        assert!(GraphRecordValue::Float(10_f64).contains(&GraphRecordValue::Float(0_f64)));
-        assert!(!GraphRecordValue::Float(10_f64).contains(&GraphRecordValue::Float(2_f64)));
+        assert!(Value::Float(10_f64).contains(&Value::String("0".to_string())));
+        assert!(!Value::Float(10_f64).contains(&Value::String("2".to_string())));
+        assert!(Value::Float(10_f64).contains(&Value::Int(0)));
+        assert!(!Value::Float(10_f64).contains(&Value::Int(2)));
+        assert!(Value::Float(10_f64).contains(&Value::Float(0_f64)));
+        assert!(!Value::Float(10_f64).contains(&Value::Float(2_f64)));
 
+        assert!(!Value::String("true".to_string()).contains(&Value::Bool(true)));
         assert!(
-            !GraphRecordValue::String("true".to_string()).contains(&GraphRecordValue::Bool(true))
+            !Value::String("-262143-01-01 00:00:00".to_string())
+                .contains(&Value::DateTime(NaiveDateTime::MIN))
         );
-        assert!(
-            !GraphRecordValue::String("-262143-01-01 00:00:00".to_string())
-                .contains(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::String("Null".to_string()).contains(&GraphRecordValue::Null));
+        assert!(!Value::String("Null".to_string()).contains(&Value::Null));
 
-        assert!(!GraphRecordValue::Int(1).contains(&GraphRecordValue::Bool(true)));
-        assert!(
-            !GraphRecordValue::Int(0).contains(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::Int(0).contains(&GraphRecordValue::Null));
+        assert!(!Value::Int(1).contains(&Value::Bool(true)));
+        assert!(!Value::Int(0).contains(&Value::DateTime(NaiveDateTime::MIN)));
+        assert!(!Value::Int(0).contains(&Value::Null));
 
-        assert!(!GraphRecordValue::Float(1_f64).contains(&GraphRecordValue::Bool(true)));
-        assert!(
-            !GraphRecordValue::Float(0_f64)
-                .contains(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::Float(0_f64).contains(&GraphRecordValue::Null));
+        assert!(!Value::Float(1_f64).contains(&Value::Bool(true)));
+        assert!(!Value::Float(0_f64).contains(&Value::DateTime(NaiveDateTime::MIN)));
+        assert!(!Value::Float(0_f64).contains(&Value::Null));
+
+        assert!(!Value::Bool(true).contains(&Value::String("true".to_string())));
+        assert!(!Value::Bool(true).contains(&Value::Int(1)));
+        assert!(!Value::Bool(true).contains(&Value::Float(1_f64)));
+        assert!(!Value::Bool(true).contains(&Value::Bool(true)));
+        assert!(!Value::Bool(true).contains(&Value::DateTime(NaiveDateTime::MAX)));
+        assert!(!Value::Bool(false).contains(&Value::Null));
 
         assert!(
-            !GraphRecordValue::Bool(true).contains(&GraphRecordValue::String("true".to_string()))
+            !Value::DateTime(NaiveDateTime::MIN)
+                .contains(&Value::String("-262143-01-01 00:00:00".to_string()))
         );
-        assert!(!GraphRecordValue::Bool(true).contains(&GraphRecordValue::Int(1)));
-        assert!(!GraphRecordValue::Bool(true).contains(&GraphRecordValue::Float(1_f64)));
-        assert!(!GraphRecordValue::Bool(true).contains(&GraphRecordValue::Bool(true)));
+        assert!(!Value::DateTime(NaiveDateTime::MIN).contains(&Value::Int(0)));
+        assert!(!Value::DateTime(NaiveDateTime::MIN).contains(&Value::Float(0_f64)));
+        assert!(!Value::DateTime(NaiveDateTime::MIN).contains(&Value::Bool(false)));
         assert!(
-            !GraphRecordValue::Bool(true).contains(&GraphRecordValue::DateTime(NaiveDateTime::MAX))
+            !Value::DateTime(NaiveDateTime::MIN).contains(&Value::DateTime(NaiveDateTime::MIN))
         );
-        assert!(!GraphRecordValue::Bool(false).contains(&GraphRecordValue::Null));
+        assert!(!Value::DateTime(NaiveDateTime::MIN).contains(&Value::Null));
 
-        assert!(!GraphRecordValue::DateTime(NaiveDateTime::MIN).contains(
-            &GraphRecordValue::String("-262143-01-01 00:00:00".to_string())
-        ));
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MIN).contains(&GraphRecordValue::Int(0))
-        );
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                .contains(&GraphRecordValue::Float(0_f64))
-        );
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                .contains(&GraphRecordValue::Bool(false))
-        );
-        assert!(
-            !GraphRecordValue::DateTime(NaiveDateTime::MIN)
-                .contains(&GraphRecordValue::DateTime(NaiveDateTime::MIN))
-        );
-        assert!(!GraphRecordValue::DateTime(NaiveDateTime::MIN).contains(&GraphRecordValue::Null));
-
-        assert!(!GraphRecordValue::Null.contains(&GraphRecordValue::String("true".to_string())));
-        assert!(!GraphRecordValue::Null.contains(&GraphRecordValue::Int(1)));
-        assert!(!GraphRecordValue::Null.contains(&GraphRecordValue::Float(1_f64)));
-        assert!(!GraphRecordValue::Null.contains(&GraphRecordValue::Bool(true)));
-        assert!(!GraphRecordValue::Null.contains(&GraphRecordValue::DateTime(NaiveDateTime::MIN)));
-        assert!(!GraphRecordValue::Null.contains(&GraphRecordValue::Null));
+        assert!(!Value::Null.contains(&Value::String("true".to_string())));
+        assert!(!Value::Null.contains(&Value::Int(1)));
+        assert!(!Value::Null.contains(&Value::Float(1_f64)));
+        assert!(!Value::Null.contains(&Value::Bool(true)));
+        assert!(!Value::Null.contains(&Value::DateTime(NaiveDateTime::MIN)));
+        assert!(!Value::Null.contains(&Value::Null));
     }
 
     #[test]
     fn test_slice() {
         assert_eq!(
-            GraphRecordValue::String("al".to_string()),
-            GraphRecordValue::String("value".to_string()).slice(1..3)
+            Value::String("al".to_string()),
+            Value::String("value".to_string()).slice(1..3)
         );
 
         assert_eq!(
-            GraphRecordValue::String("23".to_string()),
-            GraphRecordValue::Int(1234).slice(1..3)
+            Value::String("23".to_string()),
+            Value::Int(1234).slice(1..3)
         );
 
         assert_eq!(
-            GraphRecordValue::String("23".to_string()),
-            GraphRecordValue::Float(1234_f64).slice(1..3)
+            Value::String("23".to_string()),
+            Value::Float(1234_f64).slice(1..3)
         );
 
         assert_eq!(
-            GraphRecordValue::String("al".to_string()),
-            GraphRecordValue::Bool(false).slice(1..3)
+            Value::String("al".to_string()),
+            Value::Bool(false).slice(1..3)
         );
 
         assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).slice(1..3)
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN).slice(1..3)
         );
 
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.slice(1..3));
+        assert_eq!(Value::Null, Value::Null.slice(1..3));
     }
 
     #[test]
     fn test_round() {
         assert_eq!(
-            GraphRecordValue::String("value".to_string()),
-            GraphRecordValue::String("value".to_string()).round()
+            Value::String("value".to_string()),
+            Value::String("value".to_string()).round()
         );
+
+        assert_eq!(Value::Int(1234), Value::Int(1234).round());
+
+        assert_eq!(Value::Float(1234_f64), Value::Float(1234.3).round());
+
+        assert_eq!(Value::Bool(false), Value::Bool(false).round());
 
         assert_eq!(
-            GraphRecordValue::Int(1234),
-            GraphRecordValue::Int(1234).round()
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN).round()
         );
 
-        assert_eq!(
-            GraphRecordValue::Float(1234_f64),
-            GraphRecordValue::Float(1234.3).round()
-        );
-
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Bool(false).round()
-        );
-
-        assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).round()
-        );
-
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.round());
+        assert_eq!(Value::Null, Value::Null.round());
     }
 
     #[test]
     fn test_ceil() {
         assert_eq!(
-            GraphRecordValue::String("value".to_string()),
-            GraphRecordValue::String("value".to_string()).ceil()
+            Value::String("value".to_string()),
+            Value::String("value".to_string()).ceil()
         );
+
+        assert_eq!(Value::Int(1234), Value::Int(1234).ceil());
+
+        assert_eq!(Value::Float(1235_f64), Value::Float(1234.3).ceil());
+
+        assert_eq!(Value::Bool(false), Value::Bool(false).ceil());
 
         assert_eq!(
-            GraphRecordValue::Int(1234),
-            GraphRecordValue::Int(1234).ceil()
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN).ceil()
         );
 
-        assert_eq!(
-            GraphRecordValue::Float(1235_f64),
-            GraphRecordValue::Float(1234.3).ceil()
-        );
-
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Bool(false).ceil()
-        );
-
-        assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).ceil()
-        );
-
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.ceil());
+        assert_eq!(Value::Null, Value::Null.ceil());
     }
 
     #[test]
     fn test_floor() {
         assert_eq!(
-            GraphRecordValue::String("value".to_string()),
-            GraphRecordValue::String("value".to_string()).floor()
+            Value::String("value".to_string()),
+            Value::String("value".to_string()).floor()
         );
+
+        assert_eq!(Value::Int(1234), Value::Int(1234).floor());
+
+        assert_eq!(Value::Float(1234_f64), Value::Float(1234.3).floor());
+
+        assert_eq!(Value::Bool(false), Value::Bool(false).floor());
 
         assert_eq!(
-            GraphRecordValue::Int(1234),
-            GraphRecordValue::Int(1234).floor()
+            Value::DateTime(NaiveDateTime::MAX),
+            Value::DateTime(NaiveDateTime::MAX).floor()
         );
 
-        assert_eq!(
-            GraphRecordValue::Float(1234_f64),
-            GraphRecordValue::Float(1234.3).floor()
-        );
-
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Bool(false).floor()
-        );
-
-        assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MAX),
-            GraphRecordValue::DateTime(NaiveDateTime::MAX).floor()
-        );
-
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.floor());
+        assert_eq!(Value::Null, Value::Null.floor());
     }
 
     #[test]
     fn test_abs() {
         assert_eq!(
-            GraphRecordValue::String("value".to_string()),
-            GraphRecordValue::String("value".to_string()).abs()
+            Value::String("value".to_string()),
+            Value::String("value".to_string()).abs()
         );
 
-        assert_eq!(
-            GraphRecordValue::Int(1234),
-            GraphRecordValue::Int(1234).abs()
-        );
-        assert_eq!(
-            GraphRecordValue::Int(1234),
-            GraphRecordValue::Int(-1234).abs()
-        );
+        assert_eq!(Value::Int(1234), Value::Int(1234).abs());
+        assert_eq!(Value::Int(1234), Value::Int(-1234).abs());
+
+        assert_eq!(Value::Float(1234_f64), Value::Float(1234_f64).abs());
+        assert_eq!(Value::Float(1234_f64), Value::Float(-1234_f64).abs());
+
+        assert_eq!(Value::Bool(false), Value::Bool(false).abs());
 
         assert_eq!(
-            GraphRecordValue::Float(1234_f64),
-            GraphRecordValue::Float(1234_f64).abs()
-        );
-        assert_eq!(
-            GraphRecordValue::Float(1234_f64),
-            GraphRecordValue::Float(-1234_f64).abs()
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN).abs()
         );
 
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Bool(false).abs()
-        );
-
-        assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).abs()
-        );
-
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.abs());
+        assert_eq!(Value::Null, Value::Null.abs());
     }
 
     #[test]
     fn test_sqrt() {
         assert_eq!(
-            GraphRecordValue::String("value".to_string()),
-            GraphRecordValue::String("value".to_string()).sqrt()
+            Value::String("value".to_string()),
+            Value::String("value".to_string()).sqrt()
         );
+
+        assert_eq!(Value::Float(2_f64), Value::Int(4).sqrt());
+
+        assert_eq!(Value::Float(2_f64), Value::Float(4_f64).sqrt());
+
+        assert_eq!(Value::Bool(false), Value::Bool(false).sqrt());
 
         assert_eq!(
-            GraphRecordValue::Float(2_f64),
-            GraphRecordValue::Int(4).sqrt()
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN).sqrt()
         );
 
-        assert_eq!(
-            GraphRecordValue::Float(2_f64),
-            GraphRecordValue::Float(4_f64).sqrt()
-        );
-
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Bool(false).sqrt()
-        );
-
-        assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).sqrt()
-        );
-
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.sqrt());
+        assert_eq!(Value::Null, Value::Null.sqrt());
     }
 
     #[test]
     fn test_trim() {
         assert_eq!(
-            GraphRecordValue::String("value".to_string()),
-            GraphRecordValue::String("  value  ".to_string()).trim()
+            Value::String("value".to_string()),
+            Value::String("  value  ".to_string()).trim()
         );
+
+        assert_eq!(Value::Int(1234), Value::Int(1234).trim());
+
+        assert_eq!(Value::Float(1234_f64), Value::Float(1234_f64).trim());
+
+        assert_eq!(Value::Bool(false), Value::Bool(false).trim());
 
         assert_eq!(
-            GraphRecordValue::Int(1234),
-            GraphRecordValue::Int(1234).trim()
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN).trim()
         );
 
-        assert_eq!(
-            GraphRecordValue::Float(1234_f64),
-            GraphRecordValue::Float(1234_f64).trim()
-        );
-
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Bool(false).trim()
-        );
-
-        assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).trim()
-        );
-
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.trim());
+        assert_eq!(Value::Null, Value::Null.trim());
     }
 
     #[test]
     fn test_trim_start() {
         assert_eq!(
-            GraphRecordValue::String("value  ".to_string()),
-            GraphRecordValue::String("  value  ".to_string()).trim_start()
+            Value::String("value  ".to_string()),
+            Value::String("  value  ".to_string()).trim_start()
         );
+
+        assert_eq!(Value::Int(1234), Value::Int(1234).trim_start());
+
+        assert_eq!(Value::Float(1234_f64), Value::Float(1234_f64).trim_start());
+
+        assert_eq!(Value::Bool(false), Value::Bool(false).trim_start());
 
         assert_eq!(
-            GraphRecordValue::Int(1234),
-            GraphRecordValue::Int(1234).trim_start()
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN).trim_start()
         );
 
-        assert_eq!(
-            GraphRecordValue::Float(1234_f64),
-            GraphRecordValue::Float(1234_f64).trim_start()
-        );
-
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Bool(false).trim_start()
-        );
-
-        assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).trim_start()
-        );
-
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.trim_start());
+        assert_eq!(Value::Null, Value::Null.trim_start());
     }
 
     #[test]
     fn test_trim_end() {
         assert_eq!(
-            GraphRecordValue::String("  value".to_string()),
-            GraphRecordValue::String("  value  ".to_string()).trim_end()
+            Value::String("  value".to_string()),
+            Value::String("  value  ".to_string()).trim_end()
         );
+
+        assert_eq!(Value::Int(1234), Value::Int(1234).trim_end());
+
+        assert_eq!(Value::Float(1234_f64), Value::Float(1234_f64).trim_end());
+
+        assert_eq!(Value::Bool(false), Value::Bool(false).trim_end());
 
         assert_eq!(
-            GraphRecordValue::Int(1234),
-            GraphRecordValue::Int(1234).trim_end()
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN).trim_end()
         );
 
-        assert_eq!(
-            GraphRecordValue::Float(1234_f64),
-            GraphRecordValue::Float(1234_f64).trim_end()
-        );
-
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Bool(false).trim_end()
-        );
-
-        assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).trim_end()
-        );
-
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.trim_end());
+        assert_eq!(Value::Null, Value::Null.trim_end());
     }
 
     #[test]
     fn test_lowercase() {
         assert_eq!(
-            GraphRecordValue::String("value".to_string()),
-            GraphRecordValue::String("VaLuE".to_string()).lowercase()
+            Value::String("value".to_string()),
+            Value::String("VaLuE".to_string()).lowercase()
         );
+
+        assert_eq!(Value::Int(1234), Value::Int(1234).lowercase());
+
+        assert_eq!(Value::Float(1234_f64), Value::Float(1234_f64).lowercase());
+
+        assert_eq!(Value::Bool(false), Value::Bool(false).lowercase());
 
         assert_eq!(
-            GraphRecordValue::Int(1234),
-            GraphRecordValue::Int(1234).lowercase()
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN).lowercase()
         );
 
-        assert_eq!(
-            GraphRecordValue::Float(1234_f64),
-            GraphRecordValue::Float(1234_f64).lowercase()
-        );
-
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Bool(false).lowercase()
-        );
-
-        assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).lowercase()
-        );
-
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.lowercase());
+        assert_eq!(Value::Null, Value::Null.lowercase());
     }
 
     #[test]
     fn test_uppercase() {
         assert_eq!(
-            GraphRecordValue::String("VALUE".to_string()),
-            GraphRecordValue::String("VaLuE".to_string()).uppercase()
+            Value::String("VALUE".to_string()),
+            Value::String("VaLuE".to_string()).uppercase()
         );
+
+        assert_eq!(Value::Int(1234), Value::Int(1234).uppercase());
+
+        assert_eq!(Value::Float(1234_f64), Value::Float(1234_f64).uppercase());
+
+        assert_eq!(Value::Bool(false), Value::Bool(false).uppercase());
 
         assert_eq!(
-            GraphRecordValue::Int(1234),
-            GraphRecordValue::Int(1234).uppercase()
+            Value::DateTime(NaiveDateTime::MIN),
+            Value::DateTime(NaiveDateTime::MIN).uppercase()
         );
 
-        assert_eq!(
-            GraphRecordValue::Float(1234_f64),
-            GraphRecordValue::Float(1234_f64).uppercase()
-        );
-
-        assert_eq!(
-            GraphRecordValue::Bool(false),
-            GraphRecordValue::Bool(false).uppercase()
-        );
-
-        assert_eq!(
-            GraphRecordValue::DateTime(NaiveDateTime::MIN),
-            GraphRecordValue::DateTime(NaiveDateTime::MIN).uppercase()
-        );
-
-        assert_eq!(GraphRecordValue::Null, GraphRecordValue::Null.uppercase());
+        assert_eq!(Value::Null, Value::Null.uppercase());
     }
 
     #[test]
     fn test_hash() {
         use std::collections::hash_map::DefaultHasher;
 
-        let hash = |value: GraphRecordValue| -> u64 {
+        let hash = |value: Value| -> u64 {
             let mut hasher = DefaultHasher::new();
             value.hash(&mut hasher);
             hasher.finish()
         };
 
-        assert_eq!(
-            hash(GraphRecordValue::Int(1)),
-            hash(GraphRecordValue::Float(1.0))
-        );
-        assert_eq!(
-            hash(GraphRecordValue::Int(0)),
-            hash(GraphRecordValue::Float(0.0))
-        );
-        assert_eq!(
-            hash(GraphRecordValue::Float(-0.0)),
-            hash(GraphRecordValue::Float(0.0))
-        );
-        assert_eq!(
-            hash(GraphRecordValue::Float(f64::NAN)),
-            hash(GraphRecordValue::Float(f64::NAN))
-        );
-        assert_eq!(hash(GraphRecordValue::Null), hash(GraphRecordValue::Null));
+        assert_eq!(hash(Value::Int(1)), hash(Value::Float(1.0)));
+        assert_eq!(hash(Value::Int(0)), hash(Value::Float(0.0)));
+        assert_eq!(hash(Value::Float(-0.0)), hash(Value::Float(0.0)));
+        assert_eq!(hash(Value::Float(f64::NAN)), hash(Value::Float(f64::NAN)));
+        assert_eq!(hash(Value::Null), hash(Value::Null));
 
-        assert_ne!(
-            hash(GraphRecordValue::Int(1)),
-            hash(GraphRecordValue::String("1".to_string()))
-        );
-        assert_ne!(
-            hash(GraphRecordValue::Int(0)),
-            hash(GraphRecordValue::Bool(false))
-        );
+        assert_ne!(hash(Value::Int(1)), hash(Value::String("1".to_string())));
+        assert_ne!(hash(Value::Int(0)), hash(Value::Bool(false)));
     }
 
     #[test]
     fn test_eq_transitivity() {
-        let large_int = (1_i64 << 53) + 1;
-        let large_float = large_int as f64;
+        let smallest_imprecise_integer = (1_i64 << 53) + 1;
+        let large_float = smallest_imprecise_integer as f64;
         let rounded_int = large_float as i64;
 
-        assert_ne!(large_int, rounded_int);
+        assert_ne!(smallest_imprecise_integer, rounded_int);
 
-        let a = GraphRecordValue::Int(large_int);
-        let b = GraphRecordValue::Float(large_float);
-        let c = GraphRecordValue::Int(rounded_int);
+        let a = Value::Int(smallest_imprecise_integer);
+        let b = Value::Float(large_float);
+        let c = Value::Int(rounded_int);
 
         assert_ne!(a, b);
         assert_eq!(b, c);

@@ -1,23 +1,23 @@
-pub trait And<O> {
-    type ReturnOperand;
+pub trait And<M> {
+    type Output;
 
-    fn and(&self, other: O) -> Self::ReturnOperand;
+    fn and(&self, other: M) -> Self::Output;
 }
 
-pub trait Or<O> {
-    type ReturnOperand;
+pub trait Or<M> {
+    type Output;
 
-    fn or(&self, other: O) -> Self::ReturnOperand;
+    fn or(&self, other: M) -> Self::Output;
 }
 
-pub trait ExclusiveOr<O> {
-    type ReturnOperand;
+pub trait ExclusiveOr<M> {
+    type Output;
 
-    fn xor(&self, other: O) -> Self::ReturnOperand;
+    fn xor(&self, other: M) -> Self::Output;
 }
 
 pub trait Not {
-    type ReturnOperand;
+    type Output;
 
-    fn not(&self) -> Self::ReturnOperand;
+    fn not(&self) -> Self::Output;
 }

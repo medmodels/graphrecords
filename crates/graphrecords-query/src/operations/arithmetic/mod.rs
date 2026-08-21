@@ -13,6 +13,7 @@ use crate::{
 };
 pub use add::AddOperation;
 pub use divide::DivideOperation;
+use graphrecords_core::GraphRecord;
 pub use modulo::ModuloOperation;
 pub use multiply::MultiplyOperation;
 pub use power::PowerOperation;
@@ -30,15 +31,16 @@ pub(super) fn operation_manifests() -> Vec<OperationManifest> {
 }
 
 type ArithmeticFunction<'a, V> = fn(
+    <V as ValueDomain>::Value<'a>,
+    <V as ValueDomain>::Value<'a>,
     &'static str,
-    <V as ValueDomain>::Value<'a>,
-    <V as ValueDomain>::Value<'a>,
 ) -> QueryResult<<V as ValueDomain>::Value<'a>>;
 
 fn arithmetic_indexed<'a, I, V, A>(
+    graphrecord: &'a GraphRecord,
     prepared: A::Prepared<'a>,
-    label: &'static str,
     operation: ArithmeticFunction<'a, V>,
+    label: &'static str,
 ) -> IndexedValuePipeline<'a, I, V, V, A::Retention>
 where
     I: IndexDomain,
@@ -46,7 +48,7 @@ where
     A: ArgumentSource<Keyed<I>, V>,
     A::Prepared<'a>: 'a,
 {
-    Pipeline::keyed(move |index, item| {
+    Pipeline::keyed(move |address, item| {
         let value = match item {
             Ok(value) => value,
             Err(original) => {
@@ -54,20 +56,22 @@ where
             }
         };
 
-        let step = A::resolve(&prepared, &index, label);
+        let step = A::resolve(graphrecord, &prepared, &address, label);
 
         A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| {
-                operation(label, value, argument).map_err(|failure| failure.at::<I>(&index))
+                operation(value, argument, label)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))
             })
         })
     })
 }
 
 fn arithmetic_bare<'a, V, A>(
+    graphrecord: &'a GraphRecord,
     prepared: A::Prepared<'a>,
-    label: &'static str,
     operation: ArithmeticFunction<'a, V>,
+    label: &'static str,
 ) -> BarePipeline<'a, V, V, A::Retention>
 where
     V: ValueDomain,
@@ -82,10 +86,10 @@ where
             }
         };
 
-        let step = A::resolve(&prepared, &(), label);
+        let step = A::resolve(graphrecord, &prepared, &(), label);
 
         A::Retention::map_step(step, |resolved| {
-            resolved.and_then(|argument| operation(label, value, argument))
+            resolved.and_then(|argument| operation(value, argument, label))
         })
     })
 }

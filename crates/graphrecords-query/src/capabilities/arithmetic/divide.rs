@@ -1,54 +1,54 @@
 use crate::{
-    Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::arithmetic::DivisionByZero,
+    Failure, IndexValue, QueryResult, Scalar, ValueDomain, capabilities::value_into_view,
+    error::arithmetic::DivisionByZero,
 };
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::Value;
 
 pub trait ValueDivide: ValueDomain {
     fn divide<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>>;
 }
 
-fn is_division_by_zero(dividend: &GraphRecordValue, divisor: &GraphRecordValue) -> bool {
+fn is_division_by_zero(dividend: &Value, divisor: &Value) -> bool {
     match (dividend, divisor) {
-        (
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_) | GraphRecordValue::Duration(_),
-            GraphRecordValue::Int(0),
-        ) => true,
-        (
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_),
-            GraphRecordValue::Float(divisor),
-        ) => *divisor == 0.0,
+        (Value::Int(_) | Value::Float(_) | Value::Duration(_), Value::Int(0)) => true,
+        (Value::Int(_) | Value::Float(_), Value::Float(divisor)) => *divisor == 0.0,
         _ => false,
     }
 }
 
 impl ValueDivide for Scalar {
     fn divide<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
+        let value = Value::from(value);
+        let argument = Value::from(argument);
+
         if is_division_by_zero(&value, &argument) {
-            return Err(Failure::new(label, DivisionByZero::new(value)));
+            return Err(Failure::new(DivisionByZero::new(value), label));
         }
 
-        (value / argument).map_err(|error| Failure::new(label, error))
+        (value / argument)
+            .map(value_into_view)
+            .map_err(|error| Failure::new(error, label))
     }
 }
 
-impl ValueDivide for IndexValue<GraphRecordValue> {
+impl ValueDivide for IndexValue<Value> {
     fn divide<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         argument: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
         if is_division_by_zero(&value, &argument) {
-            return Err(Failure::new(label, DivisionByZero::new(value)));
+            return Err(Failure::new(DivisionByZero::new(value), label));
         }
 
-        (value / argument).map_err(|error| Failure::new(label, error))
+        (value / argument).map_err(|error| Failure::new(error, label))
     }
 }

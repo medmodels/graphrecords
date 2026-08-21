@@ -1,23 +1,25 @@
 mod collection;
 mod constant;
+mod series;
 
 use crate::{
-    Arity, Bare, BareValueDomain, Definite, Diagnostic, ElementShape, EvaluateOperand, Explain,
+    Arity, Bare, BareValueDomain, Definite, Diagnostic, ElementShape, EvaluateExpression, Explain,
     Failure, IndexDomain, Indexed, Multiple, OrderState, QueryResult, Single, ValueDomain,
     element::{ElementEmission, Preserving, Retention},
     error::{
-        argument::{Absent, ArgumentAbsent},
+        argument::{Absent, ArgumentMissing},
         index::DuplicateIndex,
     },
     execution::EvaluationCache,
     explain::ExplainFormatter,
-    operands::OperandHandle,
+    expressions::ExpressionHandle,
     optimizer::{
         Estimate, Estimated, PlanIdentity, PlanInputs, PlanNode, Session, Stats, Transformed,
     },
 };
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
+pub use series::PreparedSeriesArgument;
 use std::{
     any::Any,
     fmt,
@@ -27,6 +29,8 @@ use std::{
     sync::Arc,
 };
 
+const LABEL: &str = "ArgumentPreparation";
+
 pub trait Prepare: 'static + Send + Sync {
     type Prepared<'a>: Clone + 'a
     where
@@ -35,45 +39,48 @@ pub trait Prepare: 'static + Send + Sync {
     fn prepare<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>>;
 }
 
 pub trait Alignment: 'static {
-    type Address<'a>;
+    type Address;
 
     fn raise_at(
-        operation: &'static str,
         cause: impl Diagnostic,
-        address: &Self::Address<'_>,
+        graphrecord: &GraphRecord,
+        address: &Self::Address,
+        operation: &'static str,
     ) -> Box<Failure>;
 }
 
 pub struct Keyed<I: IndexDomain>(PhantomData<I>);
 
 impl<I: IndexDomain> Alignment for Keyed<I> {
-    type Address<'a> = I::Index<'a>;
+    type Address = I::Address;
 
     fn raise_at(
-        operation: &'static str,
         cause: impl Diagnostic,
-        address: &Self::Address<'_>,
+        graphrecord: &GraphRecord,
+        address: &Self::Address,
+        operation: &'static str,
     ) -> Box<Failure> {
-        Failure::new_at::<I, _>(operation, cause, address)
+        Failure::new_at_address::<I, _>(cause, graphrecord, address, operation)
     }
 }
 
 pub struct Unaligned;
 
 impl Alignment for Unaligned {
-    type Address<'a> = ();
+    type Address = ();
 
     fn raise_at(
-        operation: &'static str,
         cause: impl Diagnostic,
-        _address: &Self::Address<'_>,
+        _graphrecord: &GraphRecord,
+        _address: &Self::Address,
+        operation: &'static str,
     ) -> Box<Failure> {
-        Failure::new(operation, cause)
+        Failure::new(cause, operation)
     }
 }
 
@@ -81,8 +88,8 @@ pub trait SourceDomain {
     type ValueDomain: ValueDomain;
 }
 
-pub enum Lookup<'a, W> {
-    Present(&'a W),
+pub enum Lookup<W> {
+    Present(W),
     Absent(Absent),
 }
 
@@ -91,26 +98,29 @@ pub trait ArgumentSource<A: Alignment, V: ValueDomain = <Self as SourceDomain>::
 {
     type Retention: Retention;
 
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
+    fn lookup<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        address: &A::Address,
+        label: &'static str,
+    ) -> Lookup<QueryResult<V::Value<'a>>>
     where
         Self: 'a;
 
     fn resolve<'a>(
+        graphrecord: &'a GraphRecord,
         prepared: &Self::Prepared<'a>,
-        address: &A::Address<'a>,
+        address: &A::Address,
         label: &'static str,
     ) -> <Self::Retention as ElementEmission>::Step<QueryResult<V::Value<'a>>>
     where
         Self: 'a,
     {
-        match Self::lookup(prepared, address) {
-            Lookup::Present(wrapped) => Self::Retention::keep(wrapped.clone()),
-            Lookup::Absent(absent) => {
-                Self::Retention::absent(|| A::raise_at(label, ArgumentAbsent::new(absent), address))
-            }
+        match Self::lookup(graphrecord, prepared, address, label) {
+            Lookup::Present(wrapped) => Self::Retention::keep(wrapped),
+            Lookup::Absent(absent) => Self::Retention::absent(|| {
+                A::raise_at(ArgumentMissing::new(absent), graphrecord, address, label)
+            }),
         }
     }
 }
@@ -148,7 +158,7 @@ where
     fn prepare<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<PreparedArgument<'a, A, V, R>>;
 
     fn inputs(&self) -> Vec<&dyn PlanNode>;
@@ -227,14 +237,17 @@ where
     V: ValueDomain,
     R: Retention,
 {
-    fn lookup<'prepared>(
-        &'prepared self,
-        address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>;
+    fn lookup(
+        &self,
+        graphrecord: &'a GraphRecord,
+        address: &A::Address,
+        label: &'static str,
+    ) -> Lookup<QueryResult<V::Value<'a>>>;
 
     fn resolve(
         &self,
-        address: &A::Address<'a>,
+        graphrecord: &'a GraphRecord,
+        address: &A::Address,
         label: &'static str,
     ) -> R::Step<QueryResult<V::Value<'a>>>;
 }
@@ -258,19 +271,22 @@ where
     R: Retention,
     S: ArgumentSource<A, V, Retention = R> + 'a,
 {
-    fn lookup<'prepared>(
-        &'prepared self,
-        address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>> {
-        S::lookup(&self.prepared, address)
+    fn lookup(
+        &self,
+        graphrecord: &'a GraphRecord,
+        address: &A::Address,
+        label: &'static str,
+    ) -> Lookup<QueryResult<V::Value<'a>>> {
+        S::lookup(graphrecord, &self.prepared, address, label)
     }
 
     fn resolve(
         &self,
-        address: &A::Address<'a>,
+        graphrecord: &'a GraphRecord,
+        address: &A::Address,
         label: &'static str,
     ) -> R::Step<QueryResult<V::Value<'a>>> {
-        S::resolve(&self.prepared, address, label)
+        S::resolve(graphrecord, &self.prepared, address, label)
     }
 }
 
@@ -292,7 +308,7 @@ where
     fn prepare<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<PreparedArgument<'a, A, V, R>> {
         Ok(PreparedArgument {
             plan: Arc::new(PreparedSourceArgument::<_, _, _, S> {
@@ -404,7 +420,7 @@ where
     fn prepare<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         self.plan.prepare(graphrecord, cache)
     }
@@ -427,30 +443,33 @@ where
 {
     type Retention = R;
 
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
+    fn lookup<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        address: &A::Address,
+        label: &'static str,
+    ) -> Lookup<QueryResult<V::Value<'a>>>
     where
         Self: 'a,
     {
-        prepared.plan.lookup(address)
+        prepared.plan.lookup(graphrecord, address, label)
     }
 
     fn resolve<'a>(
+        graphrecord: &'a GraphRecord,
         prepared: &Self::Prepared<'a>,
-        address: &A::Address<'a>,
+        address: &A::Address,
         label: &'static str,
     ) -> R::Step<QueryResult<V::Value<'a>>>
     where
         Self: 'a,
     {
-        prepared.plan.resolve(address, label)
+        prepared.plan.resolve(graphrecord, address, label)
     }
 }
 
 pub type IndexedElementContainer<'a, I, V, C> =
-    <C as Arity>::Container<'a, (<I as IndexDomain>::Index<'a>, QueryResult<V>)>;
+    <C as Arity>::Container<'a, (<I as IndexDomain>::Address, QueryResult<V>)>;
 
 pub trait IndexedElementSource:
     SourceDomain + Prepare + Explain + PlanIdentity + PlanInputs + Estimated
@@ -473,7 +492,11 @@ pub trait IndexedElementSource:
 pub trait SetSource<V: ValueDomain>:
     Prepare + Explain + PlanIdentity + PlanInputs + Estimated
 {
-    fn set<'a>(prepared: Self::Prepared<'a>) -> QueryResult<GrHashSet<V::Value<'a>>>
+    fn set<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: Self::Prepared<'a>,
+        label: &'static str,
+    ) -> QueryResult<GrHashSet<V::Value<'a>>>
     where
         Self: 'a,
         V::Value<'a>: Eq + Hash;
@@ -485,6 +508,7 @@ pub trait PreparedArity<S: ElementShape>: Arity {
         S: 'a;
 
     fn prepare<'a>(
+        graphrecord: &'a GraphRecord,
         container: Self::Container<'a, S::Element<'a>>,
     ) -> QueryResult<Self::Prepared<'a>>
     where
@@ -494,10 +518,12 @@ pub trait PreparedArity<S: ElementShape>: Arity {
 pub trait AlignableArity<S: ElementShape, A: Alignment>: PreparedArity<S> {
     type Retention: Retention;
 
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<<S::ValueDomain as ValueDomain>::Value<'a>>>
+    fn lookup<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        address: &A::Address,
+        label: &'static str,
+    ) -> Lookup<QueryResult<<S::ValueDomain as ValueDomain>::Value<'a>>>
     where
         S: 'a;
 }
@@ -520,11 +546,11 @@ pub trait SetArity<S: ElementShape>: PreparedArity<S> {
 }
 
 pub struct PreparedIndexedMultiple<'a, I: IndexDomain, V: ValueDomain> {
-    elements: Vec<(I::Index<'a>, QueryResult<V::Value<'a>>)>,
-    positions: GrHashMap<I::Index<'a>, usize>,
+    elements: Vec<(I::Address, QueryResult<V::Value<'a>>)>,
+    positions: GrHashMap<I::Address, usize>,
 }
 
-impl<S: ElementShape, C: PreparedArity<S>> Prepare for OperandHandle<S, C> {
+impl<S: ElementShape, C: PreparedArity<S>> Prepare for ExpressionHandle<S, C> {
     type Prepared<'a>
         = C::Prepared<'a>
     where
@@ -533,41 +559,43 @@ impl<S: ElementShape, C: PreparedArity<S>> Prepare for OperandHandle<S, C> {
     fn prepare<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
-        C::prepare(self.evaluate(graphrecord, cache)?)
+        C::prepare(graphrecord, self.evaluate(graphrecord, cache)?)
     }
 }
 
-impl<S: ElementShape, C: Arity> SourceDomain for OperandHandle<S, C> {
+impl<S: ElementShape, C: Arity> SourceDomain for ExpressionHandle<S, C> {
     type ValueDomain = S::ValueDomain;
 }
 
 impl<S: ElementShape, C: AlignableArity<S, A>, A: Alignment> ArgumentSource<A>
-    for OperandHandle<S, C>
+    for ExpressionHandle<S, C>
 {
     type Retention = C::Retention;
 
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<<S::ValueDomain as ValueDomain>::Value<'a>>>
+    fn lookup<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        address: &A::Address,
+        label: &'static str,
+    ) -> Lookup<QueryResult<<S::ValueDomain as ValueDomain>::Value<'a>>>
     where
         Self: 'a,
     {
-        C::lookup(prepared, address)
+        C::lookup(graphrecord, prepared, address, label)
     }
 }
 
 impl<I: IndexDomain, V: ValueDomain, C: EnumerableArity<Indexed<I, V>, I>> IndexedElementSource
-    for OperandHandle<Indexed<I, V>, C>
+    for ExpressionHandle<Indexed<I, V>, C>
 {
     type Arity = C;
     type IndexDomain = I;
 
     fn elements<'a>(
         prepared: Self::Prepared<'a>,
-    ) -> C::Container<'a, (I::Index<'a>, QueryResult<<V as ValueDomain>::Value<'a>>)>
+    ) -> C::Container<'a, (I::Address, QueryResult<<V as ValueDomain>::Value<'a>>)>
     where
         Self: 'a,
     {
@@ -575,9 +603,11 @@ impl<I: IndexDomain, V: ValueDomain, C: EnumerableArity<Indexed<I, V>, I>> Index
     }
 }
 
-impl<S: ElementShape, C: SetArity<S>> SetSource<S::ValueDomain> for OperandHandle<S, C> {
+impl<S: ElementShape, C: SetArity<S>> SetSource<S::ValueDomain> for ExpressionHandle<S, C> {
     fn set<'a>(
+        _graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
+        _label: &'static str,
     ) -> QueryResult<GrHashSet<<S::ValueDomain as ValueDomain>::Value<'a>>>
     where
         Self: 'a,
@@ -594,6 +624,7 @@ impl<I: IndexDomain, V: ValueDomain, O: OrderState> PreparedArity<Indexed<I, V>>
         Indexed<I, V>: 'a;
 
     fn prepare<'a>(
+        graphrecord: &'a GraphRecord,
         container: Self::Container<'a, <Indexed<I, V> as ElementShape>::Element<'a>>,
     ) -> QueryResult<Self::Prepared<'a>>
     where
@@ -602,17 +633,19 @@ impl<I: IndexDomain, V: ValueDomain, O: OrderState> PreparedArity<Indexed<I, V>>
         let mut elements = Vec::new();
         let mut positions = GrHashMap::default();
 
-        for (index, outcome) in container {
-            if positions.contains_key(&index) {
+        for (address, outcome) in container {
+            if positions.contains_key(&address) {
+                let index = I::index(graphrecord, &address);
+
                 return Err(Failure::new_at::<I, _>(
-                    "operand preparation",
-                    DuplicateIndex::<I>::new(I::to_owned(&index)),
+                    DuplicateIndex::<I>::new(I::own_index(&index)),
                     &index,
+                    LABEL,
                 ));
             }
 
-            positions.insert(index.clone(), elements.len());
-            elements.push((index, outcome));
+            positions.insert(address.clone(), elements.len());
+            elements.push((address, outcome));
         }
 
         Ok(Arc::new(PreparedIndexedMultiple {
@@ -627,15 +660,17 @@ impl<I: IndexDomain, V: ValueDomain, O: OrderState> AlignableArity<Indexed<I, V>
 {
     type Retention = Preserving;
 
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        address: &<Keyed<I> as Alignment>::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
+    fn lookup<'a>(
+        _graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        address: &<Keyed<I> as Alignment>::Address,
+        _label: &'static str,
+    ) -> Lookup<QueryResult<V::Value<'a>>>
     where
         Indexed<I, V>: 'a,
     {
         match prepared.positions.get(address) {
-            Some(position) => Lookup::Present(&prepared.elements[*position].1),
+            Some(position) => Lookup::Present(prepared.elements[*position].1.clone()),
             None => Lookup::Absent(Absent::Uncovered),
         }
     }
@@ -646,7 +681,7 @@ impl<I: IndexDomain, V: ValueDomain, O: OrderState> EnumerableArity<Indexed<I, V
 {
     fn elements<'a>(
         prepared: Self::Prepared<'a>,
-    ) -> Self::Container<'a, (I::Index<'a>, QueryResult<V::Value<'a>>)>
+    ) -> Self::Container<'a, (I::Address, QueryResult<V::Value<'a>>)>
     where
         Indexed<I, V>: 'a,
     {
@@ -677,11 +712,12 @@ where
 
 impl<I: IndexDomain, V: ValueDomain> PreparedArity<Indexed<I, V>> for Single {
     type Prepared<'a>
-        = Option<(I::Index<'a>, QueryResult<V::Value<'a>>)>
+        = Option<(I::Address, QueryResult<V::Value<'a>>)>
     where
         Indexed<I, V>: 'a;
 
     fn prepare<'a>(
+        _graphrecord: &'a GraphRecord,
         container: Self::Container<'a, <Indexed<I, V> as ElementShape>::Element<'a>>,
     ) -> QueryResult<Self::Prepared<'a>>
     where
@@ -694,7 +730,7 @@ impl<I: IndexDomain, V: ValueDomain> PreparedArity<Indexed<I, V>> for Single {
 impl<I: IndexDomain, V: ValueDomain> EnumerableArity<Indexed<I, V>, I> for Single {
     fn elements<'a>(
         prepared: Self::Prepared<'a>,
-    ) -> Self::Container<'a, (I::Index<'a>, QueryResult<V::Value<'a>>)>
+    ) -> Self::Container<'a, (I::Address, QueryResult<V::Value<'a>>)>
     where
         Indexed<I, V>: 'a,
     {
@@ -721,11 +757,12 @@ where
 
 impl<I: IndexDomain, V: ValueDomain> PreparedArity<Indexed<I, V>> for Definite {
     type Prepared<'a>
-        = (I::Index<'a>, QueryResult<V::Value<'a>>)
+        = (I::Address, QueryResult<V::Value<'a>>)
     where
         Indexed<I, V>: 'a;
 
     fn prepare<'a>(
+        _graphrecord: &'a GraphRecord,
         container: Self::Container<'a, <Indexed<I, V> as ElementShape>::Element<'a>>,
     ) -> QueryResult<Self::Prepared<'a>>
     where
@@ -738,7 +775,7 @@ impl<I: IndexDomain, V: ValueDomain> PreparedArity<Indexed<I, V>> for Definite {
 impl<I: IndexDomain, V: ValueDomain> EnumerableArity<Indexed<I, V>, I> for Definite {
     fn elements<'a>(
         prepared: Self::Prepared<'a>,
-    ) -> Self::Container<'a, (I::Index<'a>, QueryResult<V::Value<'a>>)>
+    ) -> Self::Container<'a, (I::Address, QueryResult<V::Value<'a>>)>
     where
         Indexed<I, V>: 'a,
     {
@@ -767,6 +804,7 @@ impl<V: BareValueDomain, O: OrderState> PreparedArity<Bare<V>> for Multiple<O> {
         Bare<V>: 'a;
 
     fn prepare<'a>(
+        _graphrecord: &'a GraphRecord,
         container: Self::Container<'a, <Bare<V> as ElementShape>::Element<'a>>,
     ) -> QueryResult<Self::Prepared<'a>>
     where
@@ -797,6 +835,7 @@ impl<V: BareValueDomain> PreparedArity<Bare<V>> for Single {
         Bare<V>: 'a;
 
     fn prepare<'a>(
+        _graphrecord: &'a GraphRecord,
         container: Self::Container<'a, <Bare<V> as ElementShape>::Element<'a>>,
     ) -> QueryResult<Self::Prepared<'a>>
     where
@@ -809,15 +848,17 @@ impl<V: BareValueDomain> PreparedArity<Bare<V>> for Single {
 impl<A: Alignment, V: BareValueDomain> AlignableArity<Bare<V>, A> for Single {
     type Retention = Preserving;
 
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
+    fn lookup<'a>(
+        _graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        _address: &A::Address,
+        _label: &'static str,
+    ) -> Lookup<QueryResult<V::Value<'a>>>
     where
         Bare<V>: 'a,
     {
         match prepared {
-            Some(value) => Lookup::Present(value),
+            Some(value) => Lookup::Present(value.clone()),
             None => Lookup::Absent(Absent::Empty),
         }
     }
@@ -846,6 +887,7 @@ impl<V: BareValueDomain> PreparedArity<Bare<V>> for Definite {
         Bare<V>: 'a;
 
     fn prepare<'a>(
+        _graphrecord: &'a GraphRecord,
         container: Self::Container<'a, <Bare<V> as ElementShape>::Element<'a>>,
     ) -> QueryResult<Self::Prepared<'a>>
     where
@@ -858,14 +900,16 @@ impl<V: BareValueDomain> PreparedArity<Bare<V>> for Definite {
 impl<A: Alignment, V: BareValueDomain> AlignableArity<Bare<V>, A> for Definite {
     type Retention = Preserving;
 
-    fn lookup<'a, 'prepared>(
-        prepared: &'prepared Self::Prepared<'a>,
-        _address: &A::Address<'a>,
-    ) -> Lookup<'prepared, QueryResult<V::Value<'a>>>
+    fn lookup<'a>(
+        _graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        _address: &A::Address,
+        _label: &'static str,
+    ) -> Lookup<QueryResult<V::Value<'a>>>
     where
         Bare<V>: 'a,
     {
-        Lookup::Present(prepared)
+        Lookup::Present(prepared.clone())
     }
 }
 

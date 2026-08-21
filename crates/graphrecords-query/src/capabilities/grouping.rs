@@ -1,63 +1,63 @@
 use crate::{
-    AttributeName, EntityDomain, EntityReference, FailureKind, FailureKindValue, IndexDomain,
-    IndexValue, Mask, Scalar, ValueDomain, index::GroupKey,
+    EntityIndexDomain, EntityReference, FailureKind, FailureKindValue, IndexDomain, IndexValue,
+    Mask, Scalar, capabilities::ValueEquivalence,
 };
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::{AttributeName, Value};
 
 #[diagnostic::on_unimplemented(
     message = "`{Self}` values cannot be used as grouping keys",
-    note = "implement `GroupingValue` for `{Self}` to give it a group key domain"
+    note = "implement `ValueGrouping` for `{Self}` to give it a group key domain"
 )]
-pub trait GroupingValue: ValueDomain {
-    type Key: GroupKey;
+pub trait ValueGrouping: ValueEquivalence {
+    type KeyDomain: IndexDomain;
 
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned;
+    fn to_group_key(value: &Self::Value<'_>) -> <Self::KeyDomain as IndexDomain>::Owned;
 }
 
-impl GroupingValue for Scalar {
-    type Key = GraphRecordValue;
+impl ValueGrouping for Scalar {
+    type KeyDomain = Value;
 
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
-        value.clone()
+    fn to_group_key(value: &Self::Value<'_>) -> <Self::KeyDomain as IndexDomain>::Owned {
+        Value::from(value.clone())
     }
 }
 
-impl GroupingValue for Mask {
-    type Key = bool;
+impl ValueGrouping for Mask {
+    type KeyDomain = bool;
 
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
+    fn to_group_key(value: &Self::Value<'_>) -> <Self::KeyDomain as IndexDomain>::Owned {
         *value
     }
 }
 
-impl GroupingValue for AttributeName {
-    type Key = Self;
+impl ValueGrouping for AttributeName {
+    type KeyDomain = Self;
 
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
-        value.clone()
+    fn to_group_key(value: &Self::Value<'_>) -> <Self::KeyDomain as IndexDomain>::Owned {
+        Self::from(value.clone())
     }
 }
 
-impl GroupingValue for FailureKindValue {
-    type Key = FailureKind;
+impl ValueGrouping for FailureKindValue {
+    type KeyDomain = FailureKind;
 
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
+    fn to_group_key(value: &Self::Value<'_>) -> <Self::KeyDomain as IndexDomain>::Owned {
         *value
     }
 }
 
-impl<I: GroupKey> GroupingValue for IndexValue<I> {
-    type Key = I;
+impl<I: IndexDomain> ValueGrouping for IndexValue<I> {
+    type KeyDomain = I;
 
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
-        value.clone()
+    fn to_group_key(value: &Self::Value<'_>) -> <Self::KeyDomain as IndexDomain>::Owned {
+        I::own_index(value)
     }
 }
 
-impl<E: EntityDomain + GroupKey> GroupingValue for EntityReference<E> {
-    type Key = E;
+impl<E: EntityIndexDomain> ValueGrouping for EntityReference<E> {
+    type KeyDomain = E;
 
-    fn to_group_key(value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
-        E::to_owned(value)
+    fn to_group_key(value: &Self::Value<'_>) -> <Self::KeyDomain as IndexDomain>::Owned {
+        value.clone().into_owned()
     }
 }

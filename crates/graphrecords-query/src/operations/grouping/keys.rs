@@ -1,45 +1,32 @@
 use super::reject_key_failures;
 use crate::{
-    Arity, ElementShape, EvaluateOperand, Explain, IndexDomain, Labeled, Operand, QueryResult,
-    Unordered,
-    execution::EvaluationCache,
-    index::GroupKey,
-    operands::{ElementsOperand, OperandHandle, Partition},
-    operations::{Apply, GroupKernel, Operation, OperationContext, Prepare},
+    Arity, ElementShape, EvaluateExpression, Explain, IndexDomain, Labeled, QueryResult, Unordered,
+    expressions::{ElementsExpression, ExpressionHandle, Partition},
+    operations::{Build, GroupKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Keys,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Group)]
 #[explain(label = "Keys")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct KeysOperation;
 
-impl Prepare for KeysOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: Arity> GroupKernel<M, K, OperandHandle<S, C>>
-    for KeysOperation
+impl<M: IndexDomain, K: IndexDomain, S: ElementShape, C: Arity>
+    GroupKernel<M, K, ExpressionHandle<S, C>> for KeysOperation
 {
-    type Output = ElementsOperand<K, Unordered>;
+    type Output = ElementsExpression<K, Unordered>;
 
     fn execute<'a>(
         graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, OperandHandle<S, C>>,
+        partition: Partition<'a, M, K, ExpressionHandle<S, C>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let (buckets, key_failures) = partition.into_parts();
 
         reject_key_failures::<M>(key_failures, Self::LABEL)?;
@@ -47,9 +34,9 @@ impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: Arity> GroupKernel<M, K, O
         let elements: Vec<_> = buckets
             .into_iter()
             .map(|(key, _, payload)| {
-                let index = K::resolve_key(Self::LABEL, graphrecord, &key)?;
+                let address = K::resolve(graphrecord, &key, Self::LABEL)?;
 
-                Ok((index, payload.map(|_| ())))
+                Ok((address, payload.map(|_| ())))
             })
             .collect::<QueryResult<_>>()?;
 
@@ -66,11 +53,11 @@ impl<M: IndexDomain, K: GroupKey, S: ElementShape, C: Arity> GroupKernel<M, K, O
     }
 }
 
-impl<O: Apply<KeysOperation>> Keys for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<KeysOperation>> Keys for E {
+    type Output = E::Output;
 
-    fn keys(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), KeysOperation))
+    fn keys(&self) -> Self::Output {
+        self.build(KeysOperation)
     }
 }
 
@@ -80,10 +67,10 @@ operation_manifest! {
         scope: group;
 
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <S: ElementShape, C: Arity>;
-            input: OperandHandle<S, C>;
-            output: ElementsOperand<K, Unordered>;
+            input: ExpressionHandle<S, C>;
+            output: ElementsExpression<K, Unordered>;
         }
     }
 }

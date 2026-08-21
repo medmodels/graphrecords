@@ -29,7 +29,6 @@ COVERAGE_XML = PROJECT_ROOT / "coverage.xml"
 
 IGNORE_PATTERNS = [
     "**/__init__.py",
-    "**/overview.py",  # TODO(@JabobKrauskopf): #001 Add tests for overview module and remove from ignore list
 ]
 
 

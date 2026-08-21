@@ -1,4 +1,4 @@
-use super::{DynIndex, DynIndexRef, DynValue};
+use super::{DynIndex, DynIndexAddress, DynValue, DynValueView};
 use crate::{
     Arity, Bare, BoxedIterator, Definite, ElementShape, Indexed, Mask, Multiple, Ordered,
     QueryResult, Single, Unit, Unordered,
@@ -12,10 +12,10 @@ pub enum DynArityStream<'a, T: 'a> {
 }
 
 pub enum DynStream<'a> {
-    IndexedValue(DynArityStream<'a, (DynIndexRef<'a>, QueryResult<DynValue>)>),
-    IndexedMask(DynArityStream<'a, (DynIndexRef<'a>, QueryResult<bool>)>),
-    IndexedUnit(DynArityStream<'a, (DynIndexRef<'a>, QueryResult<()>)>),
-    BareValue(DynArityStream<'a, QueryResult<DynValue>>),
+    IndexedValue(DynArityStream<'a, (DynIndexAddress, QueryResult<DynValueView<'a>>)>),
+    IndexedMask(DynArityStream<'a, (DynIndexAddress, QueryResult<bool>)>),
+    IndexedUnit(DynArityStream<'a, (DynIndexAddress, QueryResult<()>)>),
+    BareValue(DynArityStream<'a, QueryResult<DynValueView<'a>>>),
     BareMask(DynArityStream<'a, QueryResult<bool>>),
 }
 

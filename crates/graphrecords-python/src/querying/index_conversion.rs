@@ -1,10 +1,10 @@
 use crate::{
-    graphrecord::{attribute::PyGraphRecordAttribute, value::PyGraphRecordValue},
+    graphrecord::{PyAttributeName, PyEdgeIndex, PyGroupIndex, PyNodeIndex, value::PyValue},
     querying::{endpoint::PyEdgeEndpointRole, failure_kind::PyFailureKind},
 };
-use graphrecords_core::graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value};
 use graphrecords_query::{
-    AttributeName, FailureKind,
+    FailureKind,
     dynamic::DynIndexOwned,
     index::{EdgeEndpointRole, Position, Positional},
     registry::IndexDescriptor,
@@ -29,27 +29,26 @@ impl IndexConversion for DynIndexOwned {
             return object.extract::<Position>().map(Self::Positional);
         }
         if domain.is::<NodeIndex>() {
-            return Ok(Self::Node(
-                object.extract::<PyGraphRecordAttribute>()?.into(),
-            ));
+            return Ok(Self::Node(object.extract::<PyNodeIndex>()?.into()));
         }
         if domain.is::<EdgeIndex>() {
-            return object.extract().map(Self::Edge);
+            return Ok(Self::Edge(object.extract::<PyEdgeIndex>()?.into()));
+        }
+        if domain.is::<GroupIndex>() {
+            return Ok(Self::Group(object.extract::<PyGroupIndex>()?.into()));
         }
         if domain.is::<AttributeName>() {
-            return Ok(Self::Attribute(
-                object.extract::<PyGraphRecordAttribute>()?.into(),
-            ));
+            return Ok(Self::Attribute(object.extract::<PyAttributeName>()?.into()));
         }
-        if domain.is::<GraphRecordValue>() {
-            return Ok(Self::Value(object.extract::<PyGraphRecordValue>()?.into()));
+        if domain.is::<Value>() {
+            return Ok(Self::Value(object.extract::<PyValue>()?.into()));
         }
         if domain.is::<bool>() {
             return object.extract().map(Self::Bool);
         }
         if domain.is::<EdgeEndpointRole>() {
-            return Err(PyTypeError::new_err(
-                "an edge-endpoint role has no literal form",
+            return Ok(Self::EndpointRole(
+                object.extract::<PyEdgeEndpointRole>()?.into(),
             ));
         }
         if domain.is::<FailureKind>() {
@@ -65,15 +64,18 @@ impl IndexConversion for DynIndexOwned {
     fn to_python(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match self {
             Self::Positional(position) => Ok(position.into_pyobject(py)?.into_any().unbind()),
-            Self::Node(index) | Self::Attribute(index) => {
-                Ok(PyGraphRecordAttribute::from(index.clone())
-                    .into_pyobject(py)?
-                    .unbind())
-            }
-            Self::Edge(index) => Ok(index.into_pyobject(py)?.into_any().unbind()),
-            Self::Value(value) => Ok(PyGraphRecordValue::from(value.clone())
+            Self::Node(index) => Ok(PyNodeIndex::from(index.clone()).into_pyobject(py)?.unbind()),
+            Self::Edge(index) => Ok(PyEdgeIndex::from(*index)
+                .into_pyobject(py)?
+                .into_any()
+                .unbind()),
+            Self::Group(index) => Ok(PyGroupIndex::from(index.clone())
                 .into_pyobject(py)?
                 .unbind()),
+            Self::Attribute(index) => Ok(PyAttributeName::from(index.clone())
+                .into_pyobject(py)?
+                .unbind()),
+            Self::Value(value) => Ok(PyValue::from(value.clone()).into_pyobject(py)?.unbind()),
             Self::Bool(value) => Ok(value.into_pyobject(py)?.to_owned().into_any().unbind()),
             Self::EndpointRole(role) => Ok(PyEdgeEndpointRole::from(*role)
                 .into_pyobject(py)?

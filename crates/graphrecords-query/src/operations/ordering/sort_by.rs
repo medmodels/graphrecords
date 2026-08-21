@@ -1,14 +1,12 @@
+use super::IndexTiebreak;
 use crate::{
-    EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled, Multiple, Operand,
-    OrderState, Ordered, QueryResult, ValueDomain,
+    EvaluateExpression, Explain, Failure, Indexed, Labeled, Multiple, OrderState, Ordered,
+    QueryResult, ValueDomain,
     capabilities::EnsureSortable,
     element::Retention,
-    error::{comparison::IncomparableValuesAt, ordering::IncomparableIndices},
-    execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{
-        Apply, ArgumentSource, Keyed, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    error::comparison::IncomparableValuesAt,
+    expressions::ExpressionHandle,
+    operations::{ArgumentSource, Build, Keyed, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::SortBy,
@@ -19,73 +17,59 @@ use std::{
     fmt::{Debug, Display},
 };
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "SortBy")]
 #[plan(optimizer_hints(empty = if_all))]
-pub struct SortByOperation<A> {
+pub struct SortByOperation<K> {
     #[argument]
-    key: A,
+    key: K,
 }
 
-type SortedBy<I, V> = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
+type SortedBy<I, V> = ExpressionHandle<Indexed<I, V>, Multiple<Ordered>>;
 
-impl<A: Prepare> Prepare for SortByOperation<A> {
-    type Prepared<'a>
-        = A::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.key.prepare(graphrecord, cache)
-    }
-}
-
-impl<I, V, A, O> LaneKernel<Indexed<I, V>, Multiple<O>> for SortByOperation<A>
+impl<I, V, K, O> LaneKernel<Indexed<I, V>, Multiple<O>> for SortByOperation<K>
 where
-    I: IndexDomain,
+    I: IndexTiebreak,
     V: ValueDomain,
-    A: ArgumentSource<Keyed<I>>,
+    K: ArgumentSource<Keyed<I>>,
     O: OrderState,
-    for<'a> I::Index<'a>: EnsureSortable,
-    for<'a> <A::ValueDomain as ValueDomain>::Value<'a>: EnsureSortable,
-    <A::ValueDomain as ValueDomain>::Owned: Debug + Display + Send + Sync,
+    for<'a> <K::ValueDomain as ValueDomain>::Value<'a>: EnsureSortable,
+    <K::ValueDomain as ValueDomain>::Owned: Debug + Display + Send + Sync,
 {
     type Output = SortedBy<I, V>;
 
     fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, V, Multiple<O>>,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let label = Self::LABEL;
 
         let mut collected: Vec<_> = values
-            .filter_map(|(index, subject)| {
-                let step = A::resolve(&prepared, &index, label);
+            .filter_map(|(address, subject)| {
+                let step = K::resolve(graphrecord, &prepared, &address, label);
 
-                A::Retention::collapse(step).map(|key| key.map(|key| (index, subject, key)))
+                K::Retention::collapse(step).map(|key| key.map(|key| (address, subject, key)))
             })
             .collect::<QueryResult<_>>()?;
 
         if let Some((first_position, second_position)) =
             EnsureSortable::find_incomparable(collected.iter().map(|(_, _, key)| key))
         {
-            let (first_index, _, first) = &collected[first_position];
-            let (second_index, _, second) = &collected[second_position];
+            let (first_address, _, first) = &collected[first_position];
+            let (second_address, _, second) = &collected[second_position];
 
             return Err(Failure::new(
-                label,
                 IncomparableValuesAt::new(
-                    A::ValueDomain::into_owned(first.clone()),
-                    A::ValueDomain::into_owned(second.clone()),
-                    I::to_owned(first_index),
-                    I::to_owned(second_index),
+                    K::ValueDomain::into_owned(first.clone()),
+                    K::ValueDomain::into_owned(second.clone()),
+                    I::own_index(&I::index(graphrecord, first_address)),
+                    I::own_index(&I::index(graphrecord, second_address)),
                 ),
+                label,
             ));
         }
 
@@ -97,33 +81,13 @@ where
         for run in collected.chunk_by_mut(|(_, _, left), (_, _, right)| {
             left.partial_cmp(right) == Some(Ordering::Equal)
         }) {
-            if let Some((first_position, second_position)) =
-                EnsureSortable::find_incomparable(run.iter().map(|(index, _, _)| index))
-            {
-                let (first_index, _, key) = &run[first_position];
-                let second_index = &run[second_position].0;
-
-                return Err(Failure::new(
-                    label,
-                    IncomparableIndices::new(
-                        A::ValueDomain::into_owned(key.clone()),
-                        I::to_owned(first_index),
-                        I::to_owned(second_index),
-                    ),
-                ));
-            }
-
-            run.sort_by(|(left_index, _, _), (right_index, _, _)| {
-                left_index.partial_cmp(right_index).unwrap_or_else(|| {
-                    panic!("EnsureSortable admitted an incomparable pair of indices")
-                })
-            });
+            I::tiebreak(graphrecord, run, |element| &element.0);
         }
 
         Ok(Box::new(
             collected
                 .into_iter()
-                .map(|(index, subject, _)| (index, subject)),
+                .map(|(address, subject, _)| (address, subject)),
         ))
     }
 
@@ -132,28 +96,29 @@ where
     }
 }
 
-impl<O, A> SortBy<A> for O
+impl<E, K> SortBy<K> for E
 where
-    SortByOperation<A>: Operation,
-    O: Apply<SortByOperation<A>>,
+    SortByOperation<K>: Operation,
+    E: Build<SortByOperation<K>>,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn sort_by(&self, key: A) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), SortByOperation { key }))
+    fn sort_by(&self, key: K) -> Self::Output {
+        self.build(SortByOperation { key })
     }
 }
 
 operation_manifest! {
-    SortByOperation<A> {
-        method: SortBy<A>::sort_by;
+    SortByOperation<K> {
+        method: SortBy<K>::sort_by;
         scope: lane;
 
         kernel {
-            parameters: <I: EnsureSortable, V: ValueDomain, O: OrderState>;
-            argument: A: ArgumentSource<Keyed<I>> where A::ValueDomain: EnsureSortable;
+            parameters: <I: IndexDomain, V: ValueDomain, O: OrderState>;
+            argument: K: ArgumentSource<Keyed<I>> where K::ValueDomain: EnsureSortable;
             input: (Indexed<I, V>, Multiple<O>);
             output: SortedBy<I, V>;
+            where K::ValueDomain::Owned: Debug + Display + Send + Sync;
         }
     }
 }

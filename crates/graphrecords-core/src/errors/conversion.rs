@@ -1,27 +1,45 @@
-use crate::graphrecord::{GraphRecordAttribute, GraphRecordValue};
+use crate::graphrecord::Value;
+#[cfg(any(feature = "polars", feature = "arrow"))]
+use crate::graphrecord::{AttributeName, GroupIndex, datatypes::DataType};
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
-    io::ErrorKind,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConversionError {
-    ValueToAttribute { value: GraphRecordValue },
-    UnsupportedPolarsValue { value: String },
-    UnsupportedPolarsAttribute { value: String },
-    TimestampOutOfRange { timestamp: i64 },
-    ColumnNotFound { column_name: String },
-    ReservedAttributeName { attribute: GraphRecordAttribute },
-    NodeDataFrameCreation { group: String },
-    EdgeDataFrameCreation { group: String },
-    FileRead { path: String, kind: ErrorKind },
-    FileWrite { path: String, kind: ErrorKind },
-    DirectoryCreation { path: String, kind: ErrorKind },
-    RonSerialization,
-    RonDeserialization { path: String },
-    BinarySerialization,
-    BinaryDeserialization,
+    ValueToIdentifier {
+        value: Value,
+    },
+    #[cfg(any(feature = "polars", feature = "arrow"))]
+    UnsupportedFrameValue {
+        value: String,
+    },
+    #[cfg(any(feature = "polars", feature = "arrow"))]
+    TimestampOutOfRange {
+        timestamp: i64,
+    },
+    #[cfg(any(feature = "polars", feature = "arrow"))]
+    ColumnNotFound {
+        column_name: String,
+    },
+    #[cfg(any(feature = "polars", feature = "arrow"))]
+    ReservedAttributeName {
+        attribute_name: AttributeName,
+    },
+    #[cfg(any(feature = "polars", feature = "arrow"))]
+    MixedColumnTypes {
+        column_name: String,
+        data_types: Vec<DataType>,
+    },
+    #[cfg(any(feature = "polars", feature = "arrow"))]
+    NodeDataFrameCreation {
+        group_index: Option<GroupIndex>,
+    },
+    #[cfg(any(feature = "polars", feature = "arrow"))]
+    EdgeDataFrameCreation {
+        group_index: Option<GroupIndex>,
+    },
 }
 
 impl Error for ConversionError {}
@@ -29,48 +47,66 @@ impl Error for ConversionError {}
 impl Display for ConversionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Self::ValueToAttribute { value } => {
-                write!(f, "Cannot convert `{value}` into `GraphRecordAttribute`")
+            Self::ValueToIdentifier { value } => {
+                write!(f, "Cannot convert `{value}` into `Identifier`")
             }
-            Self::UnsupportedPolarsValue { value } => {
-                write!(f, "Cannot convert `{value}` into `GraphRecordValue`")
+            #[cfg(any(feature = "polars", feature = "arrow"))]
+            Self::UnsupportedFrameValue { value } => {
+                write!(f, "Cannot convert `{value}` into `Value`")
             }
-            Self::UnsupportedPolarsAttribute { value } => {
-                write!(f, "Cannot convert `{value}` into `GraphRecordAttribute`")
-            }
+            #[cfg(any(feature = "polars", feature = "arrow"))]
             Self::TimestampOutOfRange { timestamp } => {
                 write!(f, "Cannot convert timestamp `{timestamp}` into a datetime")
             }
+            #[cfg(any(feature = "polars", feature = "arrow"))]
             Self::ColumnNotFound { column_name } => {
                 write!(
                     f,
                     "Cannot find column with name `{column_name}` in dataframe"
                 )
             }
-            Self::ReservedAttributeName { attribute } => {
-                write!(f, "Attribute name `{attribute}` is reserved")
+            #[cfg(any(feature = "polars", feature = "arrow"))]
+            Self::ReservedAttributeName { attribute_name } => {
+                write!(f, "Attribute name `{attribute_name}` is reserved")
             }
-            Self::NodeDataFrameCreation { group } => {
-                write!(f, "Failed to create node DataFrame for group `{group}`")
+            #[cfg(any(feature = "polars", feature = "arrow"))]
+            Self::MixedColumnTypes {
+                column_name,
+                data_types,
+            } => {
+                let data_types = data_types
+                    .iter()
+                    .map(|data_type| format!("`{data_type}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(
+                    f,
+                    "Cannot build column `{column_name}` from mixed types {data_types}"
+                )
             }
-            Self::EdgeDataFrameCreation { group } => {
-                write!(f, "Failed to create edge DataFrame for group `{group}`")
+            #[cfg(any(feature = "polars", feature = "arrow"))]
+            Self::NodeDataFrameCreation { group_index } => {
+                let group_index = group_index
+                    .as_ref()
+                    .map_or_else(|| "ungrouped".to_string(), ToString::to_string);
+
+                write!(
+                    f,
+                    "Failed to create node DataFrame for group `{group_index}`"
+                )
             }
-            Self::FileRead { path, kind } => {
-                write!(f, "Failed to read file `{path}`: {kind}")
+            #[cfg(any(feature = "polars", feature = "arrow"))]
+            Self::EdgeDataFrameCreation { group_index } => {
+                let group_index = group_index
+                    .as_ref()
+                    .map_or_else(|| "ungrouped".to_string(), ToString::to_string);
+
+                write!(
+                    f,
+                    "Failed to create edge DataFrame for group `{group_index}`"
+                )
             }
-            Self::FileWrite { path, kind } => {
-                write!(f, "Failed to write file `{path}`: {kind}")
-            }
-            Self::DirectoryCreation { path, kind } => {
-                write!(f, "Failed to create directory `{path}`: {kind}")
-            }
-            Self::RonSerialization => write!(f, "Failed to convert GraphRecord to ron"),
-            Self::RonDeserialization { path } => {
-                write!(f, "Failed to create GraphRecord from file `{path}`")
-            }
-            Self::BinarySerialization => write!(f, "Could not serialize GraphRecord"),
-            Self::BinaryDeserialization => write!(f, "Could not deserialize GraphRecord"),
         }
     }
 }
@@ -78,40 +114,35 @@ impl Display for ConversionError {
 #[cfg(test)]
 mod test {
     use super::ConversionError;
-    use crate::graphrecord::GraphRecordValue;
-    use std::io::ErrorKind;
+    use crate::graphrecord::Value;
+    #[cfg(any(feature = "polars", feature = "arrow"))]
+    use crate::graphrecord::datatypes::DataType;
 
     #[test]
     fn test_display_values() {
         assert_eq!(
-            "Cannot convert `true` into `GraphRecordAttribute`",
-            ConversionError::ValueToAttribute {
-                value: GraphRecordValue::Bool(true)
+            "Cannot convert `true` into `Identifier`",
+            ConversionError::ValueToIdentifier {
+                value: Value::Bool(true)
             }
             .to_string()
-        );
-        assert_eq!(
-            "Cannot convert `true` into `GraphRecordValue`",
-            ConversionError::UnsupportedPolarsValue {
-                value: "true".to_string()
-            }
-            .to_string()
-        );
-        assert_eq!(
-            "Cannot convert `true` into `GraphRecordAttribute`",
-            ConversionError::UnsupportedPolarsAttribute {
-                value: "true".to_string()
-            }
-            .to_string()
-        );
-        assert_eq!(
-            "Cannot convert timestamp `1` into a datetime",
-            ConversionError::TimestampOutOfRange { timestamp: 1 }.to_string()
         );
     }
 
+    #[cfg(any(feature = "polars", feature = "arrow"))]
     #[test]
-    fn test_display_dataframes() {
+    fn test_display_frame() {
+        assert_eq!(
+            "Cannot convert `object` into `Value`",
+            ConversionError::UnsupportedFrameValue {
+                value: "object".to_string()
+            }
+            .to_string()
+        );
+        assert_eq!(
+            "Cannot convert timestamp `42` into a datetime",
+            ConversionError::TimestampOutOfRange { timestamp: 42 }.to_string()
+        );
         assert_eq!(
             "Cannot find column with name `index` in dataframe",
             ConversionError::ColumnNotFound {
@@ -119,73 +150,47 @@ mod test {
             }
             .to_string()
         );
+    }
+
+    #[cfg(any(feature = "polars", feature = "arrow"))]
+    #[test]
+    fn test_display_polars() {
         assert_eq!(
             "Attribute name `\"node_index\"` is reserved",
             ConversionError::ReservedAttributeName {
-                attribute: "node_index".into()
+                attribute_name: "node_index".into()
             }
             .to_string()
         );
         assert_eq!(
-            "Failed to create node DataFrame for group `group`",
+            "Cannot build column `count` from mixed types `Int`, `String`",
+            ConversionError::MixedColumnTypes {
+                column_name: "count".to_string(),
+                data_types: vec![DataType::Int, DataType::String]
+            }
+            .to_string()
+        );
+        assert_eq!(
+            "Failed to create node DataFrame for group `\"dolor\"`",
             ConversionError::NodeDataFrameCreation {
-                group: "group".to_string()
+                group_index: Some("dolor".into())
             }
             .to_string()
         );
         assert_eq!(
-            "Failed to create edge DataFrame for group `group`",
+            "Failed to create node DataFrame for group `ungrouped`",
+            ConversionError::NodeDataFrameCreation { group_index: None }.to_string()
+        );
+        assert_eq!(
+            "Failed to create edge DataFrame for group `\"dolor\"`",
             ConversionError::EdgeDataFrameCreation {
-                group: "group".to_string()
-            }
-            .to_string()
-        );
-    }
-
-    #[test]
-    fn test_display_files() {
-        assert_eq!(
-            "Failed to read file `path`: entity not found",
-            ConversionError::FileRead {
-                path: "path".to_string(),
-                kind: ErrorKind::NotFound
+                group_index: Some("dolor".into())
             }
             .to_string()
         );
         assert_eq!(
-            "Failed to write file `path`: permission denied",
-            ConversionError::FileWrite {
-                path: "path".to_string(),
-                kind: ErrorKind::PermissionDenied
-            }
-            .to_string()
-        );
-        assert_eq!(
-            "Failed to create directory `path`: permission denied",
-            ConversionError::DirectoryCreation {
-                path: "path".to_string(),
-                kind: ErrorKind::PermissionDenied
-            }
-            .to_string()
-        );
-        assert_eq!(
-            "Failed to convert GraphRecord to ron",
-            ConversionError::RonSerialization.to_string()
-        );
-        assert_eq!(
-            "Failed to create GraphRecord from file `path`",
-            ConversionError::RonDeserialization {
-                path: "path".to_string()
-            }
-            .to_string()
-        );
-        assert_eq!(
-            "Could not serialize GraphRecord",
-            ConversionError::BinarySerialization.to_string()
-        );
-        assert_eq!(
-            "Could not deserialize GraphRecord",
-            ConversionError::BinaryDeserialization.to_string()
+            "Failed to create edge DataFrame for group `ungrouped`",
+            ConversionError::EdgeDataFrameCreation { group_index: None }.to_string()
         );
     }
 }

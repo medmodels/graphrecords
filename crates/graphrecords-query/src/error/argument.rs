@@ -22,11 +22,11 @@ impl Display for Absent {
 impl Error for Absent {}
 
 #[derive(Debug)]
-pub struct ArgumentAbsent {
+pub struct ArgumentMissing {
     cause: Absent,
 }
 
-impl ArgumentAbsent {
+impl ArgumentMissing {
     #[must_use]
     pub const fn new(cause: Absent) -> Self {
         Self { cause }
@@ -38,21 +38,21 @@ impl ArgumentAbsent {
     }
 }
 
-impl Display for ArgumentAbsent {
+impl Display for ArgumentMissing {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         write!(formatter, "{}", self.cause)
     }
 }
 
-impl Error for ArgumentAbsent {
+impl Error for ArgumentMissing {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(&self.cause)
     }
 }
 
-impl Diagnostic for ArgumentAbsent {
+impl Diagnostic for ArgumentMissing {
     fn name() -> &'static str {
-        "ArgumentAbsent"
+        "ArgumentMissing"
     }
 
     fn help(&self) -> Option<String> {

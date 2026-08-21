@@ -1,5 +1,5 @@
 use crate::Diagnostic;
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::Value;
 use std::{
     error::Error,
     fmt::{self, Debug, Display, Formatter},
@@ -86,49 +86,18 @@ impl<T: Debug + Display + Send + Sync + 'static> Diagnostic for InvalidClipBound
 }
 
 #[derive(Debug)]
-pub struct NegativeLength {
-    value: i64,
-}
-
-impl NegativeLength {
-    #[must_use]
-    pub const fn new(value: i64) -> Self {
-        Self { value }
-    }
-
-    #[must_use]
-    pub const fn value(&self) -> i64 {
-        self.value
-    }
-}
-
-impl Display for NegativeLength {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "`{}` is a negative length", self.value)
-    }
-}
-
-impl Error for NegativeLength {}
-
-impl Diagnostic for NegativeLength {
-    fn name() -> &'static str {
-        "NegativeLength"
-    }
-}
-
-#[derive(Debug)]
 pub struct NegativeSquareRoot {
-    value: GraphRecordValue,
+    value: Value,
 }
 
 impl NegativeSquareRoot {
     #[must_use]
-    pub const fn new(value: GraphRecordValue) -> Self {
+    pub const fn new(value: Value) -> Self {
         Self { value }
     }
 
     #[must_use]
-    pub const fn value(&self) -> &GraphRecordValue {
+    pub const fn value(&self) -> &Value {
         &self.value
     }
 }
@@ -215,17 +184,17 @@ impl<T: Debug + Display + Send + Sync + 'static> Diagnostic for NonNumericValue<
 
 #[derive(Debug)]
 pub struct NonPositiveLogarithm {
-    value: GraphRecordValue,
+    value: Value,
 }
 
 impl NonPositiveLogarithm {
     #[must_use]
-    pub const fn new(value: GraphRecordValue) -> Self {
+    pub const fn new(value: Value) -> Self {
         Self { value }
     }
 
     #[must_use]
-    pub const fn value(&self) -> &GraphRecordValue {
+    pub const fn value(&self) -> &Value {
         &self.value
     }
 }

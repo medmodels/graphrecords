@@ -1,9 +1,9 @@
 use crate::graphrecord::{
-    attribute::PyGraphRecordAttribute,
+    PyAttributeName, PyGroupIndex,
     datatype::PyDataType,
     schema::PyAttributeType,
     traits::{DeepFrom, DeepInto},
-    value::PyGraphRecordValue,
+    value::PyValue,
 };
 use graphrecords_overview::{
     AttributeOverview, AttributeOverviewData, EdgeGroupOverview, GroupOverview, NodeGroupOverview,
@@ -12,7 +12,7 @@ use graphrecords_overview::{
 use pyo3::{prelude::*, types::PyDict};
 use std::collections::HashMap;
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.overview")]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyAttributeOverview(AttributeOverview);
@@ -55,58 +55,42 @@ impl PyAttributeOverview {
     }
 
     #[getter]
-    #[allow(clippy::missing_panics_doc)]
-    pub fn data(&self, py: Python<'_>) -> Py<PyAny> {
+    pub fn data(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let dict = PyDict::new(py);
 
         match &self.0.data {
             AttributeOverviewData::Categorical { distinct_values } => {
-                let distinct_values: Vec<PyGraphRecordValue> = distinct_values.clone().deep_into();
+                let distinct_values: Vec<PyValue> = distinct_values.clone().deep_into();
 
-                dict.set_item("distinct_values", distinct_values)
-                    .expect("Setting item must succeed");
-                dict.set_item("attribute_type", PyAttributeType::Categorical)
-                    .expect("Setting item must succeed");
-
-                dict.into_pyobject(py)
-                    .expect("Conversion must succeed")
-                    .into()
+                dict.set_item("distinct_values", distinct_values)?;
+                dict.set_item("attribute_type", PyAttributeType::Categorical)?;
             }
             AttributeOverviewData::Continuous { min, mean, max } => {
-                dict.set_item("min", PyGraphRecordValue::from(min.clone()))
-                    .expect("Setting item must succeed");
-                dict.set_item("mean", PyGraphRecordValue::from(mean.clone()))
-                    .expect("Setting item must succeed");
-                dict.set_item("max", PyGraphRecordValue::from(max.clone()))
-                    .expect("Setting item must succeed");
-                dict.set_item("attribute_type", PyAttributeType::Continuous)
-                    .expect("Setting item must succeed");
-
-                dict.into()
+                dict.set_item("min", PyValue::from(min.clone()))?;
+                dict.set_item("mean", PyValue::from(mean.clone()))?;
+                dict.set_item("max", PyValue::from(max.clone()))?;
+                dict.set_item("attribute_type", PyAttributeType::Continuous)?;
             }
             AttributeOverviewData::Temporal { min, max } => {
-                dict.set_item("min", PyGraphRecordValue::from(min.clone()))
-                    .expect("Setting item must succeed");
-                dict.set_item("max", PyGraphRecordValue::from(max.clone()))
-                    .expect("Setting item must succeed");
-                dict.set_item("attribute_type", PyAttributeType::Temporal)
-                    .expect("Setting item must succeed");
-
-                dict.into()
+                dict.set_item("min", PyValue::from(min.clone()))?;
+                dict.set_item("max", PyValue::from(max.clone()))?;
+                dict.set_item("attribute_type", PyAttributeType::Temporal)?;
             }
             AttributeOverviewData::Unstructured { distinct_count } => {
-                dict.set_item("distinct_count", *distinct_count)
-                    .expect("Setting item must succeed");
-                dict.set_item("attribute_type", PyAttributeType::Unstructured)
-                    .expect("Setting item must succeed");
-
-                dict.into()
+                dict.set_item("distinct_count", *distinct_count)?;
+                dict.set_item("attribute_type", PyAttributeType::Unstructured)?;
             }
         }
+
+        Ok(dict.into())
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.overview")]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyNodeGroupOverview(NodeGroupOverview);
@@ -149,16 +133,16 @@ impl PyNodeGroupOverview {
     }
 
     #[getter]
-    pub fn attributes(&self) -> HashMap<PyGraphRecordAttribute, PyAttributeOverview> {
+    pub fn attributes(&self) -> HashMap<PyAttributeName, PyAttributeOverview> {
         self.0.attributes.clone().deep_into()
     }
 
-    pub fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.0))
+    pub fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.overview")]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyEdgeGroupOverview(EdgeGroupOverview);
@@ -201,20 +185,16 @@ impl PyEdgeGroupOverview {
     }
 
     #[getter]
-    pub fn attributes(&self) -> HashMap<PyGraphRecordAttribute, PyAttributeOverview> {
-        self.0
-            .attributes
-            .iter()
-            .map(|(k, v)| (k.clone().into(), v.clone().into()))
-            .collect()
+    pub fn attributes(&self) -> HashMap<PyAttributeName, PyAttributeOverview> {
+        self.0.attributes.clone().deep_into()
     }
 
-    pub fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.0))
+    pub fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.overview")]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyGroupOverview(GroupOverview);
@@ -261,12 +241,12 @@ impl PyGroupOverview {
         self.0.edge_overview.clone().into()
     }
 
-    pub fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.0))
+    pub fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.overview")]
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct PyOverview(Overview);
@@ -297,11 +277,11 @@ impl PyOverview {
     }
 
     #[getter]
-    pub fn grouped_overviews(&self) -> HashMap<PyGraphRecordAttribute, PyGroupOverview> {
+    pub fn grouped_overviews(&self) -> HashMap<PyGroupIndex, PyGroupOverview> {
         self.0.grouped_overviews.clone().deep_into()
     }
 
-    pub fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.0))
+    pub fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }

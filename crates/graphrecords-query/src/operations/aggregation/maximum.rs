@@ -1,13 +1,10 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, OrderState, QueryResult, Single,
+    Bare, BareValueDomain, EvaluateExpression, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Multiple, OrderState, QueryResult, Single,
     capabilities::ValueOrdering,
     error::comparison::{IncomparableValues, IncomparableValuesAt},
-    execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    expressions::ExpressionHandle,
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Maximum,
@@ -18,23 +15,13 @@ use std::{
     fmt::{Debug, Display},
 };
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
-#[explain(label = "Max")]
+#[explain(label = "Maximum")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct MaximumOperation;
-
-impl Prepare for MaximumOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for MaximumOperation
 where
@@ -43,32 +30,35 @@ where
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {
-    type Output = OperandHandle<Bare<V>, Single>;
+    type Output = ExpressionHandle<Bare<V>, Single>;
 
     fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         mut values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
-        let maximum = values.try_fold(None, |maximum, (index, value)| {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
+        let maximum = values.try_fold(None, |maximum, (address, value)| {
             let value = value?;
 
-            let Some((maximum_index, maximum_value)) = maximum else {
-                return Ok(Some((index, value)));
+            let Some((maximum_address, maximum_value)) = maximum else {
+                return Ok(Some((address, value)));
             };
 
             match V::ordering(&value, &maximum_value) {
-                Some(Ordering::Greater) => Ok(Some((index, value))),
-                Some(Ordering::Less | Ordering::Equal) => Ok(Some((maximum_index, maximum_value))),
-                None => Err(Failure::new_at::<I, _>(
-                    Self::LABEL,
+                Some(Ordering::Greater) => Ok(Some((address, value))),
+                Some(Ordering::Less | Ordering::Equal) => {
+                    Ok(Some((maximum_address, maximum_value)))
+                }
+                None => Err(Failure::new_at_address::<I, _>(
                     IncomparableValuesAt::new(
                         V::into_owned(value),
                         V::into_owned(maximum_value),
-                        I::to_owned(&index),
-                        I::to_owned(&maximum_index),
+                        I::own_index(&I::index(graphrecord, &address)),
+                        I::own_index(&I::index(graphrecord, &maximum_address)),
                     ),
-                    &index,
+                    graphrecord,
+                    &address,
+                    Self::LABEL,
                 )),
             }
         });
@@ -90,13 +80,13 @@ where
     O: OrderState,
     V::Owned: Debug + Display + Send + Sync,
 {
-    type Output = OperandHandle<Bare<V>, Single>;
+    type Output = ExpressionHandle<Bare<V>, Single>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         mut values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let maximum = values.try_fold(None, |maximum, value| {
             let value = value?;
 
@@ -108,8 +98,8 @@ where
                 Some(Ordering::Greater) => Ok(Some(value)),
                 Some(Ordering::Less | Ordering::Equal) => Ok(Some(maximum)),
                 None => Err(Failure::new(
-                    Self::LABEL,
                     IncomparableValues::new(V::into_owned(value), V::into_owned(maximum)),
+                    Self::LABEL,
                 )),
             }
         });
@@ -122,11 +112,11 @@ where
     }
 }
 
-impl<O: Apply<MaximumOperation>> Maximum for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<MaximumOperation>> Maximum for E {
+    type Output = E::Output;
 
-    fn max(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), MaximumOperation))
+    fn max(&self) -> Self::Output {
+        self.build(MaximumOperation)
     }
 }
 
@@ -142,7 +132,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Indexed<I, V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Single>;
+            output: ExpressionHandle<Bare<V>, Single>;
             where V::Owned: Debug + Display + Send + Sync;
         }
 
@@ -152,7 +142,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Bare<V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Single>;
+            output: ExpressionHandle<Bare<V>, Single>;
             where V::Owned: Debug + Display + Send + Sync;
         }
     }

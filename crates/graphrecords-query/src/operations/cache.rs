@@ -1,7 +1,7 @@
 use crate::{
-    Cache, EvaluateContext, EvaluateOperand, Explain, Failure, Labeled, QueryResult,
+    Cache, EvaluateContext, EvaluateExpression, Explain, Failure, Labeled, QueryResult, Series,
     error::execution::EvaluationCacheGraphRecordMismatch,
-    execution::{CacheSlot, CacheableOperand, EvaluationCache},
+    execution::{CacheSlot, CacheableExpression, EvaluationCache},
     optimizer::{
         Estimate, Estimated, MatchInputs, OptimizePlan, OptimizerHints, PlanNode, Session, Stats,
         Transformed,
@@ -15,15 +15,15 @@ use std::{
 
 #[derive(MatchInputs, OptimizerHints, Explain)]
 #[explain(label = "Cache")]
-pub struct CacheContext<O: CacheableOperand> {
+pub struct CacheContext<E: CacheableExpression> {
     #[input]
-    input: O,
+    input: E,
     slot: CacheSlot,
 }
 
-impl<O: CacheableOperand> CacheContext<O> {
+impl<E: CacheableExpression> CacheContext<E> {
     #[must_use]
-    pub fn new(input: O) -> Self {
+    pub fn new(input: E) -> Self {
         Self {
             input,
             slot: CacheSlot::new(),
@@ -31,13 +31,19 @@ impl<O: CacheableOperand> CacheContext<O> {
     }
 }
 
-impl<O: CacheableOperand> Cache for O {
+impl<E: CacheableExpression> Cache for E {
     fn cache(&self) -> Self {
         Self::new(CacheContext::new(self.clone()))
     }
 }
 
-impl<O: CacheableOperand> PlanNode for CacheContext<O> {
+impl<E: Cache> Cache for Series<E> {
+    fn cache(&self) -> Self {
+        self.bind(self.expression().cache())
+    }
+}
+
+impl<E: CacheableExpression> PlanNode for CacheContext<E> {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         vec![self.input.as_plan_node()]
     }
@@ -56,14 +62,14 @@ impl<O: CacheableOperand> PlanNode for CacheContext<O> {
     }
 }
 
-impl<O: CacheableOperand> Estimated for CacheContext<O> {
+impl<E: CacheableExpression> Estimated for CacheContext<E> {
     fn estimate(&self, stats: &Stats) -> Estimate {
         self.input.context().estimate(stats)
     }
 }
 
-impl<O: CacheableOperand> OptimizePlan for CacheContext<O> {
-    type Output = O;
+impl<E: CacheableExpression> OptimizePlan for CacheContext<E> {
+    type Output = E;
 
     fn optimize(&self, original: &Self::Output, session: &Session) -> Transformed<Self::Output> {
         let input = session.optimize(&self.input);
@@ -74,28 +80,30 @@ impl<O: CacheableOperand> OptimizePlan for CacheContext<O> {
 
         let input = input.into_parts().0;
 
-        Transformed::changed(O::new(Self {
+        Transformed::changed(E::new(Self {
             input,
             slot: self.slot.clone(),
         }))
     }
 }
 
-impl<O: CacheableOperand> EvaluateContext for CacheContext<O> {
-    type Operand = O;
+impl<E: CacheableExpression> EvaluateContext for CacheContext<E> {
+    type Expression = E;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<<O as EvaluateOperand>::ReturnValue<'a>> {
+        cache: &'a EvaluationCache,
+    ) -> QueryResult<<E as EvaluateExpression>::ReturnValue<'a>> {
         if !cache.is_bound_to(graphrecord) {
             return Err(Failure::new(
-                Self::LABEL,
                 EvaluationCacheGraphRecordMismatch,
+                Self::LABEL,
             ));
         }
 
-        cache.materialize::<O>(&self.slot, || self.input.evaluate(graphrecord, cache))
+        cache.materialize::<E>(graphrecord, &self.slot, || {
+            self.input.evaluate(graphrecord, cache)
+        })
     }
 }

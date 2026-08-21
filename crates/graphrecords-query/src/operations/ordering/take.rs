@@ -1,11 +1,9 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
-    Ordered, QueryResult, ValueDomain,
+    Bare, BareValueDomain, EvaluateExpression, Explain, IndexDomain, Indexed, Multiple, Ordered,
+    QueryResult, ValueDomain,
     execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    expressions::ExpressionHandle,
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Take,
@@ -27,7 +25,7 @@ impl Prepare for TakeOperation {
     fn prepare<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         Ok(self.elements)
     }
@@ -36,13 +34,13 @@ impl Prepare for TakeOperation {
 impl<I: IndexDomain, V: ValueDomain> LaneKernel<Indexed<I, V>, Multiple<Ordered>>
     for TakeOperation
 {
-    type Output = OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
+    type Output = ExpressionHandle<Indexed<I, V>, Multiple<Ordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, V, Multiple<Ordered>>,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(Box::new(values.take(prepared)))
     }
 
@@ -57,13 +55,13 @@ impl<I: IndexDomain, V: ValueDomain> LaneKernel<Indexed<I, V>, Multiple<Ordered>
 }
 
 impl<V: BareValueDomain> LaneKernel<Bare<V>, Multiple<Ordered>> for TakeOperation {
-    type Output = OperandHandle<Bare<V>, Multiple<Ordered>>;
+    type Output = ExpressionHandle<Bare<V>, Multiple<Ordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: BareStream<'a, V, Multiple<Ordered>>,
         prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(Box::new(values.take(prepared)))
     }
 
@@ -77,14 +75,11 @@ impl<V: BareValueDomain> LaneKernel<Bare<V>, Multiple<Ordered>> for TakeOperatio
     }
 }
 
-impl<O: Apply<TakeOperation>> Take for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<TakeOperation>> Take for E {
+    type Output = E::Output;
 
-    fn take(&self, elements: usize) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            TakeOperation { elements },
-        ))
+    fn take(&self, elements: usize) -> Self::Output {
+        self.build(TakeOperation { elements })
     }
 }
 
@@ -97,13 +92,14 @@ operation_manifest! {
             parameters: <I: IndexDomain, V: ValueDomain>;
             field: elements: usize;
             input: (Indexed<I, V>, Multiple<Ordered>);
-            output: OperandHandle<Indexed<I, V>, Multiple<Ordered>>;
+            output: ExpressionHandle<Indexed<I, V>, Multiple<Ordered>>;
         }
+
         kernel {
             parameters: <V: BareValueDomain>;
             field: elements: usize;
             input: (Bare<V>, Multiple<Ordered>);
-            output: OperandHandle<Bare<V>, Multiple<Ordered>>;
+            output: ExpressionHandle<Bare<V>, Multiple<Ordered>>;
         }
     }
 }

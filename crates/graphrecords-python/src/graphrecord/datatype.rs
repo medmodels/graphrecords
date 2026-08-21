@@ -1,7 +1,8 @@
-#![allow(clippy::new_without_default)]
-
 use super::{Lut, traits::DeepFrom};
-use crate::{conversion_lut::ConversionLut, graphrecord::errors::PyGraphRecordError};
+use crate::{
+    conversion_lut::{ConversionLut, TypeObjectKey},
+    graphrecord::errors::PyGraphRecordError,
+};
 use graphrecords_core::graphrecord::datatypes::DataType;
 use pyo3::{IntoPyObjectExt, prelude::*};
 
@@ -12,6 +13,12 @@ macro_rules! implement_pymethods {
             #[new]
             pub const fn new() -> Self {
                 Self {}
+            }
+        }
+
+        impl Default for $struct {
+            fn default() -> Self {
+                Self::new()
             }
         }
     };
@@ -47,7 +54,10 @@ impl DeepFrom<DataType> for PyDataType {
 
 static DATATYPE_CONVERSION_LUT: Lut<DataType> = ConversionLut::new();
 
-#[allow(clippy::unnecessary_wraps)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the conversion table requires uniform fallible signatures"
+)]
 pub(crate) fn convert_pyobject_to_datatype(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
     const fn convert_string(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::String)
@@ -82,59 +92,58 @@ pub(crate) fn convert_pyobject_to_datatype(ob: &Bound<'_, pyo3::PyAny>) -> PyRes
     }
 
     fn convert_union(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
-        let union = ob
-            .extract::<PyRef<PyUnion>>()
-            .expect("Extraction must succeed");
+        let union = ob.extract::<PyRef<PyUnion>>()?;
 
-        let dtypes = union.0.clone();
+        let datatypes = union.0.clone();
 
         Ok(DataType::Union((
-            Box::new(dtypes.0.into()),
-            Box::new(dtypes.1.into()),
+            Box::new(datatypes.0.into()),
+            Box::new(datatypes.1.into()),
         )))
     }
 
     fn convert_option(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
-        let option = ob
-            .extract::<PyRef<PyOption>>()
-            .expect("Extraction must succeed");
+        let option = ob.extract::<PyRef<PyOption>>()?;
 
         Ok(DataType::Option(Box::new(option.0.clone().into())))
     }
 
-    fn throw_error(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
-        Err(PyGraphRecordError::Conversion(format!("Failed to convert {ob} into DataType")).into())
-    }
+    let type_object = TypeObjectKey::from(ob.get_type().unbind());
 
-    let type_pointer = ob.get_type_ptr() as usize;
-
-    let conversion_function = DATATYPE_CONVERSION_LUT.get_or_insert(type_pointer, || {
+    let conversion_function = DATATYPE_CONVERSION_LUT.get_or_insert(type_object, || {
         if ob.is_instance_of::<PyString>() {
-            convert_string
+            Some(convert_string)
         } else if ob.is_instance_of::<PyInt>() {
-            convert_int
+            Some(convert_int)
         } else if ob.is_instance_of::<PyFloat>() {
-            convert_float
+            Some(convert_float)
         } else if ob.is_instance_of::<PyBool>() {
-            convert_bool
+            Some(convert_bool)
         } else if ob.is_instance_of::<PyDateTime>() {
-            convert_datetime
+            Some(convert_datetime)
         } else if ob.is_instance_of::<PyDuration>() {
-            convert_duration
+            Some(convert_duration)
         } else if ob.is_instance_of::<PyNull>() {
-            convert_null
+            Some(convert_null)
         } else if ob.is_instance_of::<PyAny>() {
-            convert_any
+            Some(convert_any)
         } else if ob.is_instance_of::<PyUnion>() {
-            convert_union
+            Some(convert_union)
         } else if ob.is_instance_of::<PyOption>() {
-            convert_option
+            Some(convert_option)
         } else {
-            throw_error
+            None
         }
     });
 
-    conversion_function(ob)
+    let Some(convert) = conversion_function else {
+        return Err(PyGraphRecordError::Conversion(format!(
+            "Failed to convert {ob} into DataType"
+        ))
+        .into());
+    };
+
+    convert(ob)
 }
 
 impl FromPyObject<'_, '_> for PyDataType {
@@ -160,79 +169,79 @@ impl<'py> IntoPyObject<'py> for PyDataType {
             DataType::Duration => PyDuration {}.into_bound_py_any(py),
             DataType::Null => PyNull {}.into_bound_py_any(py),
             DataType::Any => PyAny {}.into_bound_py_any(py),
-            DataType::Union((dtype1, dtype2)) => {
-                PyUnion(((*dtype1).into(), (*dtype2).into())).into_bound_py_any(py)
+            DataType::Union((left, right)) => {
+                PyUnion(((*left).into(), (*right).into())).into_bound_py_any(py)
             }
-            DataType::Option(dtype) => PyOption((*dtype).into()).into_bound_py_any(py),
+            DataType::Option(datatype) => PyOption((*datatype).into()).into_bound_py_any(py),
         }
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.datatype")]
 pub struct PyString;
 implement_pymethods!(PyString);
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.datatype")]
 pub struct PyInt;
 implement_pymethods!(PyInt);
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.datatype")]
 pub struct PyFloat;
 implement_pymethods!(PyFloat);
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.datatype")]
 pub struct PyBool;
 implement_pymethods!(PyBool);
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.datatype")]
 pub struct PyDateTime;
 implement_pymethods!(PyDateTime);
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.datatype")]
 pub struct PyDuration;
 implement_pymethods!(PyDuration);
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.datatype")]
 pub struct PyNull;
 implement_pymethods!(PyNull);
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.datatype")]
 pub struct PyAny;
 implement_pymethods!(PyAny);
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.datatype")]
 pub struct PyUnion((PyDataType, PyDataType));
 
 #[pymethods]
 impl PyUnion {
     #[new]
-    const fn new(dtype1: PyDataType, dtype2: PyDataType) -> Self {
-        Self((dtype1, dtype2))
+    const fn new(left: PyDataType, right: PyDataType) -> Self {
+        Self((left, right))
     }
 
     #[getter]
-    fn dtype1(&self) -> PyDataType {
+    fn left(&self) -> PyDataType {
         self.0.0.clone()
     }
 
     #[getter]
-    fn dtype2(&self) -> PyDataType {
+    fn right(&self) -> PyDataType {
         self.0.1.clone()
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.datatype")]
 pub struct PyOption(PyDataType);
 
 #[pymethods]
 impl PyOption {
     #[new]
-    const fn new(dtype: PyDataType) -> Self {
-        Self(dtype)
+    const fn new(datatype: PyDataType) -> Self {
+        Self(datatype)
     }
 
     #[getter]
-    fn dtype(&self) -> PyDataType {
+    fn datatype(&self) -> PyDataType {
         self.0.clone()
     }
 }

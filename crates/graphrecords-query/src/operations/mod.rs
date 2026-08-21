@@ -6,6 +6,7 @@ mod comparison;
 mod conversion;
 mod errors;
 mod grouping;
+mod groups;
 mod indexing;
 mod is_type;
 mod kernel;
@@ -21,7 +22,7 @@ mod traversal;
 mod uniqueness;
 
 use crate::{
-    EvaluateContext, EvaluateOperand, Explain, Operand, QueryResult,
+    EvaluateContext, EvaluateExpression, Explain, Expression, QueryResult, Series,
     execution::EvaluationCache,
     explain::ExplainFormatter,
     optimizer::{
@@ -39,8 +40,8 @@ pub use aggregation::{
 pub use argument::{
     AlignableArity, Alignment, Argument, ArgumentPlan, ArgumentSource, EnumerableArity,
     IndexedElementContainer, IndexedElementSource, IntoArgument, Keyed, Lookup, Prepare,
-    PreparedArgument, PreparedArity, PreparedIndexedMultiple, SetArity, SetSource, SourceDomain,
-    Unaligned,
+    PreparedArgument, PreparedArity, PreparedIndexedMultiple, PreparedSeriesArgument, SetArity,
+    SetSource, SourceDomain, Unaligned,
 };
 pub use arithmetic::{
     AddOperation, DivideOperation, ModuloOperation, MultiplyOperation, PowerOperation,
@@ -53,7 +54,7 @@ pub use comparison::{
 };
 pub use conversion::{
     CastOperation, DiscardIndexOperation, DiscardValueOperation, EnumerateOperation,
-    ExpandToOperation, TransitionOperation,
+    InheritOperation, TransitionOperation,
 };
 pub use errors::{
     DropErrorsIn, DropErrorsOf, DropErrorsWithCause, ErrorKindNameOperation, ErrorKindOperation,
@@ -63,7 +64,7 @@ pub use errors::{
     RaiseWhenErrorsWithCause, ReplaceErrorsIn, ReplaceErrorsOf, ReplaceErrorsWithCause,
 };
 use graphrecords_core::GraphRecord;
-pub use graphrecords_macros::Operation;
+pub use graphrecords_macros::{Operation, Prepare};
 pub use grouping::{
     BroadcastOperation, BroadcastViaOperation, BucketErrorPolicy, BucketErrorPolicyIn,
     BucketErrorPolicyOf, BucketErrorPolicyWithCause, BucketErrorsOperation, BucketFailureArity,
@@ -73,6 +74,10 @@ pub use grouping::{
     KeyErrorsOperation, KeysOperation, RaiseBucketErrors, RaiseBucketErrorsIn, RaiseBucketErrorsOf,
     RaiseBucketErrorsWithCause, RaiseKeyErrors, RaiseKeyErrorsIn, RaiseKeyErrorsOf,
     RaiseKeyErrorsWithCause, UngroupKeyedOperation, UngroupOperation,
+};
+pub use groups::{
+    EdgeCountOperation, GroupsOperation, MemberEdgesOperation, NodeCountOperation,
+    ViaGroupsOperation, ViaMemberEdgesOperation,
 };
 pub use indexing::{
     ChildIndexOperation, IndexOperation, ParentIndexOperation, ResolveOperation, SelectOperation,
@@ -91,7 +96,8 @@ pub use numeric::{
     FloorOperation, LogarithmOperation, NegateOperation, RoundOperation, SignOperation,
     SquareRootOperation,
 };
-pub use on_missing::{MaybeAbsent, MissingPolicy, WithMissing};
+pub use on_missing::{MissingPolicy, OnMissing, WithMissing};
+pub(crate) use ordering::IndexTiebreak;
 pub use ordering::{
     FirstOperation, LastOperation, ReverseOrderOperation, ShuffleOperation, SortByOperation,
     SortOperation, TakeOperation, UnorderOperation,
@@ -136,19 +142,46 @@ pub trait Operation: Prepare + OperationInputs + Explain {
 }
 
 pub trait Apply<P: Operation<Scope = S>, S: OperationScope = <P as Operation>::Scope>:
-    Operand
+    Expression
 {
-    type Output: Operand;
+    type Output: Expression;
 
     fn apply<'a>(
         graphrecord: &'a GraphRecord,
         values: Self::ReturnValue<'a>,
         prepared: P::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>>
     where
         Self: 'a;
 
     fn estimate(operation: &P, input: Estimate, stats: &Stats) -> Estimate;
+}
+
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot apply `{P}`",
+    label = "`{P}` is not supported by this expression",
+    note = "no implementation of `{P}` exists for this expression's shape"
+)]
+pub trait Build<P: Operation> {
+    type Output;
+
+    fn build(&self, operation: P) -> Self::Output;
+}
+
+impl<E: Apply<P>, P: Operation> Build<P> for E {
+    type Output = <E as Apply<P>>::Output;
+
+    fn build(&self, operation: P) -> Self::Output {
+        Self::Output::new(OperationContext::new(self.clone(), operation))
+    }
+}
+
+impl<E: Build<P>, P: Operation> Build<P> for Series<E> {
+    type Output = Series<E::Output>;
+
+    fn build(&self, operation: P) -> Self::Output {
+        self.bind(self.expression().build(operation))
+    }
 }
 
 pub struct OperationContext<I: Apply<P>, P: Operation> {
@@ -228,13 +261,13 @@ impl<I: Apply<P>, P: Operation> Explain for OperationContext<I, P> {
 }
 
 impl<I: Apply<P>, P: Operation> EvaluateContext for OperationContext<I, P> {
-    type Operand = I::Output;
+    type Expression = I::Output;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
+        cache: &'a EvaluationCache,
+    ) -> QueryResult<<Self::Expression as EvaluateExpression>::ReturnValue<'a>> {
         let values = self.input.evaluate(graphrecord, cache)?;
         let prepared = self.operation.prepare(graphrecord, cache)?;
 
@@ -274,6 +307,7 @@ pub(crate) fn operation_manifests() -> Vec<OperationManifest> {
         .chain(conversion::operation_manifests())
         .chain(errors::operation_manifests())
         .chain(grouping::operation_manifests())
+        .chain(groups::operation_manifests())
         .chain(indexing::operation_manifests())
         .chain(is_type::operation_manifests())
         .chain(logic::operation_manifests())

@@ -13,6 +13,7 @@ use crate::{
     registry::OperationManifest,
 };
 pub use equal_to::EqualToOperation;
+use graphrecords_core::GraphRecord;
 pub use greater_than::GreaterThanOperation;
 pub use greater_than_or_equal_to::GreaterThanOrEqualToOperation;
 pub use less_than::LessThanOperation;
@@ -35,9 +36,10 @@ pub(super) fn operation_manifests() -> Vec<OperationManifest> {
 }
 
 fn equality_indexed<'a, I, V, A>(
+    graphrecord: &'a GraphRecord,
     prepared: A::Prepared<'a>,
-    label: &'static str,
     equality: fn(&V::Value<'a>, &V::Value<'a>) -> bool,
+    label: &'static str,
 ) -> IndexedValuePipeline<'a, I, V, Mask, A::Retention>
 where
     I: IndexDomain,
@@ -45,7 +47,7 @@ where
     A: ArgumentSource<Keyed<I>, V>,
     A::Prepared<'a>: 'a,
 {
-    Pipeline::keyed(move |index, item| {
+    Pipeline::keyed(move |address, item| {
         let value = match item {
             Ok(value) => value,
             Err(original) => {
@@ -53,7 +55,7 @@ where
             }
         };
 
-        let step = A::resolve(&prepared, &index, label);
+        let step = A::resolve(graphrecord, &prepared, &address, label);
 
         A::Retention::map_step(step, |resolved| {
             resolved.map(|argument| equality(&value, &argument))
@@ -62,9 +64,10 @@ where
 }
 
 fn equality_bare<'a, V, A>(
+    graphrecord: &'a GraphRecord,
     prepared: A::Prepared<'a>,
-    label: &'static str,
     equality: fn(&V::Value<'a>, &V::Value<'a>) -> bool,
+    label: &'static str,
 ) -> BarePipeline<'a, V, Mask, A::Retention>
 where
     V: ValueDomain,
@@ -79,7 +82,7 @@ where
             }
         };
 
-        let step = A::resolve(&prepared, &(), label);
+        let step = A::resolve(graphrecord, &prepared, &(), label);
 
         A::Retention::map_step(step, |resolved| {
             resolved.map(|argument| equality(&value, &argument))
@@ -88,10 +91,11 @@ where
 }
 
 fn ordering_indexed<'a, I, V, A>(
+    graphrecord: &'a GraphRecord,
     prepared: A::Prepared<'a>,
-    label: &'static str,
     ordering: fn(&V::Value<'a>, &V::Value<'a>) -> Option<Ordering>,
     predicate: fn(Ordering) -> bool,
+    label: &'static str,
 ) -> IndexedValuePipeline<'a, I, V, Mask, A::Retention>
 where
     I: IndexDomain,
@@ -100,7 +104,7 @@ where
     V::Owned: Debug + Display + Send + Sync,
     A::Prepared<'a>: 'a,
 {
-    Pipeline::keyed(move |index, item| {
+    Pipeline::keyed(move |address, item| {
         let value = match item {
             Ok(value) => value,
             Err(original) => {
@@ -108,15 +112,16 @@ where
             }
         };
 
-        let step = A::resolve(&prepared, &index, label);
+        let step = A::resolve(graphrecord, &prepared, &address, label);
 
         A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| match ordering(&value, &argument) {
                 Some(outcome) => Ok(predicate(outcome)),
-                None => Err(Failure::new_at::<I, _>(
-                    label,
+                None => Err(Failure::new_at_address::<I, _>(
                     IncomparableValues::new(V::into_owned(value), V::into_owned(argument)),
-                    &index,
+                    graphrecord,
+                    &address,
+                    label,
                 )),
             })
         })
@@ -124,10 +129,11 @@ where
 }
 
 fn ordering_bare<'a, V, A>(
+    graphrecord: &'a GraphRecord,
     prepared: A::Prepared<'a>,
-    label: &'static str,
     ordering: fn(&V::Value<'a>, &V::Value<'a>) -> Option<Ordering>,
     predicate: fn(Ordering) -> bool,
+    label: &'static str,
 ) -> BarePipeline<'a, V, Mask, A::Retention>
 where
     V: ValueDomain,
@@ -143,14 +149,14 @@ where
             }
         };
 
-        let step = A::resolve(&prepared, &(), label);
+        let step = A::resolve(graphrecord, &prepared, &(), label);
 
         A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| match ordering(&value, &argument) {
                 Some(outcome) => Ok(predicate(outcome)),
                 None => Err(Failure::new(
-                    label,
                     IncomparableValues::new(V::into_owned(value), V::into_owned(argument)),
+                    label,
                 )),
             })
         })

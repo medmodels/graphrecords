@@ -1,15 +1,21 @@
 use graphrecords_query::dynamic::DynValueTarget;
 use pyo3::prelude::*;
 
-#[pyclass(frozen, eq, eq_int)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[pyclass(
+    frozen,
+    eq,
+    eq_int,
+    hash,
+    module = "graphrecords._graphrecords.querying"
+)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PyValueTarget {
     Value,
     ValueIndex,
     AttributeName,
     AttributeNameIndex,
     NodeIndex,
-    EdgeIndex,
+    GroupIndex,
     PositionalIndex,
     BoolIndex,
     Mask,
@@ -25,7 +31,7 @@ impl From<PyValueTarget> for DynValueTarget {
             PyValueTarget::AttributeName => Self::AttributeName,
             PyValueTarget::AttributeNameIndex => Self::AttributeNameIndex,
             PyValueTarget::NodeIndex => Self::NodeIndex,
-            PyValueTarget::EdgeIndex => Self::EdgeIndex,
+            PyValueTarget::GroupIndex => Self::GroupIndex,
             PyValueTarget::PositionalIndex => Self::PositionalIndex,
             PyValueTarget::BoolIndex => Self::BoolIndex,
             PyValueTarget::Mask => Self::Mask,

@@ -1,4 +1,5 @@
-use crate::{Failure, IndexDomain, QueryResult, ValueDomain};
+use crate::{Failure, IndexDomain, OwnedIndex, QueryResult, ValueDomain};
+use graphrecords_core::GraphRecord;
 use std::{
     cmp::Ordering,
     fmt::{self, Debug, Display, Formatter},
@@ -11,7 +12,7 @@ pub struct ExpandedIndex<P: IndexDomain, C: IndexDomain>(PhantomData<(P, C)>);
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 enum ExpandedIndexRepresentation<P, C> {
-    Source(P),
+    Parent(P),
     Child { parent: P, child: C },
 }
 
@@ -19,12 +20,12 @@ impl<P: PartialOrd, C: PartialOrd> PartialOrd for ExpandedIndexRepresentation<P,
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let parent_ordering = match (self, other) {
             (
-                Self::Source(first)
+                Self::Parent(first)
                 | Self::Child {
                     parent: first,
                     child: _,
                 },
-                Self::Source(second)
+                Self::Parent(second)
                 | Self::Child {
                     parent: second,
                     child: _,
@@ -37,9 +38,9 @@ impl<P: PartialOrd, C: PartialOrd> PartialOrd for ExpandedIndexRepresentation<P,
         }
 
         match (self, other) {
-            (Self::Source(_), Self::Source(_)) => Some(Ordering::Equal),
-            (Self::Source(_), Self::Child { .. }) => Some(Ordering::Less),
-            (Self::Child { .. }, Self::Source(_)) => Some(Ordering::Greater),
+            (Self::Parent(_), Self::Parent(_)) => Some(Ordering::Equal),
+            (Self::Parent(_), Self::Child { .. }) => Some(Ordering::Less),
+            (Self::Child { .. }, Self::Parent(_)) => Some(Ordering::Greater),
             (
                 Self::Child {
                     parent: _,
@@ -58,12 +59,12 @@ impl<P: Ord, C: Ord> Ord for ExpandedIndexRepresentation<P, C> {
     fn cmp(&self, other: &Self) -> Ordering {
         let parent_ordering = match (self, other) {
             (
-                Self::Source(first)
+                Self::Parent(first)
                 | Self::Child {
                     parent: first,
                     child: _,
                 },
-                Self::Source(second)
+                Self::Parent(second)
                 | Self::Child {
                     parent: second,
                     child: _,
@@ -76,9 +77,9 @@ impl<P: Ord, C: Ord> Ord for ExpandedIndexRepresentation<P, C> {
         }
 
         match (self, other) {
-            (Self::Source(_), Self::Source(_)) => Ordering::Equal,
-            (Self::Source(_), Self::Child { .. }) => Ordering::Less,
-            (Self::Child { .. }, Self::Source(_)) => Ordering::Greater,
+            (Self::Parent(_), Self::Parent(_)) => Ordering::Equal,
+            (Self::Parent(_), Self::Child { .. }) => Ordering::Less,
+            (Self::Child { .. }, Self::Parent(_)) => Ordering::Greater,
             (
                 Self::Child {
                     parent: _,
@@ -97,11 +98,13 @@ pub struct ExpandedIndexOwned<P: IndexDomain, C: IndexDomain> {
     representation: ExpandedIndexRepresentation<P::Owned, C::Owned>,
 }
 
+impl<P: IndexDomain, C: IndexDomain> OwnedIndex for ExpandedIndexOwned<P, C> {}
+
 impl<P: IndexDomain, C: IndexDomain> ExpandedIndexOwned<P, C> {
     #[must_use]
     pub const fn parent_index(&self) -> &P::Owned {
         match &self.representation {
-            ExpandedIndexRepresentation::Source(parent)
+            ExpandedIndexRepresentation::Parent(parent)
             | ExpandedIndexRepresentation::Child { parent, child: _ } => parent,
         }
     }
@@ -109,7 +112,7 @@ impl<P: IndexDomain, C: IndexDomain> ExpandedIndexOwned<P, C> {
     #[must_use]
     pub const fn child_index(&self) -> Option<&C::Owned> {
         match &self.representation {
-            ExpandedIndexRepresentation::Source(_) => None,
+            ExpandedIndexRepresentation::Parent(_) => None,
             ExpandedIndexRepresentation::Child { parent: _, child } => Some(child),
         }
     }
@@ -117,19 +120,19 @@ impl<P: IndexDomain, C: IndexDomain> ExpandedIndexOwned<P, C> {
     #[must_use]
     pub fn into_parts(self) -> (P::Owned, Option<C::Owned>) {
         match self.representation {
-            ExpandedIndexRepresentation::Source(parent) => (parent, None),
+            ExpandedIndexRepresentation::Parent(parent) => (parent, None),
             ExpandedIndexRepresentation::Child { parent, child } => (parent, Some(child)),
         }
     }
 
     #[must_use]
-    pub const fn is_source(&self) -> bool {
-        matches!(&self.representation, ExpandedIndexRepresentation::Source(_))
+    pub const fn is_parent(&self) -> bool {
+        matches!(&self.representation, ExpandedIndexRepresentation::Parent(_))
     }
 
-    pub(crate) const fn source(parent: P::Owned) -> Self {
+    pub(crate) const fn parent(parent: P::Owned) -> Self {
         Self {
-            representation: ExpandedIndexRepresentation::Source(parent),
+            representation: ExpandedIndexRepresentation::Parent(parent),
         }
     }
 
@@ -195,7 +198,7 @@ impl<P: IndexDomain, C: IndexDomain> Debug for ExpandedIndexOwned<P, C> {
 impl<P: IndexDomain, C: IndexDomain> Display for ExpandedIndexOwned<P, C> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match &self.representation {
-            ExpandedIndexRepresentation::Source(parent) => write!(formatter, "source({parent})"),
+            ExpandedIndexRepresentation::Parent(parent) => write!(formatter, "parent({parent})"),
             ExpandedIndexRepresentation::Child { parent, child } => {
                 write!(formatter, "child({parent}, {child})")
             }
@@ -211,7 +214,7 @@ impl<'a, P: IndexDomain, C: IndexDomain> ExpandedIndexReference<'a, P, C> {
     #[must_use]
     pub const fn parent_index(&self) -> &P::Index<'a> {
         match &self.representation {
-            ExpandedIndexRepresentation::Source(parent)
+            ExpandedIndexRepresentation::Parent(parent)
             | ExpandedIndexRepresentation::Child { parent, child: _ } => parent,
         }
     }
@@ -219,19 +222,27 @@ impl<'a, P: IndexDomain, C: IndexDomain> ExpandedIndexReference<'a, P, C> {
     #[must_use]
     pub const fn child_index(&self) -> Option<&C::Index<'a>> {
         match &self.representation {
-            ExpandedIndexRepresentation::Source(_) => None,
+            ExpandedIndexRepresentation::Parent(_) => None,
             ExpandedIndexRepresentation::Child { parent: _, child } => Some(child),
         }
     }
 
     #[must_use]
-    pub const fn is_source(&self) -> bool {
-        matches!(&self.representation, ExpandedIndexRepresentation::Source(_))
+    pub fn into_parts(self) -> (P::Index<'a>, Option<C::Index<'a>>) {
+        match self.representation {
+            ExpandedIndexRepresentation::Parent(parent) => (parent, None),
+            ExpandedIndexRepresentation::Child { parent, child } => (parent, Some(child)),
+        }
     }
 
-    pub(crate) const fn source(parent: P::Index<'a>) -> Self {
+    #[must_use]
+    pub const fn is_parent(&self) -> bool {
+        matches!(&self.representation, ExpandedIndexRepresentation::Parent(_))
+    }
+
+    pub(crate) const fn parent(parent: P::Index<'a>) -> Self {
         Self {
-            representation: ExpandedIndexRepresentation::Source(parent),
+            representation: ExpandedIndexRepresentation::Parent(parent),
         }
     }
 
@@ -291,77 +302,183 @@ impl<P: IndexDomain, C: IndexDomain> Hash for ExpandedIndexReference<'_, P, C> {
 impl<P: IndexDomain, C: IndexDomain> Debug for ExpandedIndexReference<'_, P, C> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match &self.representation {
-            ExpandedIndexRepresentation::Source(parent) => formatter
-                .debug_tuple("Source")
-                .field(&P::to_owned(parent))
+            ExpandedIndexRepresentation::Parent(parent) => formatter
+                .debug_tuple("Parent")
+                .field(&P::own_index(parent))
                 .finish(),
             ExpandedIndexRepresentation::Child { parent, child } => formatter
                 .debug_struct("Child")
-                .field("parent", &P::to_owned(parent))
-                .field("child", &C::to_owned(child))
+                .field("parent", &P::own_index(parent))
+                .field("child", &C::own_index(child))
                 .finish(),
         }
     }
 }
 
+pub struct ExpandedIndexAddress<P: IndexDomain, C: IndexDomain> {
+    representation: ExpandedIndexRepresentation<P::Address, C::Address>,
+}
+
+impl<P: IndexDomain, C: IndexDomain> ExpandedIndexAddress<P, C> {
+    #[must_use]
+    pub const fn parent_index(&self) -> &P::Address {
+        match &self.representation {
+            ExpandedIndexRepresentation::Parent(parent)
+            | ExpandedIndexRepresentation::Child { parent, child: _ } => parent,
+        }
+    }
+
+    #[must_use]
+    pub const fn child_index(&self) -> Option<&C::Address> {
+        match &self.representation {
+            ExpandedIndexRepresentation::Parent(_) => None,
+            ExpandedIndexRepresentation::Child { parent: _, child } => Some(child),
+        }
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (P::Address, Option<C::Address>) {
+        match self.representation {
+            ExpandedIndexRepresentation::Parent(parent) => (parent, None),
+            ExpandedIndexRepresentation::Child { parent, child } => (parent, Some(child)),
+        }
+    }
+
+    #[must_use]
+    pub const fn is_parent(&self) -> bool {
+        matches!(&self.representation, ExpandedIndexRepresentation::Parent(_))
+    }
+
+    pub(crate) const fn parent(parent: P::Address) -> Self {
+        Self {
+            representation: ExpandedIndexRepresentation::Parent(parent),
+        }
+    }
+
+    pub(crate) const fn child(parent: P::Address, child: C::Address) -> Self {
+        Self {
+            representation: ExpandedIndexRepresentation::Child { parent, child },
+        }
+    }
+}
+
+impl<P: IndexDomain, C: IndexDomain> Clone for ExpandedIndexAddress<P, C> {
+    fn clone(&self) -> Self {
+        Self {
+            representation: self.representation.clone(),
+        }
+    }
+}
+
+impl<P: IndexDomain, C: IndexDomain> PartialEq for ExpandedIndexAddress<P, C> {
+    fn eq(&self, other: &Self) -> bool {
+        self.representation == other.representation
+    }
+}
+
+impl<P: IndexDomain, C: IndexDomain> Eq for ExpandedIndexAddress<P, C> {}
+
+impl<P: IndexDomain, C: IndexDomain> Hash for ExpandedIndexAddress<P, C> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.representation.hash(state);
+    }
+}
+
+impl<P: IndexDomain, C: IndexDomain> Debug for ExpandedIndexAddress<P, C> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        self.representation.fmt(formatter)
+    }
+}
+
 impl<P: IndexDomain, C: IndexDomain> IndexDomain for ExpandedIndex<P, C> {
+    type Address = ExpandedIndexAddress<P, C>;
     type Index<'a>
         = ExpandedIndexReference<'a, P, C>
     where
         Self: 'a;
     type Owned = ExpandedIndexOwned<P, C>;
 
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        match &address.representation {
+            ExpandedIndexRepresentation::Parent(parent) => {
+                ExpandedIndexReference::parent(P::index(graphrecord, parent))
+            }
+            ExpandedIndexRepresentation::Child { parent, child } => ExpandedIndexReference::child(
+                P::index(graphrecord, parent),
+                C::index(graphrecord, child),
+            ),
+        }
+    }
+
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
         match &index.representation {
-            ExpandedIndexRepresentation::Source(parent) => {
-                ExpandedIndexOwned::source(P::to_owned(parent))
+            ExpandedIndexRepresentation::Parent(parent) => {
+                ExpandedIndexOwned::parent(P::own_index(parent))
             }
             ExpandedIndexRepresentation::Child { parent, child } => {
-                ExpandedIndexOwned::child(P::to_owned(parent), C::to_owned(child))
+                ExpandedIndexOwned::child(P::own_index(parent), C::own_index(child))
             }
         }
     }
 
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
         match &owned.representation {
-            ExpandedIndexRepresentation::Source(parent) => {
-                ExpandedIndexReference::source(P::from_owned(parent))
+            ExpandedIndexRepresentation::Parent(parent) => {
+                ExpandedIndexReference::parent(P::borrow_index(parent))
             }
             ExpandedIndexRepresentation::Child { parent, child } => {
-                ExpandedIndexReference::child(P::from_owned(parent), C::from_owned(child))
+                ExpandedIndexReference::child(P::borrow_index(parent), C::borrow_index(child))
+            }
+        }
+    }
+
+    fn resolve(
+        graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        match &owned.representation {
+            ExpandedIndexRepresentation::Parent(parent) => Ok(ExpandedIndexAddress::parent(
+                P::resolve(graphrecord, parent, label)?,
+            )),
+            ExpandedIndexRepresentation::Child { parent, child } => {
+                Ok(ExpandedIndexAddress::child(
+                    P::resolve(graphrecord, parent, label)?,
+                    C::resolve(graphrecord, child, label)?,
+                ))
             }
         }
     }
 }
 
 pub struct ExpandedChild<'a, C: IndexDomain, V: ValueDomain> {
-    index: C::Index<'a>,
+    address: C::Address,
     outcome: QueryResult<V::Value<'a>>,
 }
 
 impl<'a, C: IndexDomain, V: ValueDomain> ExpandedChild<'a, C, V> {
     #[must_use]
-    pub const fn success(index: C::Index<'a>, value: V::Value<'a>) -> Self {
+    pub const fn success(address: C::Address, value: V::Value<'a>) -> Self {
         Self {
-            index,
+            address,
             outcome: Ok(value),
         }
     }
 
     #[must_use]
-    pub const fn failure(index: C::Index<'a>, failure: Box<Failure>) -> Self {
+    pub const fn failure(address: C::Address, failure: Box<Failure>) -> Self {
         Self {
-            index,
+            address,
             outcome: Err(failure),
         }
     }
 
     #[must_use]
-    pub const fn from_outcome(index: C::Index<'a>, outcome: QueryResult<V::Value<'a>>) -> Self {
-        Self { index, outcome }
+    pub const fn from_outcome(address: C::Address, outcome: QueryResult<V::Value<'a>>) -> Self {
+        Self { address, outcome }
     }
 
-    pub(crate) fn into_parts(self) -> (C::Index<'a>, QueryResult<V::Value<'a>>) {
-        (self.index, self.outcome)
+    pub(crate) fn into_parts(self) -> (C::Address, QueryResult<V::Value<'a>>) {
+        (self.address, self.outcome)
     }
 }

@@ -2,40 +2,45 @@ use crate::{
     Failure, IndexValue, QueryResult, Scalar, ValueDomain,
     error::numeric::{NonNumericValue, NonPositiveLogarithm},
 };
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::{Value, ValueView};
 
 pub trait ValueLogarithm: ValueDomain {
-    fn logarithm<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
+    fn logarithm<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>>;
 }
 
 impl ValueLogarithm for Scalar {
-    fn logarithm<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
+    fn logarithm<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>> {
         match value {
-            GraphRecordValue::Int(integer) if integer <= 0 => {
-                Err(Failure::new(label, NonPositiveLogarithm::new(value)))
-            }
-            GraphRecordValue::Float(float) if float <= 0.0 => {
-                Err(Failure::new(label, NonPositiveLogarithm::new(value)))
-            }
-            GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Float((integer as f64).ln())),
-            GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(float.ln())),
-            value => Err(Failure::new(label, NonNumericValue::new(value))),
+            ValueView::Int(integer) if integer <= 0 => Err(Failure::new(
+                NonPositiveLogarithm::new(Value::from(value)),
+                label,
+            )),
+            ValueView::Float(float) if float <= 0.0 => Err(Failure::new(
+                NonPositiveLogarithm::new(Value::from(value)),
+                label,
+            )),
+            ValueView::Int(integer) => Ok(ValueView::Float((integer as f64).ln())),
+            ValueView::Float(float) => Ok(ValueView::Float(float.ln())),
+            value => Err(Failure::new(
+                NonNumericValue::new(Value::from(value)),
+                label,
+            )),
         }
     }
 }
 
-impl ValueLogarithm for IndexValue<GraphRecordValue> {
-    fn logarithm<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
+impl ValueLogarithm for IndexValue<Value> {
+    fn logarithm<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>> {
         match value {
-            GraphRecordValue::Int(integer) if integer <= 0 => {
-                Err(Failure::new(label, NonPositiveLogarithm::new(value)))
+            Value::Int(integer) if integer <= 0 => {
+                Err(Failure::new(NonPositiveLogarithm::new(value), label))
             }
-            GraphRecordValue::Float(float) if float <= 0.0 => {
-                Err(Failure::new(label, NonPositiveLogarithm::new(value)))
+            Value::Float(float) if float <= 0.0 => {
+                Err(Failure::new(NonPositiveLogarithm::new(value), label))
             }
-            GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Float((integer as f64).ln())),
-            GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(float.ln())),
-            value => Err(Failure::new(label, NonNumericValue::new(value))),
+            Value::Int(integer) => Ok(Value::Float((integer as f64).ln())),
+            Value::Float(float) => Ok(Value::Float(float.ln())),
+            value => Err(Failure::new(NonNumericValue::new(value), label)),
         }
     }
 }

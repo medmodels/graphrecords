@@ -46,7 +46,7 @@ class DataType(ABC):
 
     @abstractmethod
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
+        """Returns the string representation of the data type."""
         ...
 
     @abstractmethod
@@ -55,29 +55,37 @@ class DataType(ABC):
         ...
 
     @staticmethod
-    def _from_py_data_type(datatype: PyDataType) -> DataType:
-        if isinstance(datatype, PyString):
+    def _from_py_data_type(py_datatype: PyDataType) -> DataType:
+        """Converts a PyDataType to a DataType.
+
+        Args:
+            py_datatype (PyDataType): The PyDataType to convert.
+
+        Returns:
+            DataType: The converted DataType.
+        """
+        if isinstance(py_datatype, PyString):
             return String()
-        if isinstance(datatype, PyInt):
+        if isinstance(py_datatype, PyInt):
             return Int()
-        if isinstance(datatype, PyFloat):
+        if isinstance(py_datatype, PyFloat):
             return Float()
-        if isinstance(datatype, PyBool):
+        if isinstance(py_datatype, PyBool):
             return Bool()
-        if isinstance(datatype, PyDateTime):
+        if isinstance(py_datatype, PyDateTime):
             return DateTime()
-        if isinstance(datatype, PyDuration):
+        if isinstance(py_datatype, PyDuration):
             return Duration()
-        if isinstance(datatype, PyNull):
+        if isinstance(py_datatype, PyNull):
             return Null()
-        if isinstance(datatype, PyAny):
+        if isinstance(py_datatype, PyAny):
             return Any()
-        if isinstance(datatype, PyUnion):
+        if isinstance(py_datatype, PyUnion):
             return Union(
-                DataType._from_py_data_type(datatype.dtype1),
-                DataType._from_py_data_type(datatype.dtype2),
+                DataType._from_py_data_type(py_datatype.left),
+                DataType._from_py_data_type(py_datatype.right),
             )
-        return Option(DataType._from_py_data_type(datatype.dtype))
+        return Option(DataType._from_py_data_type(py_datatype.datatype))
 
 
 class String(DataType):
@@ -97,7 +105,7 @@ class String(DataType):
         return "String"
 
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
+        """Returns the string representation of the data type."""
         return "DataType.String"
 
     def __eq__(self, value: object) -> bool:
@@ -130,7 +138,7 @@ class Int(DataType):
         return "Int"
 
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
+        """Returns the string representation of the data type."""
         return "DataType.Int"
 
     def __eq__(self, value: object) -> bool:
@@ -163,7 +171,7 @@ class Float(DataType):
         return "Float"
 
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
+        """Returns the string representation of the data type."""
         return "DataType.Float"
 
     def __eq__(self, value: object) -> bool:
@@ -196,7 +204,7 @@ class Bool(DataType):
         return "Bool"
 
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
+        """Returns the string representation of the data type."""
         return "DataType.Bool"
 
     def __eq__(self, value: object) -> bool:
@@ -229,7 +237,7 @@ class DateTime(DataType):
         return "DateTime"
 
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
+        """Returns the string representation of the data type."""
         return "DataType.DateTime"
 
     def __eq__(self, value: object) -> bool:
@@ -262,7 +270,7 @@ class Duration(DataType):
         return "Duration"
 
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
+        """Returns the string representation of the data type."""
         return "DataType.Duration"
 
     def __eq__(self, value: object) -> bool:
@@ -295,7 +303,7 @@ class Null(DataType):
         return "Null"
 
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
+        """Returns the string representation of the data type."""
         return "DataType.Null"
 
     def __eq__(self, value: object) -> bool:
@@ -328,7 +336,7 @@ class Any(DataType):
         return "Any"
 
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
+        """Returns the string representation of the data type."""
         return "DataType.Any"
 
     def __eq__(self, value: object) -> bool:
@@ -353,25 +361,43 @@ class Union(DataType, Generic[U1, U2]):
 
     _union: PyUnion
 
-    def __init__(self, dtype1: U1, dtype2: U2) -> None:
+    def __init__(self, left: U1, right: U2) -> None:
         """Initializes the Union data type.
 
         Args:
-            dtype1 (U1): The first data type of the union.
-            dtype2 (U2): The second data type of the union.
+            left (U1): The first data type of the union.
+            right (U2): The second data type of the union.
         """
-        self._union = PyUnion(dtype1._inner(), dtype2._inner())
+        self._union = PyUnion(left._inner(), right._inner())
 
     def _inner(self) -> PyDataType:
         return self._union
 
+    @property
+    def left(self) -> DataType:
+        """The first data type of the union.
+
+        Returns:
+            DataType: The first data type of the union.
+        """
+        return DataType._from_py_data_type(self._union.left)
+
+    @property
+    def right(self) -> DataType:
+        """The second data type of the union.
+
+        Returns:
+            DataType: The second data type of the union.
+        """
+        return DataType._from_py_data_type(self._union.right)
+
     def __str__(self) -> str:
         """Returns a user-friendly string representation of the data type."""
-        return f"Union({DataType._from_py_data_type(self._union.dtype1).__str__()}, {DataType._from_py_data_type(self._union.dtype2).__str__()})"
+        return f"Union({self.left}, {self.right})"
 
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
-        return f"DataType.Union({DataType._from_py_data_type(self._union.dtype1).__repr__()}, {DataType._from_py_data_type(self._union.dtype2).__repr__()})"
+        """Returns the string representation of the data type."""
+        return f"DataType.Union({self.left!r}, {self.right!r})"
 
     def __eq__(self, value: object) -> bool:
         """Checks if the data type of the value is equal to this data type.
@@ -383,12 +409,11 @@ class Union(DataType, Generic[U1, U2]):
             bool: True if the data type is equal to this data type, otherwise
                 False.
         """
-        return (
-            isinstance(value, Union)
-            and DataType._from_py_data_type(self._union.dtype1)
-            == DataType._from_py_data_type(value._union.dtype1)
-            and DataType._from_py_data_type(self._union.dtype2)
-            == DataType._from_py_data_type(value._union.dtype2)
+        if not isinstance(value, Union):
+            return False
+
+        return (self.left == value.left and self.right == value.right) or (
+            self.left == value.right and self.right == value.left
         )
 
 
@@ -400,24 +425,33 @@ class Option(DataType, Generic[T]):
 
     _option: PyOption
 
-    def __init__(self, dtype: T) -> None:
+    def __init__(self, datatype: T) -> None:
         """Initializes the Option data type.
 
         Args:
-            dtype (T): The data type of the optional value.
+            datatype (T): The data type of the optional value.
         """
-        self._option = PyOption(dtype._inner())
+        self._option = PyOption(datatype._inner())
 
     def _inner(self) -> PyDataType:
         return self._option
 
+    @property
+    def datatype(self) -> DataType:
+        """The data type of the optional value.
+
+        Returns:
+            DataType: The data type of the optional value.
+        """
+        return DataType._from_py_data_type(self._option.datatype)
+
     def __str__(self) -> str:
         """Returns a user-friendly string representation of the data type."""
-        return f"Option({DataType._from_py_data_type(self._option.dtype).__str__()})"
+        return f"Option({self.datatype})"
 
     def __repr__(self) -> str:
-        """Returns an official string representation of the data type."""
-        return f"DataType.Option({DataType._from_py_data_type(self._option.dtype).__repr__()})"
+        """Returns the string representation of the data type."""
+        return f"DataType.Option({self.datatype!r})"
 
     def __eq__(self, value: object) -> bool:
         """Checks if the data type of the value is equal to this data type.
@@ -429,6 +463,4 @@ class Option(DataType, Generic[T]):
             bool: True if the data type is equal to this data type, otherwise
                 False.
         """
-        return isinstance(value, Option) and DataType._from_py_data_type(
-            self._option.dtype
-        ) == DataType._from_py_data_type(value._option.dtype)
+        return isinstance(value, Option) and self.datatype == value.datatype

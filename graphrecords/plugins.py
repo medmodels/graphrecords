@@ -1,4137 +1,2052 @@
-"""Plugin system for hooking into GraphRecord mutation operations."""
+"""Plugin authoring surface for the graphrecords library."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Dict,
+    Final,
+    FrozenSet,
+    List,
+    Optional,
+    Tuple,
+    TypeAlias,
+    Union,
+)
 
-from graphrecords.types import _PyPlugin
+from graphrecords._graphrecords.plugins import (
+    PyAddEdges,
+    PyAddEdgesInGroup,
+    PyAddEdgesToGroup,
+    PyAddGroup,
+    PyAddNodes,
+    PyAddNodesInGroup,
+    PyAddNodesToGroup,
+    PyClear,
+    PyEdgeBatch,
+    PyFreezeSchema,
+    PyNodeBatch,
+    PyRemoveEdgeAttributes,
+    PyRemoveEdges,
+    PyRemoveEdgesFromGroup,
+    PyRemoveGroups,
+    PyRemoveNodeAttributes,
+    PyRemoveNodes,
+    PyRemoveNodesFromGroup,
+    PyReplaceEdgeAttributes,
+    PyReplaceNodeAttributes,
+    PySetEdgeAttributes,
+    PySetNodeAttributes,
+    PySetSchema,
+    PyUnfreezeSchema,
+)
+from graphrecords.schema import Schema
+from graphrecords.types import EdgeIndex
 
 if TYPE_CHECKING:
     from graphrecords._graphrecords.graphrecord import PyGraphRecord
     from graphrecords._graphrecords.plugins import (
-        PyPostAddEdgeContext,
-        PyPostAddEdgesContext,
-        PyPostAddEdgesDataframesContext,
-        PyPostAddEdgesDataframesWithGroupContext,
-        PyPostAddEdgesDataframesWithGroupsContext,
-        PyPostAddEdgesToGroupsContext,
-        PyPostAddEdgesWithGroupContext,
-        PyPostAddEdgesWithGroupsContext,
-        PyPostAddEdgeToGroupContext,
-        PyPostAddEdgeToGroupsContext,
-        PyPostAddEdgeWithGroupContext,
-        PyPostAddEdgeWithGroupsContext,
-        PyPostAddGroupContext,
-        PyPostAddNodeContext,
-        PyPostAddNodesContext,
-        PyPostAddNodesDataframesContext,
-        PyPostAddNodesDataframesWithGroupContext,
-        PyPostAddNodesDataframesWithGroupsContext,
-        PyPostAddNodesToGroupsContext,
-        PyPostAddNodesWithGroupContext,
-        PyPostAddNodesWithGroupsContext,
-        PyPostAddNodeToGroupContext,
-        PyPostAddNodeToGroupsContext,
-        PyPostAddNodeWithGroupContext,
-        PyPostAddNodeWithGroupsContext,
-        PyPostRemoveEdgeContext,
-        PyPostRemoveEdgeFromGroupContext,
-        PyPostRemoveEdgeFromGroupsContext,
-        PyPostRemoveEdgesFromGroupsContext,
-        PyPostRemoveGroupContext,
-        PyPostRemoveNodeContext,
-        PyPostRemoveNodeFromGroupContext,
-        PyPostRemoveNodeFromGroupsContext,
-        PyPostRemoveNodesFromGroupsContext,
-        PyPreAddEdgeContext,
-        PyPreAddEdgesContext,
-        PyPreAddEdgesDataframesContext,
-        PyPreAddEdgesDataframesWithGroupContext,
-        PyPreAddEdgesDataframesWithGroupsContext,
-        PyPreAddEdgesToGroupsContext,
-        PyPreAddEdgesWithGroupContext,
-        PyPreAddEdgesWithGroupsContext,
-        PyPreAddEdgeToGroupContext,
-        PyPreAddEdgeToGroupsContext,
-        PyPreAddEdgeWithGroupContext,
-        PyPreAddEdgeWithGroupsContext,
-        PyPreAddGroupContext,
-        PyPreAddNodeContext,
-        PyPreAddNodesContext,
-        PyPreAddNodesDataframesContext,
-        PyPreAddNodesDataframesWithGroupContext,
-        PyPreAddNodesDataframesWithGroupsContext,
-        PyPreAddNodesToGroupsContext,
-        PyPreAddNodesWithGroupContext,
-        PyPreAddNodesWithGroupsContext,
-        PyPreAddNodeToGroupContext,
-        PyPreAddNodeToGroupsContext,
-        PyPreAddNodeWithGroupContext,
-        PyPreAddNodeWithGroupsContext,
-        PyPreRemoveEdgeContext,
-        PyPreRemoveEdgeFromGroupContext,
-        PyPreRemoveEdgeFromGroupsContext,
-        PyPreRemoveEdgesFromGroupsContext,
-        PyPreRemoveGroupContext,
-        PyPreRemoveNodeContext,
-        PyPreRemoveNodeFromGroupContext,
-        PyPreRemoveNodeFromGroupsContext,
-        PyPreRemoveNodesFromGroupsContext,
-        PyPreSetSchemaContext,
+        PyEdgeBatchIterator,
+        PyNodeBatchIterator,
     )
     from graphrecords.graphrecord import GraphRecord
-    from graphrecords.schema import Schema
     from graphrecords.types import (
+        AttributeName,
         Attributes,
-        EdgeIndex,
-        Group,
+        GroupIndex,
         NodeIndex,
-        PolarsEdgeDataFrameInput,
-        PolarsNodeDataFrameInput,
+        Value,
     )
 
 
-class _PluginBridge(_PyPlugin):  # pyright: ignore[reportUnusedClass]
-    _plugin: Plugin
+class NodeBatchIterator:
+    """An iterator over the nodes of a batch."""
 
-    def __init__(self, plugin: Plugin) -> None:
-        self._plugin = plugin
-
-    def _graphrecord(self, graphrecord: PyGraphRecord) -> GraphRecord:
-        from graphrecords.graphrecord import GraphRecord
-
-        return GraphRecord._from_py_graphrecord(graphrecord)
-
-    def initialize(self, graphrecord: PyGraphRecord) -> None:
-        self._plugin.initialize(self._graphrecord(graphrecord))
-
-    def finalize(self, graphrecord: PyGraphRecord) -> None:
-        self._plugin.finalize(self._graphrecord(graphrecord))
-
-    def pre_set_schema(
-        self, graphrecord: PyGraphRecord, context: PyPreSetSchemaContext
-    ) -> PyPreSetSchemaContext:
-        return self._plugin.pre_set_schema(
-            self._graphrecord(graphrecord),
-            PreSetSchemaContext._from_py_pre_set_schema_context(context),
-        )._py_pre_set_schema_context
-
-    def post_set_schema(self, graphrecord: PyGraphRecord) -> None:
-        self._plugin.post_set_schema(self._graphrecord(graphrecord))
-
-    def pre_freeze_schema(self, graphrecord: PyGraphRecord) -> None:
-        self._plugin.pre_freeze_schema(self._graphrecord(graphrecord))
-
-    def post_freeze_schema(self, graphrecord: PyGraphRecord) -> None:
-        self._plugin.post_freeze_schema(self._graphrecord(graphrecord))
-
-    def pre_unfreeze_schema(self, graphrecord: PyGraphRecord) -> None:
-        self._plugin.pre_unfreeze_schema(self._graphrecord(graphrecord))
-
-    def post_unfreeze_schema(self, graphrecord: PyGraphRecord) -> None:
-        self._plugin.post_unfreeze_schema(self._graphrecord(graphrecord))
-
-    def pre_add_node(
-        self, graphrecord: PyGraphRecord, context: PyPreAddNodeContext
-    ) -> PyPreAddNodeContext:
-        return self._plugin.pre_add_node(
-            self._graphrecord(graphrecord),
-            PreAddNodeContext._from_py_context(context),
-        )._py_context
-
-    def post_add_node(
-        self, graphrecord: PyGraphRecord, context: PyPostAddNodeContext
-    ) -> None:
-        self._plugin.post_add_node(
-            self._graphrecord(graphrecord),
-            PostAddNodeContext._from_py_context(context),
-        )
-
-    def pre_add_node_with_group(
-        self, graphrecord: PyGraphRecord, context: PyPreAddNodeWithGroupContext
-    ) -> PyPreAddNodeWithGroupContext:
-        return self._plugin.pre_add_node_with_group(
-            self._graphrecord(graphrecord),
-            PreAddNodeWithGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_add_node_with_group(
-        self, graphrecord: PyGraphRecord, context: PyPostAddNodeWithGroupContext
-    ) -> None:
-        self._plugin.post_add_node_with_group(
-            self._graphrecord(graphrecord),
-            PostAddNodeWithGroupContext._from_py_context(context),
-        )
-
-    def pre_add_node_with_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreAddNodeWithGroupsContext
-    ) -> PyPreAddNodeWithGroupsContext:
-        return self._plugin.pre_add_node_with_groups(
-            self._graphrecord(graphrecord),
-            PreAddNodeWithGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_add_node_with_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostAddNodeWithGroupsContext
-    ) -> None:
-        self._plugin.post_add_node_with_groups(
-            self._graphrecord(graphrecord),
-            PostAddNodeWithGroupsContext._from_py_context(context),
-        )
-
-    def pre_remove_node(
-        self, graphrecord: PyGraphRecord, context: PyPreRemoveNodeContext
-    ) -> PyPreRemoveNodeContext:
-        return self._plugin.pre_remove_node(
-            self._graphrecord(graphrecord),
-            PreRemoveNodeContext._from_py_context(context),
-        )._py_context
-
-    def post_remove_node(
-        self, graphrecord: PyGraphRecord, context: PyPostRemoveNodeContext
-    ) -> None:
-        self._plugin.post_remove_node(
-            self._graphrecord(graphrecord),
-            PostRemoveNodeContext._from_py_context(context),
-        )
-
-    def pre_add_nodes(
-        self, graphrecord: PyGraphRecord, context: PyPreAddNodesContext
-    ) -> PyPreAddNodesContext:
-        return self._plugin.pre_add_nodes(
-            self._graphrecord(graphrecord),
-            PreAddNodesContext._from_py_context(context),
-        )._py_context
-
-    def post_add_nodes(
-        self, graphrecord: PyGraphRecord, context: PyPostAddNodesContext
-    ) -> None:
-        self._plugin.post_add_nodes(
-            self._graphrecord(graphrecord),
-            PostAddNodesContext._from_py_context(context),
-        )
-
-    def pre_add_nodes_with_group(
-        self, graphrecord: PyGraphRecord, context: PyPreAddNodesWithGroupContext
-    ) -> PyPreAddNodesWithGroupContext:
-        return self._plugin.pre_add_nodes_with_group(
-            self._graphrecord(graphrecord),
-            PreAddNodesWithGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_add_nodes_with_group(
-        self, graphrecord: PyGraphRecord, context: PyPostAddNodesWithGroupContext
-    ) -> None:
-        self._plugin.post_add_nodes_with_group(
-            self._graphrecord(graphrecord),
-            PostAddNodesWithGroupContext._from_py_context(context),
-        )
-
-    def pre_add_nodes_with_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreAddNodesWithGroupsContext
-    ) -> PyPreAddNodesWithGroupsContext:
-        return self._plugin.pre_add_nodes_with_groups(
-            self._graphrecord(graphrecord),
-            PreAddNodesWithGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_add_nodes_with_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostAddNodesWithGroupsContext
-    ) -> None:
-        self._plugin.post_add_nodes_with_groups(
-            self._graphrecord(graphrecord),
-            PostAddNodesWithGroupsContext._from_py_context(context),
-        )
-
-    def pre_add_nodes_dataframes(
-        self, graphrecord: PyGraphRecord, context: PyPreAddNodesDataframesContext
-    ) -> PyPreAddNodesDataframesContext:
-        return self._plugin.pre_add_nodes_dataframes(
-            self._graphrecord(graphrecord),
-            PreAddNodesDataframesContext._from_py_context(context),
-        )._py_context
-
-    def post_add_nodes_dataframes(
-        self, graphrecord: PyGraphRecord, context: PyPostAddNodesDataframesContext
-    ) -> None:
-        self._plugin.post_add_nodes_dataframes(
-            self._graphrecord(graphrecord),
-            PostAddNodesDataframesContext._from_py_context(context),
-        )
-
-    def pre_add_nodes_dataframes_with_group(
-        self,
-        graphrecord: PyGraphRecord,
-        context: PyPreAddNodesDataframesWithGroupContext,
-    ) -> PyPreAddNodesDataframesWithGroupContext:
-        return self._plugin.pre_add_nodes_dataframes_with_group(
-            self._graphrecord(graphrecord),
-            PreAddNodesDataframesWithGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_add_nodes_dataframes_with_group(
-        self,
-        graphrecord: PyGraphRecord,
-        context: PyPostAddNodesDataframesWithGroupContext,
-    ) -> None:
-        self._plugin.post_add_nodes_dataframes_with_group(
-            self._graphrecord(graphrecord),
-            PostAddNodesDataframesWithGroupContext._from_py_context(context),
-        )
-
-    def pre_add_nodes_dataframes_with_groups(
-        self,
-        graphrecord: PyGraphRecord,
-        context: PyPreAddNodesDataframesWithGroupsContext,
-    ) -> PyPreAddNodesDataframesWithGroupsContext:
-        return self._plugin.pre_add_nodes_dataframes_with_groups(
-            self._graphrecord(graphrecord),
-            PreAddNodesDataframesWithGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_add_nodes_dataframes_with_groups(
-        self,
-        graphrecord: PyGraphRecord,
-        context: PyPostAddNodesDataframesWithGroupsContext,
-    ) -> None:
-        self._plugin.post_add_nodes_dataframes_with_groups(
-            self._graphrecord(graphrecord),
-            PostAddNodesDataframesWithGroupsContext._from_py_context(context),
-        )
-
-    def pre_add_edge(
-        self, graphrecord: PyGraphRecord, context: PyPreAddEdgeContext
-    ) -> PyPreAddEdgeContext:
-        return self._plugin.pre_add_edge(
-            self._graphrecord(graphrecord),
-            PreAddEdgeContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edge(
-        self, graphrecord: PyGraphRecord, context: PyPostAddEdgeContext
-    ) -> None:
-        self._plugin.post_add_edge(
-            self._graphrecord(graphrecord),
-            PostAddEdgeContext._from_py_context(context),
-        )
-
-    def pre_add_edge_with_group(
-        self, graphrecord: PyGraphRecord, context: PyPreAddEdgeWithGroupContext
-    ) -> PyPreAddEdgeWithGroupContext:
-        return self._plugin.pre_add_edge_with_group(
-            self._graphrecord(graphrecord),
-            PreAddEdgeWithGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edge_with_group(
-        self, graphrecord: PyGraphRecord, context: PyPostAddEdgeWithGroupContext
-    ) -> None:
-        self._plugin.post_add_edge_with_group(
-            self._graphrecord(graphrecord),
-            PostAddEdgeWithGroupContext._from_py_context(context),
-        )
-
-    def pre_add_edge_with_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreAddEdgeWithGroupsContext
-    ) -> PyPreAddEdgeWithGroupsContext:
-        return self._plugin.pre_add_edge_with_groups(
-            self._graphrecord(graphrecord),
-            PreAddEdgeWithGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edge_with_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostAddEdgeWithGroupsContext
-    ) -> None:
-        self._plugin.post_add_edge_with_groups(
-            self._graphrecord(graphrecord),
-            PostAddEdgeWithGroupsContext._from_py_context(context),
-        )
-
-    def pre_remove_edge(
-        self, graphrecord: PyGraphRecord, context: PyPreRemoveEdgeContext
-    ) -> PyPreRemoveEdgeContext:
-        return self._plugin.pre_remove_edge(
-            self._graphrecord(graphrecord),
-            PreRemoveEdgeContext._from_py_context(context),
-        )._py_context
-
-    def post_remove_edge(
-        self, graphrecord: PyGraphRecord, context: PyPostRemoveEdgeContext
-    ) -> None:
-        self._plugin.post_remove_edge(
-            self._graphrecord(graphrecord),
-            PostRemoveEdgeContext._from_py_context(context),
-        )
-
-    def pre_add_edges(
-        self, graphrecord: PyGraphRecord, context: PyPreAddEdgesContext
-    ) -> PyPreAddEdgesContext:
-        return self._plugin.pre_add_edges(
-            self._graphrecord(graphrecord),
-            PreAddEdgesContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edges(
-        self, graphrecord: PyGraphRecord, context: PyPostAddEdgesContext
-    ) -> None:
-        self._plugin.post_add_edges(
-            self._graphrecord(graphrecord),
-            PostAddEdgesContext._from_py_context(context),
-        )
-
-    def pre_add_edges_with_group(
-        self, graphrecord: PyGraphRecord, context: PyPreAddEdgesWithGroupContext
-    ) -> PyPreAddEdgesWithGroupContext:
-        return self._plugin.pre_add_edges_with_group(
-            self._graphrecord(graphrecord),
-            PreAddEdgesWithGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edges_with_group(
-        self, graphrecord: PyGraphRecord, context: PyPostAddEdgesWithGroupContext
-    ) -> None:
-        self._plugin.post_add_edges_with_group(
-            self._graphrecord(graphrecord),
-            PostAddEdgesWithGroupContext._from_py_context(context),
-        )
-
-    def pre_add_edges_with_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreAddEdgesWithGroupsContext
-    ) -> PyPreAddEdgesWithGroupsContext:
-        return self._plugin.pre_add_edges_with_groups(
-            self._graphrecord(graphrecord),
-            PreAddEdgesWithGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edges_with_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostAddEdgesWithGroupsContext
-    ) -> None:
-        self._plugin.post_add_edges_with_groups(
-            self._graphrecord(graphrecord),
-            PostAddEdgesWithGroupsContext._from_py_context(context),
-        )
-
-    def pre_add_edges_dataframes(
-        self, graphrecord: PyGraphRecord, context: PyPreAddEdgesDataframesContext
-    ) -> PyPreAddEdgesDataframesContext:
-        return self._plugin.pre_add_edges_dataframes(
-            self._graphrecord(graphrecord),
-            PreAddEdgesDataframesContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edges_dataframes(
-        self, graphrecord: PyGraphRecord, context: PyPostAddEdgesDataframesContext
-    ) -> None:
-        self._plugin.post_add_edges_dataframes(
-            self._graphrecord(graphrecord),
-            PostAddEdgesDataframesContext._from_py_context(context),
-        )
-
-    def pre_add_edges_dataframes_with_group(
-        self,
-        graphrecord: PyGraphRecord,
-        context: PyPreAddEdgesDataframesWithGroupContext,
-    ) -> PyPreAddEdgesDataframesWithGroupContext:
-        return self._plugin.pre_add_edges_dataframes_with_group(
-            self._graphrecord(graphrecord),
-            PreAddEdgesDataframesWithGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edges_dataframes_with_group(
-        self,
-        graphrecord: PyGraphRecord,
-        context: PyPostAddEdgesDataframesWithGroupContext,
-    ) -> None:
-        self._plugin.post_add_edges_dataframes_with_group(
-            self._graphrecord(graphrecord),
-            PostAddEdgesDataframesWithGroupContext._from_py_context(context),
-        )
-
-    def pre_add_edges_dataframes_with_groups(
-        self,
-        graphrecord: PyGraphRecord,
-        context: PyPreAddEdgesDataframesWithGroupsContext,
-    ) -> PyPreAddEdgesDataframesWithGroupsContext:
-        return self._plugin.pre_add_edges_dataframes_with_groups(
-            self._graphrecord(graphrecord),
-            PreAddEdgesDataframesWithGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edges_dataframes_with_groups(
-        self,
-        graphrecord: PyGraphRecord,
-        context: PyPostAddEdgesDataframesWithGroupsContext,
-    ) -> None:
-        self._plugin.post_add_edges_dataframes_with_groups(
-            self._graphrecord(graphrecord),
-            PostAddEdgesDataframesWithGroupsContext._from_py_context(context),
-        )
-
-    def pre_add_group(
-        self, graphrecord: PyGraphRecord, context: PyPreAddGroupContext
-    ) -> PyPreAddGroupContext:
-        return self._plugin.pre_add_group(
-            self._graphrecord(graphrecord),
-            PreAddGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_add_group(
-        self, graphrecord: PyGraphRecord, context: PyPostAddGroupContext
-    ) -> None:
-        self._plugin.post_add_group(
-            self._graphrecord(graphrecord),
-            PostAddGroupContext._from_py_context(context),
-        )
-
-    def pre_remove_group(
-        self, graphrecord: PyGraphRecord, context: PyPreRemoveGroupContext
-    ) -> PyPreRemoveGroupContext:
-        return self._plugin.pre_remove_group(
-            self._graphrecord(graphrecord),
-            PreRemoveGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_remove_group(
-        self, graphrecord: PyGraphRecord, context: PyPostRemoveGroupContext
-    ) -> None:
-        self._plugin.post_remove_group(
-            self._graphrecord(graphrecord),
-            PostRemoveGroupContext._from_py_context(context),
-        )
-
-    def pre_add_node_to_group(
-        self, graphrecord: PyGraphRecord, context: PyPreAddNodeToGroupContext
-    ) -> PyPreAddNodeToGroupContext:
-        return self._plugin.pre_add_node_to_group(
-            self._graphrecord(graphrecord),
-            PreAddNodeToGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_add_node_to_group(
-        self, graphrecord: PyGraphRecord, context: PyPostAddNodeToGroupContext
-    ) -> None:
-        self._plugin.post_add_node_to_group(
-            self._graphrecord(graphrecord),
-            PostAddNodeToGroupContext._from_py_context(context),
-        )
-
-    def pre_add_node_to_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreAddNodeToGroupsContext
-    ) -> PyPreAddNodeToGroupsContext:
-        return self._plugin.pre_add_node_to_groups(
-            self._graphrecord(graphrecord),
-            PreAddNodeToGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_add_node_to_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostAddNodeToGroupsContext
-    ) -> None:
-        self._plugin.post_add_node_to_groups(
-            self._graphrecord(graphrecord),
-            PostAddNodeToGroupsContext._from_py_context(context),
-        )
-
-    def pre_add_nodes_to_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreAddNodesToGroupsContext
-    ) -> PyPreAddNodesToGroupsContext:
-        return self._plugin.pre_add_nodes_to_groups(
-            self._graphrecord(graphrecord),
-            PreAddNodesToGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_add_nodes_to_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostAddNodesToGroupsContext
-    ) -> None:
-        self._plugin.post_add_nodes_to_groups(
-            self._graphrecord(graphrecord),
-            PostAddNodesToGroupsContext._from_py_context(context),
-        )
-
-    def pre_add_edge_to_group(
-        self, graphrecord: PyGraphRecord, context: PyPreAddEdgeToGroupContext
-    ) -> PyPreAddEdgeToGroupContext:
-        return self._plugin.pre_add_edge_to_group(
-            self._graphrecord(graphrecord),
-            PreAddEdgeToGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edge_to_group(
-        self, graphrecord: PyGraphRecord, context: PyPostAddEdgeToGroupContext
-    ) -> None:
-        self._plugin.post_add_edge_to_group(
-            self._graphrecord(graphrecord),
-            PostAddEdgeToGroupContext._from_py_context(context),
-        )
-
-    def pre_add_edge_to_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreAddEdgeToGroupsContext
-    ) -> PyPreAddEdgeToGroupsContext:
-        return self._plugin.pre_add_edge_to_groups(
-            self._graphrecord(graphrecord),
-            PreAddEdgeToGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edge_to_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostAddEdgeToGroupsContext
-    ) -> None:
-        self._plugin.post_add_edge_to_groups(
-            self._graphrecord(graphrecord),
-            PostAddEdgeToGroupsContext._from_py_context(context),
-        )
-
-    def pre_add_edges_to_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreAddEdgesToGroupsContext
-    ) -> PyPreAddEdgesToGroupsContext:
-        return self._plugin.pre_add_edges_to_groups(
-            self._graphrecord(graphrecord),
-            PreAddEdgesToGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_add_edges_to_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostAddEdgesToGroupsContext
-    ) -> None:
-        self._plugin.post_add_edges_to_groups(
-            self._graphrecord(graphrecord),
-            PostAddEdgesToGroupsContext._from_py_context(context),
-        )
-
-    def pre_remove_node_from_group(
-        self, graphrecord: PyGraphRecord, context: PyPreRemoveNodeFromGroupContext
-    ) -> PyPreRemoveNodeFromGroupContext:
-        return self._plugin.pre_remove_node_from_group(
-            self._graphrecord(graphrecord),
-            PreRemoveNodeFromGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_remove_node_from_group(
-        self, graphrecord: PyGraphRecord, context: PyPostRemoveNodeFromGroupContext
-    ) -> None:
-        self._plugin.post_remove_node_from_group(
-            self._graphrecord(graphrecord),
-            PostRemoveNodeFromGroupContext._from_py_context(context),
-        )
-
-    def pre_remove_node_from_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreRemoveNodeFromGroupsContext
-    ) -> PyPreRemoveNodeFromGroupsContext:
-        return self._plugin.pre_remove_node_from_groups(
-            self._graphrecord(graphrecord),
-            PreRemoveNodeFromGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_remove_node_from_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostRemoveNodeFromGroupsContext
-    ) -> None:
-        self._plugin.post_remove_node_from_groups(
-            self._graphrecord(graphrecord),
-            PostRemoveNodeFromGroupsContext._from_py_context(context),
-        )
-
-    def pre_remove_nodes_from_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreRemoveNodesFromGroupsContext
-    ) -> PyPreRemoveNodesFromGroupsContext:
-        return self._plugin.pre_remove_nodes_from_groups(
-            self._graphrecord(graphrecord),
-            PreRemoveNodesFromGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_remove_nodes_from_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostRemoveNodesFromGroupsContext
-    ) -> None:
-        self._plugin.post_remove_nodes_from_groups(
-            self._graphrecord(graphrecord),
-            PostRemoveNodesFromGroupsContext._from_py_context(context),
-        )
-
-    def pre_remove_edge_from_group(
-        self, graphrecord: PyGraphRecord, context: PyPreRemoveEdgeFromGroupContext
-    ) -> PyPreRemoveEdgeFromGroupContext:
-        return self._plugin.pre_remove_edge_from_group(
-            self._graphrecord(graphrecord),
-            PreRemoveEdgeFromGroupContext._from_py_context(context),
-        )._py_context
-
-    def post_remove_edge_from_group(
-        self, graphrecord: PyGraphRecord, context: PyPostRemoveEdgeFromGroupContext
-    ) -> None:
-        self._plugin.post_remove_edge_from_group(
-            self._graphrecord(graphrecord),
-            PostRemoveEdgeFromGroupContext._from_py_context(context),
-        )
-
-    def pre_remove_edge_from_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreRemoveEdgeFromGroupsContext
-    ) -> PyPreRemoveEdgeFromGroupsContext:
-        return self._plugin.pre_remove_edge_from_groups(
-            self._graphrecord(graphrecord),
-            PreRemoveEdgeFromGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_remove_edge_from_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostRemoveEdgeFromGroupsContext
-    ) -> None:
-        self._plugin.post_remove_edge_from_groups(
-            self._graphrecord(graphrecord),
-            PostRemoveEdgeFromGroupsContext._from_py_context(context),
-        )
-
-    def pre_remove_edges_from_groups(
-        self, graphrecord: PyGraphRecord, context: PyPreRemoveEdgesFromGroupsContext
-    ) -> PyPreRemoveEdgesFromGroupsContext:
-        return self._plugin.pre_remove_edges_from_groups(
-            self._graphrecord(graphrecord),
-            PreRemoveEdgesFromGroupsContext._from_py_context(context),
-        )._py_context
-
-    def post_remove_edges_from_groups(
-        self, graphrecord: PyGraphRecord, context: PyPostRemoveEdgesFromGroupsContext
-    ) -> None:
-        self._plugin.post_remove_edges_from_groups(
-            self._graphrecord(graphrecord),
-            PostRemoveEdgesFromGroupsContext._from_py_context(context),
-        )
-
-    def pre_clear(self, graphrecord: PyGraphRecord) -> None:
-        self._plugin.pre_clear(self._graphrecord(graphrecord))
-
-    def post_clear(self, graphrecord: PyGraphRecord) -> None:
-        self._plugin.post_clear(self._graphrecord(graphrecord))
-
-
-class PreSetSchemaContext:
-    """Context for the pre_set_schema hook."""
-
-    _py_pre_set_schema_context: PyPreSetSchemaContext
-
-    def __init__(self, schema: Schema) -> None:
-        """Initializes a PreSetSchemaContext.
-
-        Args:
-            schema (Schema): The schema being set.
-        """
-        from graphrecords._graphrecords.plugins import PyPreSetSchemaContext
-
-        self._py_pre_set_schema_context = PyPreSetSchemaContext(schema._schema)
+    _py_node_batch_iterator: PyNodeBatchIterator
 
     @classmethod
-    def _from_py_pre_set_schema_context(
-        cls, py_context: PyPreSetSchemaContext
-    ) -> PreSetSchemaContext:
-        context = cls.__new__(cls)
-        context._py_pre_set_schema_context = py_context
-        return context
+    def _from_py_node_batch_iterator(
+        cls, py_node_batch_iterator: PyNodeBatchIterator
+    ) -> NodeBatchIterator:
+        """Creates a NodeBatchIterator from a PyNodeBatchIterator.
+
+        Args:
+            py_node_batch_iterator (PyNodeBatchIterator): The PyNodeBatchIterator to
+                convert.
+
+        Returns:
+            NodeBatchIterator: The converted NodeBatchIterator.
+        """
+        node_batch_iterator = cls.__new__(cls)
+        node_batch_iterator._py_node_batch_iterator = py_node_batch_iterator
+        return node_batch_iterator
+
+    def __iter__(self) -> NodeBatchIterator:
+        """Returns the iterator itself.
+
+        Returns:
+            NodeBatchIterator: The iterator itself.
+        """
+        return self
+
+    def __next__(self) -> Tuple[NodeIndex, Attributes]:
+        """Returns the next node of the batch.
+
+        Returns:
+            Tuple[NodeIndex, Attributes]: The index and attributes of the node.
+        """
+        return next(self._py_node_batch_iterator)
+
+
+class NodeBatch:
+    """A batch of nodes carried by a change payload."""
+
+    _py_node_batch: PyNodeBatch
+
+    def __init__(self, nodes: List[Tuple[NodeIndex, Attributes]]) -> None:
+        """Initializes a batch of nodes.
+
+        Args:
+            nodes (List[Tuple[NodeIndex, Attributes]]): The index and attributes of
+                every node of the batch.
+        """
+        self._py_node_batch = PyNodeBatch(nodes)
+
+    @classmethod
+    def _from_py_node_batch(cls, py_node_batch: PyNodeBatch) -> NodeBatch:
+        """Creates a NodeBatch from a PyNodeBatch.
+
+        Args:
+            py_node_batch (PyNodeBatch): The PyNodeBatch to convert.
+
+        Returns:
+            NodeBatch: The converted NodeBatch.
+        """
+        node_batch = cls.__new__(cls)
+        node_batch._py_node_batch = py_node_batch
+        return node_batch
+
+    def is_empty(self) -> bool:
+        """Checks whether the batch holds no nodes.
+
+        Returns:
+            bool: True if the batch is empty, otherwise False.
+        """
+        return self._py_node_batch.is_empty()
+
+    def attribute_values(
+        self, attribute_name: AttributeName
+    ) -> List[Tuple[NodeIndex, Value]]:
+        """Collects the value of one attribute across the nodes that carry it.
+
+        Args:
+            attribute_name (AttributeName): The name of the attribute to read.
+
+        Returns:
+            List[Tuple[NodeIndex, Value]]: The index and value of every node that
+                carries the attribute.
+        """
+        return self._py_node_batch.attribute_values(attribute_name)
+
+    def __len__(self) -> int:
+        """Counts the nodes of the batch.
+
+        Returns:
+            int: The number of nodes.
+        """
+        return len(self._py_node_batch)
+
+    def __iter__(self) -> NodeBatchIterator:
+        """Iterates over the nodes of the batch.
+
+        Returns:
+            NodeBatchIterator: An iterator over the nodes.
+        """
+        return NodeBatchIterator._from_py_node_batch_iterator(iter(self._py_node_batch))
+
+
+class EdgeBatchIterator:
+    """An iterator over the edges of a batch."""
+
+    _py_edge_batch_iterator: PyEdgeBatchIterator
+
+    @classmethod
+    def _from_py_edge_batch_iterator(
+        cls, py_edge_batch_iterator: PyEdgeBatchIterator
+    ) -> EdgeBatchIterator:
+        """Creates an EdgeBatchIterator from a PyEdgeBatchIterator.
+
+        Args:
+            py_edge_batch_iterator (PyEdgeBatchIterator): The PyEdgeBatchIterator to
+                convert.
+
+        Returns:
+            EdgeBatchIterator: The converted EdgeBatchIterator.
+        """
+        edge_batch_iterator = cls.__new__(cls)
+        edge_batch_iterator._py_edge_batch_iterator = py_edge_batch_iterator
+        return edge_batch_iterator
+
+    def __iter__(self) -> EdgeBatchIterator:
+        """Returns the iterator itself.
+
+        Returns:
+            EdgeBatchIterator: The iterator itself.
+        """
+        return self
+
+    def __next__(self) -> Tuple[NodeIndex, NodeIndex, Attributes]:
+        """Returns the next edge of the batch.
+
+        Returns:
+            Tuple[NodeIndex, NodeIndex, Attributes]: The source node index, target
+                node index and attributes of the edge.
+        """
+        return next(self._py_edge_batch_iterator)
+
+
+class EdgeBatch:
+    """A batch of edges carried by a change payload."""
+
+    _py_edge_batch: PyEdgeBatch
+
+    def __init__(self, edges: List[Tuple[NodeIndex, NodeIndex, Attributes]]) -> None:
+        """Initializes a batch of edges.
+
+        Args:
+            edges (List[Tuple[NodeIndex, NodeIndex, Attributes]]): The source node
+                index, target node index and attributes of every edge of the batch.
+        """
+        self._py_edge_batch = PyEdgeBatch(edges)
+
+    @classmethod
+    def _from_py_edge_batch(cls, py_edge_batch: PyEdgeBatch) -> EdgeBatch:
+        """Creates an EdgeBatch from a PyEdgeBatch.
+
+        Args:
+            py_edge_batch (PyEdgeBatch): The PyEdgeBatch to convert.
+
+        Returns:
+            EdgeBatch: The converted EdgeBatch.
+        """
+        edge_batch = cls.__new__(cls)
+        edge_batch._py_edge_batch = py_edge_batch
+        return edge_batch
+
+    def is_empty(self) -> bool:
+        """Checks whether the batch holds no edges.
+
+        Returns:
+            bool: True if the batch is empty, otherwise False.
+        """
+        return self._py_edge_batch.is_empty()
+
+    def attribute_values(
+        self, attribute_name: AttributeName
+    ) -> List[Tuple[NodeIndex, NodeIndex, Value]]:
+        """Collects the value of one attribute across the edges that carry it.
+
+        Args:
+            attribute_name (AttributeName): The name of the attribute to read.
+
+        Returns:
+            List[Tuple[NodeIndex, NodeIndex, Value]]: The source node index, target
+                node index and value of every edge that carries the attribute.
+        """
+        return self._py_edge_batch.attribute_values(attribute_name)
+
+    def __len__(self) -> int:
+        """Counts the edges of the batch.
+
+        Returns:
+            int: The number of edges.
+        """
+        return len(self._py_edge_batch)
+
+    def __iter__(self) -> EdgeBatchIterator:
+        """Iterates over the edges of the batch.
+
+        Returns:
+            EdgeBatchIterator: An iterator over the edges.
+        """
+        return EdgeBatchIterator._from_py_edge_batch_iterator(iter(self._py_edge_batch))
+
+
+class AddNodes:
+    """The payload of a change adding nodes."""
+
+    _py_add_nodes: PyAddNodes
+
+    def __init__(self, batch: NodeBatch) -> None:
+        """Initializes the payload of a change adding nodes.
+
+        Args:
+            batch (NodeBatch): The nodes that are added.
+        """
+        self._py_add_nodes = PyAddNodes(batch._py_node_batch)
+
+    @classmethod
+    def _from_py_add_nodes(cls, py_add_nodes: PyAddNodes) -> AddNodes:
+        """Creates an AddNodes from a PyAddNodes.
+
+        Args:
+            py_add_nodes (PyAddNodes): The PyAddNodes to convert.
+
+        Returns:
+            AddNodes: The converted AddNodes.
+        """
+        add_nodes = cls.__new__(cls)
+        add_nodes._py_add_nodes = py_add_nodes
+        return add_nodes
+
+    @property
+    def batch(self) -> NodeBatch:
+        """The nodes that are added.
+
+        Returns:
+            NodeBatch: The nodes that are added.
+        """
+        return NodeBatch._from_py_node_batch(self._py_add_nodes.batch)
+
+
+class AddNodesInGroup:
+    """The payload of a change adding nodes in a group."""
+
+    _py_add_nodes_in_group: PyAddNodesInGroup
+
+    def __init__(self, batch: NodeBatch, group_index: GroupIndex) -> None:
+        """Initializes the payload of a change adding nodes in a group.
+
+        Args:
+            batch (NodeBatch): The nodes that are added.
+            group_index (GroupIndex): The group the nodes are added in.
+        """
+        self._py_add_nodes_in_group = PyAddNodesInGroup(
+            batch._py_node_batch, group_index
+        )
+
+    @classmethod
+    def _from_py_add_nodes_in_group(
+        cls, py_add_nodes_in_group: PyAddNodesInGroup
+    ) -> AddNodesInGroup:
+        """Creates an AddNodesInGroup from a PyAddNodesInGroup.
+
+        Args:
+            py_add_nodes_in_group (PyAddNodesInGroup): The PyAddNodesInGroup to convert.
+
+        Returns:
+            AddNodesInGroup: The converted AddNodesInGroup.
+        """
+        add_nodes_in_group = cls.__new__(cls)
+        add_nodes_in_group._py_add_nodes_in_group = py_add_nodes_in_group
+        return add_nodes_in_group
+
+    @property
+    def batch(self) -> NodeBatch:
+        """The nodes that are added.
+
+        Returns:
+            NodeBatch: The nodes that are added.
+        """
+        return NodeBatch._from_py_node_batch(self._py_add_nodes_in_group.batch)
+
+    @property
+    def group_index(self) -> GroupIndex:
+        """The group the nodes are added in.
+
+        Returns:
+            GroupIndex: The group the nodes are added in.
+        """
+        return self._py_add_nodes_in_group.group_index
+
+
+class AddEdges:
+    """The payload of a change adding edges."""
+
+    _py_add_edges: PyAddEdges
+
+    def __init__(self, batch: EdgeBatch) -> None:
+        """Initializes the payload of a change adding edges.
+
+        Args:
+            batch (EdgeBatch): The edges that are added.
+        """
+        self._py_add_edges = PyAddEdges(batch._py_edge_batch)
+
+    @classmethod
+    def _from_py_add_edges(cls, py_add_edges: PyAddEdges) -> AddEdges:
+        """Creates an AddEdges from a PyAddEdges.
+
+        Args:
+            py_add_edges (PyAddEdges): The PyAddEdges to convert.
+
+        Returns:
+            AddEdges: The converted AddEdges.
+        """
+        add_edges = cls.__new__(cls)
+        add_edges._py_add_edges = py_add_edges
+        return add_edges
+
+    @property
+    def batch(self) -> EdgeBatch:
+        """The edges that are added.
+
+        Returns:
+            EdgeBatch: The edges that are added.
+        """
+        return EdgeBatch._from_py_edge_batch(self._py_add_edges.batch)
+
+
+class AddEdgesInGroup:
+    """The payload of a change adding edges in a group."""
+
+    _py_add_edges_in_group: PyAddEdgesInGroup
+
+    def __init__(self, batch: EdgeBatch, group_index: GroupIndex) -> None:
+        """Initializes the payload of a change adding edges in a group.
+
+        Args:
+            batch (EdgeBatch): The edges that are added.
+            group_index (GroupIndex): The group the edges are added in.
+        """
+        self._py_add_edges_in_group = PyAddEdgesInGroup(
+            batch._py_edge_batch, group_index
+        )
+
+    @classmethod
+    def _from_py_add_edges_in_group(
+        cls, py_add_edges_in_group: PyAddEdgesInGroup
+    ) -> AddEdgesInGroup:
+        """Creates an AddEdgesInGroup from a PyAddEdgesInGroup.
+
+        Args:
+            py_add_edges_in_group (PyAddEdgesInGroup): The PyAddEdgesInGroup to convert.
+
+        Returns:
+            AddEdgesInGroup: The converted AddEdgesInGroup.
+        """
+        add_edges_in_group = cls.__new__(cls)
+        add_edges_in_group._py_add_edges_in_group = py_add_edges_in_group
+        return add_edges_in_group
+
+    @property
+    def batch(self) -> EdgeBatch:
+        """The edges that are added.
+
+        Returns:
+            EdgeBatch: The edges that are added.
+        """
+        return EdgeBatch._from_py_edge_batch(self._py_add_edges_in_group.batch)
+
+    @property
+    def group_index(self) -> GroupIndex:
+        """The group the edges are added in.
+
+        Returns:
+            GroupIndex: The group the edges are added in.
+        """
+        return self._py_add_edges_in_group.group_index
+
+
+class RemoveNodes:
+    """The payload of a change removing nodes."""
+
+    _py_remove_nodes: PyRemoveNodes
+
+    def __init__(self, node_indices: List[NodeIndex]) -> None:
+        """Initializes the payload of a change removing nodes.
+
+        Args:
+            node_indices (List[NodeIndex]): The nodes that are removed.
+        """
+        self._py_remove_nodes = PyRemoveNodes(node_indices)
+
+    @classmethod
+    def _from_py_remove_nodes(cls, py_remove_nodes: PyRemoveNodes) -> RemoveNodes:
+        """Creates a RemoveNodes from a PyRemoveNodes.
+
+        Args:
+            py_remove_nodes (PyRemoveNodes): The PyRemoveNodes to convert.
+
+        Returns:
+            RemoveNodes: The converted RemoveNodes.
+        """
+        remove_nodes = cls.__new__(cls)
+        remove_nodes._py_remove_nodes = py_remove_nodes
+        return remove_nodes
+
+    @property
+    def node_indices(self) -> List[NodeIndex]:
+        """The nodes that are removed.
+
+        Returns:
+            List[NodeIndex]: The nodes that are removed.
+        """
+        return self._py_remove_nodes.node_indices
+
+
+class RemoveEdges:
+    """The payload of a change removing edges."""
+
+    _py_remove_edges: PyRemoveEdges
+
+    def __init__(self, edge_indices: List[EdgeIndex]) -> None:
+        """Initializes the payload of a change removing edges.
+
+        Args:
+            edge_indices (List[EdgeIndex]): The edges that are removed.
+        """
+        self._py_remove_edges = PyRemoveEdges(
+            [edge_index._py_edge_index for edge_index in edge_indices]
+        )
+
+    @classmethod
+    def _from_py_remove_edges(cls, py_remove_edges: PyRemoveEdges) -> RemoveEdges:
+        """Creates a RemoveEdges from a PyRemoveEdges.
+
+        Args:
+            py_remove_edges (PyRemoveEdges): The PyRemoveEdges to convert.
+
+        Returns:
+            RemoveEdges: The converted RemoveEdges.
+        """
+        remove_edges = cls.__new__(cls)
+        remove_edges._py_remove_edges = py_remove_edges
+        return remove_edges
+
+    @property
+    def edge_indices(self) -> List[EdgeIndex]:
+        """The edges that are removed.
+
+        Returns:
+            List[EdgeIndex]: The edges that are removed.
+        """
+        return [
+            EdgeIndex._from_py_edge_index(edge_index)
+            for edge_index in self._py_remove_edges.edge_indices
+        ]
+
+
+class SetNodeAttributes:
+    """The payload of a change setting node attributes."""
+
+    _py_set_node_attributes: PySetNodeAttributes
+
+    def __init__(self, node_indices: List[NodeIndex], attributes: Attributes) -> None:
+        """Initializes the payload of a change setting node attributes.
+
+        Args:
+            node_indices (List[NodeIndex]): The nodes the attributes are set on.
+            attributes (Attributes): The attributes that are set.
+        """
+        self._py_set_node_attributes = PySetNodeAttributes(node_indices, attributes)
+
+    @classmethod
+    def _from_py_set_node_attributes(
+        cls, py_set_node_attributes: PySetNodeAttributes
+    ) -> SetNodeAttributes:
+        """Creates a SetNodeAttributes from a PySetNodeAttributes.
+
+        Args:
+            py_set_node_attributes (PySetNodeAttributes): The PySetNodeAttributes to
+                convert.
+
+        Returns:
+            SetNodeAttributes: The converted SetNodeAttributes.
+        """
+        set_node_attributes = cls.__new__(cls)
+        set_node_attributes._py_set_node_attributes = py_set_node_attributes
+        return set_node_attributes
+
+    @property
+    def node_indices(self) -> List[NodeIndex]:
+        """The nodes the attributes are set on.
+
+        Returns:
+            List[NodeIndex]: The nodes the attributes are set on.
+        """
+        return self._py_set_node_attributes.node_indices
+
+    @property
+    def attributes(self) -> Attributes:
+        """The attributes that are set.
+
+        Returns:
+            Attributes: The attributes that are set.
+        """
+        return self._py_set_node_attributes.attributes
+
+
+class ReplaceNodeAttributes:
+    """The payload of a change replacing node attributes."""
+
+    _py_replace_node_attributes: PyReplaceNodeAttributes
+
+    def __init__(self, node_indices: List[NodeIndex], attributes: Attributes) -> None:
+        """Initializes the payload of a change replacing node attributes.
+
+        Args:
+            node_indices (List[NodeIndex]): The nodes the attributes are replaced on.
+            attributes (Attributes): The attributes the nodes end up with.
+        """
+        self._py_replace_node_attributes = PyReplaceNodeAttributes(
+            node_indices, attributes
+        )
+
+    @classmethod
+    def _from_py_replace_node_attributes(
+        cls, py_replace_node_attributes: PyReplaceNodeAttributes
+    ) -> ReplaceNodeAttributes:
+        """Creates a ReplaceNodeAttributes from a PyReplaceNodeAttributes.
+
+        Args:
+            py_replace_node_attributes (PyReplaceNodeAttributes): The
+                PyReplaceNodeAttributes to convert.
+
+        Returns:
+            ReplaceNodeAttributes: The converted ReplaceNodeAttributes.
+        """
+        replace_node_attributes = cls.__new__(cls)
+        replace_node_attributes._py_replace_node_attributes = py_replace_node_attributes
+        return replace_node_attributes
+
+    @property
+    def node_indices(self) -> List[NodeIndex]:
+        """The nodes the attributes are replaced on.
+
+        Returns:
+            List[NodeIndex]: The nodes the attributes are replaced on.
+        """
+        return self._py_replace_node_attributes.node_indices
+
+    @property
+    def attributes(self) -> Attributes:
+        """The attributes the nodes end up with.
+
+        Returns:
+            Attributes: The attributes the nodes end up with.
+        """
+        return self._py_replace_node_attributes.attributes
+
+
+class RemoveNodeAttributes:
+    """The payload of a change removing node attributes."""
+
+    _py_remove_node_attributes: PyRemoveNodeAttributes
+
+    def __init__(
+        self, node_indices: List[NodeIndex], attribute_names: List[AttributeName]
+    ) -> None:
+        """Initializes the payload of a change removing node attributes.
+
+        Args:
+            node_indices (List[NodeIndex]): The nodes the attributes are removed from.
+            attribute_names (List[AttributeName]): The names of the removed attributes.
+        """
+        self._py_remove_node_attributes = PyRemoveNodeAttributes(
+            node_indices, attribute_names
+        )
+
+    @classmethod
+    def _from_py_remove_node_attributes(
+        cls, py_remove_node_attributes: PyRemoveNodeAttributes
+    ) -> RemoveNodeAttributes:
+        """Creates a RemoveNodeAttributes from a PyRemoveNodeAttributes.
+
+        Args:
+            py_remove_node_attributes (PyRemoveNodeAttributes): The
+                PyRemoveNodeAttributes
+                to convert.
+
+        Returns:
+            RemoveNodeAttributes: The converted RemoveNodeAttributes.
+        """
+        remove_node_attributes = cls.__new__(cls)
+        remove_node_attributes._py_remove_node_attributes = py_remove_node_attributes
+        return remove_node_attributes
+
+    @property
+    def node_indices(self) -> List[NodeIndex]:
+        """The nodes the attributes are removed from.
+
+        Returns:
+            List[NodeIndex]: The nodes the attributes are removed from.
+        """
+        return self._py_remove_node_attributes.node_indices
+
+    @property
+    def attribute_names(self) -> List[AttributeName]:
+        """The names of the removed attributes.
+
+        Returns:
+            List[AttributeName]: The names of the removed attributes.
+        """
+        return self._py_remove_node_attributes.attribute_names
+
+
+class SetEdgeAttributes:
+    """The payload of a change setting edge attributes."""
+
+    _py_set_edge_attributes: PySetEdgeAttributes
+
+    def __init__(self, edge_indices: List[EdgeIndex], attributes: Attributes) -> None:
+        """Initializes the payload of a change setting edge attributes.
+
+        Args:
+            edge_indices (List[EdgeIndex]): The edges the attributes are set on.
+            attributes (Attributes): The attributes that are set.
+        """
+        self._py_set_edge_attributes = PySetEdgeAttributes(
+            [edge_index._py_edge_index for edge_index in edge_indices], attributes
+        )
+
+    @classmethod
+    def _from_py_set_edge_attributes(
+        cls, py_set_edge_attributes: PySetEdgeAttributes
+    ) -> SetEdgeAttributes:
+        """Creates a SetEdgeAttributes from a PySetEdgeAttributes.
+
+        Args:
+            py_set_edge_attributes (PySetEdgeAttributes): The PySetEdgeAttributes to
+                convert.
+
+        Returns:
+            SetEdgeAttributes: The converted SetEdgeAttributes.
+        """
+        set_edge_attributes = cls.__new__(cls)
+        set_edge_attributes._py_set_edge_attributes = py_set_edge_attributes
+        return set_edge_attributes
+
+    @property
+    def edge_indices(self) -> List[EdgeIndex]:
+        """The edges the attributes are set on.
+
+        Returns:
+            List[EdgeIndex]: The edges the attributes are set on.
+        """
+        return [
+            EdgeIndex._from_py_edge_index(edge_index)
+            for edge_index in self._py_set_edge_attributes.edge_indices
+        ]
+
+    @property
+    def attributes(self) -> Attributes:
+        """The attributes that are set.
+
+        Returns:
+            Attributes: The attributes that are set.
+        """
+        return self._py_set_edge_attributes.attributes
+
+
+class ReplaceEdgeAttributes:
+    """The payload of a change replacing edge attributes."""
+
+    _py_replace_edge_attributes: PyReplaceEdgeAttributes
+
+    def __init__(self, edge_indices: List[EdgeIndex], attributes: Attributes) -> None:
+        """Initializes the payload of a change replacing edge attributes.
+
+        Args:
+            edge_indices (List[EdgeIndex]): The edges the attributes are replaced on.
+            attributes (Attributes): The attributes the edges end up with.
+        """
+        self._py_replace_edge_attributes = PyReplaceEdgeAttributes(
+            [edge_index._py_edge_index for edge_index in edge_indices], attributes
+        )
+
+    @classmethod
+    def _from_py_replace_edge_attributes(
+        cls, py_replace_edge_attributes: PyReplaceEdgeAttributes
+    ) -> ReplaceEdgeAttributes:
+        """Creates a ReplaceEdgeAttributes from a PyReplaceEdgeAttributes.
+
+        Args:
+            py_replace_edge_attributes (PyReplaceEdgeAttributes): The
+                PyReplaceEdgeAttributes to convert.
+
+        Returns:
+            ReplaceEdgeAttributes: The converted ReplaceEdgeAttributes.
+        """
+        replace_edge_attributes = cls.__new__(cls)
+        replace_edge_attributes._py_replace_edge_attributes = py_replace_edge_attributes
+        return replace_edge_attributes
+
+    @property
+    def edge_indices(self) -> List[EdgeIndex]:
+        """The edges the attributes are replaced on.
+
+        Returns:
+            List[EdgeIndex]: The edges the attributes are replaced on.
+        """
+        return [
+            EdgeIndex._from_py_edge_index(edge_index)
+            for edge_index in self._py_replace_edge_attributes.edge_indices
+        ]
+
+    @property
+    def attributes(self) -> Attributes:
+        """The attributes the edges end up with.
+
+        Returns:
+            Attributes: The attributes the edges end up with.
+        """
+        return self._py_replace_edge_attributes.attributes
+
+
+class RemoveEdgeAttributes:
+    """The payload of a change removing edge attributes."""
+
+    _py_remove_edge_attributes: PyRemoveEdgeAttributes
+
+    def __init__(
+        self, edge_indices: List[EdgeIndex], attribute_names: List[AttributeName]
+    ) -> None:
+        """Initializes the payload of a change removing edge attributes.
+
+        Args:
+            edge_indices (List[EdgeIndex]): The edges the attributes are removed from.
+            attribute_names (List[AttributeName]): The names of the removed attributes.
+        """
+        self._py_remove_edge_attributes = PyRemoveEdgeAttributes(
+            [edge_index._py_edge_index for edge_index in edge_indices], attribute_names
+        )
+
+    @classmethod
+    def _from_py_remove_edge_attributes(
+        cls, py_remove_edge_attributes: PyRemoveEdgeAttributes
+    ) -> RemoveEdgeAttributes:
+        """Creates a RemoveEdgeAttributes from a PyRemoveEdgeAttributes.
+
+        Args:
+            py_remove_edge_attributes (PyRemoveEdgeAttributes): The
+                PyRemoveEdgeAttributes
+                to convert.
+
+        Returns:
+            RemoveEdgeAttributes: The converted RemoveEdgeAttributes.
+        """
+        remove_edge_attributes = cls.__new__(cls)
+        remove_edge_attributes._py_remove_edge_attributes = py_remove_edge_attributes
+        return remove_edge_attributes
+
+    @property
+    def edge_indices(self) -> List[EdgeIndex]:
+        """The edges the attributes are removed from.
+
+        Returns:
+            List[EdgeIndex]: The edges the attributes are removed from.
+        """
+        return [
+            EdgeIndex._from_py_edge_index(edge_index)
+            for edge_index in self._py_remove_edge_attributes.edge_indices
+        ]
+
+    @property
+    def attribute_names(self) -> List[AttributeName]:
+        """The names of the removed attributes.
+
+        Returns:
+            List[AttributeName]: The names of the removed attributes.
+        """
+        return self._py_remove_edge_attributes.attribute_names
+
+
+class AddGroup:
+    """The payload of a change adding a group."""
+
+    _py_add_group: PyAddGroup
+
+    def __init__(self, group_index: GroupIndex) -> None:
+        """Initializes the payload of a change adding a group.
+
+        Args:
+            group_index (GroupIndex): The group that is added.
+        """
+        self._py_add_group = PyAddGroup(group_index)
+
+    @classmethod
+    def _from_py_add_group(cls, py_add_group: PyAddGroup) -> AddGroup:
+        """Creates an AddGroup from a PyAddGroup.
+
+        Args:
+            py_add_group (PyAddGroup): The PyAddGroup to convert.
+
+        Returns:
+            AddGroup: The converted AddGroup.
+        """
+        add_group = cls.__new__(cls)
+        add_group._py_add_group = py_add_group
+        return add_group
+
+    @property
+    def group_index(self) -> GroupIndex:
+        """The group that is added.
+
+        Returns:
+            GroupIndex: The group that is added.
+        """
+        return self._py_add_group.group_index
+
+
+class RemoveGroups:
+    """The payload of a change removing groups."""
+
+    _py_remove_groups: PyRemoveGroups
+
+    def __init__(self, group_indices: List[GroupIndex]) -> None:
+        """Initializes the payload of a change removing groups.
+
+        Args:
+            group_indices (List[GroupIndex]): The groups that are removed.
+        """
+        self._py_remove_groups = PyRemoveGroups(group_indices)
+
+    @classmethod
+    def _from_py_remove_groups(cls, py_remove_groups: PyRemoveGroups) -> RemoveGroups:
+        """Creates a RemoveGroups from a PyRemoveGroups.
+
+        Args:
+            py_remove_groups (PyRemoveGroups): The PyRemoveGroups to convert.
+
+        Returns:
+            RemoveGroups: The converted RemoveGroups.
+        """
+        remove_groups = cls.__new__(cls)
+        remove_groups._py_remove_groups = py_remove_groups
+        return remove_groups
+
+    @property
+    def group_indices(self) -> List[GroupIndex]:
+        """The groups that are removed.
+
+        Returns:
+            List[GroupIndex]: The groups that are removed.
+        """
+        return self._py_remove_groups.group_indices
+
+
+class AddNodesToGroup:
+    """The payload of a change adding nodes to a group."""
+
+    _py_add_nodes_to_group: PyAddNodesToGroup
+
+    def __init__(self, node_indices: List[NodeIndex], group_index: GroupIndex) -> None:
+        """Initializes the payload of a change adding nodes to a group.
+
+        Args:
+            node_indices (List[NodeIndex]): The nodes that are added.
+            group_index (GroupIndex): The group the nodes join.
+        """
+        self._py_add_nodes_to_group = PyAddNodesToGroup(node_indices, group_index)
+
+    @classmethod
+    def _from_py_add_nodes_to_group(
+        cls, py_add_nodes_to_group: PyAddNodesToGroup
+    ) -> AddNodesToGroup:
+        """Creates an AddNodesToGroup from a PyAddNodesToGroup.
+
+        Args:
+            py_add_nodes_to_group (PyAddNodesToGroup): The PyAddNodesToGroup to convert.
+
+        Returns:
+            AddNodesToGroup: The converted AddNodesToGroup.
+        """
+        add_nodes_to_group = cls.__new__(cls)
+        add_nodes_to_group._py_add_nodes_to_group = py_add_nodes_to_group
+        return add_nodes_to_group
+
+    @property
+    def node_indices(self) -> List[NodeIndex]:
+        """The nodes that are added.
+
+        Returns:
+            List[NodeIndex]: The nodes that are added.
+        """
+        return self._py_add_nodes_to_group.node_indices
+
+    @property
+    def group_index(self) -> GroupIndex:
+        """The group the nodes join.
+
+        Returns:
+            GroupIndex: The group the nodes join.
+        """
+        return self._py_add_nodes_to_group.group_index
+
+
+class RemoveNodesFromGroup:
+    """The payload of a change removing nodes from a group."""
+
+    _py_remove_nodes_from_group: PyRemoveNodesFromGroup
+
+    def __init__(self, node_indices: List[NodeIndex], group_index: GroupIndex) -> None:
+        """Initializes the payload of a change removing nodes from a group.
+
+        Args:
+            node_indices (List[NodeIndex]): The nodes that are removed.
+            group_index (GroupIndex): The group the nodes leave.
+        """
+        self._py_remove_nodes_from_group = PyRemoveNodesFromGroup(
+            node_indices, group_index
+        )
+
+    @classmethod
+    def _from_py_remove_nodes_from_group(
+        cls, py_remove_nodes_from_group: PyRemoveNodesFromGroup
+    ) -> RemoveNodesFromGroup:
+        """Creates a RemoveNodesFromGroup from a PyRemoveNodesFromGroup.
+
+        Args:
+            py_remove_nodes_from_group (PyRemoveNodesFromGroup): The
+                PyRemoveNodesFromGroup
+                to convert.
+
+        Returns:
+            RemoveNodesFromGroup: The converted RemoveNodesFromGroup.
+        """
+        remove_nodes_from_group = cls.__new__(cls)
+        remove_nodes_from_group._py_remove_nodes_from_group = py_remove_nodes_from_group
+        return remove_nodes_from_group
+
+    @property
+    def node_indices(self) -> List[NodeIndex]:
+        """The nodes that are removed.
+
+        Returns:
+            List[NodeIndex]: The nodes that are removed.
+        """
+        return self._py_remove_nodes_from_group.node_indices
+
+    @property
+    def group_index(self) -> GroupIndex:
+        """The group the nodes leave.
+
+        Returns:
+            GroupIndex: The group the nodes leave.
+        """
+        return self._py_remove_nodes_from_group.group_index
+
+
+class AddEdgesToGroup:
+    """The payload of a change adding edges to a group."""
+
+    _py_add_edges_to_group: PyAddEdgesToGroup
+
+    def __init__(self, edge_indices: List[EdgeIndex], group_index: GroupIndex) -> None:
+        """Initializes the payload of a change adding edges to a group.
+
+        Args:
+            edge_indices (List[EdgeIndex]): The edges that are added.
+            group_index (GroupIndex): The group the edges join.
+        """
+        self._py_add_edges_to_group = PyAddEdgesToGroup(
+            [edge_index._py_edge_index for edge_index in edge_indices], group_index
+        )
+
+    @classmethod
+    def _from_py_add_edges_to_group(
+        cls, py_add_edges_to_group: PyAddEdgesToGroup
+    ) -> AddEdgesToGroup:
+        """Creates an AddEdgesToGroup from a PyAddEdgesToGroup.
+
+        Args:
+            py_add_edges_to_group (PyAddEdgesToGroup): The PyAddEdgesToGroup to convert.
+
+        Returns:
+            AddEdgesToGroup: The converted AddEdgesToGroup.
+        """
+        add_edges_to_group = cls.__new__(cls)
+        add_edges_to_group._py_add_edges_to_group = py_add_edges_to_group
+        return add_edges_to_group
+
+    @property
+    def edge_indices(self) -> List[EdgeIndex]:
+        """The edges that are added.
+
+        Returns:
+            List[EdgeIndex]: The edges that are added.
+        """
+        return [
+            EdgeIndex._from_py_edge_index(edge_index)
+            for edge_index in self._py_add_edges_to_group.edge_indices
+        ]
+
+    @property
+    def group_index(self) -> GroupIndex:
+        """The group the edges join.
+
+        Returns:
+            GroupIndex: The group the edges join.
+        """
+        return self._py_add_edges_to_group.group_index
+
+
+class RemoveEdgesFromGroup:
+    """The payload of a change removing edges from a group."""
+
+    _py_remove_edges_from_group: PyRemoveEdgesFromGroup
+
+    def __init__(self, edge_indices: List[EdgeIndex], group_index: GroupIndex) -> None:
+        """Initializes the payload of a change removing edges from a group.
+
+        Args:
+            edge_indices (List[EdgeIndex]): The edges that are removed.
+            group_index (GroupIndex): The group the edges leave.
+        """
+        self._py_remove_edges_from_group = PyRemoveEdgesFromGroup(
+            [edge_index._py_edge_index for edge_index in edge_indices], group_index
+        )
+
+    @classmethod
+    def _from_py_remove_edges_from_group(
+        cls, py_remove_edges_from_group: PyRemoveEdgesFromGroup
+    ) -> RemoveEdgesFromGroup:
+        """Creates a RemoveEdgesFromGroup from a PyRemoveEdgesFromGroup.
+
+        Args:
+            py_remove_edges_from_group (PyRemoveEdgesFromGroup): The
+                PyRemoveEdgesFromGroup
+                to convert.
+
+        Returns:
+            RemoveEdgesFromGroup: The converted RemoveEdgesFromGroup.
+        """
+        remove_edges_from_group = cls.__new__(cls)
+        remove_edges_from_group._py_remove_edges_from_group = py_remove_edges_from_group
+        return remove_edges_from_group
+
+    @property
+    def edge_indices(self) -> List[EdgeIndex]:
+        """The edges that are removed.
+
+        Returns:
+            List[EdgeIndex]: The edges that are removed.
+        """
+        return [
+            EdgeIndex._from_py_edge_index(edge_index)
+            for edge_index in self._py_remove_edges_from_group.edge_indices
+        ]
+
+    @property
+    def group_index(self) -> GroupIndex:
+        """The group the edges leave.
+
+        Returns:
+            GroupIndex: The group the edges leave.
+        """
+        return self._py_remove_edges_from_group.group_index
+
+
+class SetSchema:
+    """The payload of a change setting the schema."""
+
+    _py_set_schema: PySetSchema
+
+    def __init__(self, schema: Schema) -> None:
+        """Initializes the payload of a change setting the schema.
+
+        Args:
+            schema (Schema): The schema that is set.
+        """
+        self._py_set_schema = PySetSchema(schema._py_schema)
+
+    @classmethod
+    def _from_py_set_schema(cls, py_set_schema: PySetSchema) -> SetSchema:
+        """Creates a SetSchema from a PySetSchema.
+
+        Args:
+            py_set_schema (PySetSchema): The PySetSchema to convert.
+
+        Returns:
+            SetSchema: The converted SetSchema.
+        """
+        set_schema = cls.__new__(cls)
+        set_schema._py_set_schema = py_set_schema
+        return set_schema
 
     @property
     def schema(self) -> Schema:
-        """The schema being set."""
-        from graphrecords.schema import Schema
+        """The schema that is set.
 
-        return Schema._from_py_schema(self._py_pre_set_schema_context.schema)
-
-
-class PreAddNodeContext:
-    """Context for the pre_add_node hook."""
-
-    _py_context: PyPreAddNodeContext
-
-    def __init__(self, node_index: NodeIndex, attributes: Attributes) -> None:
-        """Initializes a PreAddNodeContext.
-
-        Args:
-            node_index (NodeIndex): The index of the node being added.
-            attributes (Attributes): The attributes of the node being added.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddNodeContext
-
-        self._py_context = PyPreAddNodeContext(node_index, attributes)
-
-    @classmethod
-    def _from_py_context(cls, py_context: PyPreAddNodeContext) -> PreAddNodeContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being added."""
-        return self._py_context.node_index
-
-    @property
-    def attributes(self) -> Attributes:
-        """The attributes of the node being added."""
-        return self._py_context.attributes
-
-
-class PostAddNodeContext:
-    """Context for the post_add_node hook."""
-
-    _py_context: PyPostAddNodeContext
-
-    def __init__(self, node_index: NodeIndex) -> None:
-        """Initializes a PostAddNodeContext.
-
-        Args:
-            node_index (NodeIndex): The index of the node that was added.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddNodeContext
-
-        self._py_context = PyPostAddNodeContext(node_index)
-
-    @classmethod
-    def _from_py_context(cls, py_context: PyPostAddNodeContext) -> PostAddNodeContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was added."""
-        return self._py_context.node_index
-
-
-class PreAddNodeWithGroupContext:
-    """Context for the pre_add_node_with_group hook."""
-
-    _py_context: PyPreAddNodeWithGroupContext
-
-    def __init__(
-        self, node_index: NodeIndex, attributes: Attributes, group: Group
-    ) -> None:
-        """Initializes a PreAddNodeWithGroupContext.
-
-        Args:
-            node_index (NodeIndex): The index of the node being added.
-            attributes (Attributes): The attributes of the node being added.
-            group (Group): The group to add the node to.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddNodeWithGroupContext
-
-        self._py_context = PyPreAddNodeWithGroupContext(node_index, attributes, group)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddNodeWithGroupContext
-    ) -> PreAddNodeWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being added."""
-        return self._py_context.node_index
-
-    @property
-    def attributes(self) -> Attributes:
-        """The attributes of the node being added."""
-        return self._py_context.attributes
-
-    @property
-    def group(self) -> Group:
-        """The group to add the node to."""
-        return self._py_context.group
-
-
-class PostAddNodeWithGroupContext:
-    """Context for the post_add_node_with_group hook."""
-
-    _py_context: PyPostAddNodeWithGroupContext
-
-    def __init__(self, node_index: NodeIndex, group: Group) -> None:
-        """Initializes a PostAddNodeWithGroupContext.
-
-        Args:
-            node_index (NodeIndex): The index of the node that was added.
-            group (Group): The group the node was added to.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddNodeWithGroupContext
-
-        self._py_context = PyPostAddNodeWithGroupContext(node_index, group)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddNodeWithGroupContext
-    ) -> PostAddNodeWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was added."""
-        return self._py_context.node_index
-
-    @property
-    def group(self) -> Group:
-        """The group the node was added to."""
-        return self._py_context.group
-
-
-class PreAddNodeWithGroupsContext:
-    """Context for the pre_add_node_with_groups hook."""
-
-    _py_context: PyPreAddNodeWithGroupsContext
-
-    def __init__(
-        self, node_index: NodeIndex, attributes: Attributes, groups: List[Group]
-    ) -> None:
-        """Initializes a PreAddNodeWithGroupsContext.
-
-        Args:
-            node_index (NodeIndex): The index of the node being added.
-            attributes (Attributes): The attributes of the node being added.
-            groups (List[Group]): The groups to add the node to.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddNodeWithGroupsContext
-
-        self._py_context = PyPreAddNodeWithGroupsContext(node_index, attributes, groups)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddNodeWithGroupsContext
-    ) -> PreAddNodeWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being added."""
-        return self._py_context.node_index
-
-    @property
-    def attributes(self) -> Attributes:
-        """The attributes of the node being added."""
-        return self._py_context.attributes
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to add the node to."""
-        return self._py_context.groups
-
-
-class PostAddNodeWithGroupsContext:
-    """Context for the post_add_node_with_groups hook."""
-
-    _py_context: PyPostAddNodeWithGroupsContext
-
-    def __init__(self, node_index: NodeIndex, groups: List[Group]) -> None:
-        """Initializes a PostAddNodeWithGroupsContext.
-
-        Args:
-            node_index (NodeIndex): The index of the node that was added.
-            groups (List[Group]): The groups the node was added to.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddNodeWithGroupsContext
-
-        self._py_context = PyPostAddNodeWithGroupsContext(node_index, groups)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddNodeWithGroupsContext
-    ) -> PostAddNodeWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was added."""
-        return self._py_context.node_index
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the node was added to."""
-        return self._py_context.groups
-
-
-class PreRemoveNodeContext:
-    """Context for the pre_remove_node hook."""
-
-    _py_context: PyPreRemoveNodeContext
-
-    def __init__(self, node_index: NodeIndex) -> None:
-        """Initializes a PreRemoveNodeContext.
-
-        Args:
-            node_index (NodeIndex): The index of the node being removed.
-        """
-        from graphrecords._graphrecords.plugins import PyPreRemoveNodeContext
-
-        self._py_context = PyPreRemoveNodeContext(node_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreRemoveNodeContext
-    ) -> PreRemoveNodeContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being removed."""
-        return self._py_context.node_index
-
-
-class PostRemoveNodeContext:
-    """Context for the post_remove_node hook."""
-
-    _py_context: PyPostRemoveNodeContext
-
-    def __init__(self, node_index: NodeIndex) -> None:
-        """Initializes a PostRemoveNodeContext.
-
-        Args:
-            node_index (NodeIndex): The index of the node that was removed.
-        """
-        from graphrecords._graphrecords.plugins import PyPostRemoveNodeContext
-
-        self._py_context = PyPostRemoveNodeContext(node_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostRemoveNodeContext
-    ) -> PostRemoveNodeContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was removed."""
-        return self._py_context.node_index
-
-
-class PreAddNodesContext:
-    """Context for the pre_add_nodes hook."""
-
-    _py_context: PyPreAddNodesContext
-
-    def __init__(self, nodes: List[Tuple[NodeIndex, Attributes]]) -> None:
-        """Initializes a PreAddNodesContext.
-
-        Args:
-            nodes (List[Tuple[NodeIndex, Attributes]]): The nodes being added.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddNodesContext
-
-        self._py_context = PyPreAddNodesContext(nodes)
-
-    @classmethod
-    def _from_py_context(cls, py_context: PyPreAddNodesContext) -> PreAddNodesContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes(self) -> List[Tuple[NodeIndex, Attributes]]:
-        """The nodes being added."""
-        return self._py_context.nodes
-
-
-class PostAddNodesContext:
-    """Context for the post_add_nodes hook."""
-
-    _py_context: PyPostAddNodesContext
-
-    def __init__(self, nodes: List[Tuple[NodeIndex, Attributes]]) -> None:
-        """Initializes a PostAddNodesContext.
-
-        Args:
-            nodes (List[Tuple[NodeIndex, Attributes]]): The nodes that were added.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddNodesContext
-
-        self._py_context = PyPostAddNodesContext(nodes)
-
-    @classmethod
-    def _from_py_context(cls, py_context: PyPostAddNodesContext) -> PostAddNodesContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes(self) -> List[Tuple[NodeIndex, Attributes]]:
-        """The nodes that were added."""
-        return self._py_context.nodes
-
-
-class PreAddNodesWithGroupContext:
-    """Context for the pre_add_nodes_with_group hook."""
-
-    _py_context: PyPreAddNodesWithGroupContext
-
-    def __init__(self, nodes: List[Tuple[NodeIndex, Attributes]], group: Group) -> None:
-        """Initializes a PreAddNodesWithGroupContext.
-
-        Args:
-            nodes (List[Tuple[NodeIndex, Attributes]]): The nodes being added.
-            group (Group): The group to add the nodes to.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddNodesWithGroupContext
-
-        self._py_context = PyPreAddNodesWithGroupContext(nodes, group)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddNodesWithGroupContext
-    ) -> PreAddNodesWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes(self) -> List[Tuple[NodeIndex, Attributes]]:
-        """The nodes being added."""
-        return self._py_context.nodes
-
-    @property
-    def group(self) -> Group:
-        """The group to add the nodes to."""
-        return self._py_context.group
-
-
-class PostAddNodesWithGroupContext:
-    """Context for the post_add_nodes_with_group hook."""
-
-    _py_context: PyPostAddNodesWithGroupContext
-
-    def __init__(self, nodes: List[Tuple[NodeIndex, Attributes]], group: Group) -> None:
-        """Initializes a PostAddNodesWithGroupContext.
-
-        Args:
-            nodes (List[Tuple[NodeIndex, Attributes]]): The nodes that were added.
-            group (Group): The group the nodes were added to.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddNodesWithGroupContext
-
-        self._py_context = PyPostAddNodesWithGroupContext(nodes, group)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddNodesWithGroupContext
-    ) -> PostAddNodesWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes(self) -> List[Tuple[NodeIndex, Attributes]]:
-        """The nodes that were added."""
-        return self._py_context.nodes
-
-    @property
-    def group(self) -> Group:
-        """The group the nodes were added to."""
-        return self._py_context.group
-
-
-class PreAddNodesWithGroupsContext:
-    """Context for the pre_add_nodes_with_groups hook."""
-
-    _py_context: PyPreAddNodesWithGroupsContext
-
-    def __init__(
-        self, nodes: List[Tuple[NodeIndex, Attributes]], groups: List[Group]
-    ) -> None:
-        """Initializes a PreAddNodesWithGroupsContext.
-
-        Args:
-            nodes (List[Tuple[NodeIndex, Attributes]]): The nodes being added.
-            groups (List[Group]): The groups to add the nodes to.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddNodesWithGroupsContext
-
-        self._py_context = PyPreAddNodesWithGroupsContext(nodes, groups)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddNodesWithGroupsContext
-    ) -> PreAddNodesWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes(self) -> List[Tuple[NodeIndex, Attributes]]:
-        """The nodes being added."""
-        return self._py_context.nodes
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to add the nodes to."""
-        return self._py_context.groups
-
-
-class PostAddNodesWithGroupsContext:
-    """Context for the post_add_nodes_with_groups hook."""
-
-    _py_context: PyPostAddNodesWithGroupsContext
-
-    def __init__(
-        self, nodes: List[Tuple[NodeIndex, Attributes]], groups: List[Group]
-    ) -> None:
-        """Initializes a PostAddNodesWithGroupsContext.
-
-        Args:
-            nodes (List[Tuple[NodeIndex, Attributes]]): The nodes that were added.
-            groups (List[Group]): The groups the nodes were added to.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddNodesWithGroupsContext
-
-        self._py_context = PyPostAddNodesWithGroupsContext(nodes, groups)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddNodesWithGroupsContext
-    ) -> PostAddNodesWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes(self) -> List[Tuple[NodeIndex, Attributes]]:
-        """The nodes that were added."""
-        return self._py_context.nodes
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the nodes were added to."""
-        return self._py_context.groups
-
-
-class PreAddNodesDataframesContext:
-    """Context for the pre_add_nodes_dataframes hook."""
-
-    _py_context: PyPreAddNodesDataframesContext
-
-    def __init__(self, nodes_dataframes: List[PolarsNodeDataFrameInput]) -> None:
-        """Initializes a PreAddNodesDataframesContext.
-
-        Args:
-            nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
-                inputs.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddNodesDataframesContext
-
-        self._py_context = PyPreAddNodesDataframesContext(nodes_dataframes)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddNodesDataframesContext
-    ) -> PreAddNodesDataframesContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes_dataframes(self) -> List[PolarsNodeDataFrameInput]:
-        """The node dataframe inputs."""
-        return self._py_context.nodes_dataframes
-
-
-class PostAddNodesDataframesContext:
-    """Context for the post_add_nodes_dataframes hook."""
-
-    _py_context: PyPostAddNodesDataframesContext
-
-    def __init__(self, nodes_dataframes: List[PolarsNodeDataFrameInput]) -> None:
-        """Initializes a PostAddNodesDataframesContext.
-
-        Args:
-            nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
-                inputs.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddNodesDataframesContext
-
-        self._py_context = PyPostAddNodesDataframesContext(nodes_dataframes)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddNodesDataframesContext
-    ) -> PostAddNodesDataframesContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes_dataframes(self) -> List[PolarsNodeDataFrameInput]:
-        """The node dataframe inputs."""
-        return self._py_context.nodes_dataframes
-
-
-class PreAddNodesDataframesWithGroupContext:
-    """Context for the pre_add_nodes_dataframes_with_group hook."""
-
-    _py_context: PyPreAddNodesDataframesWithGroupContext
-
-    def __init__(
-        self, nodes_dataframes: List[PolarsNodeDataFrameInput], group: Group
-    ) -> None:
-        """Initializes a PreAddNodesDataframesWithGroupContext.
-
-        Args:
-            nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
-                inputs.
-            group (Group): The group to add the nodes to.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPreAddNodesDataframesWithGroupContext,
-        )
-
-        self._py_context = PyPreAddNodesDataframesWithGroupContext(
-            nodes_dataframes, group
-        )
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddNodesDataframesWithGroupContext
-    ) -> PreAddNodesDataframesWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes_dataframes(self) -> List[PolarsNodeDataFrameInput]:
-        """The node dataframe inputs."""
-        return self._py_context.nodes_dataframes
-
-    @property
-    def group(self) -> Group:
-        """The group to add the nodes to."""
-        return self._py_context.group
-
-
-class PostAddNodesDataframesWithGroupContext:
-    """Context for the post_add_nodes_dataframes_with_group hook."""
-
-    _py_context: PyPostAddNodesDataframesWithGroupContext
-
-    def __init__(
-        self, nodes_dataframes: List[PolarsNodeDataFrameInput], group: Group
-    ) -> None:
-        """Initializes a PostAddNodesDataframesWithGroupContext.
-
-        Args:
-            nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
-                inputs.
-            group (Group): The group the nodes were added to.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPostAddNodesDataframesWithGroupContext,
-        )
-
-        self._py_context = PyPostAddNodesDataframesWithGroupContext(
-            nodes_dataframes, group
-        )
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddNodesDataframesWithGroupContext
-    ) -> PostAddNodesDataframesWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes_dataframes(self) -> List[PolarsNodeDataFrameInput]:
-        """The node dataframe inputs."""
-        return self._py_context.nodes_dataframes
-
-    @property
-    def group(self) -> Group:
-        """The group the nodes were added to."""
-        return self._py_context.group
-
-
-class PreAddNodesDataframesWithGroupsContext:
-    """Context for the pre_add_nodes_dataframes_with_groups hook."""
-
-    _py_context: PyPreAddNodesDataframesWithGroupsContext
-
-    def __init__(
-        self, nodes_dataframes: List[PolarsNodeDataFrameInput], groups: List[Group]
-    ) -> None:
-        """Initializes a PreAddNodesDataframesWithGroupsContext.
-
-        Args:
-            nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
-                inputs.
-            groups (List[Group]): The groups to add the nodes to.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPreAddNodesDataframesWithGroupsContext,
-        )
-
-        self._py_context = PyPreAddNodesDataframesWithGroupsContext(
-            nodes_dataframes, groups
-        )
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddNodesDataframesWithGroupsContext
-    ) -> PreAddNodesDataframesWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes_dataframes(self) -> List[PolarsNodeDataFrameInput]:
-        """The node dataframe inputs."""
-        return self._py_context.nodes_dataframes
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to add the nodes to."""
-        return self._py_context.groups
-
-
-class PostAddNodesDataframesWithGroupsContext:
-    """Context for the post_add_nodes_dataframes_with_groups hook."""
-
-    _py_context: PyPostAddNodesDataframesWithGroupsContext
-
-    def __init__(
-        self, nodes_dataframes: List[PolarsNodeDataFrameInput], groups: List[Group]
-    ) -> None:
-        """Initializes a PostAddNodesDataframesWithGroupsContext.
-
-        Args:
-            nodes_dataframes (List[PolarsNodeDataFrameInput]): The node dataframe
-                inputs.
-            groups (List[Group]): The groups the nodes were added to.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPostAddNodesDataframesWithGroupsContext,
-        )
-
-        self._py_context = PyPostAddNodesDataframesWithGroupsContext(
-            nodes_dataframes, groups
-        )
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddNodesDataframesWithGroupsContext
-    ) -> PostAddNodesDataframesWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def nodes_dataframes(self) -> List[PolarsNodeDataFrameInput]:
-        """The node dataframe inputs."""
-        return self._py_context.nodes_dataframes
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the nodes were added to."""
-        return self._py_context.groups
-
-
-class PreAddEdgeContext:
-    """Context for the pre_add_edge hook."""
-
-    _py_context: PyPreAddEdgeContext
-
-    def __init__(
-        self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
-        attributes: Attributes,
-    ) -> None:
-        """Initializes a PreAddEdgeContext.
-
-        Args:
-            source_node_index (NodeIndex): The index of the source node.
-            target_node_index (NodeIndex): The index of the target node.
-            attributes (Attributes): The attributes of the edge being added.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddEdgeContext
-
-        self._py_context = PyPreAddEdgeContext(
-            source_node_index, target_node_index, attributes
-        )
-
-    @classmethod
-    def _from_py_context(cls, py_context: PyPreAddEdgeContext) -> PreAddEdgeContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def source_node_index(self) -> NodeIndex:
-        """The index of the source node."""
-        return self._py_context.source_node_index
-
-    @property
-    def target_node_index(self) -> NodeIndex:
-        """The index of the target node."""
-        return self._py_context.target_node_index
-
-    @property
-    def attributes(self) -> Attributes:
-        """The attributes of the edge being added."""
-        return self._py_context.attributes
-
-
-class PostAddEdgeContext:
-    """Context for the post_add_edge hook."""
-
-    _py_context: PyPostAddEdgeContext
-
-    def __init__(self, edge_index: EdgeIndex) -> None:
-        """Initializes a PostAddEdgeContext.
-
-        Args:
-            edge_index (EdgeIndex): The index of the edge that was added.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddEdgeContext
-
-        self._py_context = PyPostAddEdgeContext(edge_index)
-
-    @classmethod
-    def _from_py_context(cls, py_context: PyPostAddEdgeContext) -> PostAddEdgeContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge that was added."""
-        return self._py_context.edge_index
-
-
-class PreAddEdgeWithGroupContext:
-    """Context for the pre_add_edge_with_group hook."""
-
-    _py_context: PyPreAddEdgeWithGroupContext
-
-    def __init__(
-        self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
-        attributes: Attributes,
-        group: Group,
-    ) -> None:
-        """Initializes a PreAddEdgeWithGroupContext.
-
-        Args:
-            source_node_index (NodeIndex): The index of the source node.
-            target_node_index (NodeIndex): The index of the target node.
-            attributes (Attributes): The attributes of the edge being added.
-            group (Group): The group to add the edge to.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddEdgeWithGroupContext
-
-        self._py_context = PyPreAddEdgeWithGroupContext(
-            source_node_index, target_node_index, attributes, group
-        )
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddEdgeWithGroupContext
-    ) -> PreAddEdgeWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def source_node_index(self) -> NodeIndex:
-        """The index of the source node."""
-        return self._py_context.source_node_index
-
-    @property
-    def target_node_index(self) -> NodeIndex:
-        """The index of the target node."""
-        return self._py_context.target_node_index
-
-    @property
-    def attributes(self) -> Attributes:
-        """The attributes of the edge being added."""
-        return self._py_context.attributes
-
-    @property
-    def group(self) -> Group:
-        """The group to add the edge to."""
-        return self._py_context.group
-
-
-class PostAddEdgeWithGroupContext:
-    """Context for the post_add_edge_with_group hook."""
-
-    _py_context: PyPostAddEdgeWithGroupContext
-
-    def __init__(self, edge_index: EdgeIndex) -> None:
-        """Initializes a PostAddEdgeWithGroupContext.
-
-        Args:
-            edge_index (EdgeIndex): The index of the edge that was added.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddEdgeWithGroupContext
-
-        self._py_context = PyPostAddEdgeWithGroupContext(edge_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddEdgeWithGroupContext
-    ) -> PostAddEdgeWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge that was added."""
-        return self._py_context.edge_index
-
-
-class PreAddEdgeWithGroupsContext:
-    """Context for the pre_add_edge_with_groups hook."""
-
-    _py_context: PyPreAddEdgeWithGroupsContext
-
-    def __init__(
-        self,
-        source_node_index: NodeIndex,
-        target_node_index: NodeIndex,
-        attributes: Attributes,
-        groups: List[Group],
-    ) -> None:
-        """Initializes a PreAddEdgeWithGroupsContext.
-
-        Args:
-            source_node_index (NodeIndex): The index of the source node.
-            target_node_index (NodeIndex): The index of the target node.
-            attributes (Attributes): The attributes of the edge being added.
-            groups (List[Group]): The groups to add the edge to.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddEdgeWithGroupsContext
-
-        self._py_context = PyPreAddEdgeWithGroupsContext(
-            source_node_index, target_node_index, attributes, groups
-        )
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddEdgeWithGroupsContext
-    ) -> PreAddEdgeWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def source_node_index(self) -> NodeIndex:
-        """The index of the source node."""
-        return self._py_context.source_node_index
-
-    @property
-    def target_node_index(self) -> NodeIndex:
-        """The index of the target node."""
-        return self._py_context.target_node_index
-
-    @property
-    def attributes(self) -> Attributes:
-        """The attributes of the edge being added."""
-        return self._py_context.attributes
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to add the edge to."""
-        return self._py_context.groups
-
-
-class PostAddEdgeWithGroupsContext:
-    """Context for the post_add_edge_with_groups hook."""
-
-    _py_context: PyPostAddEdgeWithGroupsContext
-
-    def __init__(self, edge_index: EdgeIndex, groups: List[Group]) -> None:
-        """Initializes a PostAddEdgeWithGroupsContext.
-
-        Args:
-            edge_index (EdgeIndex): The index of the edge that was added.
-            groups (List[Group]): The groups the edge was added to.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddEdgeWithGroupsContext
-
-        self._py_context = PyPostAddEdgeWithGroupsContext(edge_index, groups)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddEdgeWithGroupsContext
-    ) -> PostAddEdgeWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge that was added."""
-        return self._py_context.edge_index
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the edge was added to."""
-        return self._py_context.groups
-
-
-class PreRemoveEdgeContext:
-    """Context for the pre_remove_edge hook."""
-
-    _py_context: PyPreRemoveEdgeContext
-
-    def __init__(self, edge_index: EdgeIndex) -> None:
-        """Initializes a PreRemoveEdgeContext.
-
-        Args:
-            edge_index (EdgeIndex): The index of the edge being removed.
-        """
-        from graphrecords._graphrecords.plugins import PyPreRemoveEdgeContext
-
-        self._py_context = PyPreRemoveEdgeContext(edge_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreRemoveEdgeContext
-    ) -> PreRemoveEdgeContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge being removed."""
-        return self._py_context.edge_index
-
-
-class PostRemoveEdgeContext:
-    """Context for the post_remove_edge hook."""
-
-    _py_context: PyPostRemoveEdgeContext
-
-    def __init__(self, edge_index: EdgeIndex) -> None:
-        """Initializes a PostRemoveEdgeContext.
-
-        Args:
-            edge_index (EdgeIndex): The index of the edge that was removed.
-        """
-        from graphrecords._graphrecords.plugins import PyPostRemoveEdgeContext
-
-        self._py_context = PyPostRemoveEdgeContext(edge_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostRemoveEdgeContext
-    ) -> PostRemoveEdgeContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge that was removed."""
-        return self._py_context.edge_index
-
-
-class PreAddEdgesContext:
-    """Context for the pre_add_edges hook."""
-
-    _py_context: PyPreAddEdgesContext
-
-    def __init__(self, edges: List[Tuple[NodeIndex, NodeIndex, Attributes]]) -> None:
-        """Initializes a PreAddEdgesContext.
-
-        Args:
-            edges (List[Tuple[NodeIndex, NodeIndex, Attributes]]): The edges being
-                added.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddEdgesContext
-
-        self._py_context = PyPreAddEdgesContext(edges)
-
-    @classmethod
-    def _from_py_context(cls, py_context: PyPreAddEdgesContext) -> PreAddEdgesContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edges(self) -> List[Tuple[NodeIndex, NodeIndex, Attributes]]:
-        """The edges being added."""
-        return self._py_context.edges
-
-
-class PostAddEdgesContext:
-    """Context for the post_add_edges hook."""
-
-    _py_context: PyPostAddEdgesContext
-
-    def __init__(self, edge_indices: List[EdgeIndex]) -> None:
-        """Initializes a PostAddEdgesContext.
-
-        Args:
-            edge_indices (List[EdgeIndex]): The indices of the edges that were added.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddEdgesContext
-
-        self._py_context = PyPostAddEdgesContext(edge_indices)
-
-    @classmethod
-    def _from_py_context(cls, py_context: PyPostAddEdgesContext) -> PostAddEdgesContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edge_indices(self) -> List[EdgeIndex]:
-        """The indices of the edges that were added."""
-        return self._py_context.edge_indices
-
-
-class PreAddEdgesWithGroupContext:
-    """Context for the pre_add_edges_with_group hook."""
-
-    _py_context: PyPreAddEdgesWithGroupContext
-
-    def __init__(
-        self, edges: List[Tuple[NodeIndex, NodeIndex, Attributes]], group: Group
-    ) -> None:
-        """Initializes a PreAddEdgesWithGroupContext.
-
-        Args:
-            edges (List[Tuple[NodeIndex, NodeIndex, Attributes]]): The edges being
-                added.
-            group (Group): The group to add the edges to.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddEdgesWithGroupContext
-
-        self._py_context = PyPreAddEdgesWithGroupContext(edges, group)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddEdgesWithGroupContext
-    ) -> PreAddEdgesWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edges(self) -> List[Tuple[NodeIndex, NodeIndex, Attributes]]:
-        """The edges being added."""
-        return self._py_context.edges
-
-    @property
-    def group(self) -> Group:
-        """The group to add the edges to."""
-        return self._py_context.group
-
-
-class PostAddEdgesWithGroupContext:
-    """Context for the post_add_edges_with_group hook."""
-
-    _py_context: PyPostAddEdgesWithGroupContext
-
-    def __init__(self, edge_indices: List[EdgeIndex]) -> None:
-        """Initializes a PostAddEdgesWithGroupContext.
-
-        Args:
-            edge_indices (List[EdgeIndex]): The indices of the edges that were added.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddEdgesWithGroupContext
-
-        self._py_context = PyPostAddEdgesWithGroupContext(edge_indices)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddEdgesWithGroupContext
-    ) -> PostAddEdgesWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edge_indices(self) -> List[EdgeIndex]:
-        """The indices of the edges that were added."""
-        return self._py_context.edge_indices
-
-
-class PreAddEdgesWithGroupsContext:
-    """Context for the pre_add_edges_with_groups hook."""
-
-    _py_context: PyPreAddEdgesWithGroupsContext
-
-    def __init__(
-        self,
-        edges: List[Tuple[NodeIndex, NodeIndex, Attributes]],
-        groups: List[Group],
-    ) -> None:
-        """Initializes a PreAddEdgesWithGroupsContext.
-
-        Args:
-            edges (List[Tuple[NodeIndex, NodeIndex, Attributes]]): The edges being
-                added.
-            groups (List[Group]): The groups to add the edges to.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddEdgesWithGroupsContext
-
-        self._py_context = PyPreAddEdgesWithGroupsContext(edges, groups)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddEdgesWithGroupsContext
-    ) -> PreAddEdgesWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edges(self) -> List[Tuple[NodeIndex, NodeIndex, Attributes]]:
-        """The edges being added."""
-        return self._py_context.edges
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to add the edges to."""
-        return self._py_context.groups
-
-
-class PostAddEdgesWithGroupsContext:
-    """Context for the post_add_edges_with_groups hook."""
-
-    _py_context: PyPostAddEdgesWithGroupsContext
-
-    def __init__(self, edge_indices: List[EdgeIndex], groups: List[Group]) -> None:
-        """Initializes a PostAddEdgesWithGroupsContext.
-
-        Args:
-            edge_indices (List[EdgeIndex]): The indices of the edges that were
-                added.
-            groups (List[Group]): The groups the edges were added to.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddEdgesWithGroupsContext
-
-        self._py_context = PyPostAddEdgesWithGroupsContext(edge_indices, groups)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddEdgesWithGroupsContext
-    ) -> PostAddEdgesWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edge_indices(self) -> List[EdgeIndex]:
-        """The indices of the edges that were added."""
-        return self._py_context.edge_indices
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the edges were added to."""
-        return self._py_context.groups
-
-
-class PreAddEdgesDataframesContext:
-    """Context for the pre_add_edges_dataframes hook."""
-
-    _py_context: PyPreAddEdgesDataframesContext
-
-    def __init__(self, edges_dataframes: List[PolarsEdgeDataFrameInput]) -> None:
-        """Initializes a PreAddEdgesDataframesContext.
-
-        Args:
-            edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
-                inputs.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddEdgesDataframesContext
-
-        self._py_context = PyPreAddEdgesDataframesContext(edges_dataframes)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddEdgesDataframesContext
-    ) -> PreAddEdgesDataframesContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edges_dataframes(self) -> List[PolarsEdgeDataFrameInput]:
-        """The edge dataframe inputs."""
-        return self._py_context.edges_dataframes
-
-
-class PostAddEdgesDataframesContext:
-    """Context for the post_add_edges_dataframes hook."""
-
-    _py_context: PyPostAddEdgesDataframesContext
-
-    def __init__(self, edges_dataframes: List[PolarsEdgeDataFrameInput]) -> None:
-        """Initializes a PostAddEdgesDataframesContext.
-
-        Args:
-            edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
-                inputs.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddEdgesDataframesContext
-
-        self._py_context = PyPostAddEdgesDataframesContext(edges_dataframes)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddEdgesDataframesContext
-    ) -> PostAddEdgesDataframesContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edges_dataframes(self) -> List[PolarsEdgeDataFrameInput]:
-        """The edge dataframe inputs."""
-        return self._py_context.edges_dataframes
-
-
-class PreAddEdgesDataframesWithGroupContext:
-    """Context for the pre_add_edges_dataframes_with_group hook."""
-
-    _py_context: PyPreAddEdgesDataframesWithGroupContext
-
-    def __init__(
-        self, edges_dataframes: List[PolarsEdgeDataFrameInput], group: Group
-    ) -> None:
-        """Initializes a PreAddEdgesDataframesWithGroupContext.
-
-        Args:
-            edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
-                inputs.
-            group (Group): The group to add the edges to.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPreAddEdgesDataframesWithGroupContext,
-        )
-
-        self._py_context = PyPreAddEdgesDataframesWithGroupContext(
-            edges_dataframes, group
-        )
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddEdgesDataframesWithGroupContext
-    ) -> PreAddEdgesDataframesWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edges_dataframes(self) -> List[PolarsEdgeDataFrameInput]:
-        """The edge dataframe inputs."""
-        return self._py_context.edges_dataframes
-
-    @property
-    def group(self) -> Group:
-        """The group to add the edges to."""
-        return self._py_context.group
-
-
-class PostAddEdgesDataframesWithGroupContext:
-    """Context for the post_add_edges_dataframes_with_group hook."""
-
-    _py_context: PyPostAddEdgesDataframesWithGroupContext
-
-    def __init__(
-        self, edges_dataframes: List[PolarsEdgeDataFrameInput], group: Group
-    ) -> None:
-        """Initializes a PostAddEdgesDataframesWithGroupContext.
-
-        Args:
-            edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
-                inputs.
-            group (Group): The group the edges were added to.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPostAddEdgesDataframesWithGroupContext,
-        )
-
-        self._py_context = PyPostAddEdgesDataframesWithGroupContext(
-            edges_dataframes, group
-        )
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddEdgesDataframesWithGroupContext
-    ) -> PostAddEdgesDataframesWithGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edges_dataframes(self) -> List[PolarsEdgeDataFrameInput]:
-        """The edge dataframe inputs."""
-        return self._py_context.edges_dataframes
-
-    @property
-    def group(self) -> Group:
-        """The group the edges were added to."""
-        return self._py_context.group
-
-
-class PreAddEdgesDataframesWithGroupsContext:
-    """Context for the pre_add_edges_dataframes_with_groups hook."""
-
-    _py_context: PyPreAddEdgesDataframesWithGroupsContext
-
-    def __init__(
-        self, edges_dataframes: List[PolarsEdgeDataFrameInput], groups: List[Group]
-    ) -> None:
-        """Initializes a PreAddEdgesDataframesWithGroupsContext.
-
-        Args:
-            edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
-                inputs.
-            groups (List[Group]): The groups to add the edges to.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPreAddEdgesDataframesWithGroupsContext,
-        )
-
-        self._py_context = PyPreAddEdgesDataframesWithGroupsContext(
-            edges_dataframes, groups
-        )
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddEdgesDataframesWithGroupsContext
-    ) -> PreAddEdgesDataframesWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edges_dataframes(self) -> List[PolarsEdgeDataFrameInput]:
-        """The edge dataframe inputs."""
-        return self._py_context.edges_dataframes
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to add the edges to."""
-        return self._py_context.groups
-
-
-class PostAddEdgesDataframesWithGroupsContext:
-    """Context for the post_add_edges_dataframes_with_groups hook."""
-
-    _py_context: PyPostAddEdgesDataframesWithGroupsContext
-
-    def __init__(
-        self, edges_dataframes: List[PolarsEdgeDataFrameInput], groups: List[Group]
-    ) -> None:
-        """Initializes a PostAddEdgesDataframesWithGroupsContext.
-
-        Args:
-            edges_dataframes (List[PolarsEdgeDataFrameInput]): The edge dataframe
-                inputs.
-            groups (List[Group]): The groups the edges were added to.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPostAddEdgesDataframesWithGroupsContext,
-        )
-
-        self._py_context = PyPostAddEdgesDataframesWithGroupsContext(
-            edges_dataframes, groups
-        )
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddEdgesDataframesWithGroupsContext
-    ) -> PostAddEdgesDataframesWithGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def edges_dataframes(self) -> List[PolarsEdgeDataFrameInput]:
-        """The edge dataframe inputs."""
-        return self._py_context.edges_dataframes
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the edges were added to."""
-        return self._py_context.groups
-
-
-class PreAddGroupContext:
-    """Context for the pre_add_group hook."""
-
-    _py_context: PyPreAddGroupContext
-
-    def __init__(
-        self,
-        group: Group,
-        node_indices: Optional[List[NodeIndex]],
-        edge_indices: Optional[List[EdgeIndex]],
-    ) -> None:
-        """Initializes a PreAddGroupContext.
-
-        Args:
-            group (Group): The group being added.
-            node_indices (Optional[List[NodeIndex]]): The node indices to add to
-                the group.
-            edge_indices (Optional[List[EdgeIndex]]): The edge indices to add to
-                the group.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddGroupContext
-
-        self._py_context = PyPreAddGroupContext(group, node_indices, edge_indices)
-
-    @classmethod
-    def _from_py_context(cls, py_context: PyPreAddGroupContext) -> PreAddGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group being added."""
-        return self._py_context.group
-
-    @property
-    def node_indices(self) -> Optional[List[NodeIndex]]:
-        """The node indices to add to the group."""
-        return self._py_context.node_indices
-
-    @property
-    def edge_indices(self) -> Optional[List[EdgeIndex]]:
-        """The edge indices to add to the group."""
-        return self._py_context.edge_indices
-
-
-class PostAddGroupContext:
-    """Context for the post_add_group hook."""
-
-    _py_context: PyPostAddGroupContext
-
-    def __init__(
-        self,
-        group: Group,
-        node_indices: Optional[List[NodeIndex]],
-        edge_indices: Optional[List[EdgeIndex]],
-    ) -> None:
-        """Initializes a PostAddGroupContext.
-
-        Args:
-            group (Group): The group that was added.
-            node_indices (Optional[List[NodeIndex]]): The node indices added to
-                the group.
-            edge_indices (Optional[List[EdgeIndex]]): The edge indices added to
-                the group.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddGroupContext
-
-        self._py_context = PyPostAddGroupContext(group, node_indices, edge_indices)
-
-    @classmethod
-    def _from_py_context(cls, py_context: PyPostAddGroupContext) -> PostAddGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group that was added."""
-        return self._py_context.group
-
-    @property
-    def node_indices(self) -> Optional[List[NodeIndex]]:
-        """The node indices added to the group."""
-        return self._py_context.node_indices
-
-    @property
-    def edge_indices(self) -> Optional[List[EdgeIndex]]:
-        """The edge indices added to the group."""
-        return self._py_context.edge_indices
-
-
-class PreRemoveGroupContext:
-    """Context for the pre_remove_group hook."""
-
-    _py_context: PyPreRemoveGroupContext
-
-    def __init__(self, group: Group) -> None:
-        """Initializes a PreRemoveGroupContext.
-
-        Args:
-            group (Group): The group being removed.
-        """
-        from graphrecords._graphrecords.plugins import PyPreRemoveGroupContext
-
-        self._py_context = PyPreRemoveGroupContext(group)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreRemoveGroupContext
-    ) -> PreRemoveGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group being removed."""
-        return self._py_context.group
-
-
-class PostRemoveGroupContext:
-    """Context for the post_remove_group hook."""
-
-    _py_context: PyPostRemoveGroupContext
-
-    def __init__(self, group: Group) -> None:
-        """Initializes a PostRemoveGroupContext.
-
-        Args:
-            group (Group): The group that was removed.
-        """
-        from graphrecords._graphrecords.plugins import PyPostRemoveGroupContext
-
-        self._py_context = PyPostRemoveGroupContext(group)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostRemoveGroupContext
-    ) -> PostRemoveGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group that was removed."""
-        return self._py_context.group
-
-
-class PreAddNodeToGroupContext:
-    """Context for the pre_add_node_to_group hook."""
-
-    _py_context: PyPreAddNodeToGroupContext
-
-    def __init__(self, group: Group, node_index: NodeIndex) -> None:
-        """Initializes a PreAddNodeToGroupContext.
-
-        Args:
-            group (Group): The group to add the node to.
-            node_index (NodeIndex): The index of the node being added to the group.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddNodeToGroupContext
-
-        self._py_context = PyPreAddNodeToGroupContext(group, node_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddNodeToGroupContext
-    ) -> PreAddNodeToGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group to add the node to."""
-        return self._py_context.group
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being added to the group."""
-        return self._py_context.node_index
-
-
-class PostAddNodeToGroupContext:
-    """Context for the post_add_node_to_group hook."""
-
-    _py_context: PyPostAddNodeToGroupContext
-
-    def __init__(self, group: Group, node_index: NodeIndex) -> None:
-        """Initializes a PostAddNodeToGroupContext.
-
-        Args:
-            group (Group): The group the node was added to.
-            node_index (NodeIndex): The index of the node that was added to the group.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddNodeToGroupContext
-
-        self._py_context = PyPostAddNodeToGroupContext(group, node_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddNodeToGroupContext
-    ) -> PostAddNodeToGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group the node was added to."""
-        return self._py_context.group
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was added to the group."""
-        return self._py_context.node_index
-
-
-class PreAddNodeToGroupsContext:
-    """Context for the pre_add_node_to_groups hook."""
-
-    _py_context: PyPreAddNodeToGroupsContext
-
-    def __init__(self, groups: List[Group], node_index: NodeIndex) -> None:
-        """Initializes a PreAddNodeToGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups to add the node to.
-            node_index (NodeIndex): The index of the node being added to the groups.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddNodeToGroupsContext
-
-        self._py_context = PyPreAddNodeToGroupsContext(groups, node_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddNodeToGroupsContext
-    ) -> PreAddNodeToGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to add the node to."""
-        return self._py_context.groups
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being added to the groups."""
-        return self._py_context.node_index
-
-
-class PostAddNodeToGroupsContext:
-    """Context for the post_add_node_to_groups hook."""
-
-    _py_context: PyPostAddNodeToGroupsContext
-
-    def __init__(self, groups: List[Group], node_index: NodeIndex) -> None:
-        """Initializes a PostAddNodeToGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups the node was added to.
-            node_index (NodeIndex): The index of the node that was added to the groups.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddNodeToGroupsContext
-
-        self._py_context = PyPostAddNodeToGroupsContext(groups, node_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddNodeToGroupsContext
-    ) -> PostAddNodeToGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the node was added to."""
-        return self._py_context.groups
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was added to the groups."""
-        return self._py_context.node_index
-
-
-class PreAddNodesToGroupsContext:
-    """Context for the pre_add_nodes_to_groups hook."""
-
-    _py_context: PyPreAddNodesToGroupsContext
-
-    def __init__(self, groups: List[Group], node_indices: List[NodeIndex]) -> None:
-        """Initializes a PreAddNodesToGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups to add the nodes to.
-            node_indices (List[NodeIndex]): The indices of the nodes being added
-                to the groups.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddNodesToGroupsContext
-
-        self._py_context = PyPreAddNodesToGroupsContext(groups, node_indices)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddNodesToGroupsContext
-    ) -> PreAddNodesToGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to add the nodes to."""
-        return self._py_context.groups
-
-    @property
-    def node_indices(self) -> List[NodeIndex]:
-        """The indices of the nodes being added to the groups."""
-        return self._py_context.node_indices
-
-
-class PostAddNodesToGroupsContext:
-    """Context for the post_add_nodes_to_groups hook."""
-
-    _py_context: PyPostAddNodesToGroupsContext
-
-    def __init__(self, groups: List[Group], node_indices: List[NodeIndex]) -> None:
-        """Initializes a PostAddNodesToGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups the nodes were added to.
-            node_indices (List[NodeIndex]): The indices of the nodes that were
-                added to the groups.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddNodesToGroupsContext
-
-        self._py_context = PyPostAddNodesToGroupsContext(groups, node_indices)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddNodesToGroupsContext
-    ) -> PostAddNodesToGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the nodes were added to."""
-        return self._py_context.groups
-
-    @property
-    def node_indices(self) -> List[NodeIndex]:
-        """The indices of the nodes that were added to the groups."""
-        return self._py_context.node_indices
-
-
-class PreAddEdgeToGroupContext:
-    """Context for the pre_add_edge_to_group hook."""
-
-    _py_context: PyPreAddEdgeToGroupContext
-
-    def __init__(self, group: Group, edge_index: EdgeIndex) -> None:
-        """Initializes a PreAddEdgeToGroupContext.
-
-        Args:
-            group (Group): The group to add the edge to.
-            edge_index (EdgeIndex): The index of the edge being added to the group.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddEdgeToGroupContext
-
-        self._py_context = PyPreAddEdgeToGroupContext(group, edge_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddEdgeToGroupContext
-    ) -> PreAddEdgeToGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group to add the edge to."""
-        return self._py_context.group
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge being added to the group."""
-        return self._py_context.edge_index
-
-
-class PostAddEdgeToGroupContext:
-    """Context for the post_add_edge_to_group hook."""
-
-    _py_context: PyPostAddEdgeToGroupContext
-
-    def __init__(self, group: Group, edge_index: EdgeIndex) -> None:
-        """Initializes a PostAddEdgeToGroupContext.
-
-        Args:
-            group (Group): The group the edge was added to.
-            edge_index (EdgeIndex): The index of the edge that was added to the group.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddEdgeToGroupContext
-
-        self._py_context = PyPostAddEdgeToGroupContext(group, edge_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddEdgeToGroupContext
-    ) -> PostAddEdgeToGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group the edge was added to."""
-        return self._py_context.group
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge that was added to the group."""
-        return self._py_context.edge_index
-
-
-class PreAddEdgeToGroupsContext:
-    """Context for the pre_add_edge_to_groups hook."""
-
-    _py_context: PyPreAddEdgeToGroupsContext
-
-    def __init__(self, groups: List[Group], edge_index: EdgeIndex) -> None:
-        """Initializes a PreAddEdgeToGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups to add the edge to.
-            edge_index (EdgeIndex): The index of the edge being added to the groups.
-        """
-        from graphrecords._graphrecords.plugins import PyPreAddEdgeToGroupsContext
-
-        self._py_context = PyPreAddEdgeToGroupsContext(groups, edge_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddEdgeToGroupsContext
-    ) -> PreAddEdgeToGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to add the edge to."""
-        return self._py_context.groups
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge being added to the groups."""
-        return self._py_context.edge_index
-
-
-class PostAddEdgeToGroupsContext:
-    """Context for the post_add_edge_to_groups hook."""
-
-    _py_context: PyPostAddEdgeToGroupsContext
-
-    def __init__(self, groups: List[Group], edge_index: EdgeIndex) -> None:
-        """Initializes a PostAddEdgeToGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups the edge was added to.
-            edge_index (EdgeIndex): The index of the edge that was added to the groups.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddEdgeToGroupsContext
-
-        self._py_context = PyPostAddEdgeToGroupsContext(groups, edge_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddEdgeToGroupsContext
-    ) -> PostAddEdgeToGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the edge was added to."""
-        return self._py_context.groups
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge that was added to the groups."""
-        return self._py_context.edge_index
-
-
-class PreAddEdgesToGroupsContext:
-    """Context for the pre_add_edges_to_groups hook."""
-
-    _py_context: PyPreAddEdgesToGroupsContext
-
-    def __init__(self, groups: List[Group], edge_indices: List[EdgeIndex]) -> None:
-        """Initializes a PreAddEdgesToGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups to add the edges to.
-            edge_indices (List[EdgeIndex]): The indices of the edges being added
-                to the groups.
+        Returns:
+            Schema: The schema that is set.
         """
-        from graphrecords._graphrecords.plugins import PyPreAddEdgesToGroupsContext
+        return Schema._from_py_schema(self._py_set_schema.schema)
 
-        self._py_context = PyPreAddEdgesToGroupsContext(groups, edge_indices)
 
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreAddEdgesToGroupsContext
-    ) -> PreAddEdgesToGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to add the edges to."""
-        return self._py_context.groups
-
-    @property
-    def edge_indices(self) -> List[EdgeIndex]:
-        """The indices of the edges being added to the groups."""
-        return self._py_context.edge_indices
-
-
-class PostAddEdgesToGroupsContext:
-    """Context for the post_add_edges_to_groups hook."""
-
-    _py_context: PyPostAddEdgesToGroupsContext
-
-    def __init__(self, groups: List[Group], edge_indices: List[EdgeIndex]) -> None:
-        """Initializes a PostAddEdgesToGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups the edges were added to.
-            edge_indices (List[EdgeIndex]): The indices of the edges that were
-                added to the groups.
-        """
-        from graphrecords._graphrecords.plugins import PyPostAddEdgesToGroupsContext
-
-        self._py_context = PyPostAddEdgesToGroupsContext(groups, edge_indices)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostAddEdgesToGroupsContext
-    ) -> PostAddEdgesToGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the edges were added to."""
-        return self._py_context.groups
-
-    @property
-    def edge_indices(self) -> List[EdgeIndex]:
-        """The indices of the edges that were added to the groups."""
-        return self._py_context.edge_indices
-
-
-class PreRemoveNodeFromGroupContext:
-    """Context for the pre_remove_node_from_group hook."""
-
-    _py_context: PyPreRemoveNodeFromGroupContext
-
-    def __init__(self, group: Group, node_index: NodeIndex) -> None:
-        """Initializes a PreRemoveNodeFromGroupContext.
-
-        Args:
-            group (Group): The group to remove the node from.
-            node_index (NodeIndex): The index of the node being removed from the group.
-        """
-        from graphrecords._graphrecords.plugins import PyPreRemoveNodeFromGroupContext
-
-        self._py_context = PyPreRemoveNodeFromGroupContext(group, node_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreRemoveNodeFromGroupContext
-    ) -> PreRemoveNodeFromGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group to remove the node from."""
-        return self._py_context.group
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being removed from the group."""
-        return self._py_context.node_index
-
-
-class PostRemoveNodeFromGroupContext:
-    """Context for the post_remove_node_from_group hook."""
-
-    _py_context: PyPostRemoveNodeFromGroupContext
-
-    def __init__(self, group: Group, node_index: NodeIndex) -> None:
-        """Initializes a PostRemoveNodeFromGroupContext.
-
-        Args:
-            group (Group): The group the node was removed from.
-            node_index (NodeIndex): The index of the node that was removed from
-                the group.
-        """
-        from graphrecords._graphrecords.plugins import PyPostRemoveNodeFromGroupContext
-
-        self._py_context = PyPostRemoveNodeFromGroupContext(group, node_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostRemoveNodeFromGroupContext
-    ) -> PostRemoveNodeFromGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group the node was removed from."""
-        return self._py_context.group
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was removed from the group."""
-        return self._py_context.node_index
-
-
-class PreRemoveNodeFromGroupsContext:
-    """Context for the pre_remove_node_from_groups hook."""
-
-    _py_context: PyPreRemoveNodeFromGroupsContext
-
-    def __init__(self, groups: List[Group], node_index: NodeIndex) -> None:
-        """Initializes a PreRemoveNodeFromGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups to remove the node from.
-            node_index (NodeIndex): The index of the node being removed from the groups.
-        """
-        from graphrecords._graphrecords.plugins import PyPreRemoveNodeFromGroupsContext
-
-        self._py_context = PyPreRemoveNodeFromGroupsContext(groups, node_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreRemoveNodeFromGroupsContext
-    ) -> PreRemoveNodeFromGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to remove the node from."""
-        return self._py_context.groups
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node being removed from the groups."""
-        return self._py_context.node_index
-
+class FreezeSchema:
+    """The payload of a change freezing the schema."""
 
-class PostRemoveNodeFromGroupsContext:
-    """Context for the post_remove_node_from_groups hook."""
-
-    _py_context: PyPostRemoveNodeFromGroupsContext
-
-    def __init__(self, groups: List[Group], node_index: NodeIndex) -> None:
-        """Initializes a PostRemoveNodeFromGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups the node was removed from.
-            node_index (NodeIndex): The index of the node that was removed from
-                the groups.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPostRemoveNodeFromGroupsContext,
-        )
+    _py_freeze_schema: PyFreezeSchema
 
-        self._py_context = PyPostRemoveNodeFromGroupsContext(groups, node_index)
+    def __init__(self) -> None:
+        """Initializes the payload of a change freezing the schema."""
+        self._py_freeze_schema = PyFreezeSchema()
 
     @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostRemoveNodeFromGroupsContext
-    ) -> PostRemoveNodeFromGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the node was removed from."""
-        return self._py_context.groups
-
-    @property
-    def node_index(self) -> NodeIndex:
-        """The index of the node that was removed from the groups."""
-        return self._py_context.node_index
-
+    def _from_py_freeze_schema(cls, py_freeze_schema: PyFreezeSchema) -> FreezeSchema:
+        """Creates a FreezeSchema from a PyFreezeSchema.
 
-class PreRemoveNodesFromGroupsContext:
-    """Context for the pre_remove_nodes_from_groups hook."""
-
-    _py_context: PyPreRemoveNodesFromGroupsContext
-
-    def __init__(self, groups: List[Group], node_indices: List[NodeIndex]) -> None:
-        """Initializes a PreRemoveNodesFromGroupsContext.
-
         Args:
-            groups (List[Group]): The groups to remove the nodes from.
-            node_indices (List[NodeIndex]): The indices of the nodes being removed
-                from the groups.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPreRemoveNodesFromGroupsContext,
-        )
+            py_freeze_schema (PyFreezeSchema): The PyFreezeSchema to convert.
 
-        self._py_context = PyPreRemoveNodesFromGroupsContext(groups, node_indices)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreRemoveNodesFromGroupsContext
-    ) -> PreRemoveNodesFromGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to remove the nodes from."""
-        return self._py_context.groups
-
-    @property
-    def node_indices(self) -> List[NodeIndex]:
-        """The indices of the nodes being removed from the groups."""
-        return self._py_context.node_indices
-
-
-class PostRemoveNodesFromGroupsContext:
-    """Context for the post_remove_nodes_from_groups hook."""
-
-    _py_context: PyPostRemoveNodesFromGroupsContext
-
-    def __init__(self, groups: List[Group], node_indices: List[NodeIndex]) -> None:
-        """Initializes a PostRemoveNodesFromGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups the nodes were removed from.
-            node_indices (List[NodeIndex]): The indices of the nodes that were
-                removed from the groups.
+        Returns:
+            FreezeSchema: The converted FreezeSchema.
         """
-        from graphrecords._graphrecords.plugins import (
-            PyPostRemoveNodesFromGroupsContext,
-        )
-
-        self._py_context = PyPostRemoveNodesFromGroupsContext(groups, node_indices)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostRemoveNodesFromGroupsContext
-    ) -> PostRemoveNodesFromGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the nodes were removed from."""
-        return self._py_context.groups
-
-    @property
-    def node_indices(self) -> List[NodeIndex]:
-        """The indices of the nodes that were removed from the groups."""
-        return self._py_context.node_indices
-
+        freeze_schema = cls.__new__(cls)
+        freeze_schema._py_freeze_schema = py_freeze_schema
+        return freeze_schema
 
-class PreRemoveEdgeFromGroupContext:
-    """Context for the pre_remove_edge_from_group hook."""
 
-    _py_context: PyPreRemoveEdgeFromGroupContext
+class UnfreezeSchema:
+    """The payload of a change unfreezing the schema."""
 
-    def __init__(self, group: Group, edge_index: EdgeIndex) -> None:
-        """Initializes a PreRemoveEdgeFromGroupContext.
+    _py_unfreeze_schema: PyUnfreezeSchema
 
-        Args:
-            group (Group): The group to remove the edge from.
-            edge_index (EdgeIndex): The index of the edge being removed from the group.
-        """
-        from graphrecords._graphrecords.plugins import PyPreRemoveEdgeFromGroupContext
+    def __init__(self) -> None:
+        """Initializes the payload of a change unfreezing the schema."""
+        self._py_unfreeze_schema = PyUnfreezeSchema()
 
-        self._py_context = PyPreRemoveEdgeFromGroupContext(group, edge_index)
-
     @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreRemoveEdgeFromGroupContext
-    ) -> PreRemoveEdgeFromGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group to remove the edge from."""
-        return self._py_context.group
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge being removed from the group."""
-        return self._py_context.edge_index
-
-
-class PostRemoveEdgeFromGroupContext:
-    """Context for the post_remove_edge_from_group hook."""
-
-    _py_context: PyPostRemoveEdgeFromGroupContext
+    def _from_py_unfreeze_schema(
+        cls, py_unfreeze_schema: PyUnfreezeSchema
+    ) -> UnfreezeSchema:
+        """Creates an UnfreezeSchema from a PyUnfreezeSchema.
 
-    def __init__(self, group: Group, edge_index: EdgeIndex) -> None:
-        """Initializes a PostRemoveEdgeFromGroupContext.
-
         Args:
-            group (Group): The group the edge was removed from.
-            edge_index (EdgeIndex): The index of the edge that was removed from
-                the group.
-        """
-        from graphrecords._graphrecords.plugins import PyPostRemoveEdgeFromGroupContext
-
-        self._py_context = PyPostRemoveEdgeFromGroupContext(group, edge_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostRemoveEdgeFromGroupContext
-    ) -> PostRemoveEdgeFromGroupContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def group(self) -> Group:
-        """The group the edge was removed from."""
-        return self._py_context.group
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge that was removed from the group."""
-        return self._py_context.edge_index
-
+            py_unfreeze_schema (PyUnfreezeSchema): The PyUnfreezeSchema to convert.
 
-class PreRemoveEdgeFromGroupsContext:
-    """Context for the pre_remove_edge_from_groups hook."""
-
-    _py_context: PyPreRemoveEdgeFromGroupsContext
-
-    def __init__(self, groups: List[Group], edge_index: EdgeIndex) -> None:
-        """Initializes a PreRemoveEdgeFromGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups to remove the edge from.
-            edge_index (EdgeIndex): The index of the edge being removed from the groups.
+        Returns:
+            UnfreezeSchema: The converted UnfreezeSchema.
         """
-        from graphrecords._graphrecords.plugins import (
-            PyPreRemoveEdgeFromGroupsContext,
-        )
-
-        self._py_context = PyPreRemoveEdgeFromGroupsContext(groups, edge_index)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreRemoveEdgeFromGroupsContext
-    ) -> PreRemoveEdgeFromGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to remove the edge from."""
-        return self._py_context.groups
+        unfreeze_schema = cls.__new__(cls)
+        unfreeze_schema._py_unfreeze_schema = py_unfreeze_schema
+        return unfreeze_schema
 
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge being removed from the groups."""
-        return self._py_context.edge_index
 
+class Clear:
+    """The payload of a change clearing the GraphRecord."""
 
-class PostRemoveEdgeFromGroupsContext:
-    """Context for the post_remove_edge_from_groups hook."""
+    _py_clear: PyClear
 
-    _py_context: PyPostRemoveEdgeFromGroupsContext
+    def __init__(self) -> None:
+        """Initializes the payload of a change clearing the GraphRecord."""
+        self._py_clear = PyClear()
 
-    def __init__(self, groups: List[Group], edge_index: EdgeIndex) -> None:
-        """Initializes a PostRemoveEdgeFromGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups the edge was removed from.
-            edge_index (EdgeIndex): The index of the edge that was removed from
-                the groups.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPostRemoveEdgeFromGroupsContext,
-        )
-
-        self._py_context = PyPostRemoveEdgeFromGroupsContext(groups, edge_index)
-
     @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostRemoveEdgeFromGroupsContext
-    ) -> PostRemoveEdgeFromGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the edge was removed from."""
-        return self._py_context.groups
-
-    @property
-    def edge_index(self) -> EdgeIndex:
-        """The index of the edge that was removed from the groups."""
-        return self._py_context.edge_index
-
+    def _from_py_clear(cls, py_clear: PyClear) -> Clear:
+        """Creates a Clear from a PyClear.
 
-class PreRemoveEdgesFromGroupsContext:
-    """Context for the pre_remove_edges_from_groups hook."""
-
-    _py_context: PyPreRemoveEdgesFromGroupsContext
-
-    def __init__(self, groups: List[Group], edge_indices: List[EdgeIndex]) -> None:
-        """Initializes a PreRemoveEdgesFromGroupsContext.
-
         Args:
-            groups (List[Group]): The groups to remove the edges from.
-            edge_indices (List[EdgeIndex]): The indices of the edges being removed
-                from the groups.
-        """
-        from graphrecords._graphrecords.plugins import (
-            PyPreRemoveEdgesFromGroupsContext,
-        )
-
-        self._py_context = PyPreRemoveEdgesFromGroupsContext(groups, edge_indices)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPreRemoveEdgesFromGroupsContext
-    ) -> PreRemoveEdgesFromGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
-
-    @property
-    def groups(self) -> List[Group]:
-        """The groups to remove the edges from."""
-        return self._py_context.groups
+            py_clear (PyClear): The PyClear to convert.
 
-    @property
-    def edge_indices(self) -> List[EdgeIndex]:
-        """The indices of the edges being removed from the groups."""
-        return self._py_context.edge_indices
-
-
-class PostRemoveEdgesFromGroupsContext:
-    """Context for the post_remove_edges_from_groups hook."""
-
-    _py_context: PyPostRemoveEdgesFromGroupsContext
-
-    def __init__(self, groups: List[Group], edge_indices: List[EdgeIndex]) -> None:
-        """Initializes a PostRemoveEdgesFromGroupsContext.
-
-        Args:
-            groups (List[Group]): The groups the edges were removed from.
-            edge_indices (List[EdgeIndex]): The indices of the edges that were
-                removed from the groups.
+        Returns:
+            Clear: The converted Clear.
         """
-        from graphrecords._graphrecords.plugins import (
-            PyPostRemoveEdgesFromGroupsContext,
-        )
-
-        self._py_context = PyPostRemoveEdgesFromGroupsContext(groups, edge_indices)
-
-    @classmethod
-    def _from_py_context(
-        cls, py_context: PyPostRemoveEdgesFromGroupsContext
-    ) -> PostRemoveEdgesFromGroupsContext:
-        context = cls.__new__(cls)
-        context._py_context = py_context
-        return context
+        clear = cls.__new__(cls)
+        clear._py_clear = py_clear
+        return clear
 
-    @property
-    def groups(self) -> List[Group]:
-        """The groups the edges were removed from."""
-        return self._py_context.groups
 
-    @property
-    def edge_indices(self) -> List[EdgeIndex]:
-        """The indices of the edges that were removed from the groups."""
-        return self._py_context.edge_indices
+#: A type alias for a change a plugin hook may return.
+Change: TypeAlias = Union[
+    AddNodes,
+    AddNodesInGroup,
+    AddEdges,
+    AddEdgesInGroup,
+    RemoveNodes,
+    RemoveEdges,
+    SetNodeAttributes,
+    ReplaceNodeAttributes,
+    RemoveNodeAttributes,
+    SetEdgeAttributes,
+    ReplaceEdgeAttributes,
+    RemoveEdgeAttributes,
+    AddGroup,
+    RemoveGroups,
+    AddNodesToGroup,
+    RemoveNodesFromGroup,
+    AddEdgesToGroup,
+    RemoveEdgesFromGroup,
+    SetSchema,
+    FreezeSchema,
+    UnfreezeSchema,
+    Clear,
+]
+
+#: A type alias for the changes a plugin hook may return.
+Changes: TypeAlias = Union[Change, List[Change]]
 
 
 class Plugin:
     """Base class for GraphRecord plugins.
 
-    Subclass and override pre/post methods to hook into GraphRecord
-    mutation operations. Pre-hooks can modify the context before the
-    operation executes. Post-hooks run after the operation completes.
+    Every hook is optional: a GraphRecord calls a hook only when the plugin defines
+    it. A change hook returns what the GraphRecord applies in place of the change it
+    received: ``None`` keeps that change, a change or a list of changes replaces it,
+    and an empty list drops it. ``initialize`` and ``finalize`` return changes the
+    same way, but receive no change, so ``None`` means no changes. The ``post_``
+    hooks only look at the GraphRecord and must return ``None``. The hooks are
+    declared for type checkers only, which keeps a plugin free of the hooks it does
+    not implement and keeps a GraphRecord from building payloads nobody reads.
     """
 
-    def initialize(self, graphrecord: GraphRecord) -> None:
-        """Called when the plugin is registered to a GraphRecord.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-        """
-        pass
-
-    def finalize(self, graphrecord: GraphRecord) -> None:
-        """Called when the plugin is unregistered from a GraphRecord.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-        """
-        pass
-
-    def pre_set_schema(
-        self, graphrecord: GraphRecord, context: PreSetSchemaContext
-    ) -> PreSetSchemaContext:
-        """Called before setting the schema.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreSetSchemaContext): The operation context.
+    def _bridge(self) -> _PluginBridge:
+        """Wraps the plugin in the bridge a GraphRecord calls its hooks through.
 
         Returns:
-            PreSetSchemaContext: The potentially modified context.
+            _PluginBridge: The bridge around this plugin.
         """
-        return context
+        return _PluginBridge(self)
 
-    def post_set_schema(self, graphrecord: GraphRecord) -> None:
-        """Called after setting the schema.
+    if TYPE_CHECKING:
+
+        def initialize(self, record: GraphRecord) -> Optional[Changes]:
+            """Handles the plugin being added to a GraphRecord.
+
+            Args:
+                record (GraphRecord): The GraphRecord the plugin is added to.
+
+            Returns:
+                Optional[Changes]: The changes to apply, or None to apply none.
+            """
+
+        def finalize(self, record: GraphRecord) -> Optional[Changes]:
+            """Handles the plugin being removed from a GraphRecord.
+
+            Args:
+                record (GraphRecord): The GraphRecord the plugin is removed from.
+
+            Returns:
+                Optional[Changes]: The changes to apply, or None to apply none.
+            """
+
+        def on_add_nodes(
+            self, record: GraphRecord, addition: AddNodes
+        ) -> Optional[Changes]:
+            """Handles nodes being added.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                addition (AddNodes): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_add_nodes(self, previous: GraphRecord, candidate: GraphRecord) -> None:
+            """Observes the GraphRecord after nodes were added.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_add_nodes_in_group(
+            self, record: GraphRecord, addition: AddNodesInGroup
+        ) -> Optional[Changes]:
+            """Handles nodes being added in a group.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                addition (AddNodesInGroup): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_add_nodes_in_group(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after nodes were added in a group.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_add_edges(
+            self, record: GraphRecord, addition: AddEdges
+        ) -> Optional[Changes]:
+            """Handles edges being added.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                addition (AddEdges): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_add_edges(self, previous: GraphRecord, candidate: GraphRecord) -> None:
+            """Observes the GraphRecord after edges were added.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_add_edges_in_group(
+            self, record: GraphRecord, addition: AddEdgesInGroup
+        ) -> Optional[Changes]:
+            """Handles edges being added in a group.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                addition (AddEdgesInGroup): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_add_edges_in_group(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after edges were added in a group.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_remove_nodes(
+            self, record: GraphRecord, removal: RemoveNodes
+        ) -> Optional[Changes]:
+            """Handles nodes being removed.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                removal (RemoveNodes): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_remove_nodes(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after nodes were removed.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_remove_edges(
+            self, record: GraphRecord, removal: RemoveEdges
+        ) -> Optional[Changes]:
+            """Handles edges being removed.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                removal (RemoveEdges): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_remove_edges(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after edges were removed.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_set_node_attributes(
+            self, record: GraphRecord, assignment: SetNodeAttributes
+        ) -> Optional[Changes]:
+            """Handles node attributes being set.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                assignment (SetNodeAttributes): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_set_node_attributes(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after node attributes were set.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_replace_node_attributes(
+            self, record: GraphRecord, assignment: ReplaceNodeAttributes
+        ) -> Optional[Changes]:
+            """Handles node attributes being replaced.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                assignment (ReplaceNodeAttributes): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_replace_node_attributes(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after node attributes were replaced.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_remove_node_attributes(
+            self, record: GraphRecord, removal: RemoveNodeAttributes
+        ) -> Optional[Changes]:
+            """Handles node attributes being removed.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                removal (RemoveNodeAttributes): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_remove_node_attributes(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after node attributes were removed.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_set_edge_attributes(
+            self, record: GraphRecord, assignment: SetEdgeAttributes
+        ) -> Optional[Changes]:
+            """Handles edge attributes being set.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                assignment (SetEdgeAttributes): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_set_edge_attributes(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after edge attributes were set.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_replace_edge_attributes(
+            self, record: GraphRecord, assignment: ReplaceEdgeAttributes
+        ) -> Optional[Changes]:
+            """Handles edge attributes being replaced.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                assignment (ReplaceEdgeAttributes): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_replace_edge_attributes(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after edge attributes were replaced.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_remove_edge_attributes(
+            self, record: GraphRecord, removal: RemoveEdgeAttributes
+        ) -> Optional[Changes]:
+            """Handles edge attributes being removed.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                removal (RemoveEdgeAttributes): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_remove_edge_attributes(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after edge attributes were removed.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_add_group(
+            self, record: GraphRecord, addition: AddGroup
+        ) -> Optional[Changes]:
+            """Handles a group being added.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                addition (AddGroup): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_add_group(self, previous: GraphRecord, candidate: GraphRecord) -> None:
+            """Observes the GraphRecord after a group was added.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_remove_groups(
+            self, record: GraphRecord, removal: RemoveGroups
+        ) -> Optional[Changes]:
+            """Handles groups being removed.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                removal (RemoveGroups): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_remove_groups(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after groups were removed.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_add_nodes_to_group(
+            self, record: GraphRecord, membership: AddNodesToGroup
+        ) -> Optional[Changes]:
+            """Handles nodes being added to a group.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                membership (AddNodesToGroup): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_add_nodes_to_group(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after nodes were added to a group.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_remove_nodes_from_group(
+            self, record: GraphRecord, membership: RemoveNodesFromGroup
+        ) -> Optional[Changes]:
+            """Handles nodes being removed from a group.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                membership (RemoveNodesFromGroup): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_remove_nodes_from_group(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after nodes were removed from a group.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_add_edges_to_group(
+            self, record: GraphRecord, membership: AddEdgesToGroup
+        ) -> Optional[Changes]:
+            """Handles edges being added to a group.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                membership (AddEdgesToGroup): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_add_edges_to_group(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after edges were added to a group.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_remove_edges_from_group(
+            self, record: GraphRecord, membership: RemoveEdgesFromGroup
+        ) -> Optional[Changes]:
+            """Handles edges being removed from a group.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                membership (RemoveEdgesFromGroup): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_remove_edges_from_group(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after edges were removed from a group.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_set_schema(
+            self, record: GraphRecord, schema_change: SetSchema
+        ) -> Optional[Changes]:
+            """Handles the schema being set.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                schema_change (SetSchema): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_set_schema(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after the schema was set.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_freeze_schema(
+            self, record: GraphRecord, schema_change: FreezeSchema
+        ) -> Optional[Changes]:
+            """Handles the schema being frozen.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                schema_change (FreezeSchema): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_freeze_schema(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after the schema was frozen.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_unfreeze_schema(
+            self, record: GraphRecord, schema_change: UnfreezeSchema
+        ) -> Optional[Changes]:
+            """Handles the schema being unfrozen.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                schema_change (UnfreezeSchema): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_unfreeze_schema(
+            self, previous: GraphRecord, candidate: GraphRecord
+        ) -> None:
+            """Observes the GraphRecord after the schema was unfrozen.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+        def on_clear(self, record: GraphRecord, clearing: Clear) -> Optional[Changes]:
+            """Handles the GraphRecord being cleared.
+
+            Args:
+                record (GraphRecord): The GraphRecord the change is applied to.
+                clearing (Clear): The change that is applied.
+
+            Returns:
+                Optional[Changes]: The changes to apply instead, or None to apply
+                    the change unchanged.
+            """
+
+        def post_clear(self, previous: GraphRecord, candidate: GraphRecord) -> None:
+            """Observes the GraphRecord after it was cleared.
+
+            Args:
+                previous (GraphRecord): The GraphRecord before the change.
+                candidate (GraphRecord): The GraphRecord with the change applied.
+            """
+
+
+#: The payload converter of every change hook a GraphRecord may call.
+_CHANGE_HOOKS: Final[Dict[str, Callable[..., object]]] = {
+    "on_add_nodes": AddNodes._from_py_add_nodes,
+    "on_add_nodes_in_group": AddNodesInGroup._from_py_add_nodes_in_group,
+    "on_add_edges": AddEdges._from_py_add_edges,
+    "on_add_edges_in_group": AddEdgesInGroup._from_py_add_edges_in_group,
+    "on_remove_nodes": RemoveNodes._from_py_remove_nodes,
+    "on_remove_edges": RemoveEdges._from_py_remove_edges,
+    "on_set_node_attributes": SetNodeAttributes._from_py_set_node_attributes,
+    "on_replace_node_attributes": ReplaceNodeAttributes._from_py_replace_node_attributes,
+    "on_remove_node_attributes": RemoveNodeAttributes._from_py_remove_node_attributes,
+    "on_set_edge_attributes": SetEdgeAttributes._from_py_set_edge_attributes,
+    "on_replace_edge_attributes": ReplaceEdgeAttributes._from_py_replace_edge_attributes,
+    "on_remove_edge_attributes": RemoveEdgeAttributes._from_py_remove_edge_attributes,
+    "on_add_group": AddGroup._from_py_add_group,
+    "on_remove_groups": RemoveGroups._from_py_remove_groups,
+    "on_add_nodes_to_group": AddNodesToGroup._from_py_add_nodes_to_group,
+    "on_remove_nodes_from_group": RemoveNodesFromGroup._from_py_remove_nodes_from_group,
+    "on_add_edges_to_group": AddEdgesToGroup._from_py_add_edges_to_group,
+    "on_remove_edges_from_group": RemoveEdgesFromGroup._from_py_remove_edges_from_group,
+    "on_set_schema": SetSchema._from_py_set_schema,
+    "on_freeze_schema": FreezeSchema._from_py_freeze_schema,
+    "on_unfreeze_schema": UnfreezeSchema._from_py_unfreeze_schema,
+    "on_clear": Clear._from_py_clear,
+}
+
+#: The name of every observer hook a GraphRecord may call.
+_OBSERVER_HOOKS: Final[FrozenSet[str]] = frozenset(
+    "post_" + name.removeprefix("on_") for name in _CHANGE_HOOKS
+)
+
+#: The name of every lifecycle hook a GraphRecord may call.
+_LIFECYCLE_HOOKS: Final[FrozenSet[str]] = frozenset({"initialize", "finalize"})
+
+#: The payload attribute of every change a plugin hook may return.
+_CHANGE_PAYLOADS: Final[Dict[type, str]] = {
+    AddNodes: "_py_add_nodes",
+    AddNodesInGroup: "_py_add_nodes_in_group",
+    AddEdges: "_py_add_edges",
+    AddEdgesInGroup: "_py_add_edges_in_group",
+    RemoveNodes: "_py_remove_nodes",
+    RemoveEdges: "_py_remove_edges",
+    SetNodeAttributes: "_py_set_node_attributes",
+    ReplaceNodeAttributes: "_py_replace_node_attributes",
+    RemoveNodeAttributes: "_py_remove_node_attributes",
+    SetEdgeAttributes: "_py_set_edge_attributes",
+    ReplaceEdgeAttributes: "_py_replace_edge_attributes",
+    RemoveEdgeAttributes: "_py_remove_edge_attributes",
+    AddGroup: "_py_add_group",
+    RemoveGroups: "_py_remove_groups",
+    AddNodesToGroup: "_py_add_nodes_to_group",
+    RemoveNodesFromGroup: "_py_remove_nodes_from_group",
+    AddEdgesToGroup: "_py_add_edges_to_group",
+    RemoveEdgesFromGroup: "_py_remove_edges_from_group",
+    SetSchema: "_py_set_schema",
+    FreezeSchema: "_py_freeze_schema",
+    UnfreezeSchema: "_py_unfreeze_schema",
+    Clear: "_py_clear",
+}
+
+
+class _PluginBridge:
+    """Adapts a Plugin to the hooks a GraphRecord looks up on it.
+
+    A GraphRecord looks a hook up by name and skips it when the lookup fails, so the
+    bridge resolves a hook only when the wrapped plugin defines it. Resolving one
+    yields a closure that converts the arguments the GraphRecord passes into the
+    wrapper types the plugin is written against, and the changes the plugin returns
+    back into the payloads the GraphRecord applies.
+    """
+
+    _plugin: Plugin
+
+    def __init__(self, plugin: Plugin) -> None:
+        """Initializes a bridge around a plugin.
 
         Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
+            plugin (Plugin): The plugin to adapt.
         """
-        pass
+        self._plugin = plugin
 
-    def pre_freeze_schema(self, graphrecord: GraphRecord) -> None:
-        """Called before freezing the schema.
+    @staticmethod
+    def _record(py_record: PyGraphRecord) -> GraphRecord:
+        """Converts a py_record a GraphRecord passed to a hook.
 
         Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-        """
-        pass
-
-    def post_freeze_schema(self, graphrecord: GraphRecord) -> None:
-        """Called after freezing the schema.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-        """
-        pass
-
-    def pre_unfreeze_schema(self, graphrecord: GraphRecord) -> None:
-        """Called before unfreezing the schema.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-        """
-        pass
-
-    def post_unfreeze_schema(self, graphrecord: GraphRecord) -> None:
-        """Called after unfreezing the schema.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-        """
-        pass
-
-    def pre_add_node(
-        self, graphrecord: GraphRecord, context: PreAddNodeContext
-    ) -> PreAddNodeContext:
-        """Called before adding a node.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodeContext): The operation context.
+            py_record (PyGraphRecord): The py_record to convert.
 
         Returns:
-            PreAddNodeContext: The potentially modified context.
+            GraphRecord: The converted py_record.
         """
-        return context
+        from graphrecords.graphrecord import GraphRecord
 
-    def post_add_node(
-        self, graphrecord: GraphRecord, context: PostAddNodeContext
-    ) -> None:
-        """Called after adding a node.
+        return GraphRecord._from_py_graphrecord(py_record)
+
+    @staticmethod
+    def _change(returned: object) -> object:
+        """Converts one change a hook returned into what a GraphRecord applies.
 
         Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodeContext): The operation context.
-        """
-        pass
-
-    def pre_add_node_with_group(
-        self, graphrecord: GraphRecord, context: PreAddNodeWithGroupContext
-    ) -> PreAddNodeWithGroupContext:
-        """Called before adding a node with a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodeWithGroupContext): The operation context.
+            returned (object): The change the hook returned.
 
         Returns:
-            PreAddNodeWithGroupContext: The potentially modified context.
+            object: The payload of the change, or what the hook returned when that is
+                not a change.
         """
-        return context
+        payload = _CHANGE_PAYLOADS.get(type(returned))
 
-    def post_add_node_with_group(
-        self, graphrecord: GraphRecord, context: PostAddNodeWithGroupContext
-    ) -> None:
-        """Called after adding a node with a group.
+        if payload is None:
+            return returned
+
+        return getattr(returned, payload)
+
+    @staticmethod
+    def _changes(returned: object) -> object:
+        """Converts what a hook returned into what a GraphRecord applies.
 
         Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodeWithGroupContext): The operation context.
-        """
-        pass
-
-    def pre_add_node_with_groups(
-        self, graphrecord: GraphRecord, context: PreAddNodeWithGroupsContext
-    ) -> PreAddNodeWithGroupsContext:
-        """Called before adding a node with multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodeWithGroupsContext): The operation context.
+            returned (object): The value the hook returned.
 
         Returns:
-            PreAddNodeWithGroupsContext: The potentially modified context.
+            object: The payload of every change the hook returned.
         """
-        return context
+        if isinstance(returned, list):
+            return [_PluginBridge._change(element) for element in returned]
 
-    def post_add_node_with_groups(
-        self, graphrecord: GraphRecord, context: PostAddNodeWithGroupsContext
-    ) -> None:
-        """Called after adding a node with multiple groups.
+        return _PluginBridge._change(returned)
+
+    def _change_hook(
+        self, name: str, convert: Callable[..., object]
+    ) -> Callable[[PyGraphRecord, object], object]:
+        """Resolves a change hook of the plugin.
 
         Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodeWithGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_remove_node(
-        self, graphrecord: GraphRecord, context: PreRemoveNodeContext
-    ) -> PreRemoveNodeContext:
-        """Called before removing a node.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreRemoveNodeContext): The operation context.
+            name (str): The name of the hook.
+            convert (Callable[..., object]): The converter of the hook's payload.
 
         Returns:
-            PreRemoveNodeContext: The potentially modified context.
+            Callable[[PyGraphRecord, object], object]: The hook, converting its
+                arguments and what it returns.
         """
-        return context
+        hook = getattr(self._plugin, name)
 
-    def post_remove_node(
-        self, graphrecord: GraphRecord, context: PostRemoveNodeContext
-    ) -> None:
-        """Called after removing a node.
+        def call(py_record: PyGraphRecord, payload: object) -> object:
+            return self._changes(hook(self._record(py_record), convert(payload)))
+
+        return call
+
+    def _observer_hook(
+        self, name: str
+    ) -> Callable[[PyGraphRecord, PyGraphRecord], object]:
+        """Resolves an observer hook of the plugin.
 
         Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostRemoveNodeContext): The operation context.
-        """
-        pass
-
-    def pre_add_nodes(
-        self, graphrecord: GraphRecord, context: PreAddNodesContext
-    ) -> PreAddNodesContext:
-        """Called before adding multiple nodes.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodesContext): The operation context.
+            name (str): The name of the hook.
 
         Returns:
-            PreAddNodesContext: The potentially modified context.
+            Callable[[PyGraphRecord, PyGraphRecord], object]: The hook, converting its
+                arguments.
         """
-        return context
+        hook = getattr(self._plugin, name)
 
-    def post_add_nodes(
-        self, graphrecord: GraphRecord, context: PostAddNodesContext
-    ) -> None:
-        """Called after adding multiple nodes.
+        def call(py_previous: PyGraphRecord, py_candidate: PyGraphRecord) -> object:
+            return hook(self._record(py_previous), self._record(py_candidate))
+
+        return call
+
+    def _lifecycle_hook(self, name: str) -> Callable[[PyGraphRecord], object]:
+        """Resolves a lifecycle hook of the plugin.
 
         Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodesContext): The operation context.
-        """
-        pass
-
-    def pre_add_nodes_with_group(
-        self, graphrecord: GraphRecord, context: PreAddNodesWithGroupContext
-    ) -> PreAddNodesWithGroupContext:
-        """Called before adding multiple nodes with a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodesWithGroupContext): The operation context.
+            name (str): The name of the hook.
 
         Returns:
-            PreAddNodesWithGroupContext: The potentially modified context.
+            Callable[[PyGraphRecord], object]: The hook, converting its argument and
+                what it returns.
         """
-        return context
+        hook = getattr(self._plugin, name)
 
-    def post_add_nodes_with_group(
-        self, graphrecord: GraphRecord, context: PostAddNodesWithGroupContext
-    ) -> None:
-        """Called after adding multiple nodes with a group.
+        def call(py_record: PyGraphRecord) -> object:
+            return self._changes(hook(self._record(py_record)))
+
+        return call
+
+    def __getattr__(self, name: str) -> Callable[..., object]:
+        """Resolves a hook a GraphRecord looks up on the bridge.
 
         Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodesWithGroupContext): The operation context.
-        """
-        pass
-
-    def pre_add_nodes_with_groups(
-        self, graphrecord: GraphRecord, context: PreAddNodesWithGroupsContext
-    ) -> PreAddNodesWithGroupsContext:
-        """Called before adding multiple nodes with multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodesWithGroupsContext): The operation context.
+            name (str): The name of the hook.
 
         Returns:
-            PreAddNodesWithGroupsContext: The potentially modified context.
+            Callable[..., object]: The hook, converting its arguments.
+
+        Raises:
+            AttributeError: If the name is not a hook, or the plugin does not
+                define it.
         """
-        return context
+        convert = _CHANGE_HOOKS.get(name)
+        if convert is not None:
+            return self._change_hook(name, convert)
 
-    def post_add_nodes_with_groups(
-        self, graphrecord: GraphRecord, context: PostAddNodesWithGroupsContext
-    ) -> None:
-        """Called after adding multiple nodes with multiple groups.
+        if name in _OBSERVER_HOOKS:
+            return self._observer_hook(name)
 
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodesWithGroupsContext): The operation context.
-        """
-        pass
+        if name in _LIFECYCLE_HOOKS:
+            return self._lifecycle_hook(name)
 
-    def pre_add_nodes_dataframes(
-        self, graphrecord: GraphRecord, context: PreAddNodesDataframesContext
-    ) -> PreAddNodesDataframesContext:
-        """Called before adding nodes from dataframes.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodesDataframesContext): The operation context.
-
-        Returns:
-            PreAddNodesDataframesContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_nodes_dataframes(
-        self, graphrecord: GraphRecord, context: PostAddNodesDataframesContext
-    ) -> None:
-        """Called after adding nodes from dataframes.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodesDataframesContext): The operation context.
-        """
-        pass
-
-    def pre_add_nodes_dataframes_with_group(
-        self,
-        graphrecord: GraphRecord,
-        context: PreAddNodesDataframesWithGroupContext,
-    ) -> PreAddNodesDataframesWithGroupContext:
-        """Called before adding nodes from dataframes with a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodesDataframesWithGroupContext): The operation context.
-
-        Returns:
-            PreAddNodesDataframesWithGroupContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_nodes_dataframes_with_group(
-        self,
-        graphrecord: GraphRecord,
-        context: PostAddNodesDataframesWithGroupContext,
-    ) -> None:
-        """Called after adding nodes from dataframes with a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodesDataframesWithGroupContext): The operation context.
-        """
-        pass
-
-    def pre_add_nodes_dataframes_with_groups(
-        self,
-        graphrecord: GraphRecord,
-        context: PreAddNodesDataframesWithGroupsContext,
-    ) -> PreAddNodesDataframesWithGroupsContext:
-        """Called before adding nodes from dataframes with multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodesDataframesWithGroupsContext): The operation context.
-
-        Returns:
-            PreAddNodesDataframesWithGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_nodes_dataframes_with_groups(
-        self,
-        graphrecord: GraphRecord,
-        context: PostAddNodesDataframesWithGroupsContext,
-    ) -> None:
-        """Called after adding nodes from dataframes with multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodesDataframesWithGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_add_edge(
-        self, graphrecord: GraphRecord, context: PreAddEdgeContext
-    ) -> PreAddEdgeContext:
-        """Called before adding an edge.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgeContext): The operation context.
-
-        Returns:
-            PreAddEdgeContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edge(
-        self, graphrecord: GraphRecord, context: PostAddEdgeContext
-    ) -> None:
-        """Called after adding an edge.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgeContext): The operation context.
-        """
-        pass
-
-    def pre_add_edge_with_group(
-        self, graphrecord: GraphRecord, context: PreAddEdgeWithGroupContext
-    ) -> PreAddEdgeWithGroupContext:
-        """Called before adding an edge with a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgeWithGroupContext): The operation context.
-
-        Returns:
-            PreAddEdgeWithGroupContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edge_with_group(
-        self, graphrecord: GraphRecord, context: PostAddEdgeWithGroupContext
-    ) -> None:
-        """Called after adding an edge with a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgeWithGroupContext): The operation context.
-        """
-        pass
-
-    def pre_add_edge_with_groups(
-        self, graphrecord: GraphRecord, context: PreAddEdgeWithGroupsContext
-    ) -> PreAddEdgeWithGroupsContext:
-        """Called before adding an edge with multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgeWithGroupsContext): The operation context.
-
-        Returns:
-            PreAddEdgeWithGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edge_with_groups(
-        self, graphrecord: GraphRecord, context: PostAddEdgeWithGroupsContext
-    ) -> None:
-        """Called after adding an edge with multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgeWithGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_remove_edge(
-        self, graphrecord: GraphRecord, context: PreRemoveEdgeContext
-    ) -> PreRemoveEdgeContext:
-        """Called before removing an edge.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreRemoveEdgeContext): The operation context.
-
-        Returns:
-            PreRemoveEdgeContext: The potentially modified context.
-        """
-        return context
-
-    def post_remove_edge(
-        self, graphrecord: GraphRecord, context: PostRemoveEdgeContext
-    ) -> None:
-        """Called after removing an edge.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostRemoveEdgeContext): The operation context.
-        """
-        pass
-
-    def pre_add_edges(
-        self, graphrecord: GraphRecord, context: PreAddEdgesContext
-    ) -> PreAddEdgesContext:
-        """Called before adding multiple edges.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgesContext): The operation context.
-
-        Returns:
-            PreAddEdgesContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edges(
-        self, graphrecord: GraphRecord, context: PostAddEdgesContext
-    ) -> None:
-        """Called after adding multiple edges.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgesContext): The operation context.
-        """
-        pass
-
-    def pre_add_edges_with_group(
-        self, graphrecord: GraphRecord, context: PreAddEdgesWithGroupContext
-    ) -> PreAddEdgesWithGroupContext:
-        """Called before adding multiple edges with a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgesWithGroupContext): The operation context.
-
-        Returns:
-            PreAddEdgesWithGroupContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edges_with_group(
-        self, graphrecord: GraphRecord, context: PostAddEdgesWithGroupContext
-    ) -> None:
-        """Called after adding multiple edges with a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgesWithGroupContext): The operation context.
-        """
-        pass
-
-    def pre_add_edges_with_groups(
-        self, graphrecord: GraphRecord, context: PreAddEdgesWithGroupsContext
-    ) -> PreAddEdgesWithGroupsContext:
-        """Called before adding multiple edges with multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgesWithGroupsContext): The operation context.
-
-        Returns:
-            PreAddEdgesWithGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edges_with_groups(
-        self, graphrecord: GraphRecord, context: PostAddEdgesWithGroupsContext
-    ) -> None:
-        """Called after adding multiple edges with multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgesWithGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_add_edges_dataframes(
-        self, graphrecord: GraphRecord, context: PreAddEdgesDataframesContext
-    ) -> PreAddEdgesDataframesContext:
-        """Called before adding edges from dataframes.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgesDataframesContext): The operation context.
-
-        Returns:
-            PreAddEdgesDataframesContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edges_dataframes(
-        self, graphrecord: GraphRecord, context: PostAddEdgesDataframesContext
-    ) -> None:
-        """Called after adding edges from dataframes.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgesDataframesContext): The operation context.
-        """
-        pass
-
-    def pre_add_edges_dataframes_with_group(
-        self,
-        graphrecord: GraphRecord,
-        context: PreAddEdgesDataframesWithGroupContext,
-    ) -> PreAddEdgesDataframesWithGroupContext:
-        """Called before adding edges from dataframes with a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgesDataframesWithGroupContext): The operation context.
-
-        Returns:
-            PreAddEdgesDataframesWithGroupContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edges_dataframes_with_group(
-        self,
-        graphrecord: GraphRecord,
-        context: PostAddEdgesDataframesWithGroupContext,
-    ) -> None:
-        """Called after adding edges from dataframes with a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgesDataframesWithGroupContext): The operation context.
-        """
-        pass
-
-    def pre_add_edges_dataframes_with_groups(
-        self,
-        graphrecord: GraphRecord,
-        context: PreAddEdgesDataframesWithGroupsContext,
-    ) -> PreAddEdgesDataframesWithGroupsContext:
-        """Called before adding edges from dataframes with multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgesDataframesWithGroupsContext): The operation context.
-
-        Returns:
-            PreAddEdgesDataframesWithGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edges_dataframes_with_groups(
-        self,
-        graphrecord: GraphRecord,
-        context: PostAddEdgesDataframesWithGroupsContext,
-    ) -> None:
-        """Called after adding edges from dataframes with multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgesDataframesWithGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_add_group(
-        self, graphrecord: GraphRecord, context: PreAddGroupContext
-    ) -> PreAddGroupContext:
-        """Called before adding a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddGroupContext): The operation context.
-
-        Returns:
-            PreAddGroupContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_group(
-        self, graphrecord: GraphRecord, context: PostAddGroupContext
-    ) -> None:
-        """Called after adding a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddGroupContext): The operation context.
-        """
-        pass
-
-    def pre_remove_group(
-        self, graphrecord: GraphRecord, context: PreRemoveGroupContext
-    ) -> PreRemoveGroupContext:
-        """Called before removing a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreRemoveGroupContext): The operation context.
-
-        Returns:
-            PreRemoveGroupContext: The potentially modified context.
-        """
-        return context
-
-    def post_remove_group(
-        self, graphrecord: GraphRecord, context: PostRemoveGroupContext
-    ) -> None:
-        """Called after removing a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostRemoveGroupContext): The operation context.
-        """
-        pass
-
-    def pre_add_node_to_group(
-        self, graphrecord: GraphRecord, context: PreAddNodeToGroupContext
-    ) -> PreAddNodeToGroupContext:
-        """Called before adding a node to a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodeToGroupContext): The operation context.
-
-        Returns:
-            PreAddNodeToGroupContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_node_to_group(
-        self, graphrecord: GraphRecord, context: PostAddNodeToGroupContext
-    ) -> None:
-        """Called after adding a node to a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodeToGroupContext): The operation context.
-        """
-        pass
-
-    def pre_add_node_to_groups(
-        self, graphrecord: GraphRecord, context: PreAddNodeToGroupsContext
-    ) -> PreAddNodeToGroupsContext:
-        """Called before adding a node to multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodeToGroupsContext): The operation context.
-
-        Returns:
-            PreAddNodeToGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_node_to_groups(
-        self, graphrecord: GraphRecord, context: PostAddNodeToGroupsContext
-    ) -> None:
-        """Called after adding a node to multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodeToGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_add_nodes_to_groups(
-        self, graphrecord: GraphRecord, context: PreAddNodesToGroupsContext
-    ) -> PreAddNodesToGroupsContext:
-        """Called before adding multiple nodes to multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddNodesToGroupsContext): The operation context.
-
-        Returns:
-            PreAddNodesToGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_nodes_to_groups(
-        self, graphrecord: GraphRecord, context: PostAddNodesToGroupsContext
-    ) -> None:
-        """Called after adding multiple nodes to multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddNodesToGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_add_edge_to_group(
-        self, graphrecord: GraphRecord, context: PreAddEdgeToGroupContext
-    ) -> PreAddEdgeToGroupContext:
-        """Called before adding an edge to a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgeToGroupContext): The operation context.
-
-        Returns:
-            PreAddEdgeToGroupContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edge_to_group(
-        self, graphrecord: GraphRecord, context: PostAddEdgeToGroupContext
-    ) -> None:
-        """Called after adding an edge to a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgeToGroupContext): The operation context.
-        """
-        pass
-
-    def pre_add_edge_to_groups(
-        self, graphrecord: GraphRecord, context: PreAddEdgeToGroupsContext
-    ) -> PreAddEdgeToGroupsContext:
-        """Called before adding an edge to multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgeToGroupsContext): The operation context.
-
-        Returns:
-            PreAddEdgeToGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edge_to_groups(
-        self, graphrecord: GraphRecord, context: PostAddEdgeToGroupsContext
-    ) -> None:
-        """Called after adding an edge to multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgeToGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_add_edges_to_groups(
-        self, graphrecord: GraphRecord, context: PreAddEdgesToGroupsContext
-    ) -> PreAddEdgesToGroupsContext:
-        """Called before adding multiple edges to multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreAddEdgesToGroupsContext): The operation context.
-
-        Returns:
-            PreAddEdgesToGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_add_edges_to_groups(
-        self, graphrecord: GraphRecord, context: PostAddEdgesToGroupsContext
-    ) -> None:
-        """Called after adding multiple edges to multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostAddEdgesToGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_remove_node_from_group(
-        self, graphrecord: GraphRecord, context: PreRemoveNodeFromGroupContext
-    ) -> PreRemoveNodeFromGroupContext:
-        """Called before removing a node from a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreRemoveNodeFromGroupContext): The operation context.
-
-        Returns:
-            PreRemoveNodeFromGroupContext: The potentially modified context.
-        """
-        return context
-
-    def post_remove_node_from_group(
-        self, graphrecord: GraphRecord, context: PostRemoveNodeFromGroupContext
-    ) -> None:
-        """Called after removing a node from a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostRemoveNodeFromGroupContext): The operation context.
-        """
-        pass
-
-    def pre_remove_node_from_groups(
-        self, graphrecord: GraphRecord, context: PreRemoveNodeFromGroupsContext
-    ) -> PreRemoveNodeFromGroupsContext:
-        """Called before removing a node from multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreRemoveNodeFromGroupsContext): The operation context.
-
-        Returns:
-            PreRemoveNodeFromGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_remove_node_from_groups(
-        self, graphrecord: GraphRecord, context: PostRemoveNodeFromGroupsContext
-    ) -> None:
-        """Called after removing a node from multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostRemoveNodeFromGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_remove_nodes_from_groups(
-        self, graphrecord: GraphRecord, context: PreRemoveNodesFromGroupsContext
-    ) -> PreRemoveNodesFromGroupsContext:
-        """Called before removing multiple nodes from multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreRemoveNodesFromGroupsContext): The operation context.
-
-        Returns:
-            PreRemoveNodesFromGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_remove_nodes_from_groups(
-        self, graphrecord: GraphRecord, context: PostRemoveNodesFromGroupsContext
-    ) -> None:
-        """Called after removing multiple nodes from multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostRemoveNodesFromGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_remove_edge_from_group(
-        self, graphrecord: GraphRecord, context: PreRemoveEdgeFromGroupContext
-    ) -> PreRemoveEdgeFromGroupContext:
-        """Called before removing an edge from a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreRemoveEdgeFromGroupContext): The operation context.
-
-        Returns:
-            PreRemoveEdgeFromGroupContext: The potentially modified context.
-        """
-        return context
-
-    def post_remove_edge_from_group(
-        self, graphrecord: GraphRecord, context: PostRemoveEdgeFromGroupContext
-    ) -> None:
-        """Called after removing an edge from a group.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostRemoveEdgeFromGroupContext): The operation context.
-        """
-        pass
-
-    def pre_remove_edge_from_groups(
-        self, graphrecord: GraphRecord, context: PreRemoveEdgeFromGroupsContext
-    ) -> PreRemoveEdgeFromGroupsContext:
-        """Called before removing an edge from multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreRemoveEdgeFromGroupsContext): The operation context.
-
-        Returns:
-            PreRemoveEdgeFromGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_remove_edge_from_groups(
-        self, graphrecord: GraphRecord, context: PostRemoveEdgeFromGroupsContext
-    ) -> None:
-        """Called after removing an edge from multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostRemoveEdgeFromGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_remove_edges_from_groups(
-        self, graphrecord: GraphRecord, context: PreRemoveEdgesFromGroupsContext
-    ) -> PreRemoveEdgesFromGroupsContext:
-        """Called before removing multiple edges from multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PreRemoveEdgesFromGroupsContext): The operation context.
-
-        Returns:
-            PreRemoveEdgesFromGroupsContext: The potentially modified context.
-        """
-        return context
-
-    def post_remove_edges_from_groups(
-        self, graphrecord: GraphRecord, context: PostRemoveEdgesFromGroupsContext
-    ) -> None:
-        """Called after removing multiple edges from multiple groups.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-            context (PostRemoveEdgesFromGroupsContext): The operation context.
-        """
-        pass
-
-    def pre_clear(self, graphrecord: GraphRecord) -> None:
-        """Called before clearing the graphrecord.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-        """
-        pass
-
-    def post_clear(self, graphrecord: GraphRecord) -> None:
-        """Called after clearing the graphrecord.
-
-        Args:
-            graphrecord (GraphRecord): The GraphRecord instance.
-        """
-        pass
+        raise AttributeError(name)

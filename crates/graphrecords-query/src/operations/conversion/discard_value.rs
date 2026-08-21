@@ -1,35 +1,20 @@
 use crate::{
-    Explain, IndexDomain, Indexed, Operand, QueryResult, Unit, ValueDomain,
+    Explain, IndexDomain, Indexed, QueryResult, Unit, ValueDomain,
     element::{Pipeline, Preserving},
-    execution::EvaluationCache,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     registry::operation_manifest,
     traits::DiscardValue,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "DiscardValue")]
-#[plan(optimizer_hints(
-    commutes_with_filter,
-    allows_limit_pushdown,
-    empty = if_any
-))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct DiscardValueOperation;
-
-impl Prepare for DiscardValueOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<I: IndexDomain, V: ValueDomain> ElementKernel<Indexed<I, V>> for DiscardValueOperation {
     type Emission = Preserving;
@@ -45,11 +30,11 @@ impl<I: IndexDomain, V: ValueDomain> ElementKernel<Indexed<I, V>> for DiscardVal
     }
 }
 
-impl<O: Apply<DiscardValueOperation>> DiscardValue for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<DiscardValueOperation>> DiscardValue for E {
+    type Output = E::Output;
 
-    fn discard_value(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), DiscardValueOperation))
+    fn discard_value(&self) -> Self::Output {
+        self.build(DiscardValueOperation)
     }
 }
 

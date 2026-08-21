@@ -5,16 +5,16 @@ use super::{
 #[cfg(feature = "dynamic")]
 use crate::dynamic::register_dyn_builtins;
 use crate::{
-    Arity, Bare, ElementShape, Indexed, Mask, Multiple, Operand, Ordered, Unordered,
+    Arity, Bare, ElementShape, Expression, Indexed, Mask, Multiple, Ordered, Unordered,
     element::{ElementTransition, Preserving},
-    operands::{BoolMaskOperand, OperandHandle},
+    expressions::{BoolMaskExpression, ExpressionHandle},
     operations::{
         Apply, DiscardIndexOperation, DiscardValueOperation, ElementKernel, NotOperation,
         OperationContext, TakeOperation,
     },
 };
 use graphrecords_core::graphrecord::{EdgeIndex, NodeIndex};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PhaseLabel)]
 pub enum BuiltinPhase {
@@ -22,14 +22,14 @@ pub enum BuiltinPhase {
     Simplify,
     Reorder,
     Pushdown,
-    Cse,
+    CommonSubexpressionElimination,
     Limit,
     Graph,
 }
 
 pub struct EliminateDoubleNegation;
 
-fn eliminate_double_negation<O: Apply<NotOperation, Output = O>>() -> impl Rule<O> {
+fn eliminate_double_negation<E: Apply<NotOperation, Output = E>>() -> impl Rule<E> {
     matching::<OperationContext<_, NotOperation>, _>((matching::<
         OperationContext<_, NotOperation>,
         _,
@@ -39,45 +39,54 @@ fn eliminate_double_negation<O: Apply<NotOperation, Output = O>>() -> impl Rule<
 
 pub struct PushDownTake;
 
-fn push_down_take<S, C, P>() -> impl Rule<OperandHandle<P::OutShape, C>>
+fn push_down_take<S, C, P>() -> impl Rule<ExpressionHandle<P::OutShape, C>>
 where
     S: ElementShape + ElementTransition<P::OutShape, Preserving>,
     C: Arity,
     P: ElementKernel<S, Emission = Preserving>
-        + for<'a> OperationInputs<Inputs<'a, OperandHandle<S, C>> = (&'a OperandHandle<S, C>,)>,
-    OperandHandle<S, C>: Apply<TakeOperation, Output = OperandHandle<S, C>>,
-    OperandHandle<P::OutShape, C>: Apply<TakeOperation, Output = OperandHandle<P::OutShape, C>>,
+        + for<'a> OperationInputs<Inputs<'a, ExpressionHandle<S, C>> = (&'a ExpressionHandle<S, C>,)>,
+    ExpressionHandle<S, C>: Apply<TakeOperation, Output = ExpressionHandle<S, C>>,
+    ExpressionHandle<P::OutShape, C>:
+        Apply<TakeOperation, Output = ExpressionHandle<P::OutShape, C>>,
 {
     rule(
-        |outer: &OperationContext<OperandHandle<P::OutShape, C>, TakeOperation>,
+        |outer: &OperationContext<ExpressionHandle<P::OutShape, C>, TakeOperation>,
          _|
-         -> Option<OperandHandle<P::OutShape, C>> {
-            let (operand,) = MatchInputs::inputs(outer);
-            let inner = operand
+         -> Option<ExpressionHandle<P::OutShape, C>> {
+            let (expression,) = MatchInputs::inputs(outer);
+            let inner = expression
                 .as_plan_node()
-                .downcast::<OperationContext<OperandHandle<S, C>, P>>()?;
+                .downcast::<OperationContext<ExpressionHandle<S, C>, P>>()?;
 
             if !inner.operation().allows_limit_pushdown() {
                 return None;
             }
 
             let (input,) = MatchInputs::inputs(inner);
-            let taken: OperandHandle<S, C> = Operand::new(OperationContext::new(
+            let taken: ExpressionHandle<S, C> = Expression::new(OperationContext::new(
                 input.clone(),
                 outer.operation().clone(),
             ));
 
-            let pushed =
-                OperationContext::<OperandHandle<S, C>, P>::new(taken, inner.operation().clone());
+            let pushed = OperationContext::<ExpressionHandle<S, C>, P>::new(
+                taken,
+                inner.operation().clone(),
+            );
 
-            Some(Operand::new(pushed))
+            Some(Expression::new(pushed))
         },
     )
 }
 
 impl Optimizer {
     #[must_use]
-    pub fn builtin() -> Self {
+    pub fn builtin() -> &'static Arc<Self> {
+        static BUILTIN: OnceLock<Arc<Optimizer>> = OnceLock::new();
+
+        BUILTIN.get_or_init(|| Arc::new(Self::build_builtin()))
+    }
+
+    fn build_builtin() -> Self {
         let mut builder = Self::builder();
 
         register_builtins(&mut builder);
@@ -85,22 +94,16 @@ impl Optimizer {
         #[cfg(feature = "dynamic")]
         register_dyn_builtins(&mut builder);
 
-        #[allow(clippy::missing_panics_doc)]
         builder
             .build()
             .expect("Builtin phases and rules must form a valid optimizer")
     }
-
-    #[must_use]
-    pub fn shared_builtin() -> &'static Self {
-        static BUILTIN: OnceLock<Optimizer> = OnceLock::new();
-
-        BUILTIN.get_or_init(Self::builtin)
-    }
 }
 
 pub fn register_builtins(builder: &mut OptimizerBuilder) {
-    use BuiltinPhase::{Cse, Graph, Limit, Pushdown, Reorder, Simplify, Source};
+    use BuiltinPhase::{
+        CommonSubexpressionElimination, Graph, Limit, Pushdown, Reorder, Simplify, Source,
+    };
 
     builder
         .add_phase(Source)
@@ -122,7 +125,7 @@ pub fn register_builtins(builder: &mut OptimizerBuilder) {
         .fixpoint()
         .after(Reorder);
     builder
-        .add_phase(Cse)
+        .add_phase(CommonSubexpressionElimination)
         .direction(Direction::Manual)
         .once()
         .after(Pushdown);
@@ -130,7 +133,7 @@ pub fn register_builtins(builder: &mut OptimizerBuilder) {
         .add_phase(Limit)
         .direction(Direction::TopDown)
         .fixpoint()
-        .after(Cse);
+        .after(CommonSubexpressionElimination);
     builder
         .add_phase(Graph)
         .direction(Direction::BottomUp)
@@ -140,28 +143,28 @@ pub fn register_builtins(builder: &mut OptimizerBuilder) {
     builder
         .add_rule(
             Simplify,
-            eliminate_double_negation::<BoolMaskOperand<NodeIndex, Unordered>>(),
+            eliminate_double_negation::<BoolMaskExpression<NodeIndex, Unordered>>(),
         )
         .label::<EliminateDoubleNegation>();
 
     builder
         .add_rule(
             Simplify,
-            eliminate_double_negation::<BoolMaskOperand<NodeIndex, Ordered>>(),
+            eliminate_double_negation::<BoolMaskExpression<NodeIndex, Ordered>>(),
         )
         .label::<EliminateDoubleNegation>();
 
     builder
         .add_rule(
             Simplify,
-            eliminate_double_negation::<BoolMaskOperand<EdgeIndex, Unordered>>(),
+            eliminate_double_negation::<BoolMaskExpression<EdgeIndex, Unordered>>(),
         )
         .label::<EliminateDoubleNegation>();
 
     builder
         .add_rule(
             Simplify,
-            eliminate_double_negation::<BoolMaskOperand<EdgeIndex, Ordered>>(),
+            eliminate_double_negation::<BoolMaskExpression<EdgeIndex, Ordered>>(),
         )
         .label::<EliminateDoubleNegation>();
 

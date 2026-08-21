@@ -1,36 +1,21 @@
 use crate::{
-    Arity, Bare, ElementShape, Explain, IndexDomain, Indexed, Mask, Not, Operand, QueryResult,
+    Arity, Bare, ElementShape, Explain, IndexDomain, Indexed, Mask, Not, QueryResult, Series,
     element::{Pipeline, Preserving},
-    execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    expressions::ExpressionHandle,
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
 };
 use graphrecords_core::GraphRecord;
 use std::ops::Not as BitNot;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "Not")]
-#[plan(optimizer_hints(
-    commutes_with_filter,
-    allows_limit_pushdown,
-    empty = if_any
-))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct NotOperation;
-
-impl Prepare for NotOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<I: IndexDomain> ElementKernel<Indexed<I, Mask>> for NotOperation {
     type Emission = Preserving;
@@ -74,21 +59,32 @@ impl ElementKernel<Bare<Mask>> for NotOperation {
     }
 }
 
-impl<O: Apply<NotOperation>> Not for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<NotOperation>> Not for E {
+    type Output = E::Output;
 
-    fn not(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), NotOperation))
+    fn not(&self) -> Self::Output {
+        self.build(NotOperation)
     }
 }
 
-impl<S, C> BitNot for OperandHandle<S, C>
+impl<S, C> BitNot for ExpressionHandle<S, C>
 where
     S: ElementShape,
     C: Arity,
     Self: Not,
 {
-    type Output = <Self as Not>::ReturnOperand;
+    type Output = <Self as Not>::Output;
+
+    fn not(self) -> Self::Output {
+        <Self as Not>::not(&self)
+    }
+}
+
+impl<E> BitNot for Series<E>
+where
+    Self: Not,
+{
+    type Output = <Self as Not>::Output;
 
     fn not(self) -> Self::Output {
         <Self as Not>::not(&self)

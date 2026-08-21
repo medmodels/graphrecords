@@ -1,36 +1,21 @@
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Mask, QueryResult,
     capabilities::{PayloadKind, ValueKindTest},
     element::{Pipeline, Preserving},
-    execution::EvaluationCache,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     registry::operation_manifest,
     traits::IsInt,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "IsInt")]
-#[plan(optimizer_hints(
-    commutes_with_filter,
-    allows_limit_pushdown,
-    empty = if_any
-))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct IsIntOperation;
-
-impl Prepare for IsIntOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<I: IndexDomain, V: ValueKindTest> ElementKernel<Indexed<I, V>> for IsIntOperation {
     type Emission = Preserving;
@@ -60,11 +45,11 @@ impl<V: ValueKindTest + BareValueDomain> ElementKernel<Bare<V>> for IsIntOperati
     }
 }
 
-impl<O: Apply<IsIntOperation>> IsInt for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<IsIntOperation>> IsInt for E {
+    type Output = E::Output;
 
-    fn is_int(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), IsIntOperation))
+    fn is_int(&self) -> Self::Output {
+        self.build(IsIntOperation)
     }
 }
 

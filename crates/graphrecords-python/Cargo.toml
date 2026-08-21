@@ -8,23 +8,17 @@ license = { workspace = true }
 readme = "README.md"
 
 [dependencies]
-graphrecords-core = { workspace = true, features = [
-    "serde",
-    "plugins",
-    "connectors",
-] }
+graphrecords-core = { workspace = true, features = ["arrow", "io", "plugins", "polars", "serde"] }
 graphrecords-utils = { workspace = true }
 graphrecords-query = { workspace = true, features = ["dynamic"] }
 graphrecords-overview = { workspace = true }
 
+arrow = { workspace = true, features = ["ffi"] }
 polars = { workspace = true }
 chrono = { workspace = true }
-serde = { workspace = true }
-rayon = { workspace = true }
 pyo3 = { workspace = true }
 bincode = { workspace = true }
 parking_lot = { workspace = true }
-typetag = { workspace = true }
 
 pyo3-polars = "0.26.0"
 rustc-hash = "2.1.1"

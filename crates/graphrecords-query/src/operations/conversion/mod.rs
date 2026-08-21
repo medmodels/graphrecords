@@ -2,7 +2,7 @@ mod cast;
 mod discard_index;
 mod discard_value;
 mod enumerate;
-mod expand_to;
+mod inherit;
 mod transition;
 
 use crate::registry::OperationManifest;
@@ -10,7 +10,7 @@ pub use cast::CastOperation;
 pub use discard_index::DiscardIndexOperation;
 pub use discard_value::DiscardValueOperation;
 pub use enumerate::EnumerateOperation;
-pub use expand_to::ExpandToOperation;
+pub use inherit::InheritOperation;
 pub use transition::TransitionOperation;
 
 pub(super) fn operation_manifests() -> Vec<OperationManifest> {
@@ -24,6 +24,17 @@ pub(super) fn operation_manifests() -> Vec<OperationManifest> {
         discard_index::operation_manifest(),
         discard_value::operation_manifest(),
         enumerate::operation_manifest(),
-        expand_to::operation_manifest(),
+        inherit::operation_manifest(),
+        transition::attribute_name::operation_manifest(),
+        transition::attribute_name_index::operation_manifest(),
+        transition::bool_index::operation_manifest(),
+        transition::failure_kind_index::operation_manifest(),
+        transition::failure_kind_value::operation_manifest(),
+        transition::group_index::operation_manifest(),
+        transition::mask::operation_manifest(),
+        transition::node_index::operation_manifest(),
+        transition::positional_index::operation_manifest(),
+        transition::scalar::operation_manifest(),
+        transition::value_index::operation_manifest(),
     ]
 }

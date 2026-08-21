@@ -1,6 +1,7 @@
 use crate::{
     BareValueDomain, IndexDomain, QueryResult, ReturnValueDomain, Unit, ValueDomain, element::Arity,
 };
+use graphrecords_core::GraphRecord;
 use std::marker::PhantomData;
 
 pub trait ElementShape: 'static {
@@ -12,43 +13,58 @@ pub trait ElementShape: 'static {
 pub trait ReturnShape: ElementShape {
     type ReturnElement<'a>: 'a;
 
-    fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_>;
+    fn into_return_element<'a>(
+        graphrecord: &'a GraphRecord,
+        element: Self::Element<'a>,
+    ) -> Self::ReturnElement<'a>;
 }
 
-pub struct Indexed<K: IndexDomain, V: ValueDomain>(PhantomData<(K, V)>);
+pub struct Indexed<I: IndexDomain, V: ValueDomain>(PhantomData<(I, V)>);
 pub struct Bare<V: BareValueDomain>(PhantomData<V>);
 
-impl<K: IndexDomain, V: ValueDomain> ElementShape for Indexed<K, V> {
-    type Element<'a> = (K::Index<'a>, QueryResult<V::Value<'a>>);
+impl<I: IndexDomain, V: ValueDomain> ElementShape for Indexed<I, V> {
+    type Element<'a> = (I::Address, QueryResult<V::Value<'a>>);
     type ValueDomain = V;
 }
+
 impl<V: BareValueDomain> ElementShape for Bare<V> {
     type Element<'a> = QueryResult<V::Value<'a>>;
     type ValueDomain = V;
 }
 
-impl<K: IndexDomain, V: ReturnValueDomain> ReturnShape for Indexed<K, V> {
-    type ReturnElement<'a> = (K::Index<'a>, QueryResult<V::Value<'a>>);
+impl<I: IndexDomain, V: ReturnValueDomain> ReturnShape for Indexed<I, V> {
+    type ReturnElement<'a> = (I::Index<'a>, QueryResult<V::Value<'a>>);
 
-    fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_> {
-        element
+    fn into_return_element<'a>(
+        graphrecord: &'a GraphRecord,
+        element: Self::Element<'a>,
+    ) -> Self::ReturnElement<'a> {
+        let (address, value) = element;
+
+        (I::index(graphrecord, &address), value)
     }
 }
 
-impl<K: IndexDomain> ReturnShape for Indexed<K, Unit> {
-    type ReturnElement<'a> = QueryResult<K::Owned>;
+impl<I: IndexDomain> ReturnShape for Indexed<I, Unit> {
+    type ReturnElement<'a> = QueryResult<I::Owned>;
 
-    fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_> {
-        let (index, value) = element;
+    fn into_return_element<'a>(
+        graphrecord: &'a GraphRecord,
+        element: Self::Element<'a>,
+    ) -> Self::ReturnElement<'a> {
+        let (address, value) = element;
 
-        value.map(|()| K::to_owned(&index))
+        value.map(|()| I::own_index(&I::index(graphrecord, &address)))
     }
 }
 
 impl<V: BareValueDomain + ReturnValueDomain> ReturnShape for Bare<V> {
     type ReturnElement<'a> = QueryResult<V::Value<'a>>;
 
-    fn into_return_element(element: Self::Element<'_>) -> Self::ReturnElement<'_> {
+    fn into_return_element<'a>(
+        _graphrecord: &'a GraphRecord,
+        element: Self::Element<'a>,
+    ) -> Self::ReturnElement<'a> {
         element
     }
 }

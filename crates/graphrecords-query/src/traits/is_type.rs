@@ -1,41 +1,41 @@
 pub trait IsBool {
-    type ReturnOperand;
+    type Output;
 
-    fn is_bool(&self) -> Self::ReturnOperand;
+    fn is_bool(&self) -> Self::Output;
 }
 
 pub trait IsDateTime {
-    type ReturnOperand;
+    type Output;
 
-    fn is_datetime(&self) -> Self::ReturnOperand;
+    fn is_datetime(&self) -> Self::Output;
 }
 
 pub trait IsDuration {
-    type ReturnOperand;
+    type Output;
 
-    fn is_duration(&self) -> Self::ReturnOperand;
+    fn is_duration(&self) -> Self::Output;
 }
 
 pub trait IsFloat {
-    type ReturnOperand;
+    type Output;
 
-    fn is_float(&self) -> Self::ReturnOperand;
+    fn is_float(&self) -> Self::Output;
 }
 
 pub trait IsInt {
-    type ReturnOperand;
+    type Output;
 
-    fn is_int(&self) -> Self::ReturnOperand;
+    fn is_int(&self) -> Self::Output;
 }
 
 pub trait IsNull {
-    type ReturnOperand;
+    type Output;
 
-    fn is_null(&self) -> Self::ReturnOperand;
+    fn is_null(&self) -> Self::Output;
 }
 
 pub trait IsString {
-    type ReturnOperand;
+    type Output;
 
-    fn is_string(&self) -> Self::ReturnOperand;
+    fn is_string(&self) -> Self::Output;
 }

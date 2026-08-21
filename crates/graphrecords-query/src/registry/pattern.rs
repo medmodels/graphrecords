@@ -2,8 +2,8 @@ use super::{
     capability::{CapabilityIdentifier, CapabilityRegistry},
     descriptor::{
         ArgumentDescriptor, ArgumentMissingPolicy, ArgumentValueSource, ArityDescriptor,
-        DomainDescriptor, IndexDescriptor, LaneShapeDescriptor, OperandDescriptor, OrderDescriptor,
-        RetentionDescriptor, ValueArgumentDescriptor, ValueDescriptor, ValueRole,
+        DomainDescriptor, ExpressionDescriptor, IndexDescriptor, LaneShapeDescriptor,
+        OrderDescriptor, RetentionDescriptor, ValueArgumentDescriptor, ValueDescriptor, ValueRole,
     },
 };
 use graphrecords_utils::aliases::GrHashMap;
@@ -73,7 +73,7 @@ pub enum ArityPattern {
 }
 
 #[derive(Clone, Debug)]
-pub enum StatePattern {
+pub enum ExpressionPattern {
     Lane {
         shape: ShapePattern,
         arity: ArityPattern,
@@ -108,7 +108,7 @@ pub enum ArgumentPattern {
     Set(ValuePattern),
     Field(DomainDescriptor),
     Selector(DomainDescriptor),
-    Operand(StatePattern),
+    Expression(ExpressionPattern),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -118,7 +118,7 @@ pub struct Bindings {
     shapes: GrHashMap<VariableIdentifier, LaneShapeDescriptor>,
     orders: GrHashMap<VariableIdentifier, OrderDescriptor>,
     arities: GrHashMap<VariableIdentifier, ArityDescriptor>,
-    operands: GrHashMap<VariableIdentifier, OperandDescriptor>,
+    expressions: GrHashMap<VariableIdentifier, ExpressionDescriptor>,
     argument_retention: RetentionDescriptor,
 }
 
@@ -193,18 +193,22 @@ impl Bindings {
         self.arities.get(&variable).copied()
     }
 
-    fn bind_operand(&mut self, variable: VariableIdentifier, operand: &OperandDescriptor) -> bool {
-        if let Some(bound) = self.operands.get(&variable) {
-            return bound == operand;
+    fn bind_expression(
+        &mut self,
+        variable: VariableIdentifier,
+        expression: &ExpressionDescriptor,
+    ) -> bool {
+        if let Some(bound) = self.expressions.get(&variable) {
+            return bound == expression;
         }
 
-        self.operands.insert(variable, operand.clone());
+        self.expressions.insert(variable, expression.clone());
         true
     }
 
     #[must_use]
-    pub fn operand(&self, variable: VariableIdentifier) -> Option<&OperandDescriptor> {
-        self.operands.get(&variable)
+    pub fn expression(&self, variable: VariableIdentifier) -> Option<&ExpressionDescriptor> {
+        self.expressions.get(&variable)
     }
 
     fn compose_retention(&mut self, retention: RetentionDescriptor) {
@@ -245,7 +249,7 @@ impl IndexPattern {
                     parent.matches(parent_descriptor, capabilities, bindings)
                         && child.matches(child_descriptor, capabilities, bindings)
                 }
-                IndexDescriptor::Domain(_) | IndexDescriptor::ExpandedSource { .. } => false,
+                IndexDescriptor::Domain(_) | IndexDescriptor::ExpandedParent { .. } => false,
             },
             Self::Variable(variable, bound) => {
                 if !bound.matches(index, capabilities, bindings) {
@@ -363,33 +367,33 @@ impl ArityPattern {
     }
 }
 
-impl StatePattern {
+impl ExpressionPattern {
     #[must_use]
     pub fn matches(
         &self,
-        operand: &OperandDescriptor,
+        expression: &ExpressionDescriptor,
         capabilities: &CapabilityRegistry,
     ) -> Option<Bindings> {
         let mut bindings = Bindings::default();
-        self.matches_into(operand, capabilities, &mut bindings)
+        self.matches_into(expression, capabilities, &mut bindings)
             .then_some(bindings)
     }
 
     fn matches_into(
         &self,
-        operand: &OperandDescriptor,
+        expression: &ExpressionDescriptor,
         capabilities: &CapabilityRegistry,
         bindings: &mut Bindings,
     ) -> bool {
         if let Self::Variable(variable, bound) = self {
-            return bound.matches_into(operand, capabilities, bindings)
-                && bindings.bind_operand(*variable, operand);
+            return bound.matches_into(expression, capabilities, bindings)
+                && bindings.bind_expression(*variable, expression);
         }
 
-        match (self, operand) {
+        match (self, expression) {
             (
                 Self::Lane { shape, arity },
-                OperandDescriptor::Lane {
+                ExpressionDescriptor::Lane {
                     shape: shape_descriptor,
                     arity: arity_descriptor,
                 },
@@ -403,7 +407,7 @@ impl StatePattern {
                     key,
                     payload,
                 },
-                OperandDescriptor::Group {
+                ExpressionDescriptor::Group {
                     member: member_descriptor,
                     key: key_descriptor,
                     payload: payload_descriptor,
@@ -438,7 +442,7 @@ impl AlignmentDescriptor {
             }
             ArgumentMissingPolicy::Replace(replacement) => {
                 self.admits_lookup(argument.source(), capabilities, bindings)
-                    && self.admits_source(replacement, capabilities, bindings)
+                    && self.admits(replacement, capabilities, bindings)
             }
         }
     }
@@ -449,10 +453,10 @@ impl AlignmentDescriptor {
         capabilities: &CapabilityRegistry,
         bindings: &mut Bindings,
     ) -> bool {
-        let ArgumentValueSource::Operand(operand) = source else {
+        let ArgumentValueSource::Expression(expression) = source else {
             return true;
         };
-        let OperandDescriptor::Lane { shape, arity } = operand else {
+        let ExpressionDescriptor::Lane { shape, arity } = expression else {
             return false;
         };
 
@@ -477,7 +481,8 @@ impl AlignmentDescriptor {
         capabilities: &CapabilityRegistry,
         bindings: &mut Bindings,
     ) -> bool {
-        let ArgumentValueSource::Operand(OperandDescriptor::Lane { shape, arity }) = source else {
+        let ArgumentValueSource::Expression(ExpressionDescriptor::Lane { shape, arity }) = source
+        else {
             return false;
         };
 
@@ -487,7 +492,7 @@ impl AlignmentDescriptor {
                 LaneShapeDescriptor::Indexed { index, .. },
                 ArityDescriptor::Multiple { .. },
             ) => pattern.matches(index, capabilities, bindings),
-            (Self::Unaligned, LaneShapeDescriptor::Bare { .. }, ArityDescriptor::Single) => true,
+            (_, LaneShapeDescriptor::Bare { .. }, ArityDescriptor::Single) => true,
             _ => false,
         }
     }
@@ -548,8 +553,8 @@ impl ArgumentPattern {
             (Self::Selector(pattern), ArgumentDescriptor::Selector(selector)) => {
                 pattern == selector
             }
-            (Self::Operand(pattern), ArgumentDescriptor::Operand(operand)) => {
-                pattern.matches_into(operand, capabilities, bindings)
+            (Self::Expression(pattern), ArgumentDescriptor::Expression(expression)) => {
+                pattern.matches_into(expression, capabilities, bindings)
             }
             _ => false,
         }
@@ -558,8 +563,8 @@ impl ArgumentPattern {
     const fn admits_set_source(source: &ArgumentValueSource) -> bool {
         match source {
             ArgumentValueSource::Literal(_) => true,
-            ArgumentValueSource::Operand(operand) => {
-                matches!(operand, OperandDescriptor::Lane { .. })
+            ArgumentValueSource::Expression(expression) => {
+                matches!(expression, ExpressionDescriptor::Lane { .. })
             }
         }
     }
@@ -578,6 +583,6 @@ impl ArgumentPattern {
             return true;
         };
 
-        pattern.matches(replacement.value(), capabilities, bindings)
+        Self::matches_value(pattern, replacement, capabilities, bindings)
     }
 }

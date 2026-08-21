@@ -1,5 +1,5 @@
 use crate::Diagnostic;
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::Value;
 use std::{
     error::Error,
     fmt::{self, Display, Formatter},
@@ -7,17 +7,17 @@ use std::{
 
 #[derive(Debug)]
 pub struct DivisionByZero {
-    dividend: GraphRecordValue,
+    dividend: Value,
 }
 
 impl DivisionByZero {
     #[must_use]
-    pub const fn new(dividend: GraphRecordValue) -> Self {
+    pub const fn new(dividend: Value) -> Self {
         Self { dividend }
     }
 
     #[must_use]
-    pub const fn dividend(&self) -> &GraphRecordValue {
+    pub const fn dividend(&self) -> &Value {
         &self.dividend
     }
 }

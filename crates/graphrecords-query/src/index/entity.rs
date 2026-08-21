@@ -1,92 +1,173 @@
 use crate::{
-    Failure, QueryResult,
-    index::EntityDomain,
+    index::EntityIndexDomain,
     optimizer::{
         EdgeAttributeCardinality, EdgeGroupSize, NodeAttributeCardinality, NodeGroupSize, Stats,
     },
 };
 use graphrecords_core::{
     GraphRecord,
-    errors::GraphRecordError,
-    graphrecord::{AttributeMap, EdgeIndex, GraphRecordAttribute, Group, NodeIndex},
+    graphrecord::{
+        AttributeName, AttributeNameView, EdgeAttributeAddress, EdgeIndex, GroupAddress,
+        GroupIndex, NodeAttributeAddress, NodeIndex, StateView, ValueView,
+    },
 };
-use graphrecords_utils::aliases::GrHashSet;
 
-pub trait EntityAttributes: EntityDomain {
-    fn attributes<'a>(
+pub trait EntityAttributes: EntityIndexDomain {
+    type AttributeAddress: Copy;
+
+    fn attribute_addresses(
+        graphrecord: &GraphRecord,
+    ) -> impl Iterator<Item = Self::AttributeAddress> + '_;
+
+    fn attribute<'a>(
         graphrecord: &'a GraphRecord,
-        index: &Self::Index<'a>,
-    ) -> Result<&'a AttributeMap, GraphRecordError>;
+        address: &Self::Address,
+        attribute_address: Self::AttributeAddress,
+    ) -> Option<ValueView<'a>>;
 
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize;
+    fn attribute_name(
+        graphrecord: &GraphRecord,
+        attribute_address: Self::AttributeAddress,
+    ) -> AttributeNameView<'_>;
+
+    fn resolve_attribute_address(
+        graphrecord: &GraphRecord,
+        attribute_name: &AttributeName,
+    ) -> Option<Self::AttributeAddress>;
+
+    fn attribute_cardinality(stats: &Stats, attribute: &AttributeName) -> usize;
 }
 
 impl EntityAttributes for NodeIndex {
-    fn attributes<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Index<'a>,
-    ) -> Result<&'a AttributeMap, GraphRecordError> {
-        graphrecord.node_attributes(index)
+    type AttributeAddress = NodeAttributeAddress;
+
+    fn attribute_addresses(
+        graphrecord: &GraphRecord,
+    ) -> impl Iterator<Item = Self::AttributeAddress> + '_ {
+        StateView::of(graphrecord).node_attribute_addresses()
     }
 
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize {
+    fn attribute<'a>(
+        graphrecord: &'a GraphRecord,
+        address: &Self::Address,
+        attribute_address: Self::AttributeAddress,
+    ) -> Option<ValueView<'a>> {
+        StateView::of(graphrecord).node_attribute(*address, attribute_address)
+    }
+
+    fn attribute_name(
+        graphrecord: &GraphRecord,
+        attribute_address: Self::AttributeAddress,
+    ) -> AttributeNameView<'_> {
+        AttributeNameView::from(
+            StateView::of(graphrecord)
+                .node_attribute_name(attribute_address)
+                .identifier(),
+        )
+    }
+
+    fn resolve_attribute_address(
+        graphrecord: &GraphRecord,
+        attribute_name: &AttributeName,
+    ) -> Option<Self::AttributeAddress> {
+        StateView::of(graphrecord).resolve_node_attribute_address(attribute_name)
+    }
+
+    fn attribute_cardinality(stats: &Stats, attribute: &AttributeName) -> usize {
         stats.get::<NodeAttributeCardinality>(attribute)
     }
 }
 
 impl EntityAttributes for EdgeIndex {
-    fn attributes<'a>(
-        graphrecord: &'a GraphRecord,
-        index: &Self::Index<'a>,
-    ) -> Result<&'a AttributeMap, GraphRecordError> {
-        graphrecord.edge_attributes(index)
+    type AttributeAddress = EdgeAttributeAddress;
+
+    fn attribute_addresses(
+        graphrecord: &GraphRecord,
+    ) -> impl Iterator<Item = Self::AttributeAddress> + '_ {
+        StateView::of(graphrecord).edge_attribute_addresses()
     }
 
-    fn attribute_cardinality(stats: &Stats, attribute: &GraphRecordAttribute) -> usize {
+    fn attribute<'a>(
+        graphrecord: &'a GraphRecord,
+        address: &Self::Address,
+        attribute_address: Self::AttributeAddress,
+    ) -> Option<ValueView<'a>> {
+        StateView::of(graphrecord).edge_attribute(*address, attribute_address)
+    }
+
+    fn attribute_name(
+        graphrecord: &GraphRecord,
+        attribute_address: Self::AttributeAddress,
+    ) -> AttributeNameView<'_> {
+        AttributeNameView::from(
+            StateView::of(graphrecord)
+                .edge_attribute_name(attribute_address)
+                .identifier(),
+        )
+    }
+
+    fn resolve_attribute_address(
+        graphrecord: &GraphRecord,
+        attribute_name: &AttributeName,
+    ) -> Option<Self::AttributeAddress> {
+        StateView::of(graphrecord).resolve_edge_attribute_address(attribute_name)
+    }
+
+    fn attribute_cardinality(stats: &Stats, attribute: &AttributeName) -> usize {
         stats.get::<EdgeAttributeCardinality>(attribute)
     }
 }
 
-pub trait IndicesInGroup: EntityDomain {
-    fn indices_in_group<'a>(
-        label: &'static str,
-        graphrecord: &'a GraphRecord,
-        group: &Group,
-    ) -> QueryResult<GrHashSet<Self::Index<'a>>>;
+pub trait GroupMembership: EntityIndexDomain {
+    fn addresses_in_group(
+        graphrecord: &GraphRecord,
+        group_address: GroupAddress,
+    ) -> impl Iterator<Item = Self::Address> + '_;
 
-    fn group_size(stats: &Stats, group: &Group) -> usize;
+    fn group_addresses<'a>(
+        graphrecord: &'a GraphRecord,
+        address: &Self::Address,
+    ) -> impl Iterator<Item = GroupAddress> + 'a;
+
+    fn group_size(stats: &Stats, group_index: &GroupIndex) -> usize;
 }
 
-impl IndicesInGroup for NodeIndex {
-    fn indices_in_group<'a>(
-        label: &'static str,
-        graphrecord: &'a GraphRecord,
-        group: &Group,
-    ) -> QueryResult<GrHashSet<Self::Index<'a>>> {
-        Ok(graphrecord
-            .nodes_in_group(group)
-            .map_err(|error| Failure::new(label, error))?
-            .collect())
+impl GroupMembership for NodeIndex {
+    fn addresses_in_group(
+        graphrecord: &GraphRecord,
+        group_address: GroupAddress,
+    ) -> impl Iterator<Item = Self::Address> + '_ {
+        StateView::of(graphrecord).group_node_addresses(group_address)
     }
 
-    fn group_size(stats: &Stats, group: &Group) -> usize {
-        stats.get::<NodeGroupSize>(group)
+    fn group_addresses<'a>(
+        graphrecord: &'a GraphRecord,
+        address: &Self::Address,
+    ) -> impl Iterator<Item = GroupAddress> + 'a {
+        StateView::of(graphrecord).node_group_addresses(*address)
+    }
+
+    fn group_size(stats: &Stats, group_index: &GroupIndex) -> usize {
+        stats.get::<NodeGroupSize>(group_index)
     }
 }
 
-impl IndicesInGroup for EdgeIndex {
-    fn indices_in_group<'a>(
-        label: &'static str,
-        graphrecord: &'a GraphRecord,
-        group: &Group,
-    ) -> QueryResult<GrHashSet<Self::Index<'a>>> {
-        Ok(graphrecord
-            .edges_in_group(group)
-            .map_err(|error| Failure::new(label, error))?
-            .collect())
+impl GroupMembership for EdgeIndex {
+    fn addresses_in_group(
+        graphrecord: &GraphRecord,
+        group_address: GroupAddress,
+    ) -> impl Iterator<Item = Self::Address> + '_ {
+        StateView::of(graphrecord).group_edge_addresses(group_address)
     }
 
-    fn group_size(stats: &Stats, group: &Group) -> usize {
-        stats.get::<EdgeGroupSize>(group)
+    fn group_addresses<'a>(
+        graphrecord: &'a GraphRecord,
+        address: &Self::Address,
+    ) -> impl Iterator<Item = GroupAddress> + 'a {
+        StateView::of(graphrecord).edge_group_addresses(*address)
+    }
+
+    fn group_size(stats: &Stats, group_index: &GroupIndex) -> usize {
+        stats.get::<EdgeGroupSize>(group_index)
     }
 }

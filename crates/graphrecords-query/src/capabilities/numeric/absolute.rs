@@ -1,64 +1,76 @@
 use crate::{
-    AttributeName, Failure, IndexValue, QueryResult, Scalar, ValueDomain,
-    error::numeric::NonNumericValue,
+    Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::numeric::NonNumericValue,
 };
 use graphrecords_core::graphrecord::{
-    GraphRecordAttribute, GraphRecordValue, NodeIndex, datatypes::Abs,
+    AttributeName, IdentifierView, NodeIndex, NodeIndexView, Value, ValueView,
+    datatypes::{Abs, AttributeNameView},
 };
 
 pub trait ValueAbsolute: ValueDomain {
-    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
+    fn absolute<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>>;
 }
 
 impl ValueAbsolute for Scalar {
-    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
+    fn absolute<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>> {
         match value {
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.abs()),
-            GraphRecordValue::Duration(duration) => Ok(GraphRecordValue::Duration(duration.abs())),
-            value => Err(Failure::new(label, NonNumericValue::new(value))),
+            ValueView::Int(integer) => Ok(ValueView::Int(integer.abs())),
+            ValueView::Float(float) => Ok(ValueView::Float(float.abs())),
+            ValueView::Duration(duration) => Ok(ValueView::Duration(duration.abs())),
+            value => Err(Failure::new(
+                NonNumericValue::new(Value::from(value)),
+                label,
+            )),
         }
     }
 }
 
 impl ValueAbsolute for AttributeName {
-    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
-        match value {
-            GraphRecordAttribute::Int(_) => Ok(value.abs()),
-            value @ GraphRecordAttribute::String(_) => {
-                Err(Failure::new(label, NonNumericValue::new(value)))
+    fn absolute<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>> {
+        match value.identifier_view() {
+            IdentifierView::Int(integer) => {
+                Ok(AttributeNameView::from(IdentifierView::Int(integer.abs())))
+            }
+            IdentifierView::String(_) => {
+                Err(Failure::new(NonNumericValue::new(Self::from(value)), label))
             }
         }
     }
 }
 
 impl ValueAbsolute for IndexValue<NodeIndex> {
-    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
-        match value {
-            GraphRecordAttribute::Int(_) => Ok(value.abs()),
-            value @ GraphRecordAttribute::String(_) => {
-                Err(Failure::new(label, NonNumericValue::new(value)))
+    fn absolute<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>> {
+        match value.identifier_view() {
+            IdentifierView::Int(integer) => {
+                Ok(NodeIndexView::from(IdentifierView::Int(integer.abs())))
             }
+            IdentifierView::String(_) => Err(Failure::new(
+                NonNumericValue::new(NodeIndex::from(value)),
+                label,
+            )),
         }
     }
 }
 
 impl ValueAbsolute for IndexValue<AttributeName> {
-    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
-        match value {
-            GraphRecordAttribute::Int(_) => Ok(value.abs()),
-            value @ GraphRecordAttribute::String(_) => {
-                Err(Failure::new(label, NonNumericValue::new(value)))
+    fn absolute<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>> {
+        match value.identifier_view() {
+            IdentifierView::Int(integer) => {
+                Ok(AttributeNameView::from(IdentifierView::Int(integer.abs())))
             }
+            IdentifierView::String(_) => Err(Failure::new(
+                NonNumericValue::new(AttributeName::from(value)),
+                label,
+            )),
         }
     }
 }
 
-impl ValueAbsolute for IndexValue<GraphRecordValue> {
-    fn absolute<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
+impl ValueAbsolute for IndexValue<Value> {
+    fn absolute<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>> {
         match value {
-            GraphRecordValue::Int(_) | GraphRecordValue::Float(_) => Ok(value.abs()),
-            GraphRecordValue::Duration(duration) => Ok(GraphRecordValue::Duration(duration.abs())),
-            value => Err(Failure::new(label, NonNumericValue::new(value))),
+            Value::Int(_) | Value::Float(_) => Ok(value.abs()),
+            Value::Duration(duration) => Ok(Value::Duration(duration.abs())),
+            value => Err(Failure::new(NonNumericValue::new(value), label)),
         }
     }
 }

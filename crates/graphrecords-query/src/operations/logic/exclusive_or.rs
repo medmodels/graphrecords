@@ -1,12 +1,10 @@
 use super::{combine_masks_bare, combine_masks_indexed};
 use crate::{
-    Arity, Bare, ElementShape, ExclusiveOr, Explain, IndexDomain, Indexed, Labeled, Mask, Operand,
-    QueryResult,
-    execution::EvaluationCache,
-    operands::OperandHandle,
+    Arity, Bare, ElementShape, ExclusiveOr, Explain, IndexDomain, Indexed, Labeled, Mask,
+    QueryResult, Series,
+    expressions::ExpressionHandle,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
-        Prepare, Unaligned,
+        ArgumentSource, Build, ElementKernel, ElementPipeline, Keyed, Operation, Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::{describe::ArgumentRetention, operation_manifest},
@@ -14,46 +12,32 @@ use crate::{
 use graphrecords_core::GraphRecord;
 use std::ops::BitXor;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
-#[explain(label = "Xor")]
+#[explain(label = "ExclusiveOr")]
 #[plan(optimizer_hints(empty = if_all))]
 pub struct ExclusiveOrOperation<M> {
     #[argument]
     other: M,
 }
 
-impl<M: Prepare> Prepare for ExclusiveOrOperation<M> {
-    type Prepared<'a>
-        = M::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.other.prepare(graphrecord, cache)
-    }
-}
-
-impl<I, M> ElementKernel<Indexed<I, Mask>> for ExclusiveOrOperation<M>
-where
-    I: IndexDomain,
-    M: ArgumentSource<Keyed<I>, Mask>,
+impl<I: IndexDomain, M: ArgumentSource<Keyed<I>, Mask>> ElementKernel<Indexed<I, Mask>>
+    for ExclusiveOrOperation<M>
 {
     type Emission = M::Retention;
     type OutShape = Indexed<I, Mask>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
         Ok(combine_masks_indexed::<_, M>(
+            graphrecord,
             prepared,
-            Self::LABEL,
             |left, right| left ^ right,
+            Self::LABEL,
         ))
     }
 
@@ -70,21 +54,19 @@ where
     }
 }
 
-impl<M> ElementKernel<Bare<Mask>> for ExclusiveOrOperation<M>
-where
-    M: ArgumentSource<Unaligned, Mask>,
-{
+impl<M: ArgumentSource<Unaligned, Mask>> ElementKernel<Bare<Mask>> for ExclusiveOrOperation<M> {
     type Emission = M::Retention;
     type OutShape = Bare<Mask>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<Mask>, Self>> {
         Ok(combine_masks_bare::<M>(
+            graphrecord,
             prepared,
-            Self::LABEL,
             |left, right| left ^ right,
+            Self::LABEL,
         ))
     }
 
@@ -101,28 +83,36 @@ where
     }
 }
 
-impl<O, M> ExclusiveOr<M> for O
+impl<E, M> ExclusiveOr<M> for E
 where
     ExclusiveOrOperation<M>: Operation,
-    O: Apply<ExclusiveOrOperation<M>>,
+    E: Build<ExclusiveOrOperation<M>>,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn xor(&self, other: M) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            ExclusiveOrOperation { other },
-        ))
+    fn xor(&self, other: M) -> Self::Output {
+        self.build(ExclusiveOrOperation { other })
     }
 }
 
-impl<S, C, M> BitXor<M> for OperandHandle<S, C>
+impl<S, C, M> BitXor<M> for ExpressionHandle<S, C>
 where
     S: ElementShape,
     C: Arity,
     Self: ExclusiveOr<M>,
 {
-    type Output = <Self as ExclusiveOr<M>>::ReturnOperand;
+    type Output = <Self as ExclusiveOr<M>>::Output;
+
+    fn bitxor(self, rhs: M) -> Self::Output {
+        self.xor(rhs)
+    }
+}
+
+impl<E, M> BitXor<M> for Series<E>
+where
+    Self: ExclusiveOr<M>,
+{
+    type Output = <Self as ExclusiveOr<M>>::Output;
 
     fn bitxor(self, rhs: M) -> Self::Output {
         self.xor(rhs)

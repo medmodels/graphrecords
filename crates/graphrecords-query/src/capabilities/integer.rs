@@ -1,69 +1,79 @@
 use crate::{
-    AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
+    Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
     error::numeric::{IntegerOverflow, NonIntegerValue},
 };
-use graphrecords_core::graphrecord::{
-    EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex,
-};
+use graphrecords_core::graphrecord::{AttributeName, IdentifierView, NodeIndex, Value, ValueView};
 
-pub trait IntValue: ValueDomain {
-    fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64>;
+pub trait ValueInt: ValueDomain {
+    fn into_int(value: Self::Value<'_>, label: &'static str) -> QueryResult<i64>;
 }
 
-fn int_from_value(label: &'static str, value: GraphRecordValue) -> QueryResult<i64> {
+fn int_from_value(value: ValueView<'_>, label: &'static str) -> QueryResult<i64> {
     match value {
-        GraphRecordValue::Int(value) => Ok(value),
-        value => Err(Failure::new(label, NonIntegerValue::new(value))),
+        ValueView::Int(value) => Ok(value),
+        value => Err(Failure::new(
+            NonIntegerValue::new(Value::from(value)),
+            label,
+        )),
     }
 }
 
-fn int_from_attribute(label: &'static str, value: GraphRecordAttribute) -> QueryResult<i64> {
+fn int_from_value_owned(value: Value, label: &'static str) -> QueryResult<i64> {
     match value {
-        GraphRecordAttribute::Int(value) => Ok(value),
-        value @ GraphRecordAttribute::String(_) => {
-            Err(Failure::new(label, NonIntegerValue::new(value)))
+        Value::Int(value) => Ok(value),
+        value => Err(Failure::new(NonIntegerValue::new(value), label)),
+    }
+}
+
+impl ValueInt for Scalar {
+    fn into_int(value: Self::Value<'_>, label: &'static str) -> QueryResult<i64> {
+        int_from_value(value, label)
+    }
+}
+
+impl ValueInt for IndexValue<Value> {
+    fn into_int(value: Self::Value<'_>, label: &'static str) -> QueryResult<i64> {
+        int_from_value_owned(value, label)
+    }
+}
+
+impl ValueInt for AttributeName {
+    fn into_int(value: Self::Value<'_>, label: &'static str) -> QueryResult<i64> {
+        match value.identifier_view() {
+            IdentifierView::Int(integer) => Ok(*integer),
+            IdentifierView::String(_) => {
+                Err(Failure::new(NonIntegerValue::new(Self::from(value)), label))
+            }
         }
     }
 }
 
-impl IntValue for Scalar {
-    fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
-        int_from_value(label, value)
+impl ValueInt for IndexValue<NodeIndex> {
+    fn into_int(value: Self::Value<'_>, label: &'static str) -> QueryResult<i64> {
+        match value.identifier_view() {
+            IdentifierView::Int(integer) => Ok(*integer),
+            IdentifierView::String(_) => Err(Failure::new(
+                NonIntegerValue::new(NodeIndex::from(value)),
+                label,
+            )),
+        }
     }
 }
 
-impl IntValue for IndexValue<GraphRecordValue> {
-    fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
-        int_from_value(label, value)
+impl ValueInt for IndexValue<AttributeName> {
+    fn into_int(value: Self::Value<'_>, label: &'static str) -> QueryResult<i64> {
+        match value.identifier_view() {
+            IdentifierView::Int(integer) => Ok(*integer),
+            IdentifierView::String(_) => Err(Failure::new(
+                NonIntegerValue::new(AttributeName::from(value)),
+                label,
+            )),
+        }
     }
 }
 
-impl IntValue for AttributeName {
-    fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
-        int_from_attribute(label, value)
-    }
-}
-
-impl IntValue for IndexValue<NodeIndex> {
-    fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
-        int_from_attribute(label, value)
-    }
-}
-
-impl IntValue for IndexValue<AttributeName> {
-    fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
-        int_from_attribute(label, value)
-    }
-}
-
-impl IntValue for IndexValue<EdgeIndex> {
-    fn into_int(_label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
-        Ok(i64::from(value))
-    }
-}
-
-impl IntValue for IndexValue<Positional> {
-    fn into_int(label: &'static str, value: Self::Value<'_>) -> QueryResult<i64> {
-        i64::try_from(value).map_err(|_| Failure::new(label, IntegerOverflow::new(value)))
+impl ValueInt for IndexValue<Positional> {
+    fn into_int(value: Self::Value<'_>, label: &'static str) -> QueryResult<i64> {
+        i64::try_from(value).map_err(|_| Failure::new(IntegerOverflow::new(value), label))
     }
 }

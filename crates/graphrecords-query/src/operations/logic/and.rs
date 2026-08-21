@@ -1,12 +1,10 @@
-use super::{combine_masks_bare, combine_masks_indexed};
+use super::{combine_masks_kleene_bare, combine_masks_kleene_indexed};
 use crate::{
-    And, Arity, Bare, ElementShape, Explain, IndexDomain, Indexed, Labeled, Mask, Operand,
-    QueryResult,
-    execution::EvaluationCache,
-    operands::OperandHandle,
+    And, Arity, Bare, ElementShape, Explain, IndexDomain, Indexed, Labeled, Mask, QueryResult,
+    Series,
+    expressions::ExpressionHandle,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
-        Prepare, Unaligned,
+        ArgumentSource, Build, ElementKernel, ElementPipeline, Keyed, Operation, Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::{describe::ArgumentRetention, operation_manifest},
@@ -14,7 +12,11 @@ use crate::{
 use graphrecords_core::GraphRecord;
 use std::ops::BitAnd;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+const DETERMINING: bool = false;
+
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "And")]
 #[plan(optimizer_hints(empty = if_all))]
@@ -23,37 +25,21 @@ pub struct AndOperation<M> {
     other: M,
 }
 
-impl<M: Prepare> Prepare for AndOperation<M> {
-    type Prepared<'a>
-        = M::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.other.prepare(graphrecord, cache)
-    }
-}
-
-impl<I, M> ElementKernel<Indexed<I, Mask>> for AndOperation<M>
-where
-    I: IndexDomain,
-    M: ArgumentSource<Keyed<I>, Mask>,
+impl<I: IndexDomain, M: ArgumentSource<Keyed<I>, Mask>> ElementKernel<Indexed<I, Mask>>
+    for AndOperation<M>
 {
     type Emission = M::Retention;
     type OutShape = Indexed<I, Mask>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
-        Ok(combine_masks_indexed::<_, M>(
+        Ok(combine_masks_kleene_indexed::<_, M>(
+            graphrecord,
             prepared,
+            DETERMINING,
             Self::LABEL,
-            |left, right| left && right,
         ))
     }
 
@@ -70,21 +56,19 @@ where
     }
 }
 
-impl<M> ElementKernel<Bare<Mask>> for AndOperation<M>
-where
-    M: ArgumentSource<Unaligned, Mask>,
-{
+impl<M: ArgumentSource<Unaligned, Mask>> ElementKernel<Bare<Mask>> for AndOperation<M> {
     type Emission = M::Retention;
     type OutShape = Bare<Mask>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<Mask>, Self>> {
-        Ok(combine_masks_bare::<M>(
+        Ok(combine_masks_kleene_bare::<M>(
+            graphrecord,
             prepared,
+            DETERMINING,
             Self::LABEL,
-            |left, right| left && right,
         ))
     }
 
@@ -101,25 +85,36 @@ where
     }
 }
 
-impl<O, M> And<M> for O
+impl<E, M> And<M> for E
 where
     AndOperation<M>: Operation,
-    O: Apply<AndOperation<M>>,
+    E: Build<AndOperation<M>>,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn and(&self, other: M) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), AndOperation { other }))
+    fn and(&self, other: M) -> Self::Output {
+        self.build(AndOperation { other })
     }
 }
 
-impl<S, C, M> BitAnd<M> for OperandHandle<S, C>
+impl<S, C, M> BitAnd<M> for ExpressionHandle<S, C>
 where
     S: ElementShape,
     C: Arity,
     Self: And<M>,
 {
-    type Output = <Self as And<M>>::ReturnOperand;
+    type Output = <Self as And<M>>::Output;
+
+    fn bitand(self, rhs: M) -> Self::Output {
+        self.and(rhs)
+    }
+}
+
+impl<E, M> BitAnd<M> for Series<E>
+where
+    Self: And<M>,
+{
+    type Output = <Self as And<M>>::Output;
 
     fn bitand(self, rhs: M) -> Self::Output {
         self.and(rhs)

@@ -33,7 +33,7 @@ pub fn expand(input: &DeriveInput) -> Result<TokenStream> {
         quote! {
             fn inputs(&self) -> ::std::vec::Vec<&dyn #crate_path::optimizer::PlanNode> {
                 let mut nodes: ::std::vec::Vec<&dyn #crate_path::optimizer::PlanNode> =
-                    ::std::vec![ #( #crate_path::Operand::as_plan_node(&self.#inputs), )* ];
+                    ::std::vec![ #( #crate_path::Expression::as_plan_node(&self.#inputs), )* ];
                 #(
                     nodes.extend(
                         #crate_path::optimizer::PlanInputs::inputs(&self.#arguments),

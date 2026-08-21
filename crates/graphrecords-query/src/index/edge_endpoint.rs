@@ -1,4 +1,4 @@
-use crate::{IndexDomain, QueryResult, index::GroupKey};
+use crate::{IndexDomain, OwnedIndex, QueryResult};
 use graphrecords_core::GraphRecord;
 use std::fmt::{self, Display, Formatter};
 
@@ -17,25 +17,30 @@ impl Display for EdgeEndpointRole {
     }
 }
 
+impl OwnedIndex for EdgeEndpointRole {}
+
 impl IndexDomain for EdgeEndpointRole {
+    type Address = Self;
     type Index<'a> = Self;
     type Owned = Self;
 
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        *address
+    }
+
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
         *index
     }
 
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
         *owned
     }
-}
 
-impl GroupKey for EdgeEndpointRole {
-    fn resolve_key<'a>(
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        owned: &Self::Owned,
         _label: &'static str,
-        _graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
-        Ok(*key)
+    ) -> QueryResult<Self::Address> {
+        Ok(*owned)
     }
 }

@@ -19,18 +19,16 @@ mod trim_start;
 mod uppercase;
 
 use crate::{
-    Failure, IndexDomain, Position, QueryResult, ValueDomain,
-    capabilities::{IntValue, StringValue},
+    Failure, IndexDomain, QueryResult, ValueDomain,
+    capabilities::ValueString,
     element::{BarePipeline, IndexedValuePipeline, Pipeline, Preserving, Retention},
-    error::{
-        numeric::{IntegerOverflow, NegativeLength},
-        string::InvalidPaddingCharacter,
-    },
+    error::string::InvalidPaddingCharacter,
     operations::{ArgumentSource, Keyed, Unaligned},
     registry::OperationManifest,
 };
 pub use contains::ContainsOperation;
 pub use ends_with::EndsWithOperation;
+use graphrecords_core::GraphRecord;
 pub use length::LengthOperation;
 pub use lowercase::LowercaseOperation;
 pub use matches::MatchesOperation;
@@ -73,272 +71,286 @@ pub(super) fn operation_manifests() -> Vec<OperationManifest> {
     ]
 }
 
+type StringMapFunction<'a, W> =
+    fn(&str, &'static str) -> QueryResult<<W as ValueDomain>::Value<'a>>;
+
 fn string_map_indexed<'a, I, V, W>(
+    graphrecord: &'a GraphRecord,
+    operation: StringMapFunction<'a, W>,
     label: &'static str,
-    operation: impl Fn(&'static str, String) -> QueryResult<W::Value<'a>> + 'a,
 ) -> IndexedValuePipeline<'a, I, V, W, Preserving>
 where
     I: IndexDomain,
-    V: StringValue,
+    V: ValueString,
     W: ValueDomain,
 {
-    Pipeline::keyed(move |index, outcome| match outcome {
+    Pipeline::keyed(move |address, outcome| match outcome {
         Err(failure) => Err(failure),
-        Ok(value) => V::into_string(label, value)
-            .and_then(|value| operation(label, value))
-            .map_err(|failure| failure.at::<I>(&index)),
+        Ok(value) => V::as_str(&value, label)
+            .and_then(|value| operation(value, label))
+            .map_err(|failure| failure.at_address::<I>(graphrecord, &address)),
     })
 }
 
 fn string_map_bare<'a, V, W>(
+    operation: StringMapFunction<'a, W>,
     label: &'static str,
-    operation: impl Fn(&'static str, String) -> QueryResult<W::Value<'a>> + 'a,
 ) -> BarePipeline<'a, V, W, Preserving>
 where
-    V: StringValue,
+    V: ValueString,
     W: ValueDomain,
 {
     Pipeline::new(move |outcome| match outcome {
         Err(failure) => Err(failure),
-        Ok(value) => V::into_string(label, value).and_then(|value| operation(label, value)),
+        Ok(value) => V::as_str(&value, label).and_then(|value| operation(value, label)),
     })
 }
 
 fn string_rebuild_map_indexed<'a, I, V>(
+    graphrecord: &'a GraphRecord,
+    operation: impl Fn(&str, &'static str) -> QueryResult<String> + 'a,
     label: &'static str,
-    operation: impl Fn(&'static str, String) -> QueryResult<String> + 'a,
 ) -> IndexedValuePipeline<'a, I, V, V, Preserving>
 where
     I: IndexDomain,
-    V: StringValue,
+    V: ValueString,
 {
     Pipeline::keyed(
-        move |index, outcome: QueryResult<V::Value<'a>>| match outcome {
+        move |address, outcome: QueryResult<V::Value<'a>>| match outcome {
             Err(failure) => Err(failure),
-            Ok(value) => {
-                let role = value.clone();
-                V::into_string(label, value)
-                    .and_then(|value| operation(label, value))
-                    .map(|value| V::from_string(&role, value))
-                    .map_err(|failure| failure.at::<I>(&index))
-            }
+            Ok(value) => V::as_str(&value, label)
+                .and_then(|string| operation(string, label))
+                .map(|string| V::with_string(&value, string))
+                .map_err(|failure| failure.at_address::<I>(graphrecord, &address)),
         },
     )
 }
 
 fn string_rebuild_map_bare<'a, V>(
+    operation: impl Fn(&str, &'static str) -> QueryResult<String> + 'a,
     label: &'static str,
-    operation: impl Fn(&'static str, String) -> QueryResult<String> + 'a,
 ) -> BarePipeline<'a, V, V, Preserving>
 where
-    V: StringValue,
+    V: ValueString,
 {
     Pipeline::new(move |outcome: QueryResult<V::Value<'a>>| match outcome {
         Err(failure) => Err(failure),
-        Ok(value) => {
-            let role = value.clone();
-            V::into_string(label, value)
-                .and_then(|value| operation(label, value))
-                .map(|value| V::from_string(&role, value))
-        }
+        Ok(value) => V::as_str(&value, label)
+            .and_then(|string| operation(string, label))
+            .map(|string| V::with_string(&value, string)),
     })
 }
 
+type StringArgumentMapFunction<'a, W> =
+    fn(&str, &str, &'static str) -> QueryResult<<W as ValueDomain>::Value<'a>>;
+
 fn string_argument_map_indexed<'a, I, V, W, A>(
+    graphrecord: &'a GraphRecord,
     prepared: A::Prepared<'a>,
+    operation: StringArgumentMapFunction<'a, W>,
     label: &'static str,
-    operation: impl Fn(&'static str, String, String) -> QueryResult<W::Value<'a>> + 'a,
 ) -> IndexedValuePipeline<'a, I, V, W, A::Retention>
 where
     I: IndexDomain,
-    V: StringValue,
+    V: ValueString,
     W: ValueDomain,
     A: ArgumentSource<Keyed<I>>,
-    A::ValueDomain: StringValue,
+    A::ValueDomain: ValueString,
 {
-    Pipeline::keyed(move |index, outcome| {
+    Pipeline::keyed(move |address, outcome| {
         let value = match outcome {
             Err(failure) => return A::Retention::keep(Err(failure)),
-            Ok(value) => match V::into_string(label, value) {
-                Ok(value) => value,
-                Err(failure) => {
-                    return A::Retention::keep(Err(failure.at::<I>(&index)));
-                }
-            },
+            Ok(value) => value,
         };
 
-        let step = A::resolve(&prepared, &index, label);
+        let string = match V::as_str(&value, label) {
+            Ok(string) => string,
+            Err(failure) => {
+                return A::Retention::keep(Err(failure.at_address::<I>(graphrecord, &address)));
+            }
+        };
+
+        let step = A::resolve(graphrecord, &prepared, &address, label);
 
         A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| {
-                let argument = A::ValueDomain::into_string(label, argument)
-                    .map_err(|failure| failure.at::<I>(&index))?;
+                let argument = A::ValueDomain::as_str(&argument, label)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
 
-                operation(label, value, argument).map_err(|failure| failure.at::<I>(&index))
+                operation(string, argument, label)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))
             })
         })
     })
 }
 
 fn string_argument_map_bare<'a, V, W, A>(
+    graphrecord: &'a GraphRecord,
     prepared: A::Prepared<'a>,
+    operation: StringArgumentMapFunction<'a, W>,
     label: &'static str,
-    operation: impl Fn(&'static str, String, String) -> QueryResult<W::Value<'a>> + 'a,
 ) -> BarePipeline<'a, V, W, A::Retention>
 where
-    V: StringValue,
+    V: ValueString,
     W: ValueDomain,
     A: ArgumentSource<Unaligned>,
-    A::ValueDomain: StringValue,
+    A::ValueDomain: ValueString,
 {
     Pipeline::new(move |outcome| {
         let value = match outcome {
             Err(failure) => return A::Retention::keep(Err(failure)),
-            Ok(value) => match V::into_string(label, value) {
-                Ok(value) => value,
-                Err(failure) => {
-                    return A::Retention::keep(Err(failure));
-                }
-            },
+            Ok(value) => value,
         };
 
-        let step = A::resolve(&prepared, &(), label);
+        let string = match V::as_str(&value, label) {
+            Ok(string) => string,
+            Err(failure) => {
+                return A::Retention::keep(Err(failure));
+            }
+        };
+
+        let step = A::resolve(graphrecord, &prepared, &(), label);
 
         A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| {
-                let argument = A::ValueDomain::into_string(label, argument)?;
+                let argument = A::ValueDomain::as_str(&argument, label)?;
 
-                operation(label, value, argument)
+                operation(string, argument, label)
             })
         })
     })
 }
 
+type StringRebuildArgumentMapFunction = fn(&str, &str, &'static str) -> QueryResult<String>;
+
 fn string_rebuild_argument_map_indexed<'a, I, V, A>(
+    graphrecord: &'a GraphRecord,
     prepared: A::Prepared<'a>,
+    operation: StringRebuildArgumentMapFunction,
     label: &'static str,
-    operation: impl Fn(&'static str, String, String) -> QueryResult<String> + 'a,
 ) -> IndexedValuePipeline<'a, I, V, V, A::Retention>
 where
     I: IndexDomain,
-    V: StringValue,
+    V: ValueString,
     A: ArgumentSource<Keyed<I>>,
-    A::ValueDomain: StringValue,
+    A::ValueDomain: ValueString,
 {
-    Pipeline::keyed(move |index, outcome: QueryResult<V::Value<'a>>| {
-        let (role, value) = match outcome {
+    Pipeline::keyed(move |address, outcome: QueryResult<V::Value<'a>>| {
+        let value = match outcome {
             Err(failure) => return A::Retention::keep(Err(failure)),
-            Ok(value) => {
-                let role = value.clone();
-                match V::into_string(label, value) {
-                    Ok(value) => (role, value),
-                    Err(failure) => {
-                        return A::Retention::keep(Err(failure.at::<I>(&index)));
-                    }
-                }
-            }
+            Ok(value) => value,
         };
 
-        let step = A::resolve(&prepared, &index, label);
+        if let Err(failure) = V::as_str(&value, label) {
+            return A::Retention::keep(Err(failure.at_address::<I>(graphrecord, &address)));
+        }
+
+        let step = A::resolve(graphrecord, &prepared, &address, label);
 
         A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| {
-                let argument = A::ValueDomain::into_string(label, argument)
-                    .map_err(|failure| failure.at::<I>(&index))?;
+                let argument = A::ValueDomain::as_str(&argument, label)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
+                let string = V::as_str(&value, label)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
 
-                operation(label, value, argument)
-                    .map(|value| V::from_string(&role, value))
-                    .map_err(|failure| failure.at::<I>(&index))
+                operation(string, argument, label)
+                    .map(|string| V::with_string(&value, string))
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))
             })
         })
     })
 }
 
 fn string_rebuild_argument_map_bare<'a, V, A>(
+    graphrecord: &'a GraphRecord,
     prepared: A::Prepared<'a>,
+    operation: StringRebuildArgumentMapFunction,
     label: &'static str,
-    operation: impl Fn(&'static str, String, String) -> QueryResult<String> + 'a,
 ) -> BarePipeline<'a, V, V, A::Retention>
 where
-    V: StringValue,
+    V: ValueString,
     A: ArgumentSource<Unaligned>,
-    A::ValueDomain: StringValue,
+    A::ValueDomain: ValueString,
 {
     Pipeline::new(move |outcome: QueryResult<V::Value<'a>>| {
-        let (role, value) = match outcome {
+        let value = match outcome {
             Err(failure) => return A::Retention::keep(Err(failure)),
-            Ok(value) => {
-                let role = value.clone();
-                match V::into_string(label, value) {
-                    Ok(value) => (role, value),
-                    Err(failure) => return A::Retention::keep(Err(failure)),
-                }
-            }
+            Ok(value) => value,
         };
 
-        let step = A::resolve(&prepared, &(), label);
+        if let Err(failure) = V::as_str(&value, label) {
+            return A::Retention::keep(Err(failure));
+        }
+
+        let step = A::resolve(graphrecord, &prepared, &(), label);
 
         A::Retention::map_step(step, |resolved| {
             resolved.and_then(|argument| {
-                let argument = A::ValueDomain::into_string(label, argument)?;
+                let argument = A::ValueDomain::as_str(&argument, label)?;
+                let string = V::as_str(&value, label)?;
 
-                operation(label, value, argument).map(|value| V::from_string(&role, value))
+                operation(string, argument, label).map(|string| V::with_string(&value, string))
             })
         })
     })
 }
 
+type StringReplaceFunction = fn(&str, &str, &str) -> String;
+
 fn string_replace_indexed<'a, I, V, A, B>(
+    graphrecord: &'a GraphRecord,
     prepared: (A::Prepared<'a>, B::Prepared<'a>),
+    operation: StringReplaceFunction,
     label: &'static str,
-    operation: impl Fn(&str, &str, &str) -> String + 'a,
 ) -> IndexedValuePipeline<'a, I, V, V, <A::Retention as Retention>::Then<B::Retention>>
 where
     I: IndexDomain,
-    V: StringValue,
+    V: ValueString,
     A: ArgumentSource<Keyed<I>>,
-    A::ValueDomain: StringValue,
+    A::ValueDomain: ValueString,
     B: ArgumentSource<Keyed<I>>,
-    B::ValueDomain: StringValue,
+    B::ValueDomain: ValueString,
 {
-    Pipeline::keyed(move |index, outcome: QueryResult<V::Value<'a>>| {
-        let (role, value) = match outcome {
+    Pipeline::keyed(move |address, outcome: QueryResult<V::Value<'a>>| {
+        let value = match outcome {
             Err(failure) => {
                 return <<A::Retention as Retention>::Then<B::Retention> as Retention>::keep(Err(
                     failure,
                 ));
             }
-            Ok(value) => {
-                let role = value.clone();
-                match V::into_string(label, value) {
-                    Ok(value) => (role, value),
-                    Err(failure) => {
-                        return <<A::Retention as Retention>::Then<B::Retention> as Retention>::keep(
-                            Err(failure.at::<I>(&index)),
-                        );
-                    }
-                }
-            }
+            Ok(value) => value,
         };
 
-        let first = A::resolve(&prepared.0, &index, label);
+        if let Err(failure) = V::as_str(&value, label) {
+            return <<A::Retention as Retention>::Then<B::Retention> as Retention>::keep(Err(
+                failure.at_address::<I>(graphrecord, &address),
+            ));
+        }
+
+        let first = A::resolve(graphrecord, &prepared.0, &address, label);
 
         A::Retention::and_then(first, |first| {
-            let first = match A::ValueDomain::into_string(label, first) {
+            let first = match A::ValueDomain::as_str(&first, label) {
                 Ok(first) => first,
                 Err(failure) => {
-                    return B::Retention::keep(Err(failure.at::<I>(&index)));
+                    return B::Retention::keep(Err(failure.at_address::<I>(graphrecord, &address)));
                 }
             };
 
-            let second = B::resolve(&prepared.1, &index, label);
+            let second = B::resolve(graphrecord, &prepared.1, &address, label);
 
             B::Retention::map_step(second, |second| {
                 second.and_then(|second| {
-                    let second = B::ValueDomain::into_string(label, second)
-                        .map_err(|failure| failure.at::<I>(&index))?;
+                    let second = B::ValueDomain::as_str(&second, label)
+                        .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
+                    let value_string = V::as_str(&value, label)
+                        .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
 
-                    Ok(V::from_string(&role, operation(&value, &first, &second)))
+                    Ok(V::with_string(
+                        &value,
+                        operation(value_string, first, second),
+                    ))
                 })
             })
         })
@@ -346,195 +358,151 @@ where
 }
 
 fn string_replace_bare<'a, V, A, B>(
+    graphrecord: &'a GraphRecord,
     prepared: (A::Prepared<'a>, B::Prepared<'a>),
+    operation: StringReplaceFunction,
     label: &'static str,
-    operation: impl Fn(&str, &str, &str) -> String + 'a,
 ) -> BarePipeline<'a, V, V, <A::Retention as Retention>::Then<B::Retention>>
 where
-    V: StringValue,
+    V: ValueString,
     A: ArgumentSource<Unaligned>,
-    A::ValueDomain: StringValue,
+    A::ValueDomain: ValueString,
     B: ArgumentSource<Unaligned>,
-    B::ValueDomain: StringValue,
+    B::ValueDomain: ValueString,
 {
     Pipeline::new(move |outcome: QueryResult<V::Value<'a>>| {
-        let (role, value) = match outcome {
+        let value = match outcome {
             Err(failure) => {
                 return <<A::Retention as Retention>::Then<B::Retention> as Retention>::keep(Err(
                     failure,
                 ));
             }
-            Ok(value) => {
-                let role = value.clone();
-                match V::into_string(label, value) {
-                    Ok(value) => (role, value),
-                    Err(failure) => {
-                        return <<A::Retention as Retention>::Then<B::Retention> as Retention>::keep(
-                            Err(failure),
-                        );
-                    }
-                }
-            }
+            Ok(value) => value,
         };
 
-        let first = A::resolve(&prepared.0, &(), label);
+        if let Err(failure) = V::as_str(&value, label) {
+            return <<A::Retention as Retention>::Then<B::Retention> as Retention>::keep(Err(
+                failure,
+            ));
+        }
+
+        let first = A::resolve(graphrecord, &prepared.0, &(), label);
 
         A::Retention::and_then(first, |first| {
-            let first = match A::ValueDomain::into_string(label, first) {
+            let first = match A::ValueDomain::as_str(&first, label) {
                 Ok(first) => first,
                 Err(failure) => {
                     return B::Retention::keep(Err(failure));
                 }
             };
 
-            let second = B::resolve(&prepared.1, &(), label);
+            let second = B::resolve(graphrecord, &prepared.1, &(), label);
 
             B::Retention::map_step(second, |second| {
                 second.and_then(|second| {
-                    let second = B::ValueDomain::into_string(label, second)?;
+                    let second = B::ValueDomain::as_str(&second, label)?;
+                    let value_string = V::as_str(&value, label)?;
 
-                    Ok(V::from_string(&role, operation(&value, &first, &second)))
+                    Ok(V::with_string(
+                        &value,
+                        operation(value_string, first, second),
+                    ))
                 })
             })
         })
     })
 }
 
-fn padding_character(label: &'static str, value: String) -> QueryResult<char> {
+fn padding_character(value: &str, label: &'static str) -> QueryResult<char> {
     let mut characters = value.chars();
     let Some(character) = characters.next() else {
-        return Err(Failure::new(label, InvalidPaddingCharacter::new(value)));
+        return Err(Failure::new(
+            InvalidPaddingCharacter::new(value.to_string()),
+            label,
+        ));
     };
 
     if characters.next().is_some() {
-        return Err(Failure::new(label, InvalidPaddingCharacter::new(value)));
+        return Err(Failure::new(
+            InvalidPaddingCharacter::new(value.to_string()),
+            label,
+        ));
     }
 
     Ok(character)
 }
 
-fn padding_width(label: &'static str, value: i64) -> QueryResult<Position> {
-    if value < 0 {
-        return Err(Failure::new(label, NegativeLength::new(value)));
-    }
+type StringPadFunction = fn(&str, usize, &str, &'static str) -> QueryResult<String>;
 
-    Position::try_from(value).map_err(|_| Failure::new(label, IntegerOverflow::new(value)))
-}
-
-fn string_pad_indexed<'a, I, V, W, C>(
-    prepared: (W::Prepared<'a>, C::Prepared<'a>),
+fn string_pad_indexed<'a, I, V, A>(
+    graphrecord: &'a GraphRecord,
+    prepared: (usize, A::Prepared<'a>),
+    operation: StringPadFunction,
     label: &'static str,
-    operation: impl Fn(&'static str, String, Position, String) -> QueryResult<String> + 'a,
-) -> IndexedValuePipeline<'a, I, V, V, <W::Retention as Retention>::Then<C::Retention>>
+) -> IndexedValuePipeline<'a, I, V, V, A::Retention>
 where
     I: IndexDomain,
-    V: StringValue,
-    W: ArgumentSource<Keyed<I>>,
-    W::ValueDomain: IntValue,
-    C: ArgumentSource<Keyed<I>>,
-    C::ValueDomain: StringValue,
+    V: ValueString,
+    A: ArgumentSource<Keyed<I>>,
+    A::ValueDomain: ValueString,
 {
-    Pipeline::keyed(move |index, outcome: QueryResult<V::Value<'a>>| {
-        let (role, value) = match outcome {
-            Err(failure) => {
-                return <<W::Retention as Retention>::Then<C::Retention> as Retention>::keep(Err(
-                    failure,
-                ));
-            }
-            Ok(value) => {
-                let role = value.clone();
-                match V::into_string(label, value) {
-                    Ok(value) => (role, value),
-                    Err(failure) => {
-                        return <<W::Retention as Retention>::Then<C::Retention> as Retention>::keep(
-                            Err(failure.at::<I>(&index)),
-                        );
-                    }
-                }
-            }
+    Pipeline::keyed(move |address, outcome: QueryResult<V::Value<'a>>| {
+        let value = match outcome {
+            Err(failure) => return A::Retention::keep(Err(failure)),
+            Ok(value) => value,
         };
 
-        let width = W::resolve(&prepared.0, &index, label);
+        if let Err(failure) = V::as_str(&value, label) {
+            return A::Retention::keep(Err(failure.at_address::<I>(graphrecord, &address)));
+        }
 
-        W::Retention::and_then(width, |width| {
-            let width = match W::ValueDomain::into_int(label, width)
-                .and_then(|width| padding_width(label, width))
-            {
-                Ok(width) => width,
-                Err(failure) => {
-                    return C::Retention::keep(Err(failure.at::<I>(&index)));
-                }
-            };
+        let character = A::resolve(graphrecord, &prepared.1, &address, label);
 
-            let character = C::resolve(&prepared.1, &index, label);
+        A::Retention::map_step(character, |character| {
+            character.and_then(|character| {
+                let character = A::ValueDomain::as_str(&character, label)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
+                let string = V::as_str(&value, label)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
 
-            C::Retention::map_step(character, |character| {
-                character.and_then(|character| {
-                    let character = C::ValueDomain::into_string(label, character)
-                        .map_err(|failure| failure.at::<I>(&index))?;
-
-                    operation(label, value, width, character)
-                        .map(|value| V::from_string(&role, value))
-                        .map_err(|failure| failure.at::<I>(&index))
-                })
+                operation(string, prepared.0, character, label)
+                    .map(|string| V::with_string(&value, string))
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))
             })
         })
     })
 }
 
-fn string_pad_bare<'a, V, W, C>(
-    prepared: (W::Prepared<'a>, C::Prepared<'a>),
+fn string_pad_bare<'a, V, A>(
+    graphrecord: &'a GraphRecord,
+    prepared: (usize, A::Prepared<'a>),
+    operation: StringPadFunction,
     label: &'static str,
-    operation: impl Fn(&'static str, String, Position, String) -> QueryResult<String> + 'a,
-) -> BarePipeline<'a, V, V, <W::Retention as Retention>::Then<C::Retention>>
+) -> BarePipeline<'a, V, V, A::Retention>
 where
-    V: StringValue,
-    W: ArgumentSource<Unaligned>,
-    W::ValueDomain: IntValue,
-    C: ArgumentSource<Unaligned>,
-    C::ValueDomain: StringValue,
+    V: ValueString,
+    A: ArgumentSource<Unaligned>,
+    A::ValueDomain: ValueString,
 {
     Pipeline::new(move |outcome: QueryResult<V::Value<'a>>| {
-        let (role, value) = match outcome {
-            Err(failure) => {
-                return <<W::Retention as Retention>::Then<C::Retention> as Retention>::keep(Err(
-                    failure,
-                ));
-            }
-            Ok(value) => {
-                let role = value.clone();
-                match V::into_string(label, value) {
-                    Ok(value) => (role, value),
-                    Err(failure) => {
-                        return <<W::Retention as Retention>::Then<C::Retention> as Retention>::keep(
-                            Err(failure),
-                        );
-                    }
-                }
-            }
+        let value = match outcome {
+            Err(failure) => return A::Retention::keep(Err(failure)),
+            Ok(value) => value,
         };
 
-        let width = W::resolve(&prepared.0, &(), label);
+        if let Err(failure) = V::as_str(&value, label) {
+            return A::Retention::keep(Err(failure));
+        }
 
-        W::Retention::and_then(width, |width| {
-            let width = match W::ValueDomain::into_int(label, width)
-                .and_then(|width| padding_width(label, width))
-            {
-                Ok(width) => width,
-                Err(failure) => {
-                    return C::Retention::keep(Err(failure));
-                }
-            };
+        let character = A::resolve(graphrecord, &prepared.1, &(), label);
 
-            let character = C::resolve(&prepared.1, &(), label);
+        A::Retention::map_step(character, |character| {
+            character.and_then(|character| {
+                let character = A::ValueDomain::as_str(&character, label)?;
+                let string = V::as_str(&value, label)?;
 
-            C::Retention::map_step(character, |character| {
-                character.and_then(|character| {
-                    let character = C::ValueDomain::into_string(label, character)?;
-
-                    operation(label, value, width, character)
-                        .map(|value| V::from_string(&role, value))
-                })
+                operation(string, prepared.0, character, label)
+                    .map(|string| V::with_string(&value, string))
             })
         })
     })

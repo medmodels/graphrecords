@@ -1,14 +1,20 @@
 use crate::{
-    EntityReference, Explain, IndexDomain, Indexed, Labeled, Mask, Operand, QueryResult, Unit,
+    EntityRef, EntityReference, Explain, Failure, IndexDomain, Indexed, Labeled, Mask, QueryResult,
+    Unit,
     element::{Pipeline, Preserving},
     execution::EvaluationCache,
-    index::IndicesInGroup,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    index::GroupMembership,
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::InGroup,
 };
-use graphrecords_core::{GraphRecord, graphrecord::Group};
+use graphrecords_core::{
+    GraphRecord,
+    errors::GraphRecordError,
+    graphrecord::{GroupAddress, GroupIndex, StateView},
+};
+use graphrecords_utils::aliases::GrHashSet;
 
 #[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
 #[operation(scope = Element)]
@@ -16,22 +22,31 @@ use graphrecords_core::{GraphRecord, graphrecord::Group};
 #[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct InGroupOperation {
     #[explain(label)]
-    group: Group,
+    group_index: GroupIndex,
 }
 
 impl Prepare for InGroupOperation {
-    type Prepared<'a> = &'a Group;
+    type Prepared<'a> = GroupAddress;
 
     fn prepare<'a>(
         &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(&self.group)
+        StateView::of(graphrecord)
+            .resolve_group_address(&self.group_index)
+            .ok_or_else(|| {
+                Failure::new(
+                    GraphRecordError::GroupNotFound {
+                        group_index: self.group_index.clone(),
+                    },
+                    Self::LABEL,
+                )
+            })
     }
 }
 
-impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
+impl<I: GroupMembership> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
     type Emission = Preserving;
     type OutShape = Indexed<I, Mask>;
 
@@ -39,15 +54,17 @@ impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
-        let members = I::indices_in_group(Self::LABEL, graphrecord, prepared)?;
+        let members: GrHashSet<I::Address> = I::addresses_in_group(graphrecord, prepared).collect();
 
-        Ok(Pipeline::keyed(move |index, membership: QueryResult<_>| {
-            membership.map(|()| members.contains(&index))
-        }))
+        Ok(Pipeline::keyed(
+            move |address, membership: QueryResult<_>| {
+                membership.map(|()| members.contains(&address))
+            },
+        ))
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        let size = I::group_size(stats, &self.group);
+        let size = I::group_size(stats, &self.group_index);
         let selectivity = input
             .elements
             .map(|elements| size.min(elements) as f64 / elements.max(1) as f64);
@@ -59,7 +76,7 @@ impl<I: IndicesInGroup> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
     }
 }
 
-impl<E: IndicesInGroup, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
+impl<E: GroupMembership, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
     for InGroupOperation
 {
     type Emission = Preserving;
@@ -69,10 +86,10 @@ impl<E: IndicesInGroup, I: IndexDomain> ElementKernel<Indexed<I, EntityReference
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
-        let members = E::indices_in_group(Self::LABEL, graphrecord, prepared)?;
+        let members: GrHashSet<E::Address> = E::addresses_in_group(graphrecord, prepared).collect();
 
         Ok(Pipeline::unkeyed(move |reference: QueryResult<_>| {
-            reference.map(|entity| members.contains(&entity))
+            reference.map(|entity: EntityRef<'a, E>| members.contains(entity.address()))
         }))
     }
 
@@ -84,14 +101,13 @@ impl<E: IndicesInGroup, I: IndexDomain> ElementKernel<Indexed<I, EntityReference
     }
 }
 
-impl<O: Apply<InGroupOperation>> InGroup for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<InGroupOperation>> InGroup for E {
+    type Output = E::Output;
 
-    fn in_group(&self, group: Group) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            InGroupOperation { group },
-        ))
+    fn in_group(&self, group_index: impl Into<GroupIndex>) -> Self::Output {
+        self.build(InGroupOperation {
+            group_index: group_index.into(),
+        })
     }
 }
 
@@ -101,16 +117,16 @@ operation_manifest! {
         scope: element;
 
         kernel {
-            parameters: <I: IndicesInGroup>;
-            field: group: Group;
+            parameters: <I: GroupMembership>;
+            field: group_index: GroupIndex;
             input: Indexed<I, Unit>;
             output: Indexed<I, Mask>;
             emission: Preserving;
         }
 
         kernel {
-            parameters: <E: IndicesInGroup, I: IndexDomain>;
-            field: group: Group;
+            parameters: <E: GroupMembership, I: IndexDomain>;
+            field: group_index: GroupIndex;
             input: Indexed<I, EntityReference<E>>;
             output: Indexed<I, Mask>;
             emission: Preserving;

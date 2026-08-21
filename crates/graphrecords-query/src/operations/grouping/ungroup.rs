@@ -1,19 +1,19 @@
 use super::reject_key_failures;
 use crate::{
-    Bare, BareValueDomain, Definite, EvaluateOperand, Explain, Failure, IndexDomain, Indexed,
-    Labeled, Multiple, Operand, QueryResult, Single, Unordered, ValueDomain,
+    Bare, BareValueDomain, Definite, EvaluateExpression, Explain, Failure, IndexDomain, Indexed,
+    Labeled, Multiple, QueryResult, Single, Unordered, ValueDomain,
     error::grouping::UnresolvedBucketFailures,
-    execution::EvaluationCache,
-    index::GroupKey,
-    operands::{CheckedIndexedLaneBuilder, OperandHandle, Partition, PartitionArity},
-    operations::{Apply, GroupKernel, Operation, OperationContext, Prepare},
+    expressions::{CheckedIndexedLaneBuilder, ExpressionHandle, Partition, PartitionArity},
+    operations::{Build, GroupKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Ungroup,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Group)]
 #[explain(label = "Ungroup")]
 #[plan(optimizer_hints(empty = if_any))]
@@ -41,28 +41,21 @@ fn ungroup_estimate(input: &Estimate) -> Estimate {
     }
 }
 
-impl Prepare for UngroupOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueDomain, C: PartitionArity<Indexed<I, V>>>
-    GroupKernel<M, K, OperandHandle<Indexed<I, V>, C>> for UngroupOperation
+impl<
+    M: IndexDomain,
+    K: IndexDomain,
+    I: IndexDomain,
+    V: ValueDomain,
+    C: PartitionArity<Indexed<I, V>>,
+> GroupKernel<M, K, ExpressionHandle<Indexed<I, V>, C>> for UngroupOperation
 {
-    type Output = OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+    type Output = ExpressionHandle<Indexed<I, V>, Multiple<Unordered>>;
 
     fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, OperandHandle<Indexed<I, V>, C>>,
+        graphrecord: &'a GraphRecord,
+        partition: Partition<'a, M, K, ExpressionHandle<Indexed<I, V>, C>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let (buckets, key_failures) = partition.into_parts();
 
         reject_key_failures::<M>(key_failures, Self::LABEL)?;
@@ -73,8 +66,8 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueDomain, C: PartitionAr
         for bucket in buckets {
             match bucket.2 {
                 Ok(payload) => {
-                    for (index, outcome) in C::into_elements(payload) {
-                        output.push(index, outcome)?;
+                    for (address, outcome) in C::into_elements(payload) {
+                        output.push(graphrecord, address, outcome)?;
                     }
                 }
                 Err(failure) => bucket_failures.push(*failure),
@@ -83,8 +76,8 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueDomain, C: PartitionAr
 
         if !bucket_failures.is_empty() {
             return Err(Failure::new(
-                Self::LABEL,
                 UnresolvedBucketFailures::new(bucket_failures),
+                Self::LABEL,
             ));
         }
 
@@ -96,16 +89,16 @@ impl<M: IndexDomain, K: GroupKey, I: IndexDomain, V: ValueDomain, C: PartitionAr
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, V: BareValueDomain, C: PartitionArity<Bare<V>>>
-    GroupKernel<M, K, OperandHandle<Bare<V>, C>> for UngroupOperation
+impl<M: IndexDomain, K: IndexDomain, V: BareValueDomain, C: PartitionArity<Bare<V>>>
+    GroupKernel<M, K, ExpressionHandle<Bare<V>, C>> for UngroupOperation
 {
-    type Output = OperandHandle<Bare<V>, Multiple<Unordered>>;
+    type Output = ExpressionHandle<Bare<V>, Multiple<Unordered>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, OperandHandle<Bare<V>, C>>,
+        partition: Partition<'a, M, K, ExpressionHandle<Bare<V>, C>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let (buckets, key_failures) = partition.into_parts();
 
         reject_key_failures::<M>(key_failures, Self::LABEL)?;
@@ -122,8 +115,8 @@ impl<M: IndexDomain, K: GroupKey, V: BareValueDomain, C: PartitionArity<Bare<V>>
 
         if !bucket_failures.is_empty() {
             return Err(Failure::new(
-                Self::LABEL,
                 UnresolvedBucketFailures::new(bucket_failures),
+                Self::LABEL,
             ));
         }
 
@@ -135,11 +128,11 @@ impl<M: IndexDomain, K: GroupKey, V: BareValueDomain, C: PartitionArity<Bare<V>>
     }
 }
 
-impl<O: Apply<UngroupOperation>> Ungroup for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<UngroupOperation>> Ungroup for E {
+    type Output = E::Output;
 
-    fn ungroup(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), UngroupOperation))
+    fn ungroup(&self) -> Self::Output {
+        self.build(UngroupOperation)
     }
 }
 
@@ -149,40 +142,45 @@ operation_manifest! {
         scope: group;
 
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <I: IndexDomain, V: ValueDomain, O: OrderState>;
-            input: OperandHandle<Indexed<I, V>, Multiple<O>>;
-            output: OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+            input: ExpressionHandle<Indexed<I, V>, Multiple<O>>;
+            output: ExpressionHandle<Indexed<I, V>, Multiple<Unordered>>;
         }
+
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <I: IndexDomain, V: ValueDomain>;
-            input: OperandHandle<Indexed<I, V>, Single>;
-            output: OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+            input: ExpressionHandle<Indexed<I, V>, Single>;
+            output: ExpressionHandle<Indexed<I, V>, Multiple<Unordered>>;
         }
+
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <I: IndexDomain, V: ValueDomain>;
-            input: OperandHandle<Indexed<I, V>, Definite>;
-            output: OperandHandle<Indexed<I, V>, Multiple<Unordered>>;
+            input: ExpressionHandle<Indexed<I, V>, Definite>;
+            output: ExpressionHandle<Indexed<I, V>, Multiple<Unordered>>;
         }
+
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <V: BareValueDomain, O: OrderState>;
-            input: OperandHandle<Bare<V>, Multiple<O>>;
-            output: OperandHandle<Bare<V>, Multiple<Unordered>>;
+            input: ExpressionHandle<Bare<V>, Multiple<O>>;
+            output: ExpressionHandle<Bare<V>, Multiple<Unordered>>;
         }
+
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <V: BareValueDomain>;
-            input: OperandHandle<Bare<V>, Single>;
-            output: OperandHandle<Bare<V>, Multiple<Unordered>>;
+            input: ExpressionHandle<Bare<V>, Single>;
+            output: ExpressionHandle<Bare<V>, Multiple<Unordered>>;
         }
+
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
+            group: <M: IndexDomain, K: IndexDomain>;
             parameters: <V: BareValueDomain>;
-            input: OperandHandle<Bare<V>, Definite>;
-            output: OperandHandle<Bare<V>, Multiple<Unordered>>;
+            input: ExpressionHandle<Bare<V>, Definite>;
+            output: ExpressionHandle<Bare<V>, Multiple<Unordered>>;
         }
     }
 }

@@ -1,11 +1,8 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Multiple, Operand,
-    OrderState, QueryResult, Single, ValueDomain,
-    execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    Bare, BareValueDomain, EvaluateExpression, Explain, IndexDomain, Indexed, Multiple, OrderState,
+    QueryResult, Single, ValueDomain,
+    expressions::ExpressionHandle,
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Random,
@@ -13,37 +10,24 @@ use crate::{
 use graphrecords_core::GraphRecord;
 use rand::seq::IteratorRandom;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "Random")]
 #[plan(optimizer_hints(volatile, empty = if_any))]
 pub struct RandomOperation;
 
-impl Prepare for RandomOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for RandomOperation
-where
-    I: IndexDomain,
-    V: ValueDomain,
-    O: OrderState,
+impl<I: IndexDomain, V: ValueDomain, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
+    for RandomOperation
 {
-    type Output = OperandHandle<Indexed<I, V>, Single>;
+    type Output = ExpressionHandle<Indexed<I, V>, Single>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(values.choose(&mut rand::rng()))
     }
 
@@ -52,18 +36,14 @@ where
     }
 }
 
-impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for RandomOperation
-where
-    V: BareValueDomain,
-    O: OrderState,
-{
-    type Output = OperandHandle<Bare<V>, Single>;
+impl<V: BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>> for RandomOperation {
+    type Output = ExpressionHandle<Bare<V>, Single>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         Ok(values.choose(&mut rand::rng()))
     }
 
@@ -72,11 +52,11 @@ where
     }
 }
 
-impl<O: Apply<RandomOperation>> Random for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<RandomOperation>> Random for E {
+    type Output = E::Output;
 
-    fn random(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), RandomOperation))
+    fn random(&self) -> Self::Output {
+        self.build(RandomOperation)
     }
 }
 
@@ -92,7 +72,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Indexed<I, V>, Multiple<O>);
-            output: OperandHandle<Indexed<I, V>, Single>;
+            output: ExpressionHandle<Indexed<I, V>, Single>;
         }
 
         kernel {
@@ -101,7 +81,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Bare<V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Single>;
+            output: ExpressionHandle<Bare<V>, Single>;
         }
     }
 }

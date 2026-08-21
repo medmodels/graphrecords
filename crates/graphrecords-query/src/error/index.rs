@@ -31,11 +31,7 @@ impl<I: IndexDomain> Debug for DuplicateIndex<I> {
 
 impl<I: IndexDomain> Display for DuplicateIndex<I> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "index `{}` occurs more than once in one indexed operand",
-            self.index
-        )
+        write!(formatter, "index `{}` occurs more than once", self.index)
     }
 }
 
@@ -47,7 +43,7 @@ impl<I: IndexDomain> Diagnostic for DuplicateIndex<I> {
     }
 
     fn help(&self) -> Option<String> {
-        Some("construct each index at most once in one indexed operand".to_string())
+        Some("provide each index at most once".to_string())
     }
 }
 
@@ -98,6 +94,94 @@ impl<C: IndexDomain> Diagnostic for DuplicateExpandedChildIndex<C> {
     }
 }
 
+pub struct UnresolvedIndex<I: IndexDomain> {
+    index: I::Owned,
+}
+
+impl<I: IndexDomain> UnresolvedIndex<I> {
+    #[must_use]
+    pub const fn new(index: I::Owned) -> Self {
+        Self { index }
+    }
+
+    #[must_use]
+    pub const fn index(&self) -> &I::Owned {
+        &self.index
+    }
+}
+
+impl<I: IndexDomain> Debug for UnresolvedIndex<I> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("UnresolvedIndex")
+            .field("index", &self.index)
+            .finish()
+    }
+}
+
+impl<I: IndexDomain> Display for UnresolvedIndex<I> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "index `{}` does not exist", self.index)
+    }
+}
+
+impl<I: IndexDomain> Error for UnresolvedIndex<I> {}
+
+impl<I: IndexDomain> Diagnostic for UnresolvedIndex<I> {
+    fn name() -> &'static str {
+        "UnresolvedIndex"
+    }
+}
+
+pub struct UncoveredIndices<I: IndexDomain> {
+    indices: Vec<I::Owned>,
+}
+
+impl<I: IndexDomain> UncoveredIndices<I> {
+    #[must_use]
+    pub const fn new(indices: Vec<I::Owned>) -> Self {
+        Self { indices }
+    }
+
+    #[must_use]
+    pub fn indices(&self) -> &[I::Owned] {
+        &self.indices
+    }
+}
+
+impl<I: IndexDomain> Debug for UncoveredIndices<I> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("UncoveredIndices")
+            .field("indices", &self.indices)
+            .finish()
+    }
+}
+
+impl<I: IndexDomain> Display for UncoveredIndices<I> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{} uncovered element(s)", self.indices.len())?;
+
+        for index in &self.indices {
+            write!(formatter, "\nindex `{index}` is not covered")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<I: IndexDomain> Error for UncoveredIndices<I> {}
+
+impl<I: IndexDomain> Diagnostic for UncoveredIndices<I> {
+    fn name() -> &'static str {
+        "UncoveredIndices"
+    }
+
+    fn help(&self) -> Option<String> {
+        Some("ignore the uncovered elements with `on_missing(Drop)`".to_string())
+    }
+}
+
 pub struct NoChildIndex<P: IndexDomain> {
     parent: P::Owned,
 }
@@ -109,7 +193,7 @@ impl<P: IndexDomain> NoChildIndex<P> {
     }
 
     #[must_use]
-    pub const fn parent_index(&self) -> &P::Owned {
+    pub const fn parent(&self) -> &P::Owned {
         &self.parent
     }
 }
@@ -127,7 +211,7 @@ impl<P: IndexDomain> Display for NoChildIndex<P> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "address `source({})` has no child component",
+            "address `parent({})` has no child component",
             self.parent
         )
     }
@@ -142,7 +226,7 @@ impl<P: IndexDomain> Diagnostic for NoChildIndex<P> {
 
     fn help(&self) -> Option<String> {
         Some(
-            "source(...) addresses mark parents whose expansion failed; handle those elements with on_error before projecting child indices"
+            "parent(...) addresses mark parents whose expansion failed; handle those elements with on_error before projecting child indices"
                 .to_string(),
         )
     }

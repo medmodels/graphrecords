@@ -1,12 +1,14 @@
 use crate::{
-    AttributeName, Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
+    Failure, IndexValue, Positional, QueryResult, Scalar, ValueDomain,
+    capabilities::{identifier_into_view, value_into_view},
     error::{
         comparison::IncomparableValues,
         numeric::{InvalidClipBounds, NonNumericValue},
     },
 };
 use graphrecords_core::graphrecord::{
-    EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex,
+    AttributeName, Identifier, IdentifierView, NodeIndex, NodeIndexView, Value,
+    datatypes::AttributeNameView,
 };
 use std::{
     cmp::Ordering,
@@ -15,23 +17,23 @@ use std::{
 
 pub trait ValueClip: ValueDomain {
     fn clip<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>>;
 }
 
-fn clip_ordered<T>(label: &'static str, value: T, lower: T, upper: T) -> QueryResult<T>
+fn clip_ordered<T>(value: T, lower: T, upper: T, label: &'static str) -> QueryResult<T>
 where
     T: Debug + Display + PartialOrd + Send + Sync + 'static,
 {
     match lower.partial_cmp(&upper) {
         Some(Ordering::Greater) => {
-            return Err(Failure::new(label, InvalidClipBounds::new(lower, upper)));
+            return Err(Failure::new(InvalidClipBounds::new(lower, upper), label));
         }
         None => {
-            return Err(Failure::new(label, IncomparableValues::new(lower, upper)));
+            return Err(Failure::new(IncomparableValues::new(lower, upper), label));
         }
         Some(Ordering::Less | Ordering::Equal) => {}
     }
@@ -39,7 +41,7 @@ where
     match value.partial_cmp(&lower) {
         Some(Ordering::Less) => return Ok(lower),
         None => {
-            return Err(Failure::new(label, IncomparableValues::new(value, lower)));
+            return Err(Failure::new(IncomparableValues::new(value, lower), label));
         }
         Some(Ordering::Equal | Ordering::Greater) => {}
     }
@@ -47,142 +49,161 @@ where
     match value.partial_cmp(&upper) {
         Some(Ordering::Greater) => Ok(upper),
         Some(Ordering::Less | Ordering::Equal) => Ok(value),
-        None => Err(Failure::new(label, IncomparableValues::new(value, upper))),
+        None => Err(Failure::new(IncomparableValues::new(value, upper), label)),
     }
 }
 
-fn clip_graphrecord_attribute(
-    label: &'static str,
-    value: GraphRecordAttribute,
-    lower: GraphRecordAttribute,
-    upper: GraphRecordAttribute,
-) -> QueryResult<GraphRecordAttribute> {
+fn clip_value(value: Value, lower: Value, upper: Value, label: &'static str) -> QueryResult<Value> {
     let value = match value {
-        GraphRecordAttribute::Int(_) => value,
-        value @ GraphRecordAttribute::String(_) => {
-            return Err(Failure::new(label, NonNumericValue::new(value)));
-        }
+        Value::Int(_) | Value::Float(_) | Value::DateTime(_) | Value::Duration(_) => value,
+        value => return Err(Failure::new(NonNumericValue::new(value), label)),
     };
     let lower = match lower {
-        GraphRecordAttribute::Int(_) => lower,
-        lower @ GraphRecordAttribute::String(_) => {
-            return Err(Failure::new(label, NonNumericValue::new(lower)));
-        }
+        Value::Int(_) | Value::Float(_) | Value::DateTime(_) | Value::Duration(_) => lower,
+        lower => return Err(Failure::new(NonNumericValue::new(lower), label)),
     };
     let upper = match upper {
-        GraphRecordAttribute::Int(_) => upper,
-        upper @ GraphRecordAttribute::String(_) => {
-            return Err(Failure::new(label, NonNumericValue::new(upper)));
-        }
+        Value::Int(_) | Value::Float(_) | Value::DateTime(_) | Value::Duration(_) => upper,
+        upper => return Err(Failure::new(NonNumericValue::new(upper), label)),
     };
 
-    clip_ordered(label, value, lower, upper)
-}
-
-fn clip_graphrecord_value(
-    label: &'static str,
-    value: GraphRecordValue,
-    lower: GraphRecordValue,
-    upper: GraphRecordValue,
-) -> QueryResult<GraphRecordValue> {
-    let value = match value {
-        GraphRecordValue::Int(_)
-        | GraphRecordValue::Float(_)
-        | GraphRecordValue::DateTime(_)
-        | GraphRecordValue::Duration(_) => value,
-        value => return Err(Failure::new(label, NonNumericValue::new(value))),
-    };
-    let lower = match lower {
-        GraphRecordValue::Int(_)
-        | GraphRecordValue::Float(_)
-        | GraphRecordValue::DateTime(_)
-        | GraphRecordValue::Duration(_) => lower,
-        lower => return Err(Failure::new(label, NonNumericValue::new(lower))),
-    };
-    let upper = match upper {
-        GraphRecordValue::Int(_)
-        | GraphRecordValue::Float(_)
-        | GraphRecordValue::DateTime(_)
-        | GraphRecordValue::Duration(_) => upper,
-        upper => return Err(Failure::new(label, NonNumericValue::new(upper))),
-    };
-
-    clip_ordered(label, value, lower, upper)
+    clip_ordered(value, lower, upper, label)
 }
 
 impl ValueClip for Scalar {
     fn clip<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_graphrecord_value(label, value, lower, upper)
+        clip_value(
+            Value::from(value),
+            Value::from(lower),
+            Value::from(upper),
+            label,
+        )
+        .map(value_into_view)
     }
 }
 
 impl ValueClip for AttributeName {
     fn clip<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_graphrecord_attribute(label, value, lower, upper)
+        if let IdentifierView::String(_) = value.identifier_view() {
+            return Err(Failure::new(NonNumericValue::new(Self::from(value)), label));
+        }
+        if let IdentifierView::String(_) = lower.identifier_view() {
+            return Err(Failure::new(NonNumericValue::new(Self::from(lower)), label));
+        }
+        if let IdentifierView::String(_) = upper.identifier_view() {
+            return Err(Failure::new(NonNumericValue::new(Self::from(upper)), label));
+        }
+
+        clip_ordered(
+            Self::from(value),
+            Self::from(lower),
+            Self::from(upper),
+            label,
+        )
+        .map(|result| AttributeNameView::from(identifier_into_view(Identifier::from(result))))
     }
 }
 
 impl ValueClip for IndexValue<Positional> {
     fn clip<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_ordered(label, value, lower, upper)
+        clip_ordered(value, lower, upper, label)
     }
 }
 
 impl ValueClip for IndexValue<NodeIndex> {
     fn clip<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_graphrecord_attribute(label, value, lower, upper)
+        if let IdentifierView::String(_) = value.identifier_view() {
+            return Err(Failure::new(
+                NonNumericValue::new(NodeIndex::from(value)),
+                label,
+            ));
+        }
+        if let IdentifierView::String(_) = lower.identifier_view() {
+            return Err(Failure::new(
+                NonNumericValue::new(NodeIndex::from(lower)),
+                label,
+            ));
+        }
+        if let IdentifierView::String(_) = upper.identifier_view() {
+            return Err(Failure::new(
+                NonNumericValue::new(NodeIndex::from(upper)),
+                label,
+            ));
+        }
+
+        clip_ordered(
+            NodeIndex::from(value),
+            NodeIndex::from(lower),
+            NodeIndex::from(upper),
+            label,
+        )
+        .map(|result| NodeIndexView::from(identifier_into_view(Identifier::from(result))))
     }
 }
 
 impl ValueClip for IndexValue<AttributeName> {
     fn clip<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
+        label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_graphrecord_attribute(label, value, lower, upper)
+        if let IdentifierView::String(_) = value.identifier_view() {
+            return Err(Failure::new(
+                NonNumericValue::new(AttributeName::from(value)),
+                label,
+            ));
+        }
+        if let IdentifierView::String(_) = lower.identifier_view() {
+            return Err(Failure::new(
+                NonNumericValue::new(AttributeName::from(lower)),
+                label,
+            ));
+        }
+        if let IdentifierView::String(_) = upper.identifier_view() {
+            return Err(Failure::new(
+                NonNumericValue::new(AttributeName::from(upper)),
+                label,
+            ));
+        }
+
+        clip_ordered(
+            AttributeName::from(value),
+            AttributeName::from(lower),
+            AttributeName::from(upper),
+            label,
+        )
+        .map(|result| AttributeNameView::from(identifier_into_view(Identifier::from(result))))
     }
 }
 
-impl ValueClip for IndexValue<EdgeIndex> {
+impl ValueClip for IndexValue<Value> {
     fn clip<'a>(
-        label: &'static str,
         value: Self::Value<'a>,
         lower: Self::Value<'a>,
         upper: Self::Value<'a>,
-    ) -> QueryResult<Self::Value<'a>> {
-        clip_ordered(label, value, lower, upper)
-    }
-}
-
-impl ValueClip for IndexValue<GraphRecordValue> {
-    fn clip<'a>(
         label: &'static str,
-        value: Self::Value<'a>,
-        lower: Self::Value<'a>,
-        upper: Self::Value<'a>,
     ) -> QueryResult<Self::Value<'a>> {
-        clip_graphrecord_value(label, value, lower, upper)
+        clip_value(value, lower, upper, label)
     }
 }

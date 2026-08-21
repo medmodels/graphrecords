@@ -1,12 +1,9 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, IndexDomain, Indexed, Mask, Multiple, Operand,
+    Bare, BareValueDomain, EvaluateExpression, Explain, IndexDomain, Indexed, Mask, Multiple,
     OrderState, QueryResult,
     capabilities::ValueEquivalence,
-    execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    expressions::ExpressionHandle,
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::IsDuplicated,
@@ -14,34 +11,24 @@ use crate::{
 use graphrecords_core::GraphRecord;
 use graphrecords_utils::aliases::GrHashMap;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "IsDuplicated")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct IsDuplicatedOperation;
 
-impl Prepare for IsDuplicatedOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
 impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V>, Multiple<O>>
     for IsDuplicatedOperation
 {
-    type Output = OperandHandle<Indexed<I, Mask>, Multiple<O>>;
+    type Output = ExpressionHandle<Indexed<I, Mask>, Multiple<O>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let values: Vec<_> = values.collect();
         let mut counts: GrHashMap<_, usize> = GrHashMap::default();
 
@@ -77,13 +64,13 @@ impl<I: IndexDomain, V: ValueEquivalence, O: OrderState> LaneKernel<Indexed<I, V
 impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
     for IsDuplicatedOperation
 {
-    type Output = OperandHandle<Bare<Mask>, Multiple<O>>;
+    type Output = ExpressionHandle<Bare<Mask>, Multiple<O>>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let values: Vec<_> = values.collect();
         let mut counts: GrHashMap<_, usize> = GrHashMap::default();
 
@@ -112,11 +99,11 @@ impl<V: ValueEquivalence + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, M
     }
 }
 
-impl<O: Apply<IsDuplicatedOperation>> IsDuplicated for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<IsDuplicatedOperation>> IsDuplicated for E {
+    type Output = E::Output;
 
-    fn is_duplicated(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), IsDuplicatedOperation))
+    fn is_duplicated(&self) -> Self::Output {
+        self.build(IsDuplicatedOperation)
     }
 }
 
@@ -132,15 +119,16 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Indexed<I, V>, Multiple<O>);
-            output: OperandHandle<Indexed<I, Mask>, Multiple<O>>;
+            output: ExpressionHandle<Indexed<I, Mask>, Multiple<O>>;
         }
+
         kernel {
             parameters: <
                 V: ValueEquivalence + BareValueDomain,
                 O: OrderState,
             >;
             input: (Bare<V>, Multiple<O>);
-            output: OperandHandle<Bare<Mask>, Multiple<O>>;
+            output: ExpressionHandle<Bare<Mask>, Multiple<O>>;
         }
     }
 }

@@ -1,12 +1,15 @@
 use crate::{
-    AttributeName, EdgeEndpointRole, FailureKind, IndexDomain, Position, Positional, QueryResult,
+    EdgeEndpointRole, FailureKind, IndexDomain, OwnedIndex, Position, Positional, QueryResult,
     capabilities::{EnsureSortable, incomparable_pair},
-    index::GroupKey,
+    operations::IndexTiebreak,
     registry::IndexDescriptor,
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, NodeIndex},
+    graphrecord::{
+        AttributeName, AttributeNameView, EdgeAddress, EdgeIndex, GroupAddress, GroupIndex,
+        GroupIndexView, NodeAddress, NodeIndex, NodeIndexView, Value,
+    },
 };
 use std::{
     cmp::Ordering,
@@ -21,25 +24,43 @@ pub enum DynIndexOwned {
     Positional(Position),
     Node(NodeIndex),
     Edge(EdgeIndex),
-    Attribute(GraphRecordAttribute),
-    Value(GraphRecordValue),
+    Group(GroupIndex),
+    Attribute(AttributeName),
+    Value(Value),
     Bool(bool),
     EndpointRole(EdgeEndpointRole),
     FailureKind(FailureKind),
     Expanded(Box<DynExpandedOwned>),
 }
 
+impl OwnedIndex for DynIndexOwned {}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum DynIndexRef<'a> {
+pub enum DynIndexView<'a> {
     Positional(Position),
-    Node(&'a NodeIndex),
-    Edge(&'a EdgeIndex),
-    Attribute(GraphRecordAttribute),
-    Value(GraphRecordValue),
+    Node(NodeIndexView<'a>),
+    Edge(EdgeIndex),
+    Group(GroupIndexView<'a>),
+    Attribute(AttributeNameView<'a>),
+    Value(Value),
     Bool(bool),
     EndpointRole(EdgeEndpointRole),
     FailureKind(FailureKind),
-    Expanded(Box<DynExpandedRef<'a>>),
+    Expanded(Box<DynExpandedView<'a>>),
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum DynIndexAddress {
+    Positional(Position),
+    Node(NodeAddress),
+    Edge(EdgeAddress),
+    Group(GroupAddress),
+    Attribute(AttributeName),
+    Value(Value),
+    Bool(bool),
+    EndpointRole(EdgeEndpointRole),
+    FailureKind(FailureKind),
+    Expanded(Box<DynExpandedAddress>),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -49,9 +70,15 @@ pub struct DynExpandedOwned {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct DynExpandedRef<'a> {
-    parent: DynIndexRef<'a>,
-    child: Option<DynIndexRef<'a>>,
+pub struct DynExpandedView<'a> {
+    parent: DynIndexView<'a>,
+    child: Option<DynIndexView<'a>>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct DynExpandedAddress {
+    parent: DynIndexAddress,
+    child: Option<DynIndexAddress>,
 }
 
 impl DynExpandedOwned {
@@ -71,12 +98,12 @@ impl DynExpandedOwned {
     }
 
     #[must_use]
-    pub const fn is_source(&self) -> bool {
+    pub const fn is_parent(&self) -> bool {
         self.child.is_none()
     }
 
     #[must_use]
-    pub const fn source(parent: DynIndexOwned) -> Self {
+    pub const fn parent(parent: DynIndexOwned) -> Self {
         Self {
             parent,
             child: None,
@@ -92,29 +119,29 @@ impl DynExpandedOwned {
     }
 }
 
-impl<'a> DynExpandedRef<'a> {
+impl<'a> DynExpandedView<'a> {
     #[must_use]
-    pub const fn parent_index(&self) -> &DynIndexRef<'a> {
+    pub const fn parent_index(&self) -> &DynIndexView<'a> {
         &self.parent
     }
 
     #[must_use]
-    pub const fn child_index(&self) -> Option<&DynIndexRef<'a>> {
+    pub const fn child_index(&self) -> Option<&DynIndexView<'a>> {
         self.child.as_ref()
     }
 
     #[must_use]
-    pub fn into_parts(self) -> (DynIndexRef<'a>, Option<DynIndexRef<'a>>) {
+    pub fn into_parts(self) -> (DynIndexView<'a>, Option<DynIndexView<'a>>) {
         (self.parent, self.child)
     }
 
     #[must_use]
-    pub const fn is_source(&self) -> bool {
+    pub const fn is_parent(&self) -> bool {
         self.child.is_none()
     }
 
     #[must_use]
-    pub const fn source(parent: DynIndexRef<'a>) -> Self {
+    pub const fn parent(parent: DynIndexView<'a>) -> Self {
         Self {
             parent,
             child: None,
@@ -122,7 +149,45 @@ impl<'a> DynExpandedRef<'a> {
     }
 
     #[must_use]
-    pub const fn child(parent: DynIndexRef<'a>, child: DynIndexRef<'a>) -> Self {
+    pub const fn child(parent: DynIndexView<'a>, child: DynIndexView<'a>) -> Self {
+        Self {
+            parent,
+            child: Some(child),
+        }
+    }
+}
+
+impl DynExpandedAddress {
+    #[must_use]
+    pub const fn parent_index(&self) -> &DynIndexAddress {
+        &self.parent
+    }
+
+    #[must_use]
+    pub const fn child_index(&self) -> Option<&DynIndexAddress> {
+        self.child.as_ref()
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (DynIndexAddress, Option<DynIndexAddress>) {
+        (self.parent, self.child)
+    }
+
+    #[must_use]
+    pub const fn is_parent(&self) -> bool {
+        self.child.is_none()
+    }
+
+    #[must_use]
+    pub const fn parent(parent: DynIndexAddress) -> Self {
+        Self {
+            parent,
+            child: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn child(parent: DynIndexAddress, child: DynIndexAddress) -> Self {
         Self {
             parent,
             child: Some(child),
@@ -136,8 +201,9 @@ impl DynIndexOwned {
             Self::Positional(_) => IndexDescriptor::domain::<Positional>(),
             Self::Node(_) => IndexDescriptor::domain::<NodeIndex>(),
             Self::Edge(_) => IndexDescriptor::domain::<EdgeIndex>(),
+            Self::Group(_) => IndexDescriptor::domain::<GroupIndex>(),
             Self::Attribute(_) => IndexDescriptor::domain::<AttributeName>(),
-            Self::Value(_) => IndexDescriptor::domain::<GraphRecordValue>(),
+            Self::Value(_) => IndexDescriptor::domain::<Value>(),
             Self::Bool(_) => IndexDescriptor::domain::<bool>(),
             Self::EndpointRole(_) => IndexDescriptor::domain::<EdgeEndpointRole>(),
             Self::FailureKind(_) => IndexDescriptor::domain::<FailureKind>(),
@@ -145,20 +211,23 @@ impl DynIndexOwned {
                 let parent = expanded.parent_index().descriptor();
 
                 expanded.child_index().map_or_else(
-                    || IndexDescriptor::expanded_source(parent.clone()),
+                    || IndexDescriptor::expanded_parent(parent.clone()),
                     |child| IndexDescriptor::expanded(parent.clone(), child.descriptor()),
                 )
             }
         }
     }
+}
 
+impl DynIndexView<'_> {
     pub(crate) const fn description(&self) -> &'static str {
         match self {
             Self::Positional(_) => "positional index",
             Self::Node(_) => "node index",
             Self::Edge(_) => "edge index",
+            Self::Group(_) => "group index",
             Self::Attribute(_) => "attribute-name index",
-            Self::Value(_) => "graphrecord-value index",
+            Self::Value(_) => "value index",
             Self::Bool(_) => "boolean index",
             Self::EndpointRole(_) => "edge-endpoint-role index",
             Self::FailureKind(_) => "failure-kind index",
@@ -168,17 +237,17 @@ impl DynIndexOwned {
 }
 
 macro_rules! implement_dynamic_index {
-    ($index:ty, $node:ty, $edge:ty) => {
+    ($index:ty, $node:ty, $group:ty, $attribute:ty) => {
         impl $index {
             pub(crate) fn supports_value_ordering(&self) -> bool {
                 match self {
                     Self::Positional(_)
                     | Self::Node(_)
-                    | Self::Edge(_)
+                    | Self::Group(_)
                     | Self::Attribute(_)
                     | Self::Value(_)
                     | Self::Bool(_) => true,
-                    Self::EndpointRole(_) | Self::FailureKind(_) => false,
+                    Self::Edge(_) | Self::EndpointRole(_) | Self::FailureKind(_) => false,
                     Self::Expanded(expanded) => {
                         expanded.parent.supports_value_ordering()
                             && expanded
@@ -193,11 +262,11 @@ macro_rules! implement_dynamic_index {
                 match self {
                     Self::Positional(_)
                     | Self::Node(_)
-                    | Self::Edge(_)
+                    | Self::Group(_)
                     | Self::Attribute(_)
                     | Self::Value(_)
                     | Self::Bool(_) => true,
-                    Self::EndpointRole(_) | Self::FailureKind(_) => false,
+                    Self::Edge(_) | Self::EndpointRole(_) | Self::FailureKind(_) => false,
                     Self::Expanded(expanded) => {
                         expanded.parent.supports_index_sorting()
                             && expanded
@@ -213,6 +282,7 @@ macro_rules! implement_dynamic_index {
                     (Self::Positional(_), Self::Positional(_))
                     | (Self::Node(_), Self::Node(_))
                     | (Self::Edge(_), Self::Edge(_))
+                    | (Self::Group(_), Self::Group(_))
                     | (Self::Attribute(_), Self::Attribute(_))
                     | (Self::Value(_), Self::Value(_))
                     | (Self::Bool(_), Self::Bool(_))
@@ -236,6 +306,7 @@ macro_rules! implement_dynamic_index {
                     Self::Positional(position) => position.fmt(formatter),
                     Self::Node(node) => node.fmt(formatter),
                     Self::Edge(edge) => edge.fmt(formatter),
+                    Self::Group(group_index) => group_index.fmt(formatter),
                     Self::Attribute(attribute) => attribute.fmt(formatter),
                     Self::Value(value) => value.fmt(formatter),
                     Self::Bool(value) => value.fmt(formatter),
@@ -244,7 +315,7 @@ macro_rules! implement_dynamic_index {
                     Self::Expanded(expanded) => {
                         let parent = &expanded.parent;
                         match &expanded.child {
-                            None => write!(formatter, "source({parent})"),
+                            None => write!(formatter, "parent({parent})"),
                             Some(child) => write!(formatter, "child({parent}, {child})"),
                         }
                     }
@@ -263,7 +334,7 @@ macro_rules! implement_dynamic_index {
                         first.partial_cmp(second)
                     }
                     (Self::Node(first), Self::Node(second)) => first.partial_cmp(second),
-                    (Self::Edge(first), Self::Edge(second)) => first.partial_cmp(second),
+                    (Self::Group(first), Self::Group(second)) => first.partial_cmp(second),
                     (Self::Attribute(first), Self::Attribute(second)) => first.partial_cmp(second),
                     (Self::Value(first), Self::Value(second)) => first.partial_cmp(second),
                     (Self::Bool(first), Self::Bool(second)) => first.partial_cmp(second),
@@ -316,10 +387,10 @@ macro_rules! implement_dynamic_index {
                             value
                         }))
                     }
-                    Self::Edge(_) if values.iter().all(|value| matches!(value, Self::Edge(_))) => {
-                        <$edge>::find_incomparable(values.into_iter().map(|value| {
-                            let Self::Edge(value) = value else {
-                                unreachable!("dynamic indices were checked as edge indices")
+                    Self::Group(_) if values.iter().all(|value| matches!(value, Self::Group(_))) => {
+                        <$group>::find_incomparable(values.into_iter().map(|value| {
+                            let Self::Group(value) = value else {
+                                unreachable!("dynamic indices were checked as group indices")
                             };
                             value
                         }))
@@ -329,7 +400,7 @@ macro_rules! implement_dynamic_index {
                             .iter()
                             .all(|value| matches!(value, Self::Attribute(_))) =>
                     {
-                        GraphRecordAttribute::find_incomparable(values.into_iter().map(|value| {
+                        <$attribute>::find_incomparable(values.into_iter().map(|value| {
                             let Self::Attribute(value) = value else {
                                 unreachable!(
                                     "dynamic indices were checked as attribute-name indices"
@@ -341,7 +412,7 @@ macro_rules! implement_dynamic_index {
                     Self::Value(_)
                         if values.iter().all(|value| matches!(value, Self::Value(_))) =>
                     {
-                        GraphRecordValue::find_incomparable(values.into_iter().map(|value| {
+                        Value::find_incomparable(values.into_iter().map(|value| {
                             let Self::Value(value) = value else {
                                 unreachable!("dynamic indices were checked as value indices")
                             };
@@ -361,19 +432,19 @@ macro_rules! implement_dynamic_index {
                             .iter()
                             .all(|value| matches!(value, Self::Expanded(_))) =>
                     {
-                        let true = values.iter().all(|value| value.supports_index_sorting()) else {
+                        if !values.iter().all(|value| value.supports_index_sorting()) {
                             panic!(
                                 "registry admitted EnsureSortable for an expanded dynamic index containing an unsortable domain"
                             );
-                        };
-                        let true = values.iter().all(|value| first.has_same_domain(value)) else {
+                        }
+                        if !values.iter().all(|value| first.has_same_domain(value)) {
                             panic!(
                                 "registry admitted EnsureSortable for mixed expanded dynamic index domains"
                             );
-                        };
+                        }
                         incomparable_pair(values.into_iter())
                     }
-                    Self::EndpointRole(_) | Self::FailureKind(_) => {
+                    Self::Edge(_) | Self::EndpointRole(_) | Self::FailureKind(_) => {
                         panic!(
                             "registry admitted EnsureSortable for an unsortable dynamic index domain"
                         )
@@ -385,106 +456,282 @@ macro_rules! implement_dynamic_index {
     };
 }
 
-implement_dynamic_index!(DynIndexOwned, NodeIndex, EdgeIndex);
-implement_dynamic_index!(DynIndexRef<'_>, &NodeIndex, &EdgeIndex);
+implement_dynamic_index!(DynIndexOwned, NodeIndex, GroupIndex, AttributeName);
+implement_dynamic_index!(
+    DynIndexView<'_>,
+    NodeIndexView<'_>,
+    GroupIndexView<'_>,
+    AttributeNameView<'_>
+);
+
+impl DynIndex {
+    fn tiebreak_expanded<T, F: Fn(&T) -> &DynIndexAddress>(
+        graphrecord: &GraphRecord,
+        run: &mut [T],
+        address: F,
+    ) {
+        let identities: Vec<_> = run
+            .iter()
+            .map(|element| Self::index(graphrecord, address(element)))
+            .collect();
+
+        let sortable = identities.first().is_some_and(|first| {
+            first.supports_index_sorting()
+                && identities
+                    .iter()
+                    .all(|identity| first.has_same_domain(identity))
+        });
+
+        if !sortable || EnsureSortable::find_incomparable(identities.iter()).is_some() {
+            return;
+        }
+
+        run.sort_by(|left, right| {
+            Self::index(graphrecord, address(left))
+                .partial_cmp(&Self::index(graphrecord, address(right)))
+                .unwrap_or_else(|| {
+                    panic!("EnsureSortable admitted an incomparable pair of identities")
+                })
+        });
+    }
+}
 
 impl IndexDomain for DynIndex {
-    type Index<'a> = DynIndexRef<'a>;
+    type Address = DynIndexAddress;
+    type Index<'a> = DynIndexView<'a>;
     type Owned = DynIndexOwned;
 
-    fn to_owned(index: &Self::Index<'_>) -> Self::Owned {
-        match index {
-            DynIndexRef::Positional(position) => DynIndexOwned::Positional(*position),
-            DynIndexRef::Node(node) => DynIndexOwned::Node((*node).clone()),
-            DynIndexRef::Edge(edge) => DynIndexOwned::Edge(**edge),
-            DynIndexRef::Attribute(attribute) => DynIndexOwned::Attribute(attribute.clone()),
-            DynIndexRef::Value(value) => DynIndexOwned::Value(value.clone()),
-            DynIndexRef::Bool(value) => DynIndexOwned::Bool(*value),
-            DynIndexRef::EndpointRole(role) => DynIndexOwned::EndpointRole(*role),
-            DynIndexRef::FailureKind(kind) => DynIndexOwned::FailureKind(*kind),
-            DynIndexRef::Expanded(expanded) => {
-                let parent = <Self as IndexDomain>::to_owned(expanded.parent_index());
+    fn index<'a>(graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
+        match address {
+            DynIndexAddress::Positional(position) => {
+                DynIndexView::Positional(Positional::index(graphrecord, position))
+            }
+            DynIndexAddress::Node(node) => DynIndexView::Node(NodeIndex::index(graphrecord, node)),
+            DynIndexAddress::Edge(edge) => DynIndexView::Edge(EdgeIndex::index(graphrecord, edge)),
+            DynIndexAddress::Group(group_index) => {
+                DynIndexView::Group(GroupIndex::index(graphrecord, group_index))
+            }
+            DynIndexAddress::Attribute(attribute) => {
+                DynIndexView::Attribute(AttributeName::index(graphrecord, attribute))
+            }
+            DynIndexAddress::Value(value) => DynIndexView::Value(Value::index(graphrecord, value)),
+            DynIndexAddress::Bool(value) => DynIndexView::Bool(bool::index(graphrecord, value)),
+            DynIndexAddress::EndpointRole(role) => {
+                DynIndexView::EndpointRole(EdgeEndpointRole::index(graphrecord, role))
+            }
+            DynIndexAddress::FailureKind(kind) => {
+                DynIndexView::FailureKind(FailureKind::index(graphrecord, kind))
+            }
+            DynIndexAddress::Expanded(expanded) => {
+                let parent = Self::index(graphrecord, expanded.parent_index());
                 let expanded = match expanded.child_index() {
-                    None => DynExpandedOwned::source(parent),
-                    Some(child) => {
-                        DynExpandedOwned::child(parent, <Self as IndexDomain>::to_owned(child))
-                    }
+                    None => DynExpandedView::parent(parent),
+                    Some(child) => DynExpandedView::child(parent, Self::index(graphrecord, child)),
                 };
+
+                DynIndexView::Expanded(Box::new(expanded))
+            }
+        }
+    }
+
+    fn own_index(index: &Self::Index<'_>) -> Self::Owned {
+        match index {
+            DynIndexView::Positional(position) => {
+                DynIndexOwned::Positional(Positional::own_index(position))
+            }
+            DynIndexView::Node(node) => DynIndexOwned::Node(NodeIndex::own_index(node)),
+            DynIndexView::Edge(edge) => DynIndexOwned::Edge(EdgeIndex::own_index(edge)),
+            DynIndexView::Group(group_index) => {
+                DynIndexOwned::Group(GroupIndex::own_index(group_index))
+            }
+            DynIndexView::Attribute(attribute) => {
+                DynIndexOwned::Attribute(AttributeName::own_index(attribute))
+            }
+            DynIndexView::Value(value) => DynIndexOwned::Value(Value::own_index(value)),
+            DynIndexView::Bool(value) => DynIndexOwned::Bool(bool::own_index(value)),
+            DynIndexView::EndpointRole(role) => {
+                DynIndexOwned::EndpointRole(EdgeEndpointRole::own_index(role))
+            }
+            DynIndexView::FailureKind(kind) => {
+                DynIndexOwned::FailureKind(FailureKind::own_index(kind))
+            }
+            DynIndexView::Expanded(expanded) => {
+                let parent = Self::own_index(expanded.parent_index());
+                let expanded = match expanded.child_index() {
+                    None => DynExpandedOwned::parent(parent),
+                    Some(child) => DynExpandedOwned::child(parent, Self::own_index(child)),
+                };
+
                 DynIndexOwned::Expanded(Box::new(expanded))
             }
         }
     }
 
-    fn from_owned(owned: &Self::Owned) -> Self::Index<'_> {
+    fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
         match owned {
-            DynIndexOwned::Positional(position) => DynIndexRef::Positional(*position),
-            DynIndexOwned::Node(node) => DynIndexRef::Node(node),
-            DynIndexOwned::Edge(edge) => DynIndexRef::Edge(edge),
-            DynIndexOwned::Attribute(attribute) => DynIndexRef::Attribute(attribute.clone()),
-            DynIndexOwned::Value(value) => DynIndexRef::Value(value.clone()),
-            DynIndexOwned::Bool(value) => DynIndexRef::Bool(*value),
-            DynIndexOwned::EndpointRole(role) => DynIndexRef::EndpointRole(*role),
-            DynIndexOwned::FailureKind(kind) => DynIndexRef::FailureKind(*kind),
+            DynIndexOwned::Positional(position) => {
+                DynIndexView::Positional(Positional::borrow_index(position))
+            }
+            DynIndexOwned::Node(node) => DynIndexView::Node(NodeIndex::borrow_index(node)),
+            DynIndexOwned::Edge(edge) => DynIndexView::Edge(EdgeIndex::borrow_index(edge)),
+            DynIndexOwned::Group(group_index) => {
+                DynIndexView::Group(GroupIndex::borrow_index(group_index))
+            }
+            DynIndexOwned::Attribute(attribute) => {
+                DynIndexView::Attribute(AttributeName::borrow_index(attribute))
+            }
+            DynIndexOwned::Value(value) => DynIndexView::Value(Value::borrow_index(value)),
+            DynIndexOwned::Bool(value) => DynIndexView::Bool(bool::borrow_index(value)),
+            DynIndexOwned::EndpointRole(role) => {
+                DynIndexView::EndpointRole(EdgeEndpointRole::borrow_index(role))
+            }
+            DynIndexOwned::FailureKind(kind) => {
+                DynIndexView::FailureKind(FailureKind::borrow_index(kind))
+            }
             DynIndexOwned::Expanded(expanded) => {
-                let parent = Self::from_owned(expanded.parent_index());
+                let parent = Self::borrow_index(expanded.parent_index());
                 let expanded = match expanded.child_index() {
-                    None => DynExpandedRef::source(parent),
-                    Some(child) => DynExpandedRef::child(parent, Self::from_owned(child)),
+                    None => DynExpandedView::parent(parent),
+                    Some(child) => DynExpandedView::child(parent, Self::borrow_index(child)),
                 };
-                DynIndexRef::Expanded(Box::new(expanded))
+                DynIndexView::Expanded(Box::new(expanded))
+            }
+        }
+    }
+
+    fn resolve(
+        graphrecord: &GraphRecord,
+        owned: &Self::Owned,
+        label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        match owned {
+            DynIndexOwned::Positional(position) => {
+                Positional::resolve(graphrecord, position, label).map(DynIndexAddress::Positional)
+            }
+            DynIndexOwned::Node(node) => {
+                NodeIndex::resolve(graphrecord, node, label).map(DynIndexAddress::Node)
+            }
+            DynIndexOwned::Edge(edge) => {
+                EdgeIndex::resolve(graphrecord, edge, label).map(DynIndexAddress::Edge)
+            }
+            DynIndexOwned::Group(group_index) => {
+                GroupIndex::resolve(graphrecord, group_index, label).map(DynIndexAddress::Group)
+            }
+            DynIndexOwned::Attribute(attribute) => {
+                AttributeName::resolve(graphrecord, attribute, label)
+                    .map(DynIndexAddress::Attribute)
+            }
+            DynIndexOwned::Value(value) => {
+                Value::resolve(graphrecord, value, label).map(DynIndexAddress::Value)
+            }
+            DynIndexOwned::Bool(value) => {
+                bool::resolve(graphrecord, value, label).map(DynIndexAddress::Bool)
+            }
+            DynIndexOwned::EndpointRole(role) => {
+                EdgeEndpointRole::resolve(graphrecord, role, label)
+                    .map(DynIndexAddress::EndpointRole)
+            }
+            DynIndexOwned::FailureKind(kind) => {
+                FailureKind::resolve(graphrecord, kind, label).map(DynIndexAddress::FailureKind)
+            }
+            DynIndexOwned::Expanded(expanded) => {
+                let parent = Self::resolve(graphrecord, expanded.parent_index(), label)?;
+                let expanded = match expanded.child_index() {
+                    None => DynExpandedAddress::parent(parent),
+                    Some(child) => {
+                        DynExpandedAddress::child(parent, Self::resolve(graphrecord, child, label)?)
+                    }
+                };
+
+                Ok(DynIndexAddress::Expanded(Box::new(expanded)))
             }
         }
     }
 }
 
-impl GroupKey for DynIndex {
-    fn resolve_key<'a>(
-        label: &'static str,
-        graphrecord: &'a GraphRecord,
-        key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
-        match key {
-            DynIndexOwned::Positional(position) => {
-                Positional::resolve_key(label, graphrecord, position).map(DynIndexRef::Positional)
-            }
-            DynIndexOwned::Node(node) => NodeIndex::resolve_key(label, graphrecord, node)
-                .map(DynIndexRef::Node)
-                .map_err(|failure| failure.at::<Self>(&Self::from_owned(key))),
-            DynIndexOwned::Edge(edge) => EdgeIndex::resolve_key(label, graphrecord, edge)
-                .map(DynIndexRef::Edge)
-                .map_err(|failure| failure.at::<Self>(&Self::from_owned(key))),
-            DynIndexOwned::Attribute(attribute) => {
-                AttributeName::resolve_key(label, graphrecord, attribute)
-                    .map(DynIndexRef::Attribute)
-            }
-            DynIndexOwned::Value(value) => {
-                GraphRecordValue::resolve_key(label, graphrecord, value).map(DynIndexRef::Value)
-            }
-            DynIndexOwned::Bool(value) => {
-                bool::resolve_key(label, graphrecord, value).map(DynIndexRef::Bool)
-            }
-            DynIndexOwned::EndpointRole(role) => {
-                EdgeEndpointRole::resolve_key(label, graphrecord, role)
-                    .map(DynIndexRef::EndpointRole)
-            }
-            DynIndexOwned::FailureKind(kind) => {
-                FailureKind::resolve_key(label, graphrecord, kind).map(DynIndexRef::FailureKind)
-            }
-            DynIndexOwned::Expanded(expanded) => {
-                let parent = Self::resolve_key(label, graphrecord, &expanded.parent)?;
-                let child = expanded
-                    .child
-                    .as_ref()
-                    .map(|child| Self::resolve_key(label, graphrecord, child))
-                    .transpose()?;
+impl IndexTiebreak for DynIndex {
+    fn tiebreak<T, F: Fn(&T) -> &Self::Address>(
+        graphrecord: &GraphRecord,
+        run: &mut [T],
+        address: F,
+    ) {
+        if run
+            .iter()
+            .all(|element| matches!(address(element), DynIndexAddress::Positional(_)))
+        {
+            Positional::tiebreak(graphrecord, run, |element| match address(element) {
+                DynIndexAddress::Positional(position) => position,
+                _ => unreachable!("dynamic addresses were checked as positional addresses"),
+            });
 
-                let expanded = match child {
-                    None => DynExpandedRef::source(parent),
-                    Some(child) => DynExpandedRef::child(parent, child),
-                };
+            return;
+        }
 
-                Ok(DynIndexRef::Expanded(Box::new(expanded)))
-            }
+        if run
+            .iter()
+            .all(|element| matches!(address(element), DynIndexAddress::Node(_)))
+        {
+            NodeIndex::tiebreak(graphrecord, run, |element| match address(element) {
+                DynIndexAddress::Node(node) => node,
+                _ => unreachable!("dynamic addresses were checked as node addresses"),
+            });
+
+            return;
+        }
+
+        if run
+            .iter()
+            .all(|element| matches!(address(element), DynIndexAddress::Group(_)))
+        {
+            GroupIndex::tiebreak(graphrecord, run, |element| match address(element) {
+                DynIndexAddress::Group(group_index) => group_index,
+                _ => unreachable!("dynamic addresses were checked as group addresses"),
+            });
+
+            return;
+        }
+
+        if run
+            .iter()
+            .all(|element| matches!(address(element), DynIndexAddress::Attribute(_)))
+        {
+            AttributeName::tiebreak(graphrecord, run, |element| match address(element) {
+                DynIndexAddress::Attribute(attribute) => attribute,
+                _ => unreachable!("dynamic addresses were checked as attribute-name addresses"),
+            });
+
+            return;
+        }
+
+        if run
+            .iter()
+            .all(|element| matches!(address(element), DynIndexAddress::Value(_)))
+        {
+            Value::tiebreak(graphrecord, run, |element| match address(element) {
+                DynIndexAddress::Value(value) => value,
+                _ => unreachable!("dynamic addresses were checked as value addresses"),
+            });
+
+            return;
+        }
+
+        if run
+            .iter()
+            .all(|element| matches!(address(element), DynIndexAddress::Bool(_)))
+        {
+            bool::tiebreak(graphrecord, run, |element| match address(element) {
+                DynIndexAddress::Bool(value) => value,
+                _ => unreachable!("dynamic addresses were checked as boolean addresses"),
+            });
+
+            return;
+        }
+
+        if run
+            .iter()
+            .all(|element| matches!(address(element), DynIndexAddress::Expanded(_)))
+        {
+            Self::tiebreak_expanded(graphrecord, run, address);
         }
     }
 }

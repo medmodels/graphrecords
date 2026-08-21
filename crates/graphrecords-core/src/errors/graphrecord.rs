@@ -1,8 +1,13 @@
+#[cfg(feature = "io")]
+use super::io::IoError;
 use super::{conversion::ConversionError, schema::SchemaError};
-use crate::graphrecord::{EdgeIndex, GraphRecordAttribute, GraphRecordValue, Group, NodeIndex};
+#[cfg(feature = "plugins")]
+use crate::graphrecord::PluginName;
+use crate::graphrecord::{AttributeName, EdgeIndex, GroupIndex, Identifier, NodeIndex, Value};
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
+    sync::Arc,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -15,75 +20,115 @@ pub enum ValueOperation {
     Modulo,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum GraphRecordError {
     NodeNotFound {
         node_index: NodeIndex,
     },
+    NodesNotFound {
+        node_indices: Vec<NodeIndex>,
+    },
     EdgeNotFound {
         edge_index: EdgeIndex,
+    },
+    EdgesNotFound {
+        edge_indices: Vec<EdgeIndex>,
     },
     NodeAlreadyExists {
         node_index: NodeIndex,
     },
+    AddressSpaceExhausted,
     GroupNotFound {
-        group: Group,
+        group_index: GroupIndex,
+    },
+    GroupsNotFound {
+        group_indices: Vec<GroupIndex>,
     },
     GroupAlreadyExists {
-        group: Group,
+        group_index: GroupIndex,
     },
+    NoNodeSelected,
+    NoEdgeSelected,
+    NoGroupSelected,
     NodeAlreadyInGroup {
         node_index: NodeIndex,
-        group: Group,
+        group_index: GroupIndex,
     },
     EdgeAlreadyInGroup {
         edge_index: EdgeIndex,
-        group: Group,
+        group_index: GroupIndex,
     },
     NodeNotInGroup {
         node_index: NodeIndex,
-        group: Group,
+        group_index: GroupIndex,
     },
     EdgeNotInGroup {
         edge_index: EdgeIndex,
-        group: Group,
+        group_index: GroupIndex,
     },
     NodeAttributeNotFound {
         node_index: NodeIndex,
-        attribute: GraphRecordAttribute,
+        attribute_name: AttributeName,
     },
     EdgeAttributeNotFound {
         edge_index: EdgeIndex,
-        attribute: GraphRecordAttribute,
+        attribute_name: AttributeName,
+    },
+    NodeAttributeConflict {
+        node_index: NodeIndex,
+        attribute_name: AttributeName,
+        self_value: Value,
+        other_value: Value,
     },
     IncompatibleValueOperands {
         operation: ValueOperation,
-        left: GraphRecordValue,
-        right: GraphRecordValue,
+        left: Value,
+        right: Value,
     },
-    IncompatibleAttributeOperands {
+    IncompatibleIdentifierOperands {
         operation: ValueOperation,
-        left: GraphRecordAttribute,
-        right: GraphRecordAttribute,
+        left: Identifier,
+        right: Identifier,
     },
     InvalidTimestamp,
+    #[cfg(feature = "plugins")]
     PluginNotFound {
-        name: GraphRecordAttribute,
+        name: PluginName,
     },
+    #[cfg(feature = "plugins")]
     PluginAlreadyExists {
-        name: GraphRecordAttribute,
+        name: PluginName,
     },
+    #[cfg(feature = "plugins")]
     PluginFailure {
-        message: String,
+        cause: Arc<dyn Error + Send + Sync>,
     },
-    ConnectorFailure {
-        message: String,
+    WriterFailure {
+        cause: Arc<dyn Error + Send + Sync>,
+    },
+    QueryFailure {
+        cause: Arc<dyn Error + Send + Sync>,
     },
     Schema(SchemaError),
     Conversion(ConversionError),
+    #[cfg(feature = "io")]
+    Io(IoError),
 }
 
-impl Error for GraphRecordError {}
+impl Error for GraphRecordError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            #[cfg(feature = "plugins")]
+            Self::PluginFailure { cause } => Some(&**cause),
+            Self::WriterFailure { cause } | Self::QueryFailure { cause } => Some(&**cause),
+            Self::Schema(error) => Some(error),
+            Self::Conversion(error) => Some(error),
+            #[cfg(feature = "io")]
+            Self::Io(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 impl From<SchemaError> for GraphRecordError {
     fn from(error: SchemaError) -> Self {
@@ -97,51 +142,122 @@ impl From<ConversionError> for GraphRecordError {
     }
 }
 
+#[cfg(feature = "io")]
+impl From<IoError> for GraphRecordError {
+    fn from(error: IoError) -> Self {
+        Self::Io(error)
+    }
+}
+
 impl Display for GraphRecordError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::NodeNotFound { node_index } => {
                 write!(f, "Cannot find node with index `{node_index}`")
             }
+            Self::NodesNotFound { node_indices } => {
+                let indices = node_indices
+                    .iter()
+                    .map(|node_index| format!("`{node_index}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(f, "Cannot find nodes with indices {indices}")
+            }
             Self::EdgeNotFound { edge_index } => {
                 write!(f, "Cannot find edge with index `{edge_index}`")
+            }
+            Self::EdgesNotFound { edge_indices } => {
+                let indices = edge_indices
+                    .iter()
+                    .map(|edge_index| format!("`{edge_index}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(f, "Cannot find edges with indices {indices}")
             }
             Self::NodeAlreadyExists { node_index } => {
                 write!(f, "Node with index `{node_index}` already exists")
             }
-            Self::GroupNotFound { group } => write!(f, "Cannot find group `{group}`"),
-            Self::GroupAlreadyExists { group } => write!(f, "Group `{group}` already exists"),
-            Self::NodeAlreadyInGroup { node_index, group } => {
+            Self::AddressSpaceExhausted => {
+                write!(f, "Address space is exhausted")
+            }
+            Self::GroupNotFound { group_index } => {
+                write!(f, "Cannot find group with index `{group_index}`")
+            }
+            Self::GroupsNotFound { group_indices } => {
+                let indices = group_indices
+                    .iter()
+                    .map(|group_index| format!("`{group_index}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(f, "Cannot find groups with indices {indices}")
+            }
+            Self::GroupAlreadyExists { group_index } => {
+                write!(f, "Group with index `{group_index}` already exists")
+            }
+            Self::NoNodeSelected => write!(f, "No node selected"),
+            Self::NoEdgeSelected => write!(f, "No edge selected"),
+            Self::NoGroupSelected => write!(f, "No group selected"),
+            Self::NodeAlreadyInGroup {
+                node_index,
+                group_index,
+            } => {
                 write!(
                     f,
-                    "Node with index `{node_index}` already in group `{group}`"
+                    "Node with index `{node_index}` already in group `{group_index}`"
                 )
             }
-            Self::EdgeAlreadyInGroup { edge_index, group } => {
+            Self::EdgeAlreadyInGroup {
+                edge_index,
+                group_index,
+            } => {
                 write!(
                     f,
-                    "Edge with index `{edge_index}` already in group `{group}`"
+                    "Edge with index `{edge_index}` already in group `{group_index}`"
                 )
             }
-            Self::NodeNotInGroup { node_index, group } => {
-                write!(f, "Node with index `{node_index}` not in group `{group}`")
+            Self::NodeNotInGroup {
+                node_index,
+                group_index,
+            } => {
+                write!(
+                    f,
+                    "Node with index `{node_index}` not in group `{group_index}`"
+                )
             }
-            Self::EdgeNotInGroup { edge_index, group } => {
-                write!(f, "Edge with index `{edge_index}` not in group `{group}`")
+            Self::EdgeNotInGroup {
+                edge_index,
+                group_index,
+            } => {
+                write!(
+                    f,
+                    "Edge with index `{edge_index}` not in group `{group_index}`"
+                )
             }
             Self::NodeAttributeNotFound {
                 node_index,
-                attribute,
+                attribute_name,
             } => write!(
                 f,
-                "Attribute `{attribute}` does not exist on node `{node_index}`"
+                "Attribute `{attribute_name}` does not exist on node `{node_index}`"
             ),
             Self::EdgeAttributeNotFound {
                 edge_index,
-                attribute,
+                attribute_name,
             } => write!(
                 f,
-                "Attribute `{attribute}` does not exist on edge `{edge_index}`"
+                "Attribute `{attribute_name}` does not exist on edge `{edge_index}`"
+            ),
+            Self::NodeAttributeConflict {
+                node_index,
+                attribute_name,
+                self_value,
+                other_value,
+            } => write!(
+                f,
+                "Attribute `{attribute_name}` on node `{node_index}` conflicts between `{self_value}` and `{other_value}`"
             ),
             Self::IncompatibleValueOperands {
                 operation,
@@ -155,9 +271,9 @@ impl Display for GraphRecordError {
                 ValueOperation::Power => {
                     write!(f, "Cannot raise `{left}` to the power of `{right}`")
                 }
-                ValueOperation::Modulo => write!(f, "Cannot mod `{left}` with `{right}`"),
+                ValueOperation::Modulo => write!(f, "Cannot take `{left}` modulo `{right}`"),
             },
-            Self::IncompatibleAttributeOperands {
+            Self::IncompatibleIdentifierOperands {
                 operation,
                 left,
                 right,
@@ -169,27 +285,139 @@ impl Display for GraphRecordError {
                 ValueOperation::Power => {
                     write!(f, "Cannot raise `{left}` to the power of `{right}`")
                 }
-                ValueOperation::Modulo => write!(f, "Cannot mod `{left}` with `{right}`"),
+                ValueOperation::Modulo => write!(f, "Cannot take `{left}` modulo `{right}`"),
             },
             Self::InvalidTimestamp => write!(f, "Invalid timestamp"),
+            #[cfg(feature = "plugins")]
             Self::PluginNotFound { name } => {
                 write!(f, "Plugin with name `{name}` does not exist")
             }
+            #[cfg(feature = "plugins")]
             Self::PluginAlreadyExists { name } => {
                 write!(f, "Plugin with name `{name}` already exists")
             }
-            Self::PluginFailure { message } => write!(f, "Plugin failed: {message}"),
-            Self::ConnectorFailure { message } => write!(f, "Connector failed: {message}"),
+            #[cfg(feature = "plugins")]
+            Self::PluginFailure { cause } => write!(f, "Plugin failed: {cause}"),
+            Self::WriterFailure { cause } => write!(f, "Writer failed: {cause}"),
+            Self::QueryFailure { cause } => write!(f, "Query failed: {cause}"),
             Self::Schema(error) => write!(f, "{error}"),
             Self::Conversion(error) => write!(f, "{error}"),
+            #[cfg(feature = "io")]
+            Self::Io(error) => write!(f, "{error}"),
         }
     }
 }
 
 #[cfg(test)]
 mod test {
+    #[cfg(feature = "io")]
+    use super::IoError;
     use super::{ConversionError, GraphRecordError, SchemaError, ValueOperation};
-    use crate::graphrecord::GraphRecordValue;
+    use crate::graphrecord::{EdgeIndex, Value};
+    use std::{
+        error::Error,
+        fmt::{Display, Formatter, Result as FmtResult},
+        sync::Arc,
+    };
+
+    #[derive(Debug)]
+    struct LoremError;
+
+    impl Display for LoremError {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+            write!(f, "lorem ipsum")
+        }
+    }
+
+    impl Error for LoremError {}
+
+    #[test]
+    fn test_source() {
+        let writer_failure = GraphRecordError::WriterFailure {
+            cause: Arc::new(LoremError),
+        };
+
+        assert!(
+            writer_failure
+                .source()
+                .unwrap()
+                .downcast_ref::<LoremError>()
+                .is_some()
+        );
+
+        let query_failure = GraphRecordError::QueryFailure {
+            cause: Arc::new(LoremError),
+        };
+
+        assert!(
+            query_failure
+                .source()
+                .unwrap()
+                .downcast_ref::<LoremError>()
+                .is_some()
+        );
+
+        let schema_error = GraphRecordError::Schema(SchemaError::GroupNotInSchema {
+            group_index: "test".into(),
+        });
+
+        assert_eq!(
+            Some(&SchemaError::GroupNotInSchema {
+                group_index: "test".into()
+            }),
+            schema_error.source().unwrap().downcast_ref::<SchemaError>()
+        );
+
+        let conversion_error = GraphRecordError::Conversion(ConversionError::ValueToIdentifier {
+            value: Value::Bool(true),
+        });
+
+        assert_eq!(
+            Some(&ConversionError::ValueToIdentifier {
+                value: Value::Bool(true)
+            }),
+            conversion_error
+                .source()
+                .unwrap()
+                .downcast_ref::<ConversionError>()
+        );
+
+        #[cfg(feature = "io")]
+        {
+            let io_error = GraphRecordError::Io(IoError::CorruptedFile {
+                path: "path".to_string(),
+            });
+
+            assert_eq!(
+                Some(&IoError::CorruptedFile {
+                    path: "path".to_string()
+                }),
+                io_error.source().unwrap().downcast_ref::<IoError>()
+            );
+        }
+
+        let node_not_found = GraphRecordError::NodeNotFound {
+            node_index: "test".into(),
+        };
+
+        assert!(node_not_found.source().is_none());
+    }
+
+    #[cfg(feature = "plugins")]
+    #[test]
+    fn test_source_plugins() {
+        let plugin_failure = GraphRecordError::PluginFailure {
+            cause: Arc::new(LoremError),
+        };
+
+        assert!(
+            plugin_failure
+                .source()
+                .unwrap()
+                .downcast_ref::<LoremError>()
+                .is_some()
+        );
+    }
 
     #[test]
     fn test_display_entities() {
@@ -201,8 +429,25 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Cannot find edge with index `0`",
-            GraphRecordError::EdgeNotFound { edge_index: 0 }.to_string()
+            "Cannot find nodes with indices `\"test\"`, `\"other\"`",
+            GraphRecordError::NodesNotFound {
+                node_indices: vec!["test".into(), "other".into()]
+            }
+            .to_string()
+        );
+        assert_eq!(
+            "Cannot find edge with index `0000000000000000:0`",
+            GraphRecordError::EdgeNotFound {
+                edge_index: EdgeIndex::new(0, 0)
+            }
+            .to_string()
+        );
+        assert_eq!(
+            "Cannot find edges with indices `0000000000000000:0`",
+            GraphRecordError::EdgesNotFound {
+                edge_indices: vec![EdgeIndex::new(0, 0)]
+            }
+            .to_string()
         );
         assert_eq!(
             "Node with index `\"test\"` already exists",
@@ -212,18 +457,41 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Cannot find group `\"test\"`",
+            "Address space is exhausted",
+            GraphRecordError::AddressSpaceExhausted.to_string()
+        );
+        assert_eq!(
+            "Cannot find group with index `\"test\"`",
             GraphRecordError::GroupNotFound {
-                group: "test".into()
+                group_index: "test".into()
             }
             .to_string()
         );
         assert_eq!(
-            "Group `\"test\"` already exists",
-            GraphRecordError::GroupAlreadyExists {
-                group: "test".into()
+            "Cannot find groups with indices `\"test\"`, `\"other\"`",
+            GraphRecordError::GroupsNotFound {
+                group_indices: vec!["test".into(), "other".into()]
             }
             .to_string()
+        );
+        assert_eq!(
+            "Group with index `\"test\"` already exists",
+            GraphRecordError::GroupAlreadyExists {
+                group_index: "test".into()
+            }
+            .to_string()
+        );
+        assert_eq!(
+            "No node selected",
+            GraphRecordError::NoNodeSelected.to_string()
+        );
+        assert_eq!(
+            "No edge selected",
+            GraphRecordError::NoEdgeSelected.to_string()
+        );
+        assert_eq!(
+            "No group selected",
+            GraphRecordError::NoGroupSelected.to_string()
         );
     }
 
@@ -233,15 +501,15 @@ mod test {
             "Node with index `\"test\"` already in group `\"group\"`",
             GraphRecordError::NodeAlreadyInGroup {
                 node_index: "test".into(),
-                group: "group".into()
+                group_index: "group".into()
             }
             .to_string()
         );
         assert_eq!(
-            "Edge with index `0` already in group `\"group\"`",
+            "Edge with index `0000000000000000:0` already in group `\"group\"`",
             GraphRecordError::EdgeAlreadyInGroup {
-                edge_index: 0,
-                group: "group".into()
+                edge_index: EdgeIndex::new(0, 0),
+                group_index: "group".into()
             }
             .to_string()
         );
@@ -249,15 +517,15 @@ mod test {
             "Node with index `\"test\"` not in group `\"group\"`",
             GraphRecordError::NodeNotInGroup {
                 node_index: "test".into(),
-                group: "group".into()
+                group_index: "group".into()
             }
             .to_string()
         );
         assert_eq!(
-            "Edge with index `0` not in group `\"group\"`",
+            "Edge with index `0000000000000000:0` not in group `\"group\"`",
             GraphRecordError::EdgeNotInGroup {
-                edge_index: 0,
-                group: "group".into()
+                edge_index: EdgeIndex::new(0, 0),
+                group_index: "group".into()
             }
             .to_string()
         );
@@ -269,15 +537,25 @@ mod test {
             "Attribute `\"attribute\"` does not exist on node `\"test\"`",
             GraphRecordError::NodeAttributeNotFound {
                 node_index: "test".into(),
-                attribute: "attribute".into()
+                attribute_name: "attribute".into()
             }
             .to_string()
         );
         assert_eq!(
-            "Attribute `\"attribute\"` does not exist on edge `0`",
+            "Attribute `\"attribute\"` does not exist on edge `0000000000000000:0`",
             GraphRecordError::EdgeAttributeNotFound {
-                edge_index: 0,
-                attribute: "attribute".into()
+                edge_index: EdgeIndex::new(0, 0),
+                attribute_name: "attribute".into()
+            }
+            .to_string()
+        );
+        assert_eq!(
+            "Attribute `\"attribute\"` on node `\"test\"` conflicts between `1` and `2`",
+            GraphRecordError::NodeAttributeConflict {
+                node_index: "test".into(),
+                attribute_name: "attribute".into(),
+                self_value: Value::Int(1),
+                other_value: Value::Int(2)
             }
             .to_string()
         );
@@ -287,8 +565,8 @@ mod test {
     fn test_display_operands() {
         let error = |operation| GraphRecordError::IncompatibleValueOperands {
             operation,
-            left: GraphRecordValue::Int(1),
-            right: GraphRecordValue::Bool(true),
+            left: Value::Int(1),
+            right: Value::Bool(true),
         };
 
         assert_eq!(
@@ -312,12 +590,12 @@ mod test {
             error(ValueOperation::Power).to_string()
         );
         assert_eq!(
-            "Cannot mod `1` with `true`",
+            "Cannot take `1` modulo `true`",
             error(ValueOperation::Modulo).to_string()
         );
         assert_eq!(
             "Cannot add `\"attribute\"` to `1`",
-            GraphRecordError::IncompatibleAttributeOperands {
+            GraphRecordError::IncompatibleIdentifierOperands {
                 operation: ValueOperation::Add,
                 left: 1.into(),
                 right: "attribute".into()
@@ -326,25 +604,15 @@ mod test {
         );
     }
 
+    #[cfg(feature = "plugins")]
     #[test]
-    fn test_display_remaining() {
+    fn test_display_plugins() {
         assert_eq!(
-            "Plugin failed: message",
+            "Plugin failed: lorem ipsum",
             GraphRecordError::PluginFailure {
-                message: "message".to_string()
+                cause: Arc::new(LoremError)
             }
             .to_string()
-        );
-        assert_eq!(
-            "Connector failed: message",
-            GraphRecordError::ConnectorFailure {
-                message: "message".to_string()
-            }
-            .to_string()
-        );
-        assert_eq!(
-            "Invalid timestamp",
-            GraphRecordError::InvalidTimestamp.to_string()
         );
         assert_eq!(
             "Plugin with name `\"plugin\"` does not exist",
@@ -360,17 +628,59 @@ mod test {
             }
             .to_string()
         );
+    }
+
+    #[test]
+    fn test_display_writers() {
         assert_eq!(
-            "Group `\"test\"` is not defined in the schema",
+            "Writer failed: lorem ipsum",
+            GraphRecordError::WriterFailure {
+                cause: Arc::new(LoremError)
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn test_display_query() {
+        assert_eq!(
+            "Query failed: lorem ipsum",
+            GraphRecordError::QueryFailure {
+                cause: Arc::new(LoremError)
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn test_display_timestamp() {
+        assert_eq!(
+            "Invalid timestamp",
+            GraphRecordError::InvalidTimestamp.to_string()
+        );
+    }
+
+    #[test]
+    fn test_display_wrapped() {
+        assert_eq!(
+            "Group with index `\"test\"` is not defined in the schema",
             GraphRecordError::Schema(SchemaError::GroupNotInSchema {
-                group: "test".into()
+                group_index: "test".into()
             })
             .to_string()
         );
         assert_eq!(
-            "Cannot convert `true` into `GraphRecordAttribute`",
-            GraphRecordError::Conversion(ConversionError::ValueToAttribute {
-                value: GraphRecordValue::Bool(true)
+            "Cannot convert `true` into `Identifier`",
+            GraphRecordError::Conversion(ConversionError::ValueToIdentifier {
+                value: Value::Bool(true)
+            })
+            .to_string()
+        );
+        #[cfg(feature = "io")]
+        assert_eq!(
+            "File `path` is corrupted",
+            GraphRecordError::Io(IoError::CorruptedFile {
+                path: "path".to_string()
             })
             .to_string()
         );

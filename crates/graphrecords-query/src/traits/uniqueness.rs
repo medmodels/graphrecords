@@ -1,17 +1,17 @@
 pub trait DropDuplicates {
-    type ReturnOperand;
+    type Output;
 
-    fn drop_duplicates(&self) -> Self::ReturnOperand;
+    fn drop_duplicates(&self) -> Self::Output;
 }
 
 pub trait IsDuplicated {
-    type ReturnOperand;
+    type Output;
 
-    fn is_duplicated(&self) -> Self::ReturnOperand;
+    fn is_duplicated(&self) -> Self::Output;
 }
 
 pub trait Unique {
-    type ReturnOperand;
+    type Output;
 
-    fn unique(&self) -> Self::ReturnOperand;
+    fn unique(&self) -> Self::Output;
 }

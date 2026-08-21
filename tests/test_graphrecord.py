@@ -1,3953 +1,1669 @@
-import tempfile
+import copy
+import pickle
 import unittest
-from typing import List, Tuple
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import List, Optional, Tuple, cast
 
-import pandas as pd
 import polars as pl
 import pytest
 
-from graphrecords import GraphRecord
-from graphrecords._graphrecords.graphrecord import PyGraphRecord
-from graphrecords.builder import GraphRecordBuilder
-from graphrecords.datatype import Int
-from graphrecords.graphrecord import EdgesDirection
-from graphrecords.plugins import (
-    Plugin,
-    PostAddEdgesContext,
-    PostAddEdgesDataframesContext,
-    PostAddEdgesDataframesWithGroupContext,
-    PostAddEdgesDataframesWithGroupsContext,
-    PostAddEdgesToGroupsContext,
-    PostAddEdgesWithGroupContext,
-    PostAddEdgesWithGroupsContext,
-    PostAddEdgeToGroupContext,
-    PostAddGroupContext,
-    PostAddNodesContext,
-    PostAddNodesDataframesContext,
-    PostAddNodesDataframesWithGroupContext,
-    PostAddNodesDataframesWithGroupsContext,
-    PostAddNodesToGroupsContext,
-    PostAddNodesWithGroupContext,
-    PostAddNodesWithGroupsContext,
-    PostAddNodeToGroupContext,
-    PostRemoveEdgeContext,
-    PostRemoveEdgeFromGroupContext,
-    PostRemoveEdgesFromGroupsContext,
-    PostRemoveGroupContext,
-    PostRemoveNodeContext,
-    PostRemoveNodeFromGroupContext,
-    PostRemoveNodesFromGroupsContext,
-    PreAddEdgesContext,
-    PreAddEdgesDataframesContext,
-    PreAddEdgesDataframesWithGroupContext,
-    PreAddEdgesDataframesWithGroupsContext,
-    PreAddEdgesToGroupsContext,
-    PreAddEdgesWithGroupContext,
-    PreAddEdgesWithGroupsContext,
-    PreAddEdgeToGroupContext,
-    PreAddGroupContext,
-    PreAddNodesContext,
-    PreAddNodesDataframesContext,
-    PreAddNodesDataframesWithGroupContext,
-    PreAddNodesDataframesWithGroupsContext,
-    PreAddNodesToGroupsContext,
-    PreAddNodesWithGroupContext,
-    PreAddNodesWithGroupsContext,
-    PreAddNodeToGroupContext,
-    PreRemoveEdgeContext,
-    PreRemoveEdgeFromGroupContext,
-    PreRemoveEdgesFromGroupsContext,
-    PreRemoveGroupContext,
-    PreRemoveNodeContext,
-    PreRemoveNodeFromGroupContext,
-    PreRemoveNodesFromGroupsContext,
-    PreSetSchemaContext,
-)
-from graphrecords.querying import (
-    BareAttributeOperand,
-    BareEdgeIndexOperand,
-    BareEdgeIndicesOperand,
-    BareNodeIndexOperand,
-    BareNodeIndicesOperand,
-    EdgeAttributesTreeOperand,
+from graphrecords import (
+    AddNodes,
+    AttributeDataType,
+    AttributeType,
+    Drop,
     EdgeDirection,
-    EdgeOperand,
-    EdgesOperand,
-    EdgeValueOperand,
-    EdgeValuesOperand,
-    NodeAttributesTreeOperand,
-    NodeOperand,
-    NodesOperand,
-    NodeValueOperand,
-    NodeValuesOperand,
-    QueryError,
+    GraphRecord,
+    GroupSchema,
+    OnConflict,
+    Option,
+    Plugin,
+    Schema,
+    SchemaType,
+    String,
+    edges,
+    groups,
+    nodes,
 )
-from graphrecords.schema import AttributeType, GroupSchema, Schema, SchemaType
-from graphrecords.types import (
-    AttributesInput,
-    NodeIndex,
+from graphrecords.graphrecord import (
+    ArrowStream,
+    ArrowTables,
+    EdgeCollector,
+    EdgeView,
+    GroupView,
+    NodeCollector,
+    NodeView,
+    PolarsFrames,
+    RecordBatch,
+    RonFile,
+    Writer,
 )
+from graphrecords.querying import Series
+from graphrecords.types import Attributes, EdgeIndex, NodeIndex, Value
 
 
-# TODO(#397): Change AttributesInput to Attributes
-def create_nodes() -> List[Tuple[NodeIndex, AttributesInput]]:
+def create_nodes() -> List[Tuple[NodeIndex, Attributes]]:
     return [
         ("0", {"lorem": "ipsum", "dolor": "sit"}),
         ("1", {"amet": "consectetur"}),
-        ("2", {"adipiscing": "elit"}),
+        ("2", {"lorem": "adipiscing"}),
         ("3", {}),
     ]
 
 
-# TODO(#397): Change AttributesInput to Attributes
-def create_edges() -> List[Tuple[NodeIndex, NodeIndex, AttributesInput]]:
+def create_edges() -> List[Tuple[NodeIndex, NodeIndex, Attributes]]:
     return [
         ("0", "1", {"sed": "do", "eiusmod": "tempor"}),
-        ("1", "0", {"sed": "do", "eiusmod": "tempor"}),
-        ("1", "2", {"incididunt": "ut"}),
+        ("1", "0", {"sed": "incididunt"}),
+        ("1", "2", {"ut": "labore"}),
         ("0", "3", {}),
     ]
 
 
-def create_pandas_nodes_dataframe() -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "index": ["0", "1"],
-            "attribute": [1, 2],
-        }
-    )
-
-
-def create_second_pandas_nodes_dataframe() -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "index": ["2", "3"],
-            "attribute": [2, 3],
-        }
-    )
-
-
-def create_pandas_edges_dataframe() -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "source": ["0", "1"],
-            "target": ["1", "0"],
-            "attribute": [1, 2],
-        }
-    )
-
-
-def create_second_pandas_edges_dataframe() -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "source": ["0", "1"],
-            "target": ["1", "0"],
-            "attribute": [2, 3],
-        }
-    )
-
-
 def create_graphrecord() -> GraphRecord:
-    return GraphRecord.from_tuples(create_nodes(), create_edges())
+    record = GraphRecord().add_nodes(create_nodes()).add_edges(create_edges())
+    record = record.add_group("magna").add_nodes_to_group(["0", "1"], "magna")
+    record = record.add_edges_to_group(record.edge_indices()[0], "magna")
+    return record.add_group("aliqua").add_nodes_to_group("2", "aliqua")
 
 
-class TestGraphRecord(unittest.TestCase):
-    def test_from_py_graphrecord(self) -> None:
-        py_graphrecord = PyGraphRecord()
+def create_nodes_frame() -> pl.DataFrame:
+    return pl.DataFrame({"node_index": ["4", "5"], "enim": ["veniam", "quis"]})
 
-        graphrecord = GraphRecord._from_py_graphrecord(py_graphrecord)
-        assert isinstance(graphrecord, GraphRecord)
-        assert graphrecord.node_count() == 0
-        assert graphrecord.edge_count() == 0
 
-    def test_builder(self) -> None:
-        graphrecord_builder = GraphRecord().builder()
-
-        assert isinstance(graphrecord_builder, GraphRecordBuilder)
-
-        nodes = create_nodes()
-
-        graphrecord = graphrecord_builder.add_nodes(nodes=nodes).build()
-
-        assert isinstance(graphrecord, GraphRecord)
-        assert graphrecord.node_count() == len(nodes)
-        assert graphrecord.edge_count() == 0
-
-    def test_from_tuples(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert graphrecord.node_count() == 4
-        assert graphrecord.edge_count() == 4
-
-    def test_invalid_from_tuples(self) -> None:
-        nodes = create_nodes()
-
-        # Adding an edge pointing to a non-existent node should fail
-        with pytest.raises(IndexError):
-            GraphRecord.from_tuples(nodes, [("0", "50", {})])
-
-        # Adding an edge from a non-existing node should fail
-        with pytest.raises(IndexError):
-            GraphRecord.from_tuples(nodes, [("50", "0", {})])
-
-    def test_from_pandas(self) -> None:
-        graphrecord = GraphRecord.from_pandas(
-            (create_pandas_nodes_dataframe(), "index"),
-        )
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.edge_count() == 0
-
-        graphrecord = GraphRecord.from_pandas(
-            [
-                (create_pandas_nodes_dataframe(), "index"),
-                (create_second_pandas_nodes_dataframe(), "index"),
-            ],
-        )
-
-        assert graphrecord.node_count() == 4
-        assert graphrecord.edge_count() == 0
-
-        graphrecord = GraphRecord.from_pandas(
-            (create_pandas_nodes_dataframe(), "index"),
-            (create_pandas_edges_dataframe(), "source", "target"),
-        )
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.edge_count() == 2
-
-        graphrecord = GraphRecord.from_pandas(
-            [
-                (create_pandas_nodes_dataframe(), "index"),
-                (create_second_pandas_nodes_dataframe(), "index"),
-            ],
-            (create_pandas_edges_dataframe(), "source", "target"),
-        )
-
-        assert graphrecord.node_count() == 4
-        assert graphrecord.edge_count() == 2
-
-        graphrecord = GraphRecord.from_pandas(
-            (create_pandas_nodes_dataframe(), "index"),
-            [
-                (create_pandas_edges_dataframe(), "source", "target"),
-                (create_second_pandas_edges_dataframe(), "source", "target"),
-            ],
-        )
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.edge_count() == 4
-
-        graphrecord = GraphRecord.from_pandas(
-            [
-                (create_pandas_nodes_dataframe(), "index"),
-                (create_second_pandas_nodes_dataframe(), "index"),
-            ],
-            [
-                (create_pandas_edges_dataframe(), "source", "target"),
-                (create_second_pandas_edges_dataframe(), "source", "target"),
-            ],
-        )
-
-        assert graphrecord.node_count() == 4
-        assert graphrecord.edge_count() == 4
-
-    def test_from_polars(self) -> None:
-        nodes = pl.from_pandas(create_pandas_nodes_dataframe())
-        second_nodes = pl.from_pandas(create_second_pandas_nodes_dataframe())
-        edges = pl.from_pandas(create_pandas_edges_dataframe())
-        second_edges = pl.from_pandas(create_second_pandas_edges_dataframe())
-
-        graphrecord = GraphRecord.from_polars(
-            (nodes, "index"), (edges, "source", "target")
-        )
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.edge_count() == 2
-
-        graphrecord = GraphRecord.from_polars(
-            [(nodes, "index"), (second_nodes, "index")], (edges, "source", "target")
-        )
-
-        assert graphrecord.node_count() == 4
-        assert graphrecord.edge_count() == 2
-
-        graphrecord = GraphRecord.from_polars(
-            (nodes, "index"),
-            [(edges, "source", "target"), (second_edges, "source", "target")],
-        )
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.edge_count() == 4
-
-        graphrecord = GraphRecord.from_polars(
-            [(nodes, "index"), (second_nodes, "index")],
-            [(edges, "source", "target"), (second_edges, "source", "target")],
-        )
-
-        assert graphrecord.node_count() == 4
-        assert graphrecord.edge_count() == 4
-
-        graphrecord = GraphRecord.from_polars(
-            (nodes, "index"),
-        )
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.edge_count() == 0
-
-    def test_invalid_from_polars(self) -> None:
-        nodes = pl.from_pandas(create_pandas_nodes_dataframe())
-        second_nodes = pl.from_pandas(create_second_pandas_nodes_dataframe())
-        edges = pl.from_pandas(create_pandas_edges_dataframe())
-        second_edges = pl.from_pandas(create_second_pandas_edges_dataframe())
-
-        # Providing the wrong node index column name should fail
-        with pytest.raises(RuntimeError):
-            GraphRecord.from_polars((nodes, "invalid"), (edges, "source", "target"))
-
-        # Providing the wrong node index column name should fail
-        with pytest.raises(RuntimeError):
-            GraphRecord.from_polars(
-                [(nodes, "index"), (second_nodes, "invalid")],
-                (edges, "source", "target"),
-            )
-
-        # Providing the wrong source index column name should fail
-        with pytest.raises(RuntimeError):
-            GraphRecord.from_polars((nodes, "index"), (edges, "invalid", "target"))
-
-        # Providing the wrong source index column name should fail
-        with pytest.raises(RuntimeError):
-            GraphRecord.from_polars(
-                (nodes, "index"),
-                [(edges, "source", "target"), (second_edges, "invalid", "target")],
-            )
-
-        # Providing the wrong target index column name should fail
-        with pytest.raises(RuntimeError):
-            GraphRecord.from_polars((nodes, "index"), (edges, "source", "invalid"))
-
-        # Providing the wrong target index column name should fail
-        with pytest.raises(RuntimeError):
-            GraphRecord.from_polars(
-                (nodes, "index"),
-                [(edges, "source", "target"), (edges, "source", "invalid")],
-            )
-
-    def test_from_tuples_with_schema(self) -> None:
-        nodes = [("0", {"value": 1}), ("1", {"value": 2})]
-        edges = [("0", "1", {"weight": 10})]
-        schema = Schema(
-            ungrouped=GroupSchema(nodes={"value": Int()}, edges={"weight": Int()}),
-            schema_type=SchemaType.Provided,
-        )
-
-        graphrecord = GraphRecord.from_tuples(nodes, edges, schema=schema)
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.edge_count() == 1
-        assert graphrecord.get_schema().schema_type == SchemaType.Provided
-
-    def test_from_tuples_nodes_only_with_schema(self) -> None:
-        nodes = [("0", {"value": 1}), ("1", {"value": 2})]
-        schema = Schema(
-            ungrouped=GroupSchema(nodes={"value": Int()}),
-            schema_type=SchemaType.Provided,
-        )
-
-        graphrecord = GraphRecord.from_tuples(nodes, schema=schema)
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.get_schema().schema_type == SchemaType.Provided
-
-    def test_from_polars_with_schema(self) -> None:
-        nodes = pl.from_pandas(create_pandas_nodes_dataframe())
-        edges = pl.from_pandas(create_pandas_edges_dataframe())
-        schema = Schema(
-            ungrouped=GroupSchema(
-                nodes={"attribute": Int()}, edges={"attribute": Int()}
-            ),
-            schema_type=SchemaType.Provided,
-        )
-
-        graphrecord = GraphRecord.from_polars(
-            (nodes, "index"), (edges, "source", "target"), schema=schema
-        )
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.get_schema().schema_type == SchemaType.Provided
-
-    def test_from_polars_nodes_only_with_schema(self) -> None:
-        nodes = pl.from_pandas(create_pandas_nodes_dataframe())
-        schema = Schema(
-            ungrouped=GroupSchema(nodes={"attribute": Int()}),
-            schema_type=SchemaType.Provided,
-        )
-
-        graphrecord = GraphRecord.from_polars((nodes, "index"), schema=schema)
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.get_schema().schema_type == SchemaType.Provided
-
-    def test_from_pandas_with_schema(self) -> None:
-        schema = Schema(
-            ungrouped=GroupSchema(
-                nodes={"attribute": Int()}, edges={"attribute": Int()}
-            ),
-            schema_type=SchemaType.Provided,
-        )
-
-        graphrecord = GraphRecord.from_pandas(
-            (create_pandas_nodes_dataframe(), "index"),
-            (create_pandas_edges_dataframe(), "source", "target"),
-            schema=schema,
-        )
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.get_schema().schema_type == SchemaType.Provided
-
-    def test_from_pandas_nodes_only_with_schema(self) -> None:
-        schema = Schema(
-            ungrouped=GroupSchema(nodes={"attribute": Int()}),
-            schema_type=SchemaType.Provided,
-        )
-
-        graphrecord = GraphRecord.from_pandas(
-            (create_pandas_nodes_dataframe(), "index"), schema=schema
-        )
-
-        assert graphrecord.node_count() == 2
-        assert graphrecord.get_schema().schema_type == SchemaType.Provided
-
-    def test_ron(self) -> None:
-        graphrecord = create_graphrecord()
-
-        with tempfile.NamedTemporaryFile() as f:
-            graphrecord.to_ron(f.name)
-
-            loaded_graphrecord = GraphRecord.from_ron(f.name)
-
-        assert graphrecord.node_count() == loaded_graphrecord.node_count()
-        assert graphrecord.edge_count() == loaded_graphrecord.edge_count()
-
-    def test_to_polars(self) -> None:
-        graphrecord = create_graphrecord()
-
-        export = graphrecord.to_polars()
-
-        assert "ungrouped" in export
-        assert "nodes" in export["ungrouped"]
-        assert "edges" in export["ungrouped"]
-
-        nodes_df = export["ungrouped"]["nodes"]
-        edges_df = export["ungrouped"]["edges"]
-
-        assert isinstance(nodes_df, pl.DataFrame)
-        assert isinstance(edges_df, pl.DataFrame)
-
-        assert nodes_df.shape[0] == graphrecord.node_count()
-        assert edges_df.shape[0] == graphrecord.edge_count()
-
-    def test_to_pandas(self) -> None:
-        graphrecord = create_graphrecord()
-
-        export = graphrecord.to_pandas()
-
-        assert "ungrouped" in export
-        assert "nodes" in export["ungrouped"]
-        assert "edges" in export["ungrouped"]
-
-        nodes_df = export["ungrouped"]["nodes"]
-        edges_df = export["ungrouped"]["edges"]
-
-        assert isinstance(nodes_df, pd.DataFrame)
-        assert isinstance(edges_df, pd.DataFrame)
-
-        assert nodes_df.shape[0] == graphrecord.node_count()
-        assert edges_df.shape[0] == graphrecord.edge_count()
-
-    def test_schema(self) -> None:
-        graphrecord = GraphRecord()
-
-        group_schema = GroupSchema(
-            nodes={"attribute": Int()}, edges={"attribute": Int()}
-        )
-
-        graphrecord.add_nodes([("0", {"attribute": 1}), ("1", {"attribute": 1})])
-        graphrecord.add_edges(("0", "1", {"attribute": 1}))
-
-        schema = Schema(ungrouped=group_schema, schema_type=SchemaType.Provided)
-
-        graphrecord.set_schema(schema)
-
-        assert graphrecord.get_schema().ungrouped.nodes == {
-            "attribute": (Int(), AttributeType.Continuous)
+def create_edges_frame() -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "source_node_index": ["4", "5"],
+            "target_node_index": ["5", "4"],
+            "nostrud": ["exercitation", "ullamco"],
         }
-        assert graphrecord.get_schema().ungrouped.edges == {
-            "attribute": (Int(), AttributeType.Continuous)
-        }
+    )
 
-        graphrecord = GraphRecord()
 
-        graphrecord.add_nodes(
-            [("0", {"attribute": 1}), ("1", {"attribute": 1}), ("2", {"attribute": 1})]
-        )
-        graphrecord.add_edges(
-            [
-                ("0", "1", {"attribute": 1}),
-                ("0", "1", {"attribute": 1}),
-                ("0", "1", {"attribute": 1}),
-            ]
-        )
+def create_schema() -> Schema:
+    return Schema(
+        ungrouped=GroupSchema(
+            nodes={
+                "lorem": AttributeDataType(Option(String()), AttributeType.Unstructured)
+            }
+        ),
+        schema_type=SchemaType.Provided,
+    )
 
-        schema = Schema(
-            groups={"0": group_schema, "1": group_schema},
-            ungrouped=group_schema,
-            schema_type=SchemaType.Inferred,
-        )
 
-        graphrecord.add_group("0", ["0", "1"], [0, 1])
-        graphrecord.add_group("1", ["0", "1"], [0, 1])
+class NodeRows(NodeCollector):
+    def collect_nodes(self) -> List[Tuple[NodeIndex, Attributes]]:
+        return create_nodes()
 
-        inferred_schema = Schema(schema_type=SchemaType.Inferred)
 
-        graphrecord.set_schema(inferred_schema)
+class EdgeRows(EdgeCollector):
+    def collect_edges(self) -> List[Tuple[NodeIndex, NodeIndex, Attributes]]:
+        return create_edges()
 
-        schema = graphrecord.get_schema()
 
-        assert schema.group("0").nodes == {
-            "attribute": (Int(), AttributeType.Continuous)
-        }
-        assert schema.group("0").edges == {
-            "attribute": (Int(), AttributeType.Continuous)
-        }
-        assert schema.group("1").nodes == {
-            "attribute": (Int(), AttributeType.Continuous)
-        }
-        assert schema.group("1").edges == {
-            "attribute": (Int(), AttributeType.Continuous)
-        }
-        assert schema.ungrouped.nodes == {
-            "attribute": (Int(), AttributeType.Continuous)
-        }
-        assert schema.ungrouped.edges == {
-            "attribute": (Int(), AttributeType.Continuous)
-        }
-        assert schema.schema_type == inferred_schema.schema_type
+class ArrowTable(ArrowStream):
+    def __init__(self, record_batch: RecordBatch) -> None:
+        self._record_batch = record_batch
 
-    def test_invalid_schema(self) -> None:
-        graphrecord = GraphRecord()
+    def __arrow_c_stream__(self, requested_schema: Optional[object] = None) -> object:
+        return self._record_batch.__arrow_c_stream__(requested_schema)
 
-        graphrecord.add_nodes(("0", {"attribute2": 1}))
 
-        schema = Schema(
-            ungrouped=GroupSchema(
-                nodes={"attribute": Int()}, edges={"attribute": Int()}
-            ),
-            schema_type=SchemaType.Provided,
-        )
+class CountingWriter(Writer[Tuple[int, int]]):
+    def write(self, record: GraphRecord) -> Tuple[int, int]:
+        return record.node_count(), record.edge_count()
 
-        with pytest.raises(
-            ValueError,
-            match=r"Attribute [^\s]+ of type [^\s]+ not found on node with index [^\s]+",
-        ):
-            graphrecord.set_schema(schema)
 
-        assert graphrecord.get_schema().ungrouped.nodes == {
-            "attribute2": (Int(), AttributeType.Continuous)
-        }
-        assert graphrecord.get_schema().ungrouped.edges == {}
-        assert len(graphrecord.get_schema().groups) == 0
-        assert graphrecord.get_schema().schema_type == SchemaType.Inferred
+class FailingWriter(Writer[None]):
+    def write(self, record: GraphRecord) -> None:
+        msg = f"lorem ipsum {record.node_count()}"
+        raise RuntimeError(msg)
 
-        graphrecord = GraphRecord()
 
-        graphrecord.add_nodes([("0", {"attribute": 1}), ("1", {"attribute": 1})])
-        graphrecord.add_edges(("0", "1", {"attribute2": 1}))
+class IntegerScalar:
+    def __index__(self) -> int:
+        return 4
 
-        with pytest.raises(
-            ValueError,
-            match=r"Attribute [^\s]+ of type [^\s]+ not found on edge with index [^\s]+",
-        ):
-            graphrecord.set_schema(schema)
 
-        schema = graphrecord.get_schema()
-
-        assert schema.ungrouped.nodes == {
-            "attribute": (Int(), AttributeType.Continuous)
-        }
-        assert schema.ungrouped.edges == {
-            "attribute2": (Int(), AttributeType.Continuous)
-        }
-        assert len(schema.groups) == 0
-        assert schema.schema_type == SchemaType.Inferred
-
-    def test_freeze_schema(self) -> None:
-        graphrecord = GraphRecord()
-
-        assert graphrecord.get_schema().schema_type == SchemaType.Inferred
-
-        graphrecord.freeze_schema()
-
-        assert graphrecord.get_schema().schema_type == SchemaType.Provided
-
-    def test_unfreeze_schema(self) -> None:
-        graphrecord = GraphRecord.with_schema(Schema(schema_type=SchemaType.Provided))
-
-        assert graphrecord.get_schema().schema_type == SchemaType.Provided
-
-        graphrecord.unfreeze_schema()
-
-        assert graphrecord.get_schema().schema_type == SchemaType.Inferred
-
-    def test_nodes(self) -> None:
-        graphrecord = create_graphrecord()
-
-        nodes = [x[0] for x in create_nodes()]
-
-        for node in graphrecord.nodes:
-            assert node in nodes
-
-    def test_edges(self) -> None:
-        graphrecord = create_graphrecord()
-
-        edges = list(range(len(create_edges())))
-
-        for edge in graphrecord.edges:
-            assert edge in edges
-
-    def test_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0")
-
-        assert graphrecord.groups == ["0"]
-
-    def test_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0")
-
-        assert graphrecord.group("0") == {"nodes": [], "edges": []}
-
-        graphrecord.add_group("1", ["0"], [0])
-
-        assert graphrecord.group("1") == {"nodes": ["0"], "edges": [0]}
-
-        assert graphrecord.group(["0", "1"]) == {
-            "0": {"nodes": [], "edges": []},
-            "1": {"nodes": ["0"], "edges": [0]},
-        }
-
-    def test_invalid_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Querying a non-existing group should fail
-        with pytest.raises(IndexError):
-            graphrecord.group("0")
-
-        graphrecord.add_group("1", ["0"])
-
-        # Querying a non-existing group should fail
-        with pytest.raises(IndexError):
-            graphrecord.group(["0", "50"])
-
-    def test_outgoing_edges(self) -> None:
-        graphrecord = create_graphrecord()
-
-        edges = graphrecord.outgoing_edges("0")
-
-        assert sorted([0, 3]) == sorted(edges)
-
-        edges = graphrecord.outgoing_edges(["0", "1"])
-
-        assert {key: sorted(value) for key, value in edges.items()} == {
-            "0": sorted([0, 3]),
-            "1": [1, 2],
-        }
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        edges = graphrecord.outgoing_edges(query)
-
-        assert {key: sorted(value) for key, value in edges.items()} == {
-            "0": sorted([0, 3]),
-            "1": [1, 2],
-        }
-
-        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
-            indices = nodes.index()
-
-            return indices.filter(indices.equal_to("0")).max()
-
-        edges = graphrecord.outgoing_edges(query2)
-
-        assert sorted(edges) == [0, 3]
-
-        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
-            maximum_index = nodes.index().max()
-
-            return maximum_index.filter(maximum_index.equal_to("non-found"))
-
-        edges = graphrecord.outgoing_edges(query3)
-
-        assert edges == []
-
-    def test_invalid_outgoing_edges(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Querying outgoing edges of a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.outgoing_edges("50")
-
-        # Querying outgoing edges of a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.outgoing_edges(["0", "50"])
-
-    def test_incoming_edges(self) -> None:
-        graphrecord = create_graphrecord()
-
-        edges = graphrecord.incoming_edges("1")
-
-        assert edges == [0]
-
-        edges = graphrecord.incoming_edges(["1", "2"])
-
-        assert edges == {"1": [0], "2": [2]}
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["1", "2"]))
-
-        edges = graphrecord.incoming_edges(query)
-
-        assert edges == {"1": [0], "2": [2]}
-
-        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
-            indices = nodes.index()
-
-            return indices.filter(indices.equal_to("0")).max()
-
-        edges = graphrecord.incoming_edges(query2)
-
-        assert edges == [1]
-
-        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
-            maximum_index = nodes.index().max()
-
-            return maximum_index.filter(maximum_index.equal_to("non-found"))
-
-        edges = graphrecord.incoming_edges(query3)
-
-        assert edges == []
-
-    def test_invalid_incoming_edges(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Querying incoming edges of a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.incoming_edges("50")
-
-        # Querying incoming edges of a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.incoming_edges(["0", "50"])
-
-    def test_edge_endpoints(self) -> None:
-        graphrecord = create_graphrecord()
-
-        endpoints = graphrecord.edge_endpoints(0)
-
-        assert endpoints == ("0", "1")
-
-        endpoints = graphrecord.edge_endpoints([0, 1])
-
-        assert endpoints == {0: ("0", "1"), 1: ("1", "0")}
-
-        def query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().is_in([0, 1]))
-
-        endpoints = graphrecord.edge_endpoints(query)
-
-        assert endpoints == {0: ("0", "1"), 1: ("1", "0")}
-
-        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            indices = edges.index()
-
-            return indices.filter(indices.equal_to(0)).max()
-
-        endpoints = graphrecord.edge_endpoints(query2)
-
-        assert endpoints == ("0", "1")
-
-        def query3(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            maximum_index = edges.index().max()
-
-            return maximum_index.filter(maximum_index.greater_than(10))
-
-        with pytest.raises(IndexError, match="The query returned no results"):
-            graphrecord.edge_endpoints(query3)
-
-    def test_invalid_edge_endpoints(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Querying endpoints of a non-existing edge should fail
-        with pytest.raises(IndexError):
-            graphrecord.edge_endpoints(50)
-
-        # Querying endpoints of a non-existing edge should fail
-        with pytest.raises(IndexError):
-            graphrecord.edge_endpoints([0, 50])
-
-    def test_edges_connecting(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert graphrecord.edges_connecting("0", "1") == [0]
-        assert graphrecord.edges_connecting(["0", "1"], "1") == [0]
-
-        def query1(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        assert graphrecord.edges_connecting(query1, "1") == [0]
-
-        def query1_single(nodes: NodesOperand) -> BareNodeIndexOperand:
-            indices = nodes.index()
-
-            return indices.filter(indices.equal_to("0")).max()
-
-        assert graphrecord.edges_connecting(query1_single, "1") == [0]
-
-        def query1_not_found(nodes: NodesOperand) -> BareNodeIndexOperand:
-            maximum_index = nodes.index().max()
-
-            return maximum_index.filter(maximum_index.equal_to("non-found"))
-
-        assert graphrecord.edges_connecting(query1_not_found, "1") == []
-
-        edges = graphrecord.edges_connecting("0", ["1", "3"])
-
-        assert sorted([0, 3]) == sorted(edges)
-
-        def query2(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["1", "3"]))
-
-        edges = graphrecord.edges_connecting("0", query2)
-
-        assert sorted([0, 3]) == sorted(edges)
-
-        def query2_single(nodes: NodesOperand) -> BareNodeIndexOperand:
-            indices = nodes.index()
-
-            return indices.filter(indices.equal_to("1")).max()
-
-        assert graphrecord.edges_connecting("0", query2_single) == [0]
-
-        def query2_not_found(nodes: NodesOperand) -> BareNodeIndexOperand:
-            maximum_index = nodes.index().max()
-
-            return maximum_index.filter(maximum_index.equal_to("non-found"))
-
-        assert graphrecord.edges_connecting("0", query2_not_found) == []
-
-        edges = graphrecord.edges_connecting(["0", "1"], ["1", "2", "3"])
-
-        assert sorted([0, 2, 3]) == sorted(edges)
-
-        def query3(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        def query4(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["1", "2", "3"]))
-
-        edges = graphrecord.edges_connecting(query3, query4)
-
-        assert sorted([0, 2, 3]) == sorted(edges)
-
-        assert graphrecord.edges_connecting(
-            "0", "1", directed=EdgesDirection.INCOMING
-        ) == [1]
-
-        edges = graphrecord.edges_connecting(
-            "0", "1", directed=EdgesDirection.UNDIRECTED
-        )
-
-        assert sorted(edges) == [0, 1]
-
-    def test_remove_nodes(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert graphrecord.node_count() == 4
-
-        attributes = graphrecord.remove_nodes("0")
-
-        assert graphrecord.node_count() == 3
-        assert create_nodes()[0][1] == attributes
-
-        attributes = graphrecord.remove_nodes(["1", "2"])
-
-        assert graphrecord.node_count() == 1
-        assert attributes == {"1": create_nodes()[1][1], "2": create_nodes()[2][1]}
-
-        graphrecord = create_graphrecord()
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        attributes = graphrecord.remove_nodes(query)
-
-        assert graphrecord.node_count() == 2
-        assert attributes == {"0": create_nodes()[0][1], "1": create_nodes()[1][1]}
-
-        graphrecord = create_graphrecord()
-
-        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
-            indices = nodes.index()
-
-            return indices.filter(indices.equal_to("0")).max()
-
-        attributes = graphrecord.remove_nodes(query2)
-
-        assert graphrecord.node_count() == 3
-        assert attributes == create_nodes()[0][1]
-
-        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
-            maximum_index = nodes.index().max()
-
-            return maximum_index.filter(maximum_index.equal_to("non-found"))
-
-        attributes = graphrecord.remove_nodes(query3)
-
-        assert graphrecord.node_count() == 3
-        assert attributes == {}
-
-        graphrecord = GraphRecord.from_tuples(nodes=[(0, {})], edges=[(0, 0, {})])
-
-        assert graphrecord.node_count() == 1
-        assert graphrecord.edge_count() == 1
-
-        graphrecord.remove_nodes(0)
-
-        assert graphrecord.node_count() == 0
-        assert graphrecord.edge_count() == 0
-
-    def test_invalid_remove_nodes(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Removing a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.remove_nodes("50")
-
-        # Removing a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.remove_nodes(["0", "50"])
-
-    def test_add_nodes(self) -> None:
-        graphrecord = GraphRecord()
-
-        assert graphrecord.node_count() == 0
-
-        graphrecord.add_nodes(create_nodes())
-
-        assert graphrecord.node_count() == 4
-
-        # Adding node tuple
-        graphrecord = GraphRecord()
-
-        assert graphrecord.node_count() == 0
-
-        graphrecord.add_nodes(("0", {}))
-
-        assert graphrecord.node_count() == 1
-        assert len(graphrecord.groups) == 0
-
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(("0", {}), "0")
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert len(graphrecord.groups) == 1
-
-        # Adding tuple to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(create_nodes(), "0")
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert "1" in graphrecord.nodes_in_group("0")
-        assert "2" in graphrecord.nodes_in_group("0")
-        assert "3" in graphrecord.nodes_in_group("0")
-        assert "0" in graphrecord.groups
-
-        # Adding group without nodes
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes([], "0")
-
-        assert graphrecord.node_count() == 0
-        assert "0" in graphrecord.groups
-
-        # Adding pandas dataframe
-        graphrecord = GraphRecord()
-
-        assert graphrecord.node_count() == 0
-
-        graphrecord.add_nodes((create_pandas_nodes_dataframe(), "index"))
-
-        assert graphrecord.node_count() == 2
-
-        # Adding pandas dataframe to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes((create_pandas_nodes_dataframe(), "index"), "0")
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert "1" in graphrecord.nodes_in_group("0")
-
-        # Adding polars dataframe
-        graphrecord = GraphRecord()
-
-        assert graphrecord.node_count() == 0
-
-        nodes = pl.from_pandas(create_pandas_nodes_dataframe())
-
-        graphrecord.add_nodes((nodes, "index"))
-
-        assert graphrecord.node_count() == 2
-
-        # Adding polars dataframe to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes((nodes, "index"), "0")
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert "1" in graphrecord.nodes_in_group("0")
-
-        # Adding multiple pandas dataframes
-        graphrecord = GraphRecord()
-
-        assert graphrecord.node_count() == 0
-
-        graphrecord.add_nodes(
-            [
-                (create_pandas_nodes_dataframe(), "index"),
-                (create_second_pandas_nodes_dataframe(), "index"),
-            ]
-        )
-
-        assert graphrecord.node_count() == 4
-
-        # Adding multiple pandas dataframes to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(
-            [
-                (create_pandas_nodes_dataframe(), "index"),
-                (create_second_pandas_nodes_dataframe(), "index"),
-            ],
-            group="0",
-        )
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert "1" in graphrecord.nodes_in_group("0")
-        assert "2" in graphrecord.nodes_in_group("0")
-        assert "3" in graphrecord.nodes_in_group("0")
-
-        # Checking if nodes can be added to a group that already exists
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes((create_pandas_nodes_dataframe(), "index"), group="0")
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert "1" in graphrecord.nodes_in_group("0")
-        assert "2" not in graphrecord.nodes_in_group("0")
-        assert "3" not in graphrecord.nodes_in_group("0")
-
-        graphrecord.add_nodes(
-            (create_second_pandas_nodes_dataframe(), "index"), group="0"
-        )
-
-        assert "2" in graphrecord.nodes_in_group("0")
-        assert "3" in graphrecord.nodes_in_group("0")
-
-        # Adding multiple polars dataframes
-        graphrecord = GraphRecord()
-
-        second_nodes = pl.from_pandas(create_second_pandas_nodes_dataframe())
-
-        assert graphrecord.node_count() == 0
-
-        graphrecord.add_nodes(
-            [
-                (nodes, "index"),
-                (second_nodes, "index"),
-            ]
-        )
-
-        assert graphrecord.node_count() == 4
-
-        # Adding multiple polars dataframes to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(
-            [
-                (nodes, "index"),
-                (second_nodes, "index"),
-            ],
-            group="0",
-        )
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert "1" in graphrecord.nodes_in_group("0")
-        assert "2" in graphrecord.nodes_in_group("0")
-        assert "3" in graphrecord.nodes_in_group("0")
-
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(("0", {}))
-
-        assert graphrecord.node_count() == 1
-
-        graphrecord.freeze_schema()
-
-        graphrecord.add_nodes(("1", {}))
-
-        assert graphrecord.node_count() == 2
-
-    def test_invalid_add_nodes(self) -> None:
-        graphrecord = create_graphrecord()
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_nodes(create_nodes())
-
-        graphrecord.freeze_schema()
-
-        with pytest.raises(
-            ValueError,
-            match=r"Attributes \[[^\]]+\] of node with index [^\s]+ do not exist in schema\.",
-        ):
-            graphrecord.add_nodes([("4", {"attribute": 1})])
-
-    def test_add_nodes_pandas(self) -> None:
-        graphrecord = GraphRecord()
-
-        nodes = (create_pandas_nodes_dataframe(), "index")
-
-        assert graphrecord.node_count() == 0
-
-        graphrecord.add_nodes_pandas(nodes)
-
-        assert graphrecord.node_count() == 2
-
-        graphrecord = GraphRecord()
-
-        second_nodes = (create_second_pandas_nodes_dataframe(), "index")
-
-        assert graphrecord.node_count() == 0
-
-        graphrecord.add_nodes_pandas([nodes, second_nodes])
-
-        assert graphrecord.node_count() == 4
-
-        # Trying with the group argument
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes_pandas(nodes, group="0")
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert "1" in graphrecord.nodes_in_group("0")
-
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes_pandas([], group="0")
-
-        assert graphrecord.node_count() == 0
-        assert "0" in graphrecord.groups
-
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes_pandas([nodes, second_nodes], group="0")
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert "1" in graphrecord.nodes_in_group("0")
-        assert "2" in graphrecord.nodes_in_group("0")
-        assert "3" in graphrecord.nodes_in_group("0")
-
-    def test_add_nodes_polars(self) -> None:
-        graphrecord = GraphRecord()
-
-        nodes = pl.from_pandas(create_pandas_nodes_dataframe())
-
-        assert graphrecord.node_count() == 0
-
-        graphrecord.add_nodes_polars((nodes, "index"))
-
-        assert graphrecord.node_count() == 2
-
-        graphrecord = GraphRecord()
-
-        second_nodes = pl.from_pandas(create_second_pandas_nodes_dataframe())
-
-        assert graphrecord.node_count() == 0
-
-        graphrecord.add_nodes_polars([(nodes, "index"), (second_nodes, "index")])
-
-        assert graphrecord.node_count() == 4
-
-        # Trying with the group argument
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes_polars((nodes, "index"), group="0")
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert "1" in graphrecord.nodes_in_group("0")
-
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes_polars([], group="0")
-
-        assert graphrecord.node_count() == 0
-        assert "0" in graphrecord.groups
-
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes_polars(
-            [(nodes, "index"), (second_nodes, "index")], group="0"
-        )
-
-        assert "0" in graphrecord.nodes_in_group("0")
-        assert "1" in graphrecord.nodes_in_group("0")
-        assert "2" in graphrecord.nodes_in_group("0")
-        assert "3" in graphrecord.nodes_in_group("0")
-
-    def test_invalid_add_nodes_polars(self) -> None:
-        graphrecord = GraphRecord()
-
-        nodes = pl.from_pandas(create_pandas_nodes_dataframe())
-        second_nodes = pl.from_pandas(create_second_pandas_nodes_dataframe())
-
-        # Adding a nodes dataframe with the wrong index column name should fail
-        with pytest.raises(RuntimeError):
-            graphrecord.add_nodes_polars((nodes, "invalid"))
-
-        # Adding a nodes dataframe with the wrong index column name should fail
-        with pytest.raises(RuntimeError):
-            graphrecord.add_nodes_polars([(nodes, "index"), (second_nodes, "invalid")])
-
-    def test_add_nodes_with_groups(self) -> None:
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(create_nodes(), group=["0", "1"])
-
-        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1", "2", "3"])
-        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1", "2", "3"])
-
-    def test_invalid_add_nodes_with_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_nodes(create_nodes(), group=["0", "1"])
-
-    def test_add_nodes_dataframes_with_groups(self) -> None:
-        graphrecord = GraphRecord()
-
-        nodes = pl.from_pandas(create_pandas_nodes_dataframe())
-        second_nodes = pl.from_pandas(create_second_pandas_nodes_dataframe())
-
-        graphrecord.add_nodes_polars(
-            [(nodes, "index"), (second_nodes, "index")], group=["0", "1"]
-        )
-
-        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1", "2", "3"])
-        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1", "2", "3"])
-
-    def test_remove_edges(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert graphrecord.edge_count() == 4
-
-        attributes = graphrecord.remove_edges(0)
-
-        assert graphrecord.edge_count() == 3
-        assert create_edges()[0][2] == attributes
-
-        attributes = graphrecord.remove_edges([1, 2])
-
-        assert graphrecord.edge_count() == 1
-        assert attributes == {1: create_edges()[1][2], 2: create_edges()[2][2]}
-
-        graphrecord = create_graphrecord()
-
-        def query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().is_in([0, 1]))
-
-        attributes = graphrecord.remove_edges(query)
-
-        assert graphrecord.edge_count() == 2
-        assert attributes == {0: create_edges()[0][2], 1: create_edges()[1][2]}
-
-        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            indices = edges.index()
-
-            return indices.filter(indices.equal_to(2)).max()
-
-        attributes = graphrecord.remove_edges(query2)
-
-        assert graphrecord.edge_count() == 1
-        assert attributes == create_edges()[2][2]
-
-        def query3(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            maximum_index = edges.index().max()
-
-            return maximum_index.filter(maximum_index.equal_to(10))
-
-        attributes = graphrecord.remove_edges(query3)
-
-        assert graphrecord.edge_count() == 1
-        assert attributes == {}
-
-    def test_invalid_remove_edges(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Removing a non-existing edge should fail
-        with pytest.raises(IndexError):
-            graphrecord.remove_edges(50)
-
-    def test_add_edges(self) -> None:
-        graphrecord = GraphRecord()
-
-        nodes = create_nodes()
-
-        graphrecord.add_nodes(nodes)
-
-        assert graphrecord.edge_count() == 0
-
-        graphrecord.add_edges(create_edges())
-
-        assert graphrecord.edge_count() == 4
-
-        # Adding single edge tuple
-        graphrecord = create_graphrecord()
-
-        assert graphrecord.edge_count() == 4
-
-        graphrecord.add_edges(("0", "3", {}))
-
-        assert graphrecord.edge_count() == 5
-
-        graphrecord.add_edges(("3", "0", {}), group="0")
-
-        assert graphrecord.edge_count() == 6
-        assert 5 in graphrecord.edges_in_group("0")
-
-        # Adding tuple to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        graphrecord.add_edges(create_edges(), "0")
-
-        assert 0 in graphrecord.edges_in_group("0")
-        assert 1 in graphrecord.edges_in_group("0")
-        assert 2 in graphrecord.edges_in_group("0")
-        assert 3 in graphrecord.edges_in_group("0")
-
-        # Adding pandas dataframe
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        assert graphrecord.edge_count() == 0
-
-        graphrecord.add_edges((create_pandas_edges_dataframe(), "source", "target"))
-
-        assert graphrecord.edge_count() == 2
-
-        # Adding pandas dataframe to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        graphrecord.add_edges(
-            (create_pandas_edges_dataframe(), "source", "target"), "0"
-        )
-
-        assert 0 in graphrecord.edges_in_group("0")
-        assert 1 in graphrecord.edges_in_group("0")
-
-        # Adding polars dataframe
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        assert graphrecord.edge_count() == 0
-
-        edges = pl.from_pandas(create_pandas_edges_dataframe())
-
-        graphrecord.add_edges((edges, "source", "target"))
-
-        assert graphrecord.edge_count() == 2
-
-        # Adding polars dataframe to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        graphrecord.add_edges((edges, "source", "target"), "0")
-
-        assert 0 in graphrecord.edges_in_group("0")
-        assert 1 in graphrecord.edges_in_group("0")
-
-        # Adding multiple pandas dataframe
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        assert graphrecord.edge_count() == 0
-
-        graphrecord.add_edges(
-            [
-                (create_pandas_edges_dataframe(), "source", "target"),
-                (create_second_pandas_edges_dataframe(), "source", "target"),
-            ]
-        )
-
-        assert graphrecord.edge_count() == 4
-
-        # Adding multiple pandas dataframe to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        graphrecord.add_edges(
-            [
-                (create_pandas_edges_dataframe(), "source", "target"),
-                (create_second_pandas_edges_dataframe(), "source", "target"),
-            ],
-            "0",
-        )
-
-        assert 0 in graphrecord.edges_in_group("0")
-        assert 1 in graphrecord.edges_in_group("0")
-        assert 2 in graphrecord.edges_in_group("0")
-        assert 3 in graphrecord.edges_in_group("0")
-
-        # Adding multiple polars dataframe
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        assert graphrecord.edge_count() == 0
-
-        second_edges = pl.from_pandas(create_second_pandas_edges_dataframe())
-
-        graphrecord.add_edges(
-            [
-                (edges, "source", "target"),
-                (second_edges, "source", "target"),
-            ]
-        )
-
-        assert graphrecord.edge_count() == 4
-
-        # Adding multiple polars dataframe to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        graphrecord.add_edges(
-            [
-                (edges, "source", "target"),
-                (second_edges, "source", "target"),
-            ],
-            "0",
-        )
-
-        assert 0 in graphrecord.edges_in_group("0")
-        assert 1 in graphrecord.edges_in_group("0")
-        assert 2 in graphrecord.edges_in_group("0")
-        assert 3 in graphrecord.edges_in_group("0")
-
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        graphrecord.add_edges([("0", "1", {"attribute": 1})])
-
-        graphrecord.freeze_schema()
-
-        graphrecord.add_edges([("1", "2", {"attribute": 1})])
-
-        assert graphrecord.edge_count() == 2
-
-    def test_invalid_add_edges(self) -> None:
-        graphrecord = GraphRecord()
-
-        nodes = create_nodes()
-
-        graphrecord.add_nodes(nodes)
-
-        # Adding an edge pointing to a non-existent node should fail
-        with pytest.raises(IndexError):
-            graphrecord.add_edges(("0", "50", {}))
-
-        # Adding an edge from a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.add_edges(("50", "0", {}))
-
-        graphrecord.freeze_schema()
-
-        with pytest.raises(
-            ValueError,
-            match=r"Attributes \[[^\]]+\] of edge with index [^\s]+ do not exist in schema\.",
-        ):
-            graphrecord.add_edges([("0", "1", {"attribute": 1})])
-
-    def test_add_edges_pandas(self) -> None:
-        graphrecord = GraphRecord()
-
-        nodes = create_nodes()
-
-        graphrecord.add_nodes(nodes)
-
-        edges = (create_pandas_edges_dataframe(), "source", "target")
-
-        assert graphrecord.edge_count() == 0
-
-        graphrecord.add_edges(edges)
-
-        assert graphrecord.edge_count() == 2
-
-        # Adding to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        graphrecord.add_edges(edges, "0")
-
-        assert 0 in graphrecord.edges_in_group("0")
-        assert 1 in graphrecord.edges_in_group("0")
-
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        second_edges = (create_second_pandas_edges_dataframe(), "source", "target")
-
-        graphrecord.add_edges([edges, second_edges], "0")
-
-        assert 0 in graphrecord.edges_in_group("0")
-        assert 1 in graphrecord.edges_in_group("0")
-        assert 2 in graphrecord.edges_in_group("0")
-        assert 3 in graphrecord.edges_in_group("0")
-
-    def test_add_edges_polars(self) -> None:
-        graphrecord = GraphRecord()
-
-        nodes = create_nodes()
-
-        graphrecord.add_nodes(nodes)
-
-        edges = pl.from_pandas(create_pandas_edges_dataframe())
-
-        assert graphrecord.edge_count() == 0
-
-        graphrecord.add_edges_polars((edges, "source", "target"))
-
-        assert graphrecord.edge_count() == 2
-
-        # Adding to a group
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        graphrecord.add_edges_polars((edges, "source", "target"), "0")
-
-        assert 0 in graphrecord.edges_in_group("0")
-        assert 1 in graphrecord.edges_in_group("0")
-
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(nodes)
-
-        second_edges = pl.from_pandas(create_second_pandas_edges_dataframe())
-
-        graphrecord.add_edges_polars(
-            [(edges, "source", "target"), (second_edges, "source", "target")], "0"
-        )
-
-        assert 0 in graphrecord.edges_in_group("0")
-        assert 1 in graphrecord.edges_in_group("0")
-        assert 2 in graphrecord.edges_in_group("0")
-        assert 3 in graphrecord.edges_in_group("0")
-
-    def test_invalid_add_edges_polars(self) -> None:
-        graphrecord = GraphRecord()
-
-        nodes = create_nodes()
-
-        graphrecord.add_nodes(nodes)
-
-        edges = pl.from_pandas(create_pandas_edges_dataframe())
-
-        # Providing the wrong source index column name should fail
-        with pytest.raises(RuntimeError):
-            graphrecord.add_edges_polars((edges, "invalid", "target"))
-
-        # Providing the wrong target index column name should fail
-        with pytest.raises(RuntimeError):
-            graphrecord.add_edges_polars((edges, "source", "invalid"))
-
-    def test_add_edges_with_groups(self) -> None:
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(create_nodes())
-
-        edge_indices = graphrecord.add_edges(create_edges(), group=["0", "1"])
-
-        assert sorted(graphrecord.edges_in_group("0")) == sorted(edge_indices)
-        assert sorted(graphrecord.edges_in_group("1")) == sorted(edge_indices)
-
-    def test_invalid_add_edges_with_groups(self) -> None:
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(create_nodes())
-
-        with pytest.raises(IndexError):
-            graphrecord.add_edges([("0", "50", {})], group=["0", "1"])
-
-    def test_add_edges_dataframes_with_groups(self) -> None:
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(create_nodes())
-
-        edges = pl.from_pandas(create_pandas_edges_dataframe())
-        second_edges = pl.from_pandas(create_second_pandas_edges_dataframe())
-
-        graphrecord.add_edges_polars(
-            [(edges, "source", "target"), (second_edges, "source", "target")],
-            group=["0", "1"],
-        )
-
-        assert len(graphrecord.edges_in_group("0")) == 4
-        assert len(graphrecord.edges_in_group("1")) == 4
-
-    def test_add_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert graphrecord.group_count() == 0
-
-        graphrecord.add_group("0")
-
-        assert graphrecord.group_count() == 1
-
-        graphrecord.add_group("1", "0", 0)
-
-        assert graphrecord.group_count() == 2
-        assert graphrecord.group("1") == {"nodes": ["0"], "edges": [0]}
-
-        graphrecord.add_group("2", ["0", "1"], [0, 1])
-
-        assert graphrecord.group_count() == 3
-        nodes_and_edges = graphrecord.group("2")
-        assert sorted(["0", "1"]) == sorted(nodes_and_edges["nodes"])
-        assert sorted([0, 1]) == sorted(nodes_and_edges["edges"])
-
-        def query1(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        def query2(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().is_in([0, 1]))
-
-        graphrecord.add_group("3", query1, query2)
-
-        assert graphrecord.group_count() == 4
-        nodes_and_edges = graphrecord.group("3")
-        assert sorted(["0", "1"]) == sorted(nodes_and_edges["nodes"])
-        assert sorted([0, 1]) == sorted(nodes_and_edges["edges"])
-
-    def test_invalid_add_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        with pytest.raises(IndexError):
-            graphrecord.add_group("0", "50")
-
-        with pytest.raises(IndexError):
-            graphrecord.add_group("0", edges=[50])
-
-        with pytest.raises(IndexError):
-            graphrecord.add_group("0", ["0", "50"])
-
-        graphrecord.add_group("0", "0")
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_group("0")
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_group("0", "0")
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_group("0", ["1", "0"])
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().equal_to("0"))
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_group("0", query)
-
-        graphrecord.add_nodes(("4", {"test": "test"}))
-        edge_index = graphrecord.add_edges(("4", "4", {"test": "test"}))[0]
-
-        graphrecord.freeze_schema()
-
-        with pytest.raises(
-            ValueError, match='Group `"2"` is not defined in the schema'
-        ):
-            graphrecord.add_group("2")
-
-        graphrecord.remove_groups("0")
-
-        with pytest.raises(
-            ValueError,
-            match=r"Attribute [^\s]+ of type [^\s]+ not found on node with index [^\s]+",
-        ):
-            graphrecord.add_group("0", "4")
-
-        with pytest.raises(
-            ValueError,
-            match=r"Attributes \[[^\]]+\] of edge with index [^\s]+ do not exist in schema\.",
-        ):
-            graphrecord.add_group("0", edges=edge_index)
-
-    def test_remove_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0")
-
-        assert graphrecord.group_count() == 1
-
-        graphrecord.remove_groups("0")
-
-        assert graphrecord.group_count() == 0
-
-    def test_invalid_remove_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Removing a non-existing group should fail
-        with pytest.raises(IndexError):
-            graphrecord.remove_groups("0")
-
-    def test_add_nodes_to_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0")
-
-        assert graphrecord.nodes_in_group("0") == []
-
-        graphrecord.add_nodes_to_group("0", "0")
-
-        assert graphrecord.nodes_in_group("0") == ["0"]
-
-        graphrecord.add_nodes_to_group("0", ["1", "2"])
-
-        assert sorted(["0", "1", "2"]) == sorted(graphrecord.nodes_in_group("0"))
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().equal_to("3"))
-
-        graphrecord.add_nodes_to_group("0", query)
-
-        assert sorted(["0", "1", "2", "3"]) == sorted(graphrecord.nodes_in_group("0"))
-
-        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
-            indices = nodes.index()
-
-            return indices.filter(indices.equal_to("0")).max()
-
-        graphrecord.add_group("1")
-        graphrecord.add_nodes_to_group("1", query2)
-
-        assert graphrecord.nodes_in_group("1") == ["0"]
-
-        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
-            maximum_index = nodes.index().max()
-
-            return maximum_index.filter(maximum_index.equal_to("non-found"))
-
-        graphrecord.add_nodes_to_group("1", query3)
-
-        assert graphrecord.nodes_in_group("1") == ["0"]
-
-        graphrecord.add_nodes(("4", {"test": "test"}), "1")
-
-        graphrecord.freeze_schema()
-
-        graphrecord.add_nodes(("5", {"test": "test"}), "1")
-
-        assert len(graphrecord.nodes_in_group("1")) == 3
-
-    def test_invalid_add_nodes_to_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", ["0"])
-
-        with pytest.raises(IndexError):
-            graphrecord.add_nodes_to_group("0", "50")
-
-        with pytest.raises(IndexError):
-            graphrecord.add_nodes_to_group("0", ["1", "50"])
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_nodes_to_group("0", "0")
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_nodes_to_group("0", ["1", "0"])
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().equal_to("0"))
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_nodes_to_group("0", query)
-
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(("0", {"test": "test"}))
-        graphrecord.add_group("0")
-
-        graphrecord.freeze_schema()
-
-        with pytest.raises(
-            ValueError,
-            match=r"Attributes \[[^\]]+\] of node with index [^\s]+ do not exist in schema\.",
-        ):
-            graphrecord.add_nodes_to_group("0", "0")
-
-    def test_add_nodes_to_multiple_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0")
-        graphrecord.add_group("1")
-
-        graphrecord.add_nodes_to_group(["0", "1"], "0")
-
-        assert graphrecord.nodes_in_group("0") == ["0"]
-        assert graphrecord.nodes_in_group("1") == ["0"]
-
-        graphrecord.add_nodes_to_group(["0", "1"], ["1", "2"])
-
-        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1", "2"])
-        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1", "2"])
-
-    def test_invalid_add_nodes_to_multiple_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", ["0"])
-        graphrecord.add_group("1")
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_nodes_to_group(["0", "1"], "0")
-
-        with pytest.raises(IndexError):
-            graphrecord.add_nodes_to_group(["0", "1"], "50")
-
-    def test_add_nodes_to_multiple_groups_with_query(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0")
-        graphrecord.add_group("1")
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        graphrecord.add_nodes_to_group(["0", "1"], query)
-
-        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1"])
-        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1"])
-
-    def test_add_nodes_to_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0")
-        graphrecord.add_group("1")
-
-        graphrecord.add_nodes_to_group(["0", "1"], ["0", "1"])
-
-        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1"])
-        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1"])
-
-    def test_invalid_add_nodes_to_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", ["0"])
-        graphrecord.add_group("1")
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_nodes_to_group(["0", "1"], ["0", "1"])
-
-        with pytest.raises(IndexError):
-            graphrecord.add_nodes_to_group(["0", "1"], ["50"])
-
-    def test_add_nodes_to_groups_with_query(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0")
-        graphrecord.add_group("1")
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        graphrecord.add_nodes_to_group(["0", "1"], query)
-
-        assert sorted(graphrecord.nodes_in_group("0")) == sorted(["0", "1"])
-        assert sorted(graphrecord.nodes_in_group("1")) == sorted(["0", "1"])
-
-    def test_add_edges_to_group(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0")
-
-        assert graphrecord.edges_in_group("0") == []
-
-        graphrecord.add_edges_to_group("0", 0)
-        assert graphrecord.edges_in_group("0") == [0]
-
-        graphrecord.add_edges_to_group("0", [1, 2])
-        assert sorted([0, 1, 2]) == sorted(graphrecord.edges_in_group("0"))
-
-        def query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().equal_to(3))
-
-        graphrecord.add_edges_to_group("0", query)
-        assert sorted([0, 1, 2, 3]) == sorted(graphrecord.edges_in_group("0"))
-
-        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            indices = edges.index()
-
-            return indices.filter(indices.equal_to(0)).max()
-
-        graphrecord.add_group("1")
-        graphrecord.add_edges_to_group("1", query2)
-        assert graphrecord.edges_in_group("1") == [0]
-
-        def query3(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            maximum_index = edges.index().max()
-
-            return maximum_index.filter(maximum_index.greater_than(10))
-
-        graphrecord.add_edges_to_group("1", query3)
-        assert graphrecord.edges_in_group("1") == [0]
-
-        graphrecord = GraphRecord()
-        graphrecord.add_nodes(create_nodes())
-        graphrecord.add_edges(("0", "1", {"test": "test"}), group="0")
-        graphrecord.freeze_schema()
-        graphrecord.add_edges(("0", "1", {"test": "test"}), group="0")
-
-        assert len(graphrecord.edges_in_group("0")) == 2
-
-    def test_invalid_add_edges_to_group(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0", edges=[0])
-
-        with pytest.raises(IndexError):
-            graphrecord.add_edges_to_group("0", 50)
-
-        with pytest.raises(IndexError):
-            graphrecord.add_edges_to_group("0", [1, 50])
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_edges_to_group("0", 0)
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_edges_to_group("0", [1, 0])
-
-        def query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().equal_to(0))
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_edges_to_group("0", query)
-
-        graphrecord = GraphRecord()
-        graphrecord.add_nodes(("0", {}))
-        graphrecord.add_edges(("0", "0", {"test": "test"}), group="0")
-        graphrecord.freeze_schema()
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_edges_to_group("0", 0)
-
-    def test_add_edges_to_multiple_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0")
-        graphrecord.add_group("1")
-
-        graphrecord.add_edges_to_group(["0", "1"], 0)
-
-        assert graphrecord.edges_in_group("0") == [0]
-        assert graphrecord.edges_in_group("1") == [0]
-
-        graphrecord.add_edges_to_group(["0", "1"], [1, 2])
-
-        assert sorted(graphrecord.edges_in_group("0")) == sorted([0, 1, 2])
-        assert sorted(graphrecord.edges_in_group("1")) == sorted([0, 1, 2])
-
-    def test_invalid_add_edges_to_multiple_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", edges=[0])
-        graphrecord.add_group("1")
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_edges_to_group(["0", "1"], 0)
-
-        with pytest.raises(IndexError):
-            graphrecord.add_edges_to_group(["0", "1"], 50)
-
-    def test_add_edges_to_multiple_groups_with_query(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0")
-        graphrecord.add_group("1")
-
-        def query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().is_in([0, 1]))
-
-        graphrecord.add_edges_to_group(["0", "1"], query)
-
-        assert sorted(graphrecord.edges_in_group("0")) == sorted([0, 1])
-        assert sorted(graphrecord.edges_in_group("1")) == sorted([0, 1])
-
-    def test_add_edges_to_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0")
-        graphrecord.add_group("1")
-
-        graphrecord.add_edges_to_group(["0", "1"], [0, 1])
-
-        assert sorted(graphrecord.edges_in_group("0")) == sorted([0, 1])
-        assert sorted(graphrecord.edges_in_group("1")) == sorted([0, 1])
-
-    def test_invalid_add_edges_to_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", edges=[0])
-        graphrecord.add_group("1")
-
-        with pytest.raises(AssertionError):
-            graphrecord.add_edges_to_group(["0", "1"], [0, 1])
-
-        with pytest.raises(IndexError):
-            graphrecord.add_edges_to_group(["0", "1"], [50])
-
-    def test_add_edges_to_groups_with_query(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0")
-        graphrecord.add_group("1")
-
-        def query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().is_in([0, 1]))
-
-        graphrecord.add_edges_to_group(["0", "1"], query)
-
-        assert sorted(graphrecord.edges_in_group("0")) == sorted([0, 1])
-        assert sorted(graphrecord.edges_in_group("1")) == sorted([0, 1])
-
-    def test_remove_nodes_from_group(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0", ["0", "1"])
-
-        graphrecord.remove_nodes_from_group("0", "1")
-        assert graphrecord.nodes_in_group("0") == ["0"]
-
-        graphrecord.add_nodes_to_group("0", "1")
-        graphrecord.remove_nodes_from_group("0", ["0", "1"])
-        assert graphrecord.nodes_in_group("0") == []
-
-        graphrecord.add_nodes_to_group("0", ["0", "1"])
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        graphrecord.remove_nodes_from_group("0", query)
-        assert graphrecord.nodes_in_group("0") == []
-
-        graphrecord.add_nodes_to_group("0", ["0", "1"])
-
-        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
-            indices = nodes.index()
-
-            return indices.filter(indices.equal_to("0")).max()
-
-        graphrecord.remove_nodes_from_group("0", query2)
-        assert graphrecord.nodes_in_group("0") == ["1"]
-
-        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
-            maximum_index = nodes.index().max()
-
-            return maximum_index.filter(maximum_index.equal_to("non-found"))
-
-        graphrecord.remove_nodes_from_group("0", query3)
-        assert graphrecord.nodes_in_group("0") == ["1"]
-
-    def test_invalid_remove_nodes_from_group(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0", ["0", "1"])
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_nodes_from_group("50", "0")
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_nodes_from_group("50", ["0", "1"])
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().equal_to("0"))
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_nodes_from_group("50", query)
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_nodes_from_group("0", "50")
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_nodes_from_group("0", ["0", "50"])
-
-    def test_remove_nodes_from_multiple_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", ["0", "1"])
-        graphrecord.add_group("1", ["0", "2"])
-
-        graphrecord.remove_nodes_from_group(["0", "1"], "0")
-
-        assert graphrecord.nodes_in_group("0") == ["1"]
-        assert graphrecord.nodes_in_group("1") == ["2"]
-
-    def test_invalid_remove_nodes_from_multiple_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", ["0"])
-        graphrecord.add_group("1")
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_nodes_from_group(["0", "1"], "50")
-
-        with pytest.raises(AssertionError):
-            graphrecord.remove_nodes_from_group(["0", "1"], "1")
-
-    def test_remove_nodes_from_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", ["0", "1"])
-        graphrecord.add_group("1", ["0", "1"])
-
-        graphrecord.remove_nodes_from_group(["0", "1"], ["0", "1"])
-
-        assert graphrecord.nodes_in_group("0") == []
-        assert graphrecord.nodes_in_group("1") == []
-
-    def test_invalid_remove_nodes_from_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", ["0"])
-        graphrecord.add_group("1")
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_nodes_from_group(["0", "1"], ["50"])
-
-        with pytest.raises(AssertionError):
-            graphrecord.remove_nodes_from_group(["0", "1"], ["0"])
-
-    def test_remove_nodes_from_groups_with_query(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0", ["0", "1"])
-        graphrecord.add_group("1", ["0", "1"])
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        graphrecord.remove_nodes_from_group(["0", "1"], query)
-
-        assert graphrecord.nodes_in_group("0") == []
-        assert graphrecord.nodes_in_group("1") == []
-
-    def test_remove_edges_from_group(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0", edges=[0, 1])
-
-        graphrecord.remove_edges_from_group("0", 1)
-        assert graphrecord.edges_in_group("0") == [0]
-
-        graphrecord.add_edges_to_group("0", 1)
-        graphrecord.remove_edges_from_group("0", [0, 1])
-        assert graphrecord.edges_in_group("0") == []
-
-        graphrecord.add_edges_to_group("0", [0, 1])
-
-        def query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().is_in([0, 1]))
-
-        graphrecord.remove_edges_from_group("0", query)
-        assert graphrecord.edges_in_group("0") == []
-
-        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            indices = edges.index()
-
-            return indices.filter(indices.equal_to(0)).max()
-
-        graphrecord.add_edges_to_group("0", [0, 1])
-        graphrecord.remove_edges_from_group("0", query2)
-        assert graphrecord.edges_in_group("0") == [1]
-
-        def query3(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            maximum_index = edges.index().max()
-
-            return maximum_index.filter(maximum_index.greater_than(10))
-
-        graphrecord.remove_edges_from_group("0", query3)
-        assert graphrecord.edges_in_group("0") == [1]
-
-    def test_invalid_remove_edges_from_group(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0", edges=[0, 1])
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_edges_from_group("50", 0)
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_edges_from_group("50", [0, 1])
-
-        def query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().equal_to(0))
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_edges_from_group("50", query)
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_edges_from_group("0", 50)
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_edges_from_group("0", [0, 50])
-
-    def test_remove_edges_from_multiple_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", edges=[0, 1])
-        graphrecord.add_group("1", edges=[0, 2])
-
-        graphrecord.remove_edges_from_group(["0", "1"], 0)
-
-        assert graphrecord.edges_in_group("0") == [1]
-        assert graphrecord.edges_in_group("1") == [2]
-
-    def test_invalid_remove_edges_from_multiple_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", edges=[0])
-        graphrecord.add_group("1")
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_edges_from_group(["0", "1"], 50)
-
-        with pytest.raises(AssertionError):
-            graphrecord.remove_edges_from_group(["0", "1"], 1)
-
-    def test_remove_edges_from_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", edges=[0, 1])
-        graphrecord.add_group("1", edges=[0, 1])
-
-        graphrecord.remove_edges_from_group(["0", "1"], [0, 1])
-
-        assert graphrecord.edges_in_group("0") == []
-        assert graphrecord.edges_in_group("1") == []
-
-    def test_invalid_remove_edges_from_groups(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", edges=[0])
-        graphrecord.add_group("1")
-
-        with pytest.raises(IndexError):
-            graphrecord.remove_edges_from_group(["0", "1"], [50])
-
-        with pytest.raises(AssertionError):
-            graphrecord.remove_edges_from_group(["0", "1"], [0])
-
-    def test_remove_edges_from_groups_with_query(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0", edges=[0, 1])
-        graphrecord.add_group("1", edges=[0, 1])
-
-        def query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().is_in([0, 1]))
-
-        graphrecord.remove_edges_from_group(["0", "1"], query)
-
-        assert graphrecord.edges_in_group("0") == []
-        assert graphrecord.edges_in_group("1") == []
-
-    def test_nodes_in_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", ["0", "1"])
-
-        assert sorted(["0", "1"]) == sorted(graphrecord.nodes_in_group("0"))
-
-        graphrecord.add_group("1", ["2", "3"])
-
-        actual = {
-            k: sorted(v) for k, v in graphrecord.nodes_in_group(["0", "1"]).items()
-        }
-
-        assert {"0": sorted(["1", "0"]), "1": sorted(["2", "3"])} == actual
-
-    def test_invalid_nodes_in_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Querying nodes in a non-existing group should fail
-        with pytest.raises(IndexError):
-            graphrecord.nodes_in_group("50")
-
-    def test_ungrouped_nodes(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", ["0", "1"])
-
-        assert sorted(["2", "3"]) == sorted(graphrecord.ungrouped_nodes())
-
-    def test_edges_in_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", edges=[0, 1])
-
-        assert sorted([0, 1]) == sorted(graphrecord.edges_in_group("0"))
-
-        graphrecord.add_group("1", edges=[2, 3])
-
-        actual = {
-            k: sorted(v) for k, v in graphrecord.edges_in_group(["0", "1"]).items()
-        }
-
-        assert {"0": sorted([0, 1]), "1": sorted([2, 3])} == actual
-
-    def test_invalid_edges_in_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Querying edges in a non-existing group should fail
-        with pytest.raises(IndexError):
-            graphrecord.edges_in_group("50")
-
-    def test_ungrouped_edges(self) -> None:
-        graphrecord = create_graphrecord()
-
-        graphrecord.add_group("0", edges=[0, 1])
-
-        assert sorted([2, 3]) == sorted(graphrecord.ungrouped_edges())
-
-    def test_groups_of_node(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0", ["0", "1"])
-
-        assert graphrecord.groups_of_node("0") == ["0"]
-        assert graphrecord.groups_of_node(["0", "1"]) == {"0": ["0"], "1": ["0"]}
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        assert graphrecord.groups_of_node(query) == {"0": ["0"], "1": ["0"]}
-
-        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
-            indices = nodes.index()
-
-            return indices.filter(indices.equal_to("0")).max()
-
-        assert graphrecord.groups_of_node(query2) == ["0"]
-
-        def query3(nodes: NodesOperand) -> BareNodeIndexOperand:
-            maximum_index = nodes.index().max()
-
-            return maximum_index.filter(maximum_index.equal_to("non-found"))
-
-        assert graphrecord.groups_of_node(query3) == []
-
-    def test_invalid_groups_of_node(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Querying groups of a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.groups_of_node("50")
-
-        # Querying groups of a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.groups_of_node(["0", "50"])
-
-    def test_groups_of_edge(self) -> None:
-        graphrecord = create_graphrecord()
-        graphrecord.add_group("0", edges=[0, 1])
-
-        assert graphrecord.groups_of_edge(0) == ["0"]
-        assert graphrecord.groups_of_edge([0, 1]) == {0: ["0"], 1: ["0"]}
-
-        def query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().is_in([0, 1]))
-
-        assert graphrecord.groups_of_edge(query) == {0: ["0"], 1: ["0"]}
-
-        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            indices = edges.index()
-
-            return indices.filter(indices.equal_to(0)).max()
-
-        assert graphrecord.groups_of_edge(query2) == ["0"]
-
-        def query3(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            maximum_index = edges.index().max()
-
-            return maximum_index.filter(maximum_index.greater_than(10))
-
-        assert graphrecord.groups_of_edge(query3) == []
-
-    def test_invalid_groups_of_edge(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Querying groups of a non-existing edge should fail
-        with pytest.raises(IndexError):
-            graphrecord.groups_of_edge(50)
-
-        # Querying groups of a non-existing edge should fail
-        with pytest.raises(IndexError):
-            graphrecord.groups_of_edge([0, 50])
-
-    def test_node_count(self) -> None:
-        graphrecord = GraphRecord()
-
-        assert graphrecord.node_count() == 0
-
-        graphrecord.add_nodes([("0", {})])
-
-        assert graphrecord.node_count() == 1
-
-    def test_edge_count(self) -> None:
-        graphrecord = GraphRecord()
-
-        graphrecord.add_nodes(("0", {}))
-        graphrecord.add_nodes(("1", {}))
-
-        assert graphrecord.edge_count() == 0
-
-        graphrecord.add_edges(("0", "1", {}))
-
-        assert graphrecord.edge_count() == 1
-
-    def test_group_count(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert graphrecord.group_count() == 0
-
-        graphrecord.add_group("0")
-
-        assert graphrecord.group_count() == 1
-
-    def test_contains_node(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert graphrecord.contains_node("0")
-
-        assert not graphrecord.contains_node("50")
-
-    def test_contains_edge(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert graphrecord.contains_edge(0)
-
-        assert not graphrecord.contains_edge(50)
-
-    def test_contains_group(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert not graphrecord.contains_group("0")
-
-        graphrecord.add_group("0")
-
-        assert graphrecord.contains_group("0")
-
-    def test_neighbors(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert sorted(["1", "3"]) == sorted(graphrecord.neighbors("0"))
-
-        neighbors = graphrecord.neighbors(["0", "1"])
-        assert {key: sorted(value) for key, value in neighbors.items()} == {
-            "0": sorted(["1", "3"]),
-            "1": ["0", "2"],
-        }
-
-        def query1(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        neighbors = graphrecord.neighbors(query1)
-        assert {key: sorted(value) for key, value in neighbors.items()} == {
-            "0": sorted(["1", "3"]),
-            "1": ["0", "2"],
-        }
-
-        def query1_single(nodes: NodesOperand) -> BareNodeIndexOperand:
-            indices = nodes.index()
-
-            return indices.filter(indices.equal_to("0")).max()
-
-        assert sorted(graphrecord.neighbors(query1_single)) == ["1", "3"]
-
-        def query1_not_found(nodes: NodesOperand) -> BareNodeIndexOperand:
-            maximum_index = nodes.index().max()
-
-            return maximum_index.filter(maximum_index.equal_to("non-found"))
-
-        assert graphrecord.neighbors(query1_not_found) == []
-
-        neighbors = graphrecord.neighbors("0", directed=EdgesDirection.UNDIRECTED)
-        assert sorted(["1", "3"]) == sorted(neighbors)
-
-        neighbors = graphrecord.neighbors(
-            ["0", "1"], directed=EdgesDirection.UNDIRECTED
-        )
-        assert {key: sorted(value) for key, value in neighbors.items()} == {
-            "0": sorted(["1", "3"]),
-            "1": ["0", "2"],
-        }
-
-        def query2(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        neighbors = graphrecord.neighbors(query2, directed=EdgesDirection.UNDIRECTED)
-        assert {key: sorted(value) for key, value in neighbors.items()} == {
-            "0": sorted(["1", "3"]),
-            "1": ["0", "2"],
-        }
-
-    def test_neighbors_incoming(self) -> None:
-        graphrecord = create_graphrecord()
-
-        neighbors = graphrecord.neighbors("0", directed=EdgesDirection.INCOMING)
-
-        assert neighbors == ["1"]
-
-        neighbors = graphrecord.neighbors(["0", "2"], directed=EdgesDirection.INCOMING)
-
-        assert neighbors == {"0": ["1"], "2": ["1"]}
-
-    def test_neighbors_incoming_query(self) -> None:
-        graphrecord = create_graphrecord()
-
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "2"]))
-
-        neighbors = graphrecord.neighbors(query, directed=EdgesDirection.INCOMING)
-
-        assert neighbors == {"0": ["1"], "2": ["1"]}
-
-    def test_invalid_neighbors_incoming(self) -> None:
-        graphrecord = create_graphrecord()
-
-        with pytest.raises(IndexError):
-            graphrecord.neighbors("50", directed=EdgesDirection.INCOMING)
-
-        with pytest.raises(IndexError):
-            graphrecord.neighbors(["0", "50"], directed=EdgesDirection.INCOMING)
-
-    def test_invalid_neighbors(self) -> None:
-        graphrecord = create_graphrecord()
-
-        # Querying neighbors of a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.neighbors("50")
-
-        # Querying neighbors of a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.neighbors(["0", "50"])
-
-        # Querying undirected neighbors of a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.neighbors("50", directed=EdgesDirection.UNDIRECTED)
-
-        # Querying undirected neighbors of a non-existing node should fail
-        with pytest.raises(IndexError):
-            graphrecord.neighbors(["0", "50"], directed=EdgesDirection.UNDIRECTED)
-
-    def test_clear(self) -> None:
-        graphrecord = create_graphrecord()
-
-        assert graphrecord.node_count() == 4
-        assert graphrecord.edge_count() == 4
-        assert graphrecord.group_count() == 0
-
-        graphrecord.clear()
-
-        assert graphrecord.node_count() == 0
-        assert graphrecord.edge_count() == 0
-        assert graphrecord.group_count() == 0
-
-    def test_clone(self) -> None:
-        graphrecord = create_graphrecord()
-
-        cloned_graphrecord = graphrecord.clone()
-
-        assert graphrecord.node_count() == cloned_graphrecord.node_count()
-        assert graphrecord.edge_count() == cloned_graphrecord.edge_count()
-        assert graphrecord.group_count() == cloned_graphrecord.group_count()
-
-        cloned_graphrecord.add_nodes(("new_node", {"attribute": "value"}))
-        cloned_graphrecord.add_edges(("0", "new_node", {"attribute": "value"}))
-        cloned_graphrecord.add_group("new_group", ["new_node"])
-
-        assert graphrecord.node_count() != cloned_graphrecord.node_count()
-        assert graphrecord.edge_count() != cloned_graphrecord.edge_count()
-        assert graphrecord.group_count() != cloned_graphrecord.group_count()
-
-    def test_query_nodes(self) -> None:
-        graphrecord = create_graphrecord()
-
-        def query1(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().is_in(["0", "1"]))
-
-        assert set(graphrecord.query_nodes(query1)) == {"0", "1"}
-
-        def query2(nodes: NodesOperand) -> BareNodeIndexOperand:
-            indices = nodes.index()
-
-            return indices.filter(indices.equal_to("0")).max()
-
-        assert graphrecord.query_nodes(query2) == "0"
-
-        def query3(nodes: NodesOperand) -> NodeValuesOperand:
-            return nodes.filter(nodes.has_attribute("lorem")).attribute("lorem")
-
-        assert graphrecord.query_nodes(query3) == [("0", "ipsum")]
-
-        def query4(nodes: NodesOperand) -> NodeValueOperand:
-            return query3(nodes).sort().last()
-
-        assert graphrecord.query_nodes(query4) == ("0", "ipsum")
-
-        def query5(nodes: NodesOperand) -> NodeAttributesTreeOperand:
-            return nodes.filter(nodes.index().equal_to("0")).attributes()
-
-        assert set(graphrecord.query_nodes(query5)) == {
-            (("0", "dolor"), "dolor"),
-            (("0", "lorem"), "lorem"),
-        }
-
-        def query6(nodes: NodesOperand) -> BareAttributeOperand:
-            return query5(nodes).max()
-
-        assert graphrecord.query_nodes(query6) == "lorem"
-
-        def query8(nodes: NodesOperand) -> BareEdgeIndexOperand:
-            return (
-                nodes.filter(nodes.index().equal_to("0"))
-                .edges(EdgeDirection.Both)
-                .index()
-                .discard_index()
-                .max()
-            )
-
-        assert graphrecord.query_nodes(query8) == 3
-
-        def query9(nodes: NodesOperand) -> BareEdgeIndicesOperand:
-            return (
-                nodes.filter(nodes.index().equal_to("0"))
-                .edges(EdgeDirection.Both)
-                .index()
-                .discard_index()
-            )
-
-        assert set(graphrecord.query_nodes(query9)) == {0, 1, 3}
-
-    def test_query_edges(self) -> None:
-        graphrecord = create_graphrecord()
-
-        def query1(edges: EdgesOperand) -> EdgesOperand:
-            return edges.filter(edges.index().is_in([0, 1]))
-
-        assert set(graphrecord.query_edges(query1)) == {0, 1}
-
-        def query2(edges: EdgesOperand) -> BareEdgeIndexOperand:
-            indices = edges.index()
-
-            return indices.filter(indices.equal_to(0)).max()
-
-        assert graphrecord.query_edges(query2) == 0
-
-        def query3(edges: EdgesOperand) -> EdgeValuesOperand:
-            return edges.filter(edges.has_attribute("eiusmod")).attribute("eiusmod")
-
-        assert sorted(graphrecord.query_edges(query3)) == [
-            (0, "tempor"),
-            (1, "tempor"),
-        ]
-
-        def query4(edges: EdgesOperand) -> EdgeValueOperand:
-            return (
-                edges.filter(edges.index().equal_to(0))
-                .attribute("eiusmod")
-                .sort()
-                .first()
-            )
-
-        assert graphrecord.query_edges(query4) == (0, "tempor")
-
-        def query5(edges: EdgesOperand) -> EdgeAttributesTreeOperand:
-            return edges.filter(edges.index().equal_to(0)).attributes()
-
-        assert set(graphrecord.query_edges(query5)) == {
-            ((0, "eiusmod"), "eiusmod"),
-            ((0, "sed"), "sed"),
-        }
-
-        def query6(edges: EdgesOperand) -> BareAttributeOperand:
-            return query5(edges).max()
-
-        assert graphrecord.query_edges(query6) == "sed"
-
-        def query8(edges: EdgesOperand) -> BareNodeIndexOperand:
-            return (
-                edges.filter(edges.index().equal_to(0))
-                .via_source_node()
-                .index()
-                .discard_index()
-                .max()
-            )
-
-        assert graphrecord.query_edges(query8) == "0"
-
-        def query9(edges: EdgesOperand) -> BareNodeIndicesOperand:
-            return edges.via_source_node().index().discard_index()
-
-        source_indices = graphrecord.query_edges(query9)
-
-        assert source_indices.count("0") == 2
-        assert source_indices.count("1") == 2
-
-    def test_query_argument_errors(self) -> None:
-        graphrecord = create_graphrecord()
-
-        def node_query(nodes: NodesOperand) -> NodeOperand:
-            return nodes.attribute("missing").discard_value().shuffle().first()
-
-        with pytest.raises(QueryError, match="no attribute"):
-            graphrecord.outgoing_edges(node_query)
-
-        def nodes_query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.attribute("missing").discard_value()
-
-        with pytest.raises(QueryError, match="no attribute"):
-            graphrecord.outgoing_edges(nodes_query)
-
-        def edges_query(edges: EdgesOperand) -> EdgesOperand:
-            return edges.attribute("missing").discard_value()
-
-        with pytest.raises(QueryError, match="no attribute"):
-            graphrecord.edge_endpoints(edges_query)
-
-        def edge_query(edges: EdgesOperand) -> EdgeOperand:
-            return edges.attribute("missing").discard_value().shuffle().first()
-
-        with pytest.raises(QueryError, match="no attribute"):
-            graphrecord.edge_endpoints(edge_query)
-
-
-class TestGraphRecordPlugins(unittest.TestCase):
-    def test_with_plugins_single(self) -> None:
-        graphrecord = GraphRecord.with_plugins({"noop": Plugin()})
-
-        graphrecord.add_nodes([("a", {})])
-
-        assert "a" in graphrecord.nodes
-
-    def test_with_plugins_list(self) -> None:
-        graphrecord = GraphRecord.with_plugins({"noop": Plugin()})
-
-        graphrecord.add_nodes([("a", {})])
-
-        assert "a" in graphrecord.nodes
-
-    def test_run_with_plugins_calls_pre_and_post(self) -> None:
-        calls: List[str] = []
-
-        class TrackingPlugin(Plugin):
-            def pre_add_nodes(
-                self, graphrecord: GraphRecord, context: PreAddNodesContext
-            ) -> PreAddNodesContext:
-                calls.append("pre")
-                return context
-
-            def post_add_nodes(
-                self, graphrecord: GraphRecord, context: PostAddNodesContext
-            ) -> None:
-                calls.append("post")
-
-        graphrecord = GraphRecord.with_plugins({"tracker": TrackingPlugin()})
-        graphrecord.add_nodes([("a", {})])
-
-        assert calls == ["pre", "post"]
-        assert "a" in graphrecord.nodes
-
-    def test_run_with_plugins_simple_calls_pre_and_post(self) -> None:
-        calls: List[str] = []
-
-        class TrackingPlugin(Plugin):
-            def pre_clear(self, graphrecord: GraphRecord) -> None:
-                calls.append("pre_clear")
-
-            def post_clear(self, graphrecord: GraphRecord) -> None:
-                calls.append("post_clear")
-
-        graphrecord = GraphRecord.with_plugins({"tracker": TrackingPlugin()})
-        graphrecord.add_nodes([("a", {})])
-        graphrecord.clear()
-
-        assert calls == ["pre_clear", "post_clear"]
-        assert graphrecord.nodes == []
-
-    def test_run_with_plugins_restores_flag_on_error(self) -> None:
-        class FailOncePlugin(Plugin):
-            def __init__(self) -> None:
-                self.failed = False
-
-            def pre_add_nodes(
-                self, graphrecord: GraphRecord, context: PreAddNodesContext
-            ) -> PreAddNodesContext:
-                if not self.failed:
-                    self.failed = True
-                    msg = "boom"
-                    raise RuntimeError(msg)
-                return context
-
-        graphrecord = GraphRecord.with_plugins({"fail_once": FailOncePlugin()})
-
-        with pytest.raises(RuntimeError, match="boom"):
-            graphrecord.add_nodes([("a", {})])
-
-        graphrecord.add_nodes([("b", {})])
-
-        assert "b" in graphrecord.nodes
-
-    def test_run_with_plugins_simple_restores_flag_on_error(self) -> None:
-        class FailOncePlugin(Plugin):
-            def __init__(self) -> None:
-                self.failed = False
-
-            def pre_clear(self, graphrecord: GraphRecord) -> None:
-                if not self.failed:
-                    self.failed = True
-                    msg = "boom"
-                    raise RuntimeError(msg)
-
-        graphrecord = GraphRecord.with_plugins({"fail_once": FailOncePlugin()})
-
-        with pytest.raises(RuntimeError, match="boom"):
-            graphrecord.clear()
-
-        graphrecord.clear()
-
-    def test_plugins_empty_by_default(self) -> None:
-        graphrecord = GraphRecord()
-
-        assert graphrecord.plugins == []
-
-    def test_with_plugins_returns_plugin_names(self) -> None:
-        graphrecord = GraphRecord.with_plugins({"noop": Plugin()})
-
-        assert graphrecord.plugins == ["noop"]
-
-    def test_with_plugins_returns_all_names(self) -> None:
-        graphrecord = GraphRecord.with_plugins({"first": Plugin(), "second": Plugin()})
-
-        assert sorted(graphrecord.plugins) == ["first", "second"]
-
-    def test_add_plugin(self) -> None:
-        graphrecord = GraphRecord()
-
-        graphrecord.add_plugin("noop", Plugin())
-
-        assert graphrecord.plugins == ["noop"]
-
-    def test_add_plugin_fires_initialize(self) -> None:
-        calls: List[str] = []
-
-        class TrackingPlugin(Plugin):
-            def initialize(self, graphrecord: GraphRecord) -> None:
-                calls.append("initialize")
-
-        graphrecord = GraphRecord()
-        graphrecord.add_plugin("tracker", TrackingPlugin())
-
-        assert "initialize" in calls
-
-    def test_add_plugin_hooks_fire_after_registration(self) -> None:
-        calls: List[str] = []
-
-        class TrackingPlugin(Plugin):
-            def pre_add_nodes(
-                self, graphrecord: GraphRecord, context: PreAddNodesContext
-            ) -> PreAddNodesContext:
-                calls.append("pre_add_nodes")
-                return context
-
-            def post_add_nodes(
-                self, graphrecord: GraphRecord, context: PostAddNodesContext
-            ) -> None:
-                calls.append("post_add_nodes")
-
-        graphrecord = GraphRecord()
-        graphrecord.add_plugin("tracker", TrackingPlugin())
-        graphrecord.add_nodes([("a", {})])
-
-        assert "pre_add_nodes" in calls
-        assert "post_add_nodes" in calls
-
-    def test_add_multiple_plugins_sequentially(self) -> None:
-        graphrecord = GraphRecord()
-
-        graphrecord.add_plugin("first", Plugin())
-        graphrecord.add_plugin("second", Plugin())
-
-        assert sorted(graphrecord.plugins) == ["first", "second"]
-
-    def test_add_plugin_to_graphrecord_with_existing_plugins(self) -> None:
-        graphrecord = GraphRecord.with_plugins({"first": Plugin()})
-
-        graphrecord.add_plugin("second", Plugin())
-
-        assert sorted(graphrecord.plugins) == ["first", "second"]
-
-    def test_remove_plugin(self) -> None:
-        graphrecord = GraphRecord.with_plugins({"noop": Plugin()})
-
-        graphrecord.remove_plugin("noop")
-
-        assert graphrecord.plugins == []
-
-    def test_remove_plugin_fires_finalize(self) -> None:
-        calls: List[str] = []
-
-        class TrackingPlugin(Plugin):
-            def finalize(self, graphrecord: GraphRecord) -> None:
-                calls.append("finalize")
-
-        graphrecord = GraphRecord.with_plugins({"tracker": TrackingPlugin()})
-
-        graphrecord.remove_plugin("tracker")
-
-        assert "finalize" in calls
-
-    def test_remove_plugin_stops_hooks(self) -> None:
-        calls: List[str] = []
-
-        class TrackingPlugin(Plugin):
-            def pre_add_nodes(
-                self, graphrecord: GraphRecord, context: PreAddNodesContext
-            ) -> PreAddNodesContext:
-                calls.append("pre_add_nodes")
-                return context
-
-        graphrecord = GraphRecord.with_plugins({"tracker": TrackingPlugin()})
-        graphrecord.add_nodes([("a", {})])
-        assert "pre_add_nodes" in calls
-
-        graphrecord.remove_plugin("tracker")
-        calls.clear()
-
-        graphrecord.add_nodes([("b", {})])
-
-        assert calls == []
-
-    def test_remove_one_of_multiple_plugins(self) -> None:
-        graphrecord = GraphRecord.with_plugins({"first": Plugin(), "second": Plugin()})
-
-        graphrecord.remove_plugin("first")
-
-        assert graphrecord.plugins == ["second"]
-
-    def test_add_then_remove_plugin(self) -> None:
-        calls: List[str] = []
-
-        class TrackingPlugin(Plugin):
-            def finalize(self, graphrecord: GraphRecord) -> None:
-                calls.append("finalize")
-
-        graphrecord = GraphRecord()
-        graphrecord.add_plugin("tracker", TrackingPlugin())
-
-        graphrecord.remove_plugin("tracker")
-
-        assert graphrecord.plugins == []
-        assert "finalize" in calls
-
-    def test_finalize_receives_graphrecord(self) -> None:
-        received_node_count = None
-
-        class InspectingPlugin(Plugin):
-            def finalize(self, graphrecord: GraphRecord) -> None:
-                nonlocal received_node_count
-                received_node_count = graphrecord.node_count()
-
-        graphrecord = GraphRecord.with_plugins({"inspector": InspectingPlugin()})
-        graphrecord.add_nodes([("a", {}), ("b", {})])
-
-        graphrecord.remove_plugin("inspector")
-
-        assert received_node_count == 2
+class FloatScalar:
+    def __float__(self) -> float:
+        return 1.5
 
 
 class RecordingPlugin(Plugin):
     def __init__(self) -> None:
         self.calls: List[str] = []
 
-    def pre_set_schema(
-        self, graphrecord: GraphRecord, context: PreSetSchemaContext
-    ) -> PreSetSchemaContext:
-        self.calls.append("pre_set_schema")
-        return context
+    def initialize(self, record: GraphRecord) -> None:
+        self.calls.append(f"initialize:{record.node_count()}")
 
-    def post_set_schema(self, graphrecord: GraphRecord) -> None:
-        self.calls.append("post_set_schema")
+    def finalize(self, record: GraphRecord) -> None:
+        self.calls.append(f"finalize:{record.node_count()}")
 
-    def pre_freeze_schema(self, graphrecord: GraphRecord) -> None:
-        self.calls.append("pre_freeze_schema")
-
-    def post_freeze_schema(self, graphrecord: GraphRecord) -> None:
-        self.calls.append("post_freeze_schema")
-
-    def pre_unfreeze_schema(self, graphrecord: GraphRecord) -> None:
-        self.calls.append("pre_unfreeze_schema")
-
-    def post_unfreeze_schema(self, graphrecord: GraphRecord) -> None:
-        self.calls.append("post_unfreeze_schema")
-
-    def pre_add_nodes(
-        self, graphrecord: GraphRecord, context: PreAddNodesContext
-    ) -> PreAddNodesContext:
-        self.calls.append("pre_add_nodes")
-        return context
-
-    def post_add_nodes(
-        self, graphrecord: GraphRecord, context: PostAddNodesContext
-    ) -> None:
-        self.calls.append("post_add_nodes")
-
-    def pre_add_nodes_with_group(
-        self, graphrecord: GraphRecord, context: PreAddNodesWithGroupContext
-    ) -> PreAddNodesWithGroupContext:
-        self.calls.append("pre_add_nodes_with_group")
-        return context
-
-    def post_add_nodes_with_group(
-        self, graphrecord: GraphRecord, context: PostAddNodesWithGroupContext
-    ) -> None:
-        self.calls.append("post_add_nodes_with_group")
-
-    def pre_add_nodes_with_groups(
-        self, graphrecord: GraphRecord, context: PreAddNodesWithGroupsContext
-    ) -> PreAddNodesWithGroupsContext:
-        self.calls.append("pre_add_nodes_with_groups")
-        return context
-
-    def post_add_nodes_with_groups(
-        self, graphrecord: GraphRecord, context: PostAddNodesWithGroupsContext
-    ) -> None:
-        self.calls.append("post_add_nodes_with_groups")
-
-    def pre_add_nodes_dataframes(
-        self, graphrecord: GraphRecord, context: PreAddNodesDataframesContext
-    ) -> PreAddNodesDataframesContext:
-        self.calls.append("pre_add_nodes_dataframes")
-        return context
-
-    def post_add_nodes_dataframes(
-        self, graphrecord: GraphRecord, context: PostAddNodesDataframesContext
-    ) -> None:
-        self.calls.append("post_add_nodes_dataframes")
-
-    def pre_add_nodes_dataframes_with_group(
-        self,
-        graphrecord: GraphRecord,
-        context: PreAddNodesDataframesWithGroupContext,
-    ) -> PreAddNodesDataframesWithGroupContext:
-        self.calls.append("pre_add_nodes_dataframes_with_group")
-        return context
-
-    def post_add_nodes_dataframes_with_group(
-        self,
-        graphrecord: GraphRecord,
-        context: PostAddNodesDataframesWithGroupContext,
-    ) -> None:
-        self.calls.append("post_add_nodes_dataframes_with_group")
-
-    def pre_add_nodes_dataframes_with_groups(
-        self,
-        graphrecord: GraphRecord,
-        context: PreAddNodesDataframesWithGroupsContext,
-    ) -> PreAddNodesDataframesWithGroupsContext:
-        self.calls.append("pre_add_nodes_dataframes_with_groups")
-        return context
-
-    def post_add_nodes_dataframes_with_groups(
-        self,
-        graphrecord: GraphRecord,
-        context: PostAddNodesDataframesWithGroupsContext,
-    ) -> None:
-        self.calls.append("post_add_nodes_dataframes_with_groups")
-
-    def pre_remove_node(
-        self, graphrecord: GraphRecord, context: PreRemoveNodeContext
-    ) -> PreRemoveNodeContext:
-        self.calls.append("pre_remove_node")
-        return context
-
-    def post_remove_node(
-        self, graphrecord: GraphRecord, context: PostRemoveNodeContext
-    ) -> None:
-        self.calls.append("post_remove_node")
-
-    def pre_add_edges(
-        self, graphrecord: GraphRecord, context: PreAddEdgesContext
-    ) -> PreAddEdgesContext:
-        self.calls.append("pre_add_edges")
-        return context
-
-    def post_add_edges(
-        self, graphrecord: GraphRecord, context: PostAddEdgesContext
-    ) -> None:
-        self.calls.append("post_add_edges")
-
-    def pre_add_edges_with_group(
-        self, graphrecord: GraphRecord, context: PreAddEdgesWithGroupContext
-    ) -> PreAddEdgesWithGroupContext:
-        self.calls.append("pre_add_edges_with_group")
-        return context
-
-    def post_add_edges_with_group(
-        self, graphrecord: GraphRecord, context: PostAddEdgesWithGroupContext
-    ) -> None:
-        self.calls.append("post_add_edges_with_group")
-
-    def pre_add_edges_with_groups(
-        self, graphrecord: GraphRecord, context: PreAddEdgesWithGroupsContext
-    ) -> PreAddEdgesWithGroupsContext:
-        self.calls.append("pre_add_edges_with_groups")
-        return context
-
-    def post_add_edges_with_groups(
-        self, graphrecord: GraphRecord, context: PostAddEdgesWithGroupsContext
-    ) -> None:
-        self.calls.append("post_add_edges_with_groups")
-
-    def pre_add_edges_dataframes(
-        self, graphrecord: GraphRecord, context: PreAddEdgesDataframesContext
-    ) -> PreAddEdgesDataframesContext:
-        self.calls.append("pre_add_edges_dataframes")
-        return context
-
-    def post_add_edges_dataframes(
-        self, graphrecord: GraphRecord, context: PostAddEdgesDataframesContext
-    ) -> None:
-        self.calls.append("post_add_edges_dataframes")
-
-    def pre_add_edges_dataframes_with_group(
-        self,
-        graphrecord: GraphRecord,
-        context: PreAddEdgesDataframesWithGroupContext,
-    ) -> PreAddEdgesDataframesWithGroupContext:
-        self.calls.append("pre_add_edges_dataframes_with_group")
-        return context
-
-    def post_add_edges_dataframes_with_group(
-        self,
-        graphrecord: GraphRecord,
-        context: PostAddEdgesDataframesWithGroupContext,
-    ) -> None:
-        self.calls.append("post_add_edges_dataframes_with_group")
-
-    def pre_add_edges_dataframes_with_groups(
-        self,
-        graphrecord: GraphRecord,
-        context: PreAddEdgesDataframesWithGroupsContext,
-    ) -> PreAddEdgesDataframesWithGroupsContext:
-        self.calls.append("pre_add_edges_dataframes_with_groups")
-        return context
-
-    def post_add_edges_dataframes_with_groups(
-        self,
-        graphrecord: GraphRecord,
-        context: PostAddEdgesDataframesWithGroupsContext,
-    ) -> None:
-        self.calls.append("post_add_edges_dataframes_with_groups")
-
-    def pre_remove_edge(
-        self, graphrecord: GraphRecord, context: PreRemoveEdgeContext
-    ) -> PreRemoveEdgeContext:
-        self.calls.append("pre_remove_edge")
-        return context
-
-    def post_remove_edge(
-        self, graphrecord: GraphRecord, context: PostRemoveEdgeContext
-    ) -> None:
-        self.calls.append("post_remove_edge")
-
-    def pre_add_group(
-        self, graphrecord: GraphRecord, context: PreAddGroupContext
-    ) -> PreAddGroupContext:
-        self.calls.append("pre_add_group")
-        return context
-
-    def post_add_group(
-        self, graphrecord: GraphRecord, context: PostAddGroupContext
-    ) -> None:
-        self.calls.append("post_add_group")
-
-    def pre_remove_group(
-        self, graphrecord: GraphRecord, context: PreRemoveGroupContext
-    ) -> PreRemoveGroupContext:
-        self.calls.append("pre_remove_group")
-        return context
-
-    def post_remove_group(
-        self, graphrecord: GraphRecord, context: PostRemoveGroupContext
-    ) -> None:
-        self.calls.append("post_remove_group")
-
-    def pre_add_node_to_group(
-        self, graphrecord: GraphRecord, context: PreAddNodeToGroupContext
-    ) -> PreAddNodeToGroupContext:
-        self.calls.append("pre_add_node_to_group")
-        return context
-
-    def post_add_node_to_group(
-        self, graphrecord: GraphRecord, context: PostAddNodeToGroupContext
-    ) -> None:
-        self.calls.append("post_add_node_to_group")
-
-    def pre_add_nodes_to_groups(
-        self, graphrecord: GraphRecord, context: PreAddNodesToGroupsContext
-    ) -> PreAddNodesToGroupsContext:
-        self.calls.append("pre_add_nodes_to_groups")
-        return context
-
-    def post_add_nodes_to_groups(
-        self, graphrecord: GraphRecord, context: PostAddNodesToGroupsContext
-    ) -> None:
-        self.calls.append("post_add_nodes_to_groups")
-
-    def pre_add_edge_to_group(
-        self, graphrecord: GraphRecord, context: PreAddEdgeToGroupContext
-    ) -> PreAddEdgeToGroupContext:
-        self.calls.append("pre_add_edge_to_group")
-        return context
-
-    def post_add_edge_to_group(
-        self, graphrecord: GraphRecord, context: PostAddEdgeToGroupContext
-    ) -> None:
-        self.calls.append("post_add_edge_to_group")
-
-    def pre_add_edges_to_groups(
-        self, graphrecord: GraphRecord, context: PreAddEdgesToGroupsContext
-    ) -> PreAddEdgesToGroupsContext:
-        self.calls.append("pre_add_edges_to_groups")
-        return context
-
-    def post_add_edges_to_groups(
-        self, graphrecord: GraphRecord, context: PostAddEdgesToGroupsContext
-    ) -> None:
-        self.calls.append("post_add_edges_to_groups")
-
-    def pre_remove_node_from_group(
-        self, graphrecord: GraphRecord, context: PreRemoveNodeFromGroupContext
-    ) -> PreRemoveNodeFromGroupContext:
-        self.calls.append("pre_remove_node_from_group")
-        return context
-
-    def post_remove_node_from_group(
-        self, graphrecord: GraphRecord, context: PostRemoveNodeFromGroupContext
-    ) -> None:
-        self.calls.append("post_remove_node_from_group")
-
-    def pre_remove_nodes_from_groups(
-        self, graphrecord: GraphRecord, context: PreRemoveNodesFromGroupsContext
-    ) -> PreRemoveNodesFromGroupsContext:
-        self.calls.append("pre_remove_nodes_from_groups")
-        return context
-
-    def post_remove_nodes_from_groups(
-        self, graphrecord: GraphRecord, context: PostRemoveNodesFromGroupsContext
-    ) -> None:
-        self.calls.append("post_remove_nodes_from_groups")
-
-    def pre_remove_edge_from_group(
-        self, graphrecord: GraphRecord, context: PreRemoveEdgeFromGroupContext
-    ) -> PreRemoveEdgeFromGroupContext:
-        self.calls.append("pre_remove_edge_from_group")
-        return context
-
-    def post_remove_edge_from_group(
-        self, graphrecord: GraphRecord, context: PostRemoveEdgeFromGroupContext
-    ) -> None:
-        self.calls.append("post_remove_edge_from_group")
-
-    def pre_remove_edges_from_groups(
-        self, graphrecord: GraphRecord, context: PreRemoveEdgesFromGroupsContext
-    ) -> PreRemoveEdgesFromGroupsContext:
-        self.calls.append("pre_remove_edges_from_groups")
-        return context
-
-    def post_remove_edges_from_groups(
-        self, graphrecord: GraphRecord, context: PostRemoveEdgesFromGroupsContext
-    ) -> None:
-        self.calls.append("post_remove_edges_from_groups")
-
-    def pre_clear(self, graphrecord: GraphRecord) -> None:
-        self.calls.append("pre_clear")
-
-    def post_clear(self, graphrecord: GraphRecord) -> None:
-        self.calls.append("post_clear")
+    def on_add_nodes(self, record: GraphRecord, payload: AddNodes) -> None:
+        self.calls.append(f"on_add_nodes:{len(payload.batch)}")
 
 
-class TestBypassPlugins(unittest.TestCase):
-    def _create_graphrecord_with_plugin(
-        self,
-    ) -> Tuple[GraphRecord, RecordingPlugin]:
+class TestOnConflict(unittest.TestCase):
+    def test_from_py_on_conflict(self) -> None:
+        for on_conflict in OnConflict:
+            assert (
+                OnConflict._from_py_on_conflict(on_conflict._into_py_on_conflict())
+                == on_conflict
+            )
+
+    def test_into_py_on_conflict(self) -> None:
+        assert (
+            OnConflict.Raise._into_py_on_conflict()
+            == OnConflict.Raise._into_py_on_conflict()
+        )
+        assert (
+            OnConflict.Raise._into_py_on_conflict()
+            != OnConflict.KeepSelf._into_py_on_conflict()
+        )
+        assert (
+            OnConflict.KeepSelf._into_py_on_conflict()
+            != OnConflict.KeepOther._into_py_on_conflict()
+        )
+
+    def test_repr(self) -> None:
+        assert repr(OnConflict.Raise) == "OnConflict.Raise"
+        assert repr(OnConflict.KeepSelf) == "OnConflict.KeepSelf"
+        assert repr(OnConflict.KeepOther) == "OnConflict.KeepOther"
+
+    def test_str(self) -> None:
+        assert str(OnConflict.Raise) == "Raise"
+        assert str(OnConflict.KeepSelf) == "KeepSelf"
+        assert str(OnConflict.KeepOther) == "KeepOther"
+
+
+class TestNodeCollector(unittest.TestCase):
+    def test_collect_nodes(self) -> None:
+        collector = NodeRows()
+
+        assert collector.collect_nodes() == create_nodes()
+
+
+class TestEdgeCollector(unittest.TestCase):
+    def test_collect_edges(self) -> None:
+        collector = EdgeRows()
+
+        assert collector.collect_edges() == create_edges()
+
+
+class TestArrowStream(unittest.TestCase):
+    def test_arrow_c_stream(self) -> None:
+        table = ArrowTable(create_graphrecord().to_arrow()["groups"]["magna"]["nodes"])
+
+        assert GraphRecord().add_nodes((table, "node_index")).node_indices() == [
+            "0",
+            "1",
+        ]
+
+
+class TestWriter(unittest.TestCase):
+    def test_write(self) -> None:
+        writer = CountingWriter()
+
+        assert writer.write(create_graphrecord()) == (4, 4)
+
+
+class TestRecordBatch(unittest.TestCase):
+    def test_arrow_c_array(self) -> None:
+        record_batch = create_graphrecord().to_arrow()["ungrouped"]["nodes"]
+
+        schema_capsule, array_capsule = record_batch.__arrow_c_array__()
+
+        assert type(schema_capsule).__name__ == "PyCapsule"
+        assert type(array_capsule).__name__ == "PyCapsule"
+        assert len(record_batch.__arrow_c_array__(None)) == 2
+
+    def test_arrow_c_stream(self) -> None:
+        record_batch = create_graphrecord().to_arrow()["groups"]["magna"]["nodes"]
+
+        frame = pl.DataFrame(record_batch)
+
+        assert frame.columns == ["node_index", "amet", "dolor", "lorem"]
+        assert frame.height == 2
+        assert (
+            pl.DataFrame(create_graphrecord().to_arrow()["ungrouped"]["edges"]).height
+            == 3
+        )
+
+    def test_len(self) -> None:
+        export = create_graphrecord().to_arrow()
+
+        assert len(export["ungrouped"]["nodes"]) == 1
+        assert len(export["ungrouped"]["edges"]) == 3
+        assert len(export["groups"]["magna"]["nodes"]) == 2
+        assert len(export["groups"]["magna"]["edges"]) == 1
+
+
+class TestRonFile(unittest.TestCase):
+    def test_write(self) -> None:
+        record = create_graphrecord()
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "record.ron"
+
+            assert RonFile(str(path)).write(record) is None
+            assert path.exists()
+
+
+class TestPolarsFrames(unittest.TestCase):
+    def test_write(self) -> None:
+        export = PolarsFrames().write(create_graphrecord())
+
+        assert sorted(export) == ["groups", "ungrouped"]
+        assert export["ungrouped"]["nodes"].height == 1
+        assert export["groups"]["magna"]["nodes"].height == 2
+
+
+class TestArrowTables(unittest.TestCase):
+    def test_write(self) -> None:
+        export = ArrowTables().write(create_graphrecord())
+
+        assert sorted(export) == ["groups", "ungrouped"]
+        assert len(export["ungrouped"]["nodes"]) == 1
+        assert len(export["groups"]["magna"]["nodes"]) == 2
+
+
+class TestNodeView(unittest.TestCase):
+    def test_index(self) -> None:
+        record = create_graphrecord()
+
+        assert record.node("0").index() == "0"
+        assert record.node("3").index() == "3"
+
+    def test_attribute(self) -> None:
+        record = create_graphrecord()
+
+        assert record.node("0").attribute("lorem") == "ipsum"
+        assert record.node("0").attribute("dolor") == "sit"
+        assert record.add_node("4", {"amet": None}).node("4").attribute("amet") is None
+
+    def test_invalid_attribute(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(KeyError, match="does not exist on node"):
+            record.node("0").attribute("amet")
+
+        with pytest.raises(KeyError, match="does not exist on node"):
+            record.node("3").attribute("lorem")
+
+    def test_attributes(self) -> None:
+        record = create_graphrecord()
+
+        assert record.node("0").attributes() == {"lorem": "ipsum", "dolor": "sit"}
+        assert record.node("1").attributes() == {"amet": "consectetur"}
+        assert record.node("3").attributes() == {}
+
+    def test_groups(self) -> None:
+        record = create_graphrecord()
+
+        assert record.node("0").groups() == ["magna"]
+        assert record.node("2").groups() == ["aliqua"]
+        assert record.node("3").groups() == []
+
+    def test_edges(self) -> None:
+        record = create_graphrecord()
+        view = record.node("0")
+
+        assert view.edges() == [
+            record.edge_indices()[0],
+            record.edge_indices()[3],
+            record.edge_indices()[1],
+        ]
+        assert view.edges(EdgeDirection.Outgoing) == [
+            record.edge_indices()[0],
+            record.edge_indices()[3],
+        ]
+        assert view.edges(EdgeDirection.Incoming) == [record.edge_indices()[1]]
+        assert view.edges(EdgeDirection.Both) == view.edges()
+
+    def test_neighbors(self) -> None:
+        record = create_graphrecord()
+        view = record.node("0")
+
+        assert view.neighbors() == ["1", "3"]
+        assert view.neighbors(EdgeDirection.Outgoing) == ["1", "3"]
+        assert view.neighbors(EdgeDirection.Incoming) == ["1"]
+        assert record.node("3").neighbors() == ["0"]
+
+    def test_degree(self) -> None:
+        record = create_graphrecord()
+        view = record.node("0")
+
+        assert view.degree() == 3
+        assert view.degree(EdgeDirection.Outgoing) == 2
+        assert view.degree(EdgeDirection.Incoming) == 1
+        assert record.node("3").degree() == 1
+
+    def test_edges_to(self) -> None:
+        record = create_graphrecord()
+        view = record.node("0")
+
+        assert view.edges_to("1") == [record.edge_indices()[0]]
+        assert view.edges_to("1", EdgeDirection.Incoming) == [record.edge_indices()[1]]
+        assert view.edges_to("1", EdgeDirection.Both) == [
+            record.edge_indices()[0],
+            record.edge_indices()[1],
+        ]
+        assert view.edges_to(nodes().sort_by(nodes().index()).last()) == [
+            record.edge_indices()[3]
+        ]
+        assert view.edges_to("2") == []
+
+    def test_invalid_edges_to(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find node with index"):
+            record.node("0").edges_to("99")
+
+    def test_repr(self) -> None:
+        record = create_graphrecord()
+
+        assert repr(record.node("0")) == 'NodeView("0")'
+        assert repr(record.node("3")) == 'NodeView("3")'
+
+    def test_view(self) -> None:
+        record = create_graphrecord()
+
+        assert isinstance(record.node("0"), NodeView)
+
+
+class TestEdgeView(unittest.TestCase):
+    def test_index(self) -> None:
+        record = create_graphrecord()
+        edge_index = record.edge_indices()[0]
+
+        assert record.edge(edge_index).index() == edge_index
+        assert isinstance(record.edge(edge_index).index(), EdgeIndex)
+
+    def test_source(self) -> None:
+        record = create_graphrecord()
+
+        assert record.edge(record.edge_indices()[0]).source() == "0"
+        assert record.edge(record.edge_indices()[1]).source() == "1"
+
+    def test_target(self) -> None:
+        record = create_graphrecord()
+
+        assert record.edge(record.edge_indices()[0]).target() == "1"
+        assert record.edge(record.edge_indices()[1]).target() == "0"
+
+    def test_attribute(self) -> None:
+        record = create_graphrecord()
+        edge_index = record.edge_indices()[0]
+        view = record.edge(edge_index)
+
+        assert view.attribute("sed") == "do"
+        assert view.attribute("eiusmod") == "tempor"
+        assert (
+            record.set_edge_attributes(edge_index, {"ut": None})
+            .edge(edge_index)
+            .attribute("ut")
+            is None
+        )
+
+    def test_invalid_attribute(self) -> None:
+        record = create_graphrecord()
+        view = record.edge(record.edge_indices()[0])
+
+        with pytest.raises(KeyError, match="does not exist on edge"):
+            view.attribute("ut")
+
+    def test_attributes(self) -> None:
+        record = create_graphrecord()
+
+        assert record.edge(record.edge_indices()[0]).attributes() == {
+            "sed": "do",
+            "eiusmod": "tempor",
+        }
+        assert record.edge(record.edge_indices()[3]).attributes() == {}
+
+    def test_groups(self) -> None:
+        record = create_graphrecord()
+
+        assert record.edge(record.edge_indices()[0]).groups() == ["magna"]
+        assert record.edge(record.edge_indices()[1]).groups() == []
+
+    def test_repr(self) -> None:
+        record = create_graphrecord()
+        edge_index = record.edge_indices()[0]
+
+        assert repr(record.edge(edge_index)) == f"EdgeView({edge_index})"
+
+    def test_view(self) -> None:
+        record = create_graphrecord()
+
+        assert isinstance(record.edge(record.edge_indices()[0]), EdgeView)
+
+
+class TestGroupView(unittest.TestCase):
+    def test_index(self) -> None:
+        record = create_graphrecord()
+
+        assert record.group("magna").index() == "magna"
+        assert record.group("aliqua").index() == "aliqua"
+
+    def test_nodes(self) -> None:
+        record = create_graphrecord()
+
+        assert record.group("magna").nodes() == ["0", "1"]
+        assert record.group("aliqua").nodes() == ["2"]
+
+    def test_edges(self) -> None:
+        record = create_graphrecord()
+
+        assert record.group("magna").edges() == [record.edge_indices()[0]]
+        assert record.group("aliqua").edges() == []
+
+    def test_node_count(self) -> None:
+        record = create_graphrecord()
+
+        assert record.group("magna").node_count() == 2
+        assert record.group("aliqua").node_count() == 1
+
+    def test_edge_count(self) -> None:
+        record = create_graphrecord()
+
+        assert record.group("magna").edge_count() == 1
+        assert record.group("aliqua").edge_count() == 0
+
+    def test_repr(self) -> None:
+        record = create_graphrecord()
+
+        assert repr(record.group("magna")) == 'GroupView("magna")'
+
+    def test_view(self) -> None:
+        record = create_graphrecord()
+
+        assert isinstance(record.group("magna"), GroupView)
+
+
+class TestGraphRecord(unittest.TestCase):
+    def test_init(self) -> None:
+        record = GraphRecord()
+
+        assert record.node_count() == 0
+        assert record.edge_count() == 0
+        assert record.group_count() == 0
+        assert record.plugins == []
+
+    def test_from_py_graphrecord(self) -> None:
+        record = create_graphrecord()
+
+        rebuilt = GraphRecord._from_py_graphrecord(record._py_graphrecord)
+
+        assert isinstance(rebuilt, GraphRecord)
+        assert rebuilt == record
+
+    def test_with_schema(self) -> None:
+        record = GraphRecord.with_schema(create_schema())
+
+        assert record.schema.schema_type == SchemaType.Provided
+        assert list(record.schema.ungrouped.nodes) == ["lorem"]
+        assert record.add_node("0", {"lorem": "ipsum"}).node_count() == 1
+
+    def test_invalid_with_schema(self) -> None:
+        record = GraphRecord.with_schema(create_schema())
+
+        with pytest.raises(ValueError, match="do not exist in schema"):
+            record.add_node("0", {"dolor": "sit"})
+
+    def test_from_ron(self) -> None:
+        record = create_graphrecord()
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "record.ron"
+            record.to_ron(str(path))
+
+            assert GraphRecord.from_ron(str(path)) == record
+
+            record.to_ron(path)
+
+            assert GraphRecord.from_ron(path) == record
+
+    def test_invalid_from_ron(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = str(Path(directory) / "missing.ron")
+
+            with pytest.raises(OSError, match="Failed to read file"):
+                GraphRecord.from_ron(path)
+
+    def test_plugins(self) -> None:
+        record = create_graphrecord()
+
+        assert record.plugins == []
+        assert record.add_plugin("ipsum", RecordingPlugin()).plugins == ["ipsum"]
+
+    def test_plugin_entries(self) -> None:
+        record = create_graphrecord()
         plugin = RecordingPlugin()
-        graphrecord = GraphRecord.with_plugins({"recorder": plugin})
-        plugin.calls.clear()
-        return graphrecord, plugin
 
-    def test_bypass_set_schema(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        assert record.plugin_entries == {}
+        assert record.add_plugin("ipsum", plugin).plugin_entries == {"ipsum": plugin}
 
-        graphrecord.set_schema(Schema())
+    def test_add_plugin(self) -> None:
+        record = create_graphrecord()
+        plugin = RecordingPlugin()
 
-        assert plugin.calls == ["pre_set_schema", "post_set_schema"]
-        plugin.calls.clear()
+        extended = record.add_plugin("ipsum", plugin)
 
-        graphrecord.set_schema(Schema(), bypass_plugins=True)
+        assert extended.plugins == ["ipsum"]
+        assert record.plugins == []
+        assert plugin.calls == ["initialize:4"]
+        assert extended.add_node("4", {}).node_count() == 5
 
-        assert plugin.calls == []
+    def test_invalid_add_plugin(self) -> None:
+        record = create_graphrecord().add_plugin("ipsum", RecordingPlugin())
 
-    def test_bypass_freeze_schema(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
+        with pytest.raises(KeyError, match="already exists"):
+            record.add_plugin("ipsum", RecordingPlugin())
 
-        graphrecord.freeze_schema()
+    def test_remove_plugin(self) -> None:
+        plugin = RecordingPlugin()
+        record = create_graphrecord().add_plugin("ipsum", plugin)
 
-        assert plugin.calls == ["pre_freeze_schema", "post_freeze_schema"]
-        plugin.calls.clear()
+        reduced = record.remove_plugin("ipsum")
 
-        graphrecord.unfreeze_schema()
-        plugin.calls.clear()
+        assert reduced.plugins == []
+        assert record.plugins == ["ipsum"]
+        assert plugin.calls == ["initialize:4", "finalize:4"]
 
-        graphrecord.freeze_schema(bypass_plugins=True)
+    def test_invalid_remove_plugin(self) -> None:
+        record = create_graphrecord()
 
-        assert plugin.calls == []
+        with pytest.raises(KeyError, match="does not exist"):
+            record.remove_plugin("ipsum")
 
-    def test_bypass_unfreeze_schema(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.freeze_schema(bypass_plugins=True)
+    def test_add_nodes(self) -> None:
+        record = GraphRecord()
 
-        graphrecord.unfreeze_schema()
-
-        assert plugin.calls == ["pre_unfreeze_schema", "post_unfreeze_schema"]
-        plugin.calls.clear()
-
-        graphrecord.freeze_schema(bypass_plugins=True)
-
-        graphrecord.unfreeze_schema(bypass_plugins=True)
-
-        assert plugin.calls == []
-
-    def test_bypass_add_nodes(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-
-        graphrecord.add_nodes([("a", {})])
-
-        assert plugin.calls == ["pre_add_nodes", "post_add_nodes"]
-        plugin.calls.clear()
-
-        graphrecord.add_nodes([("b", {}), ("c", {})], bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert graphrecord.node_count() == 3
-
-    def test_bypass_add_nodes_with_group(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-
-        graphrecord.add_nodes([("a", {})], "group1")
-
-        assert plugin.calls == [
-            "pre_add_nodes_with_group",
-            "post_add_nodes_with_group",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.add_nodes([("b", {}), ("c", {})], "group2", bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert graphrecord.node_count() == 3
-        assert graphrecord.contains_group("group2")
-
-    def test_bypass_add_nodes_with_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-
-        graphrecord.add_nodes([("a", {})], group=["group1", "group2"])
-
-        assert plugin.calls == [
-            "pre_add_nodes_with_groups",
-            "post_add_nodes_with_groups",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.add_nodes(
-            [("b", {})], group=["group1", "group2"], bypass_plugins=True
+        from_rows = record.add_nodes(create_nodes())
+        from_collector = record.add_nodes(NodeRows())
+        from_frame = record.add_nodes((create_nodes_frame(), "node_index"))
+        from_batch = record.add_nodes(
+            (create_graphrecord().to_arrow()["groups"]["magna"]["nodes"], "node_index")
+        )
+        from_arrow = record.add_nodes(
+            (
+                ArrowTable(
+                    create_graphrecord().to_arrow()["groups"]["aliqua"]["nodes"]
+                ),
+                "node_index",
+            )
         )
 
-        assert plugin.calls == []
-        assert "b" in graphrecord.nodes_in_group("group1")
-        assert "b" in graphrecord.nodes_in_group("group2")
-
-    def test_bypass_add_nodes_polars(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        dataframe = pl.DataFrame({"index": ["a", "b"], "value": [1, 2]})
-
-        graphrecord.add_nodes_polars((dataframe, "index"))
-
-        assert plugin.calls == [
-            "pre_add_nodes_dataframes",
-            "post_add_nodes_dataframes",
-        ]
-        plugin.calls.clear()
-
-        dataframe_2 = pl.DataFrame({"index": ["c", "d"], "value": [3, 4]})
-
-        graphrecord.add_nodes_polars((dataframe_2, "index"), bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert graphrecord.node_count() == 4
-
-    def test_bypass_add_nodes_polars_with_group(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        dataframe = pl.DataFrame({"index": ["a", "b"], "value": [1, 2]})
-
-        graphrecord.add_nodes_polars((dataframe, "index"), "group1")
-
-        assert plugin.calls == [
-            "pre_add_nodes_dataframes_with_group",
-            "post_add_nodes_dataframes_with_group",
-        ]
-        plugin.calls.clear()
-
-        dataframe_2 = pl.DataFrame({"index": ["c", "d"], "value": [3, 4]})
-
-        graphrecord.add_nodes_polars(
-            (dataframe_2, "index"), "group2", bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert graphrecord.node_count() == 4
-
-    def test_bypass_add_nodes_polars_with_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        dataframe = pl.DataFrame({"index": ["a", "b"], "value": [1, 2]})
-
-        graphrecord.add_nodes_polars((dataframe, "index"), group=["group1", "group2"])
-
-        assert plugin.calls == [
-            "pre_add_nodes_dataframes_with_groups",
-            "post_add_nodes_dataframes_with_groups",
-        ]
-        plugin.calls.clear()
-
-        dataframe_2 = pl.DataFrame({"index": ["c", "d"], "value": [3, 4]})
-
-        graphrecord.add_nodes_polars(
-            (dataframe_2, "index"),
-            group=["group1", "group2"],
-            bypass_plugins=True,
-        )
-
-        assert plugin.calls == []
-        assert "c" in graphrecord.nodes_in_group("group1")
-        assert "c" in graphrecord.nodes_in_group("group2")
-
-    def test_bypass_remove_nodes(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {"x": 1}), ("b", {"x": 2})], bypass_plugins=True)
-
-        graphrecord.remove_nodes("a")
-
-        assert plugin.calls == ["pre_remove_node", "post_remove_node"]
-        plugin.calls.clear()
-
-        graphrecord.remove_nodes("b", bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert graphrecord.node_count() == 0
-
-    def test_bypass_add_edges(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
-
-        graphrecord.add_edges([("a", "b", {})])
-
-        assert plugin.calls == ["pre_add_edges", "post_add_edges"]
-        plugin.calls.clear()
-
-        graphrecord.add_edges([("b", "c", {})], bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert graphrecord.edge_count() == 2
-
-    def test_bypass_add_edges_with_group(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
-
-        graphrecord.add_edges([("a", "b", {})], "group1")
-
-        assert plugin.calls == [
-            "pre_add_edges_with_group",
-            "post_add_edges_with_group",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.add_edges([("b", "c", {})], "group2", bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert graphrecord.edge_count() == 2
-
-    def test_bypass_add_edges_with_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-
-        graphrecord.add_edges([("a", "b", {})], group=["group1", "group2"])
-
-        assert plugin.calls == [
-            "pre_add_edges_with_groups",
-            "post_add_edges_with_groups",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.add_edges(
-            [("a", "b", {})], group=["group1", "group2"], bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert graphrecord.edge_count() == 2
-
-    def test_bypass_add_edges_polars(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
-        dataframe = pl.DataFrame({"source": ["a"], "target": ["b"], "value": [1]})
-
-        graphrecord.add_edges_polars((dataframe, "source", "target"))
-
-        assert plugin.calls == [
-            "pre_add_edges_dataframes",
-            "post_add_edges_dataframes",
-        ]
-        plugin.calls.clear()
-
-        dataframe_2 = pl.DataFrame({"source": ["b"], "target": ["c"], "value": [2]})
-
-        graphrecord.add_edges_polars(
-            (dataframe_2, "source", "target"), bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert graphrecord.edge_count() == 2
-
-    def test_bypass_add_edges_polars_with_group(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
-        dataframe = pl.DataFrame({"source": ["a"], "target": ["b"], "value": [1]})
-
-        graphrecord.add_edges_polars((dataframe, "source", "target"), "group1")
-
-        assert plugin.calls == [
-            "pre_add_edges_dataframes_with_group",
-            "post_add_edges_dataframes_with_group",
-        ]
-        plugin.calls.clear()
-
-        dataframe_2 = pl.DataFrame({"source": ["b"], "target": ["c"], "value": [2]})
-
-        graphrecord.add_edges_polars(
-            (dataframe_2, "source", "target"), "group2", bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert graphrecord.edge_count() == 2
-
-    def test_bypass_add_edges_polars_with_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
-        dataframe = pl.DataFrame({"source": ["a"], "target": ["b"], "value": [1]})
-
-        graphrecord.add_edges_polars(
-            (dataframe, "source", "target"), group=["group1", "group2"]
-        )
-
-        assert plugin.calls == [
-            "pre_add_edges_dataframes_with_groups",
-            "post_add_edges_dataframes_with_groups",
-        ]
-        plugin.calls.clear()
-
-        dataframe_2 = pl.DataFrame({"source": ["b"], "target": ["c"], "value": [2]})
-
-        graphrecord.add_edges_polars(
-            (dataframe_2, "source", "target"),
-            group=["group1", "group2"],
-            bypass_plugins=True,
-        )
-
-        assert plugin.calls == []
-        assert graphrecord.edge_count() == 2
-
-    def test_bypass_remove_edges(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        edge_indices = graphrecord.add_edges(
-            [("a", "b", {}), ("a", "b", {})], bypass_plugins=True
-        )
-
-        graphrecord.remove_edges(edge_indices[0])
-
-        assert plugin.calls == ["pre_remove_edge", "post_remove_edge"]
-        plugin.calls.clear()
-
-        graphrecord.remove_edges(edge_indices[1], bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert graphrecord.edge_count() == 0
-
-    def test_bypass_add_group(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-
-        graphrecord.add_group("group1", ["a"])
-
-        assert plugin.calls == ["pre_add_group", "post_add_group"]
-        plugin.calls.clear()
-
-        graphrecord.add_group("group2", ["b"], bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert graphrecord.contains_group("group2")
-
-    def test_bypass_remove_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_group("group1", bypass_plugins=True)
-        graphrecord.add_group("group2", bypass_plugins=True)
-
-        graphrecord.remove_groups("group1")
-
-        assert plugin.calls == ["pre_remove_group", "post_remove_group"]
-        plugin.calls.clear()
-
-        graphrecord.remove_groups("group2", bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert not graphrecord.contains_group("group2")
-
-    def test_bypass_add_nodes_to_group(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        graphrecord.add_group("group1", bypass_plugins=True)
-
-        graphrecord.add_nodes_to_group("group1", "a")
-
-        assert plugin.calls == [
-            "pre_add_node_to_group",
-            "post_add_node_to_group",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.add_nodes_to_group("group1", "b", bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert "b" in graphrecord.nodes_in_group("group1")
-
-    def test_bypass_add_nodes_to_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
-        graphrecord.add_group("group1", bypass_plugins=True)
-        graphrecord.add_group("group2", bypass_plugins=True)
-
-        graphrecord.add_nodes_to_group(["group1", "group2"], ["a", "b"])
-
-        assert "pre_add_nodes_to_groups" in plugin.calls
-        assert "post_add_nodes_to_groups" in plugin.calls
-        plugin.calls.clear()
-
-        graphrecord.add_nodes_to_group(["group1", "group2"], ["c"], bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert "c" in graphrecord.nodes_in_group("group1")
-        assert "c" in graphrecord.nodes_in_group("group2")
-
-    def test_bypass_add_edges_to_group(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        edge_indices = graphrecord.add_edges(
-            [("a", "b", {}), ("a", "b", {})], bypass_plugins=True
-        )
-        graphrecord.add_group("group1", bypass_plugins=True)
-
-        graphrecord.add_edges_to_group("group1", edge_indices[0])
-
-        assert plugin.calls == [
-            "pre_add_edge_to_group",
-            "post_add_edge_to_group",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.add_edges_to_group("group1", edge_indices[1], bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert edge_indices[1] in graphrecord.edges_in_group("group1")
-
-    def test_bypass_add_edges_to_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        edge_indices = graphrecord.add_edges(
-            [("a", "b", {}), ("a", "b", {}), ("a", "b", {})], bypass_plugins=True
-        )
-        graphrecord.add_group("group1", bypass_plugins=True)
-        graphrecord.add_group("group2", bypass_plugins=True)
-
-        graphrecord.add_edges_to_group(
-            ["group1", "group2"], [edge_indices[0], edge_indices[1]]
-        )
-
-        assert "pre_add_edges_to_groups" in plugin.calls
-        assert "post_add_edges_to_groups" in plugin.calls
-        plugin.calls.clear()
-
-        graphrecord.add_edges_to_group(
-            ["group1", "group2"], [edge_indices[2]], bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert edge_indices[2] in graphrecord.edges_in_group("group1")
-        assert edge_indices[2] in graphrecord.edges_in_group("group2")
-
-    def test_bypass_remove_nodes_from_group(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        graphrecord.add_group("group1", ["a", "b"], bypass_plugins=True)
-
-        graphrecord.remove_nodes_from_group("group1", "a")
-
-        assert plugin.calls == [
-            "pre_remove_node_from_group",
-            "post_remove_node_from_group",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.remove_nodes_from_group("group1", "b", bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert "b" not in graphrecord.nodes_in_group("group1")
-
-    def test_bypass_remove_nodes_from_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {}), ("c", {})], bypass_plugins=True)
-        graphrecord.add_group("group1", ["a", "b", "c"], bypass_plugins=True)
-        graphrecord.add_group("group2", ["a", "b", "c"], bypass_plugins=True)
-
-        graphrecord.remove_nodes_from_group(["group1", "group2"], ["a", "b"])
-
-        assert "pre_remove_nodes_from_groups" in plugin.calls
-        assert "post_remove_nodes_from_groups" in plugin.calls
-        plugin.calls.clear()
-
-        graphrecord.remove_nodes_from_group(
-            ["group1", "group2"], ["c"], bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert "c" not in graphrecord.nodes_in_group("group1")
-        assert "c" not in graphrecord.nodes_in_group("group2")
-
-    def test_bypass_remove_edges_from_group(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        edge_indices = graphrecord.add_edges(
-            [("a", "b", {}), ("a", "b", {})], bypass_plugins=True
-        )
-        graphrecord.add_group("group1", edges=edge_indices, bypass_plugins=True)
-
-        graphrecord.remove_edges_from_group("group1", edge_indices[0])
-
-        assert plugin.calls == [
-            "pre_remove_edge_from_group",
-            "post_remove_edge_from_group",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.remove_edges_from_group(
-            "group1", edge_indices[1], bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert edge_indices[1] not in graphrecord.edges_in_group("group1")
-
-    def test_bypass_remove_edges_from_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        edge_indices = graphrecord.add_edges(
-            [("a", "b", {}), ("a", "b", {}), ("a", "b", {})], bypass_plugins=True
-        )
-        graphrecord.add_group("group1", edges=edge_indices, bypass_plugins=True)
-        graphrecord.add_group("group2", edges=edge_indices, bypass_plugins=True)
-
-        graphrecord.remove_edges_from_group(
-            ["group1", "group2"], [edge_indices[0], edge_indices[1]]
-        )
-
-        assert "pre_remove_edges_from_groups" in plugin.calls
-        assert "post_remove_edges_from_groups" in plugin.calls
-        plugin.calls.clear()
-
-        graphrecord.remove_edges_from_group(
-            ["group1", "group2"], [edge_indices[2]], bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert edge_indices[2] not in graphrecord.edges_in_group("group1")
-        assert edge_indices[2] not in graphrecord.edges_in_group("group2")
-
-    def test_bypass_add_nodes_to_multiple_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        graphrecord.add_group("group1", bypass_plugins=True)
-        graphrecord.add_group("group2", bypass_plugins=True)
-
-        graphrecord.add_nodes_to_group(["group1", "group2"], "a")
-
-        assert plugin.calls == [
-            "pre_add_nodes_to_groups",
-            "post_add_nodes_to_groups",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.add_nodes_to_group(["group1", "group2"], "b", bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert "b" in graphrecord.nodes_in_group("group1")
-        assert "b" in graphrecord.nodes_in_group("group2")
-
-    def test_bypass_add_edges_to_multiple_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        edge_indices = graphrecord.add_edges(
-            [("a", "b", {}), ("a", "b", {})], bypass_plugins=True
-        )
-        graphrecord.add_group("group1", bypass_plugins=True)
-        graphrecord.add_group("group2", bypass_plugins=True)
-
-        graphrecord.add_edges_to_group(["group1", "group2"], edge_indices[0])
-
-        assert plugin.calls == [
-            "pre_add_edges_to_groups",
-            "post_add_edges_to_groups",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.add_edges_to_group(
-            ["group1", "group2"], edge_indices[1], bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert edge_indices[1] in graphrecord.edges_in_group("group1")
-        assert edge_indices[1] in graphrecord.edges_in_group("group2")
-
-    def test_bypass_remove_nodes_from_multiple_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        graphrecord.add_group("group1", ["a", "b"], bypass_plugins=True)
-        graphrecord.add_group("group2", ["a", "b"], bypass_plugins=True)
-
-        graphrecord.remove_nodes_from_group(["group1", "group2"], "a")
-
-        assert plugin.calls == [
-            "pre_remove_nodes_from_groups",
-            "post_remove_nodes_from_groups",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.remove_nodes_from_group(
-            ["group1", "group2"], "b", bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert "b" not in graphrecord.nodes_in_group("group1")
-        assert "b" not in graphrecord.nodes_in_group("group2")
-
-    def test_bypass_remove_edges_from_multiple_groups(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {}), ("b", {})], bypass_plugins=True)
-        edge_indices = graphrecord.add_edges(
-            [("a", "b", {}), ("a", "b", {})], bypass_plugins=True
-        )
-        graphrecord.add_group("group1", edges=edge_indices, bypass_plugins=True)
-        graphrecord.add_group("group2", edges=edge_indices, bypass_plugins=True)
-
-        graphrecord.remove_edges_from_group(["group1", "group2"], edge_indices[0])
-
-        assert plugin.calls == [
-            "pre_remove_edges_from_groups",
-            "post_remove_edges_from_groups",
-        ]
-        plugin.calls.clear()
-
-        graphrecord.remove_edges_from_group(
-            ["group1", "group2"], edge_indices[1], bypass_plugins=True
-        )
-
-        assert plugin.calls == []
-        assert edge_indices[1] not in graphrecord.edges_in_group("group1")
-        assert edge_indices[1] not in graphrecord.edges_in_group("group2")
-
-    def test_bypass_clear(self) -> None:
-        graphrecord, plugin = self._create_graphrecord_with_plugin()
-        graphrecord.add_nodes([("a", {})], bypass_plugins=True)
-
-        graphrecord.clear()
-
-        assert plugin.calls == ["pre_clear", "post_clear"]
-        plugin.calls.clear()
-
-        graphrecord.add_nodes([("a", {})], bypass_plugins=True)
-
-        graphrecord.clear(bypass_plugins=True)
-
-        assert plugin.calls == []
-        assert graphrecord.node_count() == 0
-
-
-class TestGraphRecordConnectors(unittest.TestCase):
-    def test_with_connector(self) -> None:
-        from graphrecords.connectors import ConnectedGraphRecord, Connector
-
-        connector = Connector()
-        record = GraphRecord.with_connector(connector)
-
-        assert isinstance(record, ConnectedGraphRecord)
+        assert from_rows.node_indices() == ["0", "1", "2", "3"]
+        assert from_collector.node_indices() == ["0", "1", "2", "3"]
+        assert from_frame.node_indices() == ["4", "5"]
+        assert from_frame.node("4").attributes() == {"enim": "veniam"}
+        assert from_batch.node_indices() == ["0", "1"]
+        assert from_batch.node("0").attributes() == {
+            "lorem": "ipsum",
+            "dolor": "sit",
+            "amet": None,
+        }
+        assert from_arrow.node_indices() == ["2"]
         assert record.node_count() == 0
 
+    def test_invalid_add_nodes(self) -> None:
+        record = create_graphrecord()
 
-if __name__ == "__main__":
-    suite = unittest.TestSuite()
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGraphRecord))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGraphRecordPlugins))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBypassPlugins))
-    suite.addTests(
-        unittest.TestLoader().loadTestsFromTestCase(TestGraphRecordConnectors)
-    )
-    unittest.TextTestRunner(verbosity=2).run(suite)
+        with pytest.raises(ValueError, match="already exists"):
+            record.add_nodes([("0", {})])
+
+    def test_add_node(self) -> None:
+        record = create_graphrecord()
+
+        assert record.add_node("4", {"enim": "veniam"}).node("4").attributes() == {
+            "enim": "veniam"
+        }
+        assert record.add_node(4, {}).node_indices() == ["0", "1", "2", "3", 4]
+        assert record.add_node(
+            cast("NodeIndex", IntegerScalar()), {"enim": cast("Value", FloatScalar())}
+        ).node(4).attributes() == {"enim": 1.5}
+        assert record.node_count() == 4
+
+    def test_invalid_add_node(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(ValueError, match="already exists"):
+            record.add_node("0", {})
+
+        with pytest.raises(ValueError, match="No node selected"):
+            record.add_node(
+                nodes()
+                .filter(nodes().index().equal_to("99"))
+                .sort_by(nodes().index())
+                .first(),
+                {},
+            )
+
+    def test_add_nodes_in_group(self) -> None:
+        record = GraphRecord().add_group("magna")
+
+        extended = record.add_nodes_in_group(create_nodes(), "magna")
+
+        assert extended.group("magna").nodes() == ["0", "1", "2", "3"]
+        assert record.group("magna").nodes() == []
+        assert record.add_nodes_in_group(
+            (create_nodes_frame(), "node_index"),
+            groups().sort_by(groups().index()).first(),
+        ).group("magna").nodes() == ["4", "5"]
+
+    def test_invalid_add_nodes_in_group(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(ValueError, match="already exists"):
+            record.add_nodes_in_group([("0", {})], "magna")
+
+    def test_add_node_in_group(self) -> None:
+        record = create_graphrecord()
+
+        extended = record.add_node_in_group("4", {"enim": "veniam"}, "magna")
+
+        assert extended.group("magna").nodes() == ["0", "1", "4"]
+        assert record.group("magna").nodes() == ["0", "1"]
+        assert record.add_node_in_group(
+            "4",
+            {},
+            groups()
+            .filter(groups().index().equal_to("aliqua"))
+            .sort_by(groups().index())
+            .first(),
+        ).group("aliqua").nodes() == ["2", "4"]
+
+    def test_invalid_add_node_in_group(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(ValueError, match="No group selected"):
+            record.add_node_in_group(
+                "4",
+                {},
+                groups()
+                .filter(groups().index().equal_to("enim"))
+                .sort_by(groups().index())
+                .first(),
+            )
+
+    def test_add_edges(self) -> None:
+        record = GraphRecord().add_nodes(create_nodes())
+        frame_record = GraphRecord().add_nodes((create_nodes_frame(), "node_index"))
+        arrow_edges = ArrowTable(create_graphrecord().to_arrow()["ungrouped"]["edges"])
+
+        from_rows = record.add_edges(create_edges())
+        from_collector = record.add_edges(EdgeRows())
+        from_frame = frame_record.add_edges(
+            (create_edges_frame(), "source_node_index", "target_node_index")
+        )
+        from_arrow = record.add_edges(
+            (arrow_edges, "source_node_index", "target_node_index")
+        )
+
+        assert from_rows.edge_count() == 4
+        assert from_collector.edge_count() == 4
+        assert from_frame.edge_count() == 2
+        assert from_frame.edge(from_frame.edge_indices()[0]).attributes() == {
+            "nostrud": "exercitation"
+        }
+        assert from_arrow.edge_count() == 3
+        assert record.edge_count() == 0
+
+    def test_invalid_add_edges(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find node with index"):
+            record.add_edges([("0", "99", {})])
+
+    def test_add_edge(self) -> None:
+        record = create_graphrecord()
+
+        extended = record.add_edge("2", "3", {"enim": "veniam"})
+
+        assert extended.edge_count() == 5
+        assert extended.edge(extended.edge_indices()[4]).attributes() == {
+            "enim": "veniam"
+        }
+        assert record.edge_count() == 4
+        assert (
+            record.add_edge(
+                nodes().sort_by(nodes().index()).first(),
+                nodes().sort_by(nodes().index()).last(),
+                {},
+            ).edge_count()
+            == 5
+        )
+
+    def test_invalid_add_edge(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find nodes with indices"):
+            record.add_edge("0", "99", {})
+
+    def test_add_edges_in_group(self) -> None:
+        record = GraphRecord().add_nodes(create_nodes()).add_group("magna")
+
+        extended = record.add_edges_in_group(create_edges(), "magna")
+
+        assert extended.group("magna").edge_count() == 4
+        assert record.group("magna").edge_count() == 0
+        assert (
+            record.add_edges_in_group(
+                EdgeRows(), groups().sort_by(groups().index()).first()
+            )
+            .group("magna")
+            .edge_count()
+            == 4
+        )
+
+    def test_invalid_add_edges_in_group(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find node with index"):
+            record.add_edges_in_group([("0", "99", {})], "magna")
+
+    def test_add_edge_in_group(self) -> None:
+        record = create_graphrecord()
+
+        extended = record.add_edge_in_group("2", "3", {"enim": "veniam"}, "magna")
+
+        assert extended.group("magna").edge_count() == 2
+        assert record.group("magna").edge_count() == 1
+        assert (
+            record.add_edge_in_group(
+                nodes().sort_by(nodes().index()).first(),
+                "2",
+                {},
+                groups()
+                .filter(groups().index().equal_to("aliqua"))
+                .sort_by(groups().index())
+                .first(),
+            )
+            .group("aliqua")
+            .edge_count()
+            == 1
+        )
+
+    def test_remove_nodes(self) -> None:
+        record = create_graphrecord()
+
+        assert record.remove_nodes("0").node_indices() == ["1", "2", "3"]
+        assert record.remove_nodes(["0", "1"]).node_indices() == ["2", "3"]
+        assert record.remove_nodes(
+            nodes().filter(nodes().index().equal_to("2"))
+        ).node_indices() == ["0", "1", "3"]
+        assert record.remove_nodes(
+            record.nodes().filter(nodes().index().equal_to("3"))
+        ).node_indices() == ["0", "1", "2"]
+        assert record.remove_nodes(
+            edges().via_source_node().index()
+        ).node_indices() == ["2", "3"]
+        assert record.remove_nodes("0").edge_count() == 1
+        assert record.node_indices() == ["0", "1", "2", "3"]
+
+    def test_invalid_remove_nodes(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find nodes with indices"):
+            record.remove_nodes("99")
+
+    def test_remove_edges(self) -> None:
+        record = create_graphrecord()
+
+        assert record.remove_edges(record.edge_indices()[0]).edge_count() == 3
+        assert record.remove_edges(record.edge_indices()[:2]).edge_count() == 2
+        assert (
+            record.remove_edges(
+                edges().filter(edges().has_attribute("sed"))
+            ).edge_count()
+            == 2
+        )
+        assert (
+            record.remove_edges(
+                record.edges().filter(edges().has_attribute("ut"))
+            ).edge_count()
+            == 3
+        )
+        assert record.edge_count() == 4
+
+    def test_invalid_remove_edges(self) -> None:
+        record = create_graphrecord()
+        foreign = GraphRecord().add_nodes([("0", {})]).add_edges([("0", "0", {})])
+
+        with pytest.raises(IndexError, match="Cannot find edges with indices"):
+            record.remove_edges(foreign.edge_indices()[0])
+
+    def test_keep_nodes(self) -> None:
+        record = create_graphrecord()
+
+        assert record.keep_nodes("0").node_indices() == ["0"]
+        assert record.keep_nodes(["0", "1"]).node_indices() == ["0", "1"]
+        assert record.keep_nodes(["0", "1"]).edge_count() == 2
+        assert record.keep_nodes(
+            nodes().filter(nodes().index().is_in(["2", "3"]))
+        ).node_indices() == ["2", "3"]
+        assert record.keep_nodes(
+            record.nodes().filter(nodes().index().equal_to("0"))
+        ).node_indices() == ["0"]
+        assert record.keep_nodes(
+            nodes().has_attribute("lorem").on_missing(Drop())
+        ).node_indices() == ["0", "2"]
+        assert record.node_indices() == ["0", "1", "2", "3"]
+
+    def test_invalid_keep_nodes(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find nodes with indices"):
+            record.keep_nodes("99")
+
+    def test_keep_edges(self) -> None:
+        record = create_graphrecord()
+
+        assert record.keep_edges(record.edge_indices()[0]).edge_count() == 1
+        assert record.keep_edges(record.edge_indices()[:2]).edge_count() == 2
+        assert (
+            record.keep_edges(edges().filter(edges().has_attribute("sed"))).edge_count()
+            == 2
+        )
+        assert (
+            record.keep_edges(
+                edges().has_attribute("sed").on_missing(Drop())
+            ).edge_count()
+            == 2
+        )
+        assert (
+            record.keep_edges(
+                record.edges().filter(edges().has_attribute("ut"))
+            ).edge_count()
+            == 1
+        )
+        assert record.keep_edges(record.edge_indices()[0]).node_count() == 4
+        assert record.edge_count() == 4
+
+    def test_invalid_keep_edges(self) -> None:
+        record = create_graphrecord()
+        foreign = GraphRecord().add_nodes([("0", {})]).add_edges([("0", "0", {})])
+
+        with pytest.raises(IndexError, match="Cannot find edges with indices"):
+            record.keep_edges(foreign.edge_indices()[0])
+
+    def test_keep_groups(self) -> None:
+        record = create_graphrecord()
+
+        assert record.keep_groups("magna").group_indices() == ["magna"]
+        assert record.keep_groups("magna").group("magna").nodes() == ["0", "1"]
+        assert record.keep_groups(["magna", "aliqua"]).group_indices() == [
+            "magna",
+            "aliqua",
+        ]
+        assert record.keep_groups(
+            groups().filter(groups().index().equal_to("aliqua"))
+        ).group_indices() == ["aliqua"]
+        assert record.keep_groups(
+            record.groups().filter(groups().index().equal_to("magna"))
+        ).group_indices() == ["magna"]
+        assert record.group_indices() == ["magna", "aliqua"]
+
+    def test_invalid_keep_groups(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find groups with indices"):
+            record.keep_groups("enim")
+
+    def test_intersect(self) -> None:
+        record = create_graphrecord()
+        other = (
+            GraphRecord()
+            .add_nodes([("1", {"amet": "consectetur"}), ("2", {"lorem": "adipiscing"})])
+            .add_group("magna")
+            .add_nodes_to_group("1", "magna")
+        )
+
+        shared = record.intersect(other)
+
+        assert shared.node_indices() == ["1", "2"]
+        assert shared.edge_count() == 1
+        assert shared.group("magna").nodes() == ["1"]
+        assert record.node_indices() == ["0", "1", "2", "3"]
+
+    def test_difference(self) -> None:
+        record = create_graphrecord()
+        other = GraphRecord().add_nodes([("1", {}), ("2", {})])
+
+        remaining = record.difference(other)
+
+        assert remaining.node_indices() == ["0", "3"]
+        assert remaining.edge_count() == 1
+        assert record.node_indices() == ["0", "1", "2", "3"]
+
+    def test_merge(self) -> None:
+        record = create_graphrecord()
+        other = GraphRecord().add_nodes(
+            [("0", {"lorem": "elit"}), ("4", {"enim": "veniam"})]
+        )
+
+        assert record.merge(other, OnConflict.KeepSelf).node("0").attributes() == {
+            "lorem": "ipsum",
+            "dolor": "sit",
+        }
+        assert record.merge(other, OnConflict.KeepOther).node("0").attributes() == {
+            "lorem": "elit",
+            "dolor": "sit",
+        }
+        assert record.merge(other, OnConflict.KeepSelf).node_indices() == [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+        ]
+        assert record.merge(GraphRecord().add_nodes([("4", {})])).node_count() == 5
+        assert record.node_count() == 4
+
+    def test_invalid_merge(self) -> None:
+        record = create_graphrecord()
+        other = GraphRecord().add_nodes([("0", {"lorem": "elit"})])
+
+        with pytest.raises(ValueError, match="conflicts between"):
+            record.merge(other, OnConflict.Raise)
+
+    def test_set_node_attributes(self) -> None:
+        record = create_graphrecord()
+
+        assert record.set_node_attributes("0", {"lorem": "elit"}).node(
+            "0"
+        ).attributes() == {"lorem": "elit", "dolor": "sit"}
+        assert record.set_node_attributes(["1", "2"], {"enim": "veniam"}).node(
+            "1"
+        ).attributes() == {"amet": "consectetur", "enim": "veniam"}
+        assert record.set_node_attributes(
+            nodes().filter(nodes().index().equal_to("3")), {"enim": "veniam"}
+        ).node("3").attributes() == {"enim": "veniam"}
+        assert record.set_node_attributes(
+            record.nodes().filter(nodes().index().equal_to("3")), {"enim": "veniam"}
+        ).node("3").attributes() == {"enim": "veniam"}
+        assert record.node("0").attributes() == {"lorem": "ipsum", "dolor": "sit"}
+
+    def test_invalid_set_node_attributes(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find nodes with indices"):
+            record.set_node_attributes("99", {"enim": "veniam"})
+
+    def test_replace_node_attributes(self) -> None:
+        record = create_graphrecord()
+
+        assert record.replace_node_attributes("0", {"enim": "veniam"}).node(
+            "0"
+        ).attributes() == {"enim": "veniam"}
+        assert (
+            record.replace_node_attributes(["0", "1"], {}).node("1").attributes() == {}
+        )
+        assert record.replace_node_attributes(
+            nodes().filter(nodes().index().equal_to("2")), {"enim": "veniam"}
+        ).node("2").attributes() == {"enim": "veniam"}
+        assert record.node("0").attributes() == {"lorem": "ipsum", "dolor": "sit"}
+
+    def test_invalid_replace_node_attributes(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find nodes with indices"):
+            record.replace_node_attributes("99", {})
+
+    def test_remove_node_attributes(self) -> None:
+        record = create_graphrecord()
+
+        assert record.remove_node_attributes("0", ["lorem"]).node("0").attributes() == {
+            "dolor": "sit"
+        }
+        assert record.remove_node_attributes("0", {"lorem"}).node("0").attributes() == {
+            "dolor": "sit"
+        }
+        assert (
+            record.remove_node_attributes("0", (name for name in ["lorem", "dolor"]))
+            .node("0")
+            .attributes()
+            == {}
+        )
+        assert (
+            record.remove_node_attributes("0", ["lorem", "dolor"])
+            .node("0")
+            .attributes()
+            == {}
+        )
+        assert (
+            record.remove_node_attributes(
+                nodes().filter(nodes().index().is_in(["0", "2"])), ["lorem"]
+            )
+            .node("2")
+            .attributes()
+            == {}
+        )
+        assert record.node("0").attributes() == {"lorem": "ipsum", "dolor": "sit"}
+
+    def test_invalid_remove_node_attributes(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(KeyError, match="does not exist on node"):
+            record.remove_node_attributes("0", ["enim"])
+
+        with pytest.raises(TypeError, match="Expected attribute names"):
+            record.remove_node_attributes("0", "lorem")
+
+        with pytest.raises(TypeError, match="Expected attribute names"):
+            record.remove_node_attributes("0", b"lorem")
+
+    def test_set_edge_attributes(self) -> None:
+        record = create_graphrecord()
+        edge_index = record.edge_indices()[0]
+
+        assert record.set_edge_attributes(edge_index, {"sed": "elit"}).edge(
+            edge_index
+        ).attributes() == {"sed": "elit", "eiusmod": "tempor"}
+        assert record.set_edge_attributes(
+            record.edge_indices()[:2], {"enim": "veniam"}
+        ).edge(record.edge_indices()[1]).attributes() == {
+            "sed": "incididunt",
+            "enim": "veniam",
+        }
+        assert record.set_edge_attributes(
+            edges().filter(edges().has_attribute("ut")), {"enim": "veniam"}
+        ).edge(record.edge_indices()[2]).attributes() == {
+            "ut": "labore",
+            "enim": "veniam",
+        }
+        assert record.edge(edge_index).attributes() == {
+            "sed": "do",
+            "eiusmod": "tempor",
+        }
+
+    def test_invalid_set_edge_attributes(self) -> None:
+        record = create_graphrecord()
+        foreign = GraphRecord().add_nodes([("0", {})]).add_edges([("0", "0", {})])
+
+        with pytest.raises(IndexError, match="Cannot find edges with indices"):
+            record.set_edge_attributes(foreign.edge_indices()[0], {})
+
+    def test_replace_edge_attributes(self) -> None:
+        record = create_graphrecord()
+        edge_index = record.edge_indices()[0]
+
+        assert record.replace_edge_attributes(edge_index, {"enim": "veniam"}).edge(
+            edge_index
+        ).attributes() == {"enim": "veniam"}
+        assert (
+            record.replace_edge_attributes(record.edge_indices()[:2], {})
+            .edge(record.edge_indices()[1])
+            .attributes()
+            == {}
+        )
+        assert record.replace_edge_attributes(
+            record.edges().filter(edges().has_attribute("ut")), {"enim": "veniam"}
+        ).edge(record.edge_indices()[2]).attributes() == {"enim": "veniam"}
+        assert record.edge(edge_index).attributes() == {
+            "sed": "do",
+            "eiusmod": "tempor",
+        }
+
+    def test_invalid_replace_edge_attributes(self) -> None:
+        record = create_graphrecord()
+        foreign = GraphRecord().add_nodes([("0", {})]).add_edges([("0", "0", {})])
+
+        with pytest.raises(IndexError, match="Cannot find edges with indices"):
+            record.replace_edge_attributes(foreign.edge_indices()[0], {})
+
+    def test_remove_edge_attributes(self) -> None:
+        record = create_graphrecord()
+        edge_index = record.edge_indices()[0]
+
+        assert record.remove_edge_attributes(edge_index, ["sed"]).edge(
+            edge_index
+        ).attributes() == {"eiusmod": "tempor"}
+        assert (
+            record.remove_edge_attributes(record.edge_indices()[:2], ["sed"])
+            .edge(record.edge_indices()[1])
+            .attributes()
+            == {}
+        )
+        assert (
+            record.remove_edge_attributes(
+                edges().filter(edges().has_attribute("ut")), ["ut"]
+            )
+            .edge(record.edge_indices()[2])
+            .attributes()
+            == {}
+        )
+        assert record.edge(edge_index).attributes() == {
+            "sed": "do",
+            "eiusmod": "tempor",
+        }
+
+    def test_invalid_remove_edge_attributes(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(KeyError, match="does not exist on edge"):
+            record.remove_edge_attributes(record.edge_indices()[0], ["enim"])
+
+    def test_add_group(self) -> None:
+        record = create_graphrecord()
+
+        extended = record.add_group("enim")
+
+        assert extended.group_indices() == ["magna", "aliqua", "enim"]
+        assert extended.group("enim").node_count() == 0
+        assert record.group_indices() == ["magna", "aliqua"]
+        assert record.add_group(4).group_indices() == ["magna", "aliqua", 4]
+
+    def test_invalid_add_group(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(ValueError, match="already exists"):
+            record.add_group("magna")
+
+    def test_remove_groups(self) -> None:
+        record = create_graphrecord()
+
+        reduced = record.remove_groups("magna")
+
+        assert reduced.group_indices() == ["aliqua"]
+        assert reduced.node_indices() == ["0", "1", "2", "3"]
+        assert record.remove_groups(["magna", "aliqua"]).group_indices() == []
+        assert record.remove_groups(
+            groups().filter(groups().index().equal_to("aliqua"))
+        ).group_indices() == ["magna"]
+        assert record.group_indices() == ["magna", "aliqua"]
+
+    def test_invalid_remove_groups(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find groups with indices"):
+            record.remove_groups("enim")
+
+    def test_add_nodes_to_group(self) -> None:
+        record = create_graphrecord()
+
+        assert record.add_nodes_to_group("3", "magna").group("magna").nodes() == [
+            "0",
+            "1",
+            "3",
+        ]
+        assert (
+            record.add_nodes_to_group(["2", "3"], "magna").group("magna").node_count()
+            == 4
+        )
+        assert record.add_nodes_to_group(
+            nodes().filter(nodes().index().equal_to("3")),
+            groups()
+            .filter(groups().index().equal_to("aliqua"))
+            .sort_by(groups().index())
+            .first(),
+        ).group("aliqua").nodes() == ["2", "3"]
+        assert record.add_nodes_to_group("3", "tempor").group("tempor").nodes() == ["3"]
+        assert record.group("magna").nodes() == ["0", "1"]
+
+    def test_invalid_add_nodes_to_group(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(ValueError, match="already in group"):
+            record.add_nodes_to_group("0", "magna")
+
+    def test_remove_nodes_from_group(self) -> None:
+        record = create_graphrecord()
+
+        reduced = record.remove_nodes_from_group("0", "magna")
+
+        assert reduced.group("magna").nodes() == ["1"]
+        assert reduced.node_indices() == ["0", "1", "2", "3"]
+        assert (
+            record.remove_nodes_from_group(["0", "1"], "magna").group("magna").nodes()
+            == []
+        )
+        assert record.remove_nodes_from_group(
+            record.nodes().filter(nodes().index().equal_to("0")), "magna"
+        ).group("magna").nodes() == ["1"]
+        assert record.group("magna").nodes() == ["0", "1"]
+
+    def test_invalid_remove_nodes_from_group(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(ValueError, match="not in group"):
+            record.remove_nodes_from_group("3", "magna")
+
+    def test_add_edges_to_group(self) -> None:
+        record = create_graphrecord()
+
+        assert (
+            record.add_edges_to_group(record.edge_indices()[1], "magna")
+            .group("magna")
+            .edge_count()
+            == 2
+        )
+        assert (
+            record.add_edges_to_group(record.edge_indices()[1:], "magna")
+            .group("magna")
+            .edge_count()
+            == 4
+        )
+        assert record.add_edges_to_group(
+            edges().filter(edges().has_attribute("ut")), "aliqua"
+        ).group("aliqua").edges() == [record.edge_indices()[2]]
+        assert record.add_edges_to_group(record.edge_indices()[0], "tempor").group(
+            "tempor"
+        ).edges() == [record.edge_indices()[0]]
+        assert record.group("magna").edge_count() == 1
+
+    def test_invalid_add_edges_to_group(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(ValueError, match="already in group"):
+            record.add_edges_to_group(record.edge_indices()[0], "magna")
+
+    def test_remove_edges_from_group(self) -> None:
+        record = create_graphrecord()
+
+        reduced = record.remove_edges_from_group(record.edge_indices()[0], "magna")
+
+        assert reduced.group("magna").edges() == []
+        assert reduced.edge_count() == 4
+        assert (
+            record.remove_edges_from_group(
+                record.edges().filter(edges().has_attribute("eiusmod")), "magna"
+            )
+            .group("magna")
+            .edge_count()
+            == 0
+        )
+        assert record.group("magna").edge_count() == 1
+
+    def test_invalid_remove_edges_from_group(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(ValueError, match="not in group"):
+            record.remove_edges_from_group(record.edge_indices()[1], "magna")
+
+    def test_schema(self) -> None:
+        record = create_graphrecord()
+
+        assert record.schema.schema_type == SchemaType.Inferred
+        assert sorted(record.schema.ungrouped.nodes) == ["amet", "dolor", "lorem"]
+        assert sorted(record.schema.groups) == ["aliqua", "magna"]
+        assert GraphRecord().schema.ungrouped.nodes == {}
+
+    def test_set_schema(self) -> None:
+        record = GraphRecord().add_node("0", {"lorem": "ipsum"})
+
+        adopted = record.set_schema(create_schema())
+
+        assert adopted.schema.schema_type == SchemaType.Provided
+        assert list(adopted.schema.ungrouped.nodes) == ["lorem"]
+        assert record.schema.schema_type == SchemaType.Inferred
+
+    def test_invalid_set_schema(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(ValueError, match="is not defined in the schema"):
+            record.set_schema(create_schema())
+
+    def test_freeze_schema(self) -> None:
+        record = create_graphrecord()
+
+        frozen = record.freeze_schema()
+
+        assert frozen.schema.schema_type == SchemaType.Provided
+        assert record.schema.schema_type == SchemaType.Inferred
+
+        with pytest.raises(ValueError, match="do not exist in schema"):
+            frozen.add_node("4", {"enim": "veniam"})
+
+    def test_unfreeze_schema(self) -> None:
+        record = create_graphrecord().freeze_schema()
+
+        unfrozen = record.unfreeze_schema()
+
+        assert unfrozen.schema.schema_type == SchemaType.Inferred
+        assert record.schema.schema_type == SchemaType.Provided
+        assert unfrozen.add_node("4", {"enim": "veniam"}).node_count() == 5
+
+    def test_clear(self) -> None:
+        record = (
+            create_graphrecord().add_plugin("ipsum", RecordingPlugin()).freeze_schema()
+        )
+
+        cleared = record.clear()
+
+        assert cleared.node_count() == 0
+        assert cleared.edge_count() == 0
+        assert cleared.group_count() == 0
+        assert cleared.plugins == ["ipsum"]
+        assert cleared.schema.schema_type == SchemaType.Provided
+        assert record.node_count() == 4
+
+    def test_compact(self) -> None:
+        record = create_graphrecord().remove_nodes("0")
+
+        compacted = record.compact()
+
+        assert compacted.node_indices() == ["1", "2", "3"]
+        assert compacted.edge_count() == 1
+        assert compacted.group("magna").nodes() == ["1"]
+        assert compacted.edge_indices() != record.edge_indices()
+        assert record.node_indices() == ["1", "2", "3"]
+        assert record.edge_count() == 1
+
+    def test_node_count(self) -> None:
+        assert create_graphrecord().node_count() == 4
+        assert GraphRecord().node_count() == 0
+
+    def test_edge_count(self) -> None:
+        assert create_graphrecord().edge_count() == 4
+        assert GraphRecord().edge_count() == 0
+
+    def test_group_count(self) -> None:
+        assert create_graphrecord().group_count() == 2
+        assert GraphRecord().group_count() == 0
+
+    def test_contains_node(self) -> None:
+        record = create_graphrecord()
+
+        assert record.contains_node("0")
+        assert not record.contains_node("99")
+
+    def test_contains_edge(self) -> None:
+        record = create_graphrecord()
+        foreign = GraphRecord().add_nodes([("0", {})]).add_edges([("0", "0", {})])
+
+        assert record.contains_edge(record.edge_indices()[0])
+        assert not record.contains_edge(foreign.edge_indices()[0])
+
+    def test_contains_group(self) -> None:
+        record = create_graphrecord()
+
+        assert record.contains_group("magna")
+        assert not record.contains_group("enim")
+
+    def test_node_indices(self) -> None:
+        assert create_graphrecord().node_indices() == ["0", "1", "2", "3"]
+        assert GraphRecord().node_indices() == []
+
+    def test_edge_indices(self) -> None:
+        record = create_graphrecord()
+
+        edge_indices = record.edge_indices()
+
+        assert len(edge_indices) == 4
+        assert all(isinstance(edge_index, EdgeIndex) for edge_index in edge_indices)
+        assert edge_indices == record.edge_indices()
+        assert GraphRecord().edge_indices() == []
+
+    def test_group_indices(self) -> None:
+        assert create_graphrecord().group_indices() == ["magna", "aliqua"]
+        assert GraphRecord().group_indices() == []
+
+    def test_nodes(self) -> None:
+        record = create_graphrecord()
+
+        series = record.nodes()
+
+        assert isinstance(series, Series)
+        assert [element[0] for element in series.index().evaluate()] == [
+            "0",
+            "1",
+            "2",
+            "3",
+        ]
+
+    def test_edges(self) -> None:
+        record = create_graphrecord()
+
+        series = record.edges()
+
+        assert isinstance(series, Series)
+        assert [element[0] for element in series.index().evaluate()] == (
+            record.edge_indices()
+        )
+
+    def test_groups(self) -> None:
+        record = create_graphrecord()
+
+        series = record.groups()
+
+        assert isinstance(series, Series)
+        assert [element[0] for element in series.index().evaluate()] == [
+            "magna",
+            "aliqua",
+        ]
+
+    def test_query(self) -> None:
+        record = create_graphrecord()
+
+        series = record.query(nodes().filter(nodes().index().is_in(["0", "2"])))
+
+        assert isinstance(series, Series)
+        assert [element[0] for element in series.index().evaluate()] == ["0", "2"]
+
+    def test_node(self) -> None:
+        record = create_graphrecord()
+
+        assert isinstance(record.node("0"), NodeView)
+        assert record.node("0").index() == "0"
+
+    def test_invalid_node(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find node with index"):
+            record.node("99")
+
+    def test_edge(self) -> None:
+        record = create_graphrecord()
+
+        assert isinstance(record.edge(record.edge_indices()[0]), EdgeView)
+        assert record.edge(record.edge_indices()[0]).source() == "0"
+
+    def test_invalid_edge(self) -> None:
+        record = create_graphrecord()
+        foreign = GraphRecord().add_nodes([("0", {})]).add_edges([("0", "0", {})])
+
+        with pytest.raises(IndexError, match="Cannot find edge with index"):
+            record.edge(foreign.edge_indices()[0])
+
+    def test_group(self) -> None:
+        record = create_graphrecord()
+
+        assert isinstance(record.group("magna"), GroupView)
+        assert record.group("magna").index() == "magna"
+
+    def test_invalid_group(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find group with index"):
+            record.group("enim")
+
+    def test_export(self) -> None:
+        record = create_graphrecord()
+
+        assert record.export(CountingWriter()) == (4, 4)
+        assert sorted(record.export(PolarsFrames())) == ["groups", "ungrouped"]
+        assert len(record.export(ArrowTables())["ungrouped"]["nodes"]) == 1
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "record.ron"
+
+            assert record.export(RonFile(str(path))) is None
+            assert GraphRecord.from_ron(str(path)).node_count() == 4
+
+    def test_invalid_export(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(RuntimeError, match="lorem ipsum 4"):
+            record.export(FailingWriter())
+
+    def test_to_polars(self) -> None:
+        record = create_graphrecord()
+
+        export = record.to_polars()
+
+        assert sorted(export) == ["groups", "ungrouped"]
+        assert export["ungrouped"]["nodes"].columns == [
+            "node_index",
+            "amet",
+            "dolor",
+            "lorem",
+        ]
+        assert export["ungrouped"]["nodes"].height == 1
+        assert export["ungrouped"]["edges"].columns == [
+            "source_node_index",
+            "target_node_index",
+            "eiusmod",
+            "sed",
+            "ut",
+        ]
+        assert export["ungrouped"]["edges"].height == 3
+        assert sorted(export["groups"]) == ["aliqua", "magna"]
+        assert export["groups"]["magna"]["nodes"].height == 2
+        assert export["groups"]["magna"]["edges"].height == 1
+
+    def test_to_arrow(self) -> None:
+        record = create_graphrecord()
+
+        export = record.to_arrow()
+
+        assert sorted(export) == ["groups", "ungrouped"]
+        assert isinstance(export["ungrouped"]["nodes"], RecordBatch)
+        assert isinstance(export["ungrouped"]["edges"], RecordBatch)
+        assert sorted(export["groups"]) == ["aliqua", "magna"]
+        assert isinstance(export["groups"]["aliqua"]["nodes"], RecordBatch)
+        assert len(export["groups"]["aliqua"]["edges"]) == 0
+
+    def test_to_pandas(self) -> None:
+        record = create_graphrecord()
+
+        export = record.to_pandas()
+
+        assert sorted(export) == ["groups", "ungrouped"]
+        assert list(export["ungrouped"]["nodes"].columns) == [
+            "node_index",
+            "amet",
+            "dolor",
+            "lorem",
+        ]
+        assert len(export["ungrouped"]["nodes"]) == 1
+        assert len(export["ungrouped"]["edges"]) == 3
+        assert sorted(export["groups"]) == ["aliqua", "magna"]
+        assert len(export["groups"]["magna"]["nodes"]) == 2
+        assert len(export["groups"]["aliqua"]["edges"]) == 0
+
+    def test_to_ron(self) -> None:
+        record = create_graphrecord()
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "record.ron"
+            record.to_ron(str(path))
+
+            assert path.exists()
+            assert GraphRecord.from_ron(str(path)).node_indices() == [
+                "0",
+                "1",
+                "2",
+                "3",
+            ]
+
+    def test_invalid_to_ron(self) -> None:
+        record = create_graphrecord()
+
+        with (
+            TemporaryDirectory() as directory,
+            pytest.raises(OSError, match="Failed to write file"),
+        ):
+            record.to_ron(directory)
+
+    def test_overview(self) -> None:
+        record = create_graphrecord()
+
+        overview = record.overview()
+
+        assert sorted(overview.grouped_overviews) == ["aliqua", "magna"]
+        assert overview.ungrouped_overview.node_overview.count == 1
+        assert overview.ungrouped_overview.edge_overview.count == 3
+        assert overview.grouped_overviews["magna"].node_overview.count == 2
+        assert record.overview(None).ungrouped_overview.node_overview.count == 1
+        assert record.overview(4).ungrouped_overview.node_overview.count == 1
+
+    def test_group_overview(self) -> None:
+        record = create_graphrecord()
+
+        group_overview = record.group_overview("magna")
+
+        assert group_overview.node_overview.count == 2
+        assert group_overview.edge_overview.count == 1
+        assert record.group_overview("magna", None).node_overview.count == 2
+        assert record.group_overview("aliqua", 4).edge_overview.count == 0
+
+    def test_invalid_group_overview(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(IndexError, match="Cannot find group with index"):
+            record.group_overview("enim")
+
+    def test_eq(self) -> None:
+        record = create_graphrecord()
+
+        assert record == copy.copy(record)
+        assert record == record.add_node("4", {}).remove_nodes("4")
+        assert record != record.add_node("4", {})
+        assert record != GraphRecord()
+        assert GraphRecord() == GraphRecord()
+        assert record.__eq__("lorem") is NotImplemented
+
+    def test_hash(self) -> None:
+        record = create_graphrecord()
+
+        with pytest.raises(TypeError, match="unhashable type"):
+            hash(record)
+
+    def test_copy(self) -> None:
+        record = create_graphrecord()
+
+        copied = copy.copy(record)
+
+        assert copied is not record
+        assert copied == record
+        assert copied.add_node("4", {}).node_count() == 5
+        assert record.node_count() == 4
+
+    def test_deepcopy(self) -> None:
+        record = create_graphrecord()
+
+        copied = copy.deepcopy(record)
+
+        assert copied is not record
+        assert copied == record
+        assert record.__deepcopy__() == record
+        assert record.__deepcopy__({}) == record
+
+    def test_reduce(self) -> None:
+        record = create_graphrecord()
+
+        restored = pickle.loads(pickle.dumps(record))
+
+        assert restored == record
+        assert restored.node_indices() == ["0", "1", "2", "3"]
+
+        with_plugin = record.add_plugin("ipsum", RecordingPlugin())
+        restored_with_plugin = pickle.loads(pickle.dumps(with_plugin))
+
+        assert restored_with_plugin.plugins == ["ipsum"]
+        assert restored_with_plugin == with_plugin
+
+    def test_repr(self) -> None:
+        record = create_graphrecord()
+
+        assert "Node Overview" in repr(record)
+        assert "Edge Overview" in repr(record)
+        assert "magna" in repr(record)
+        assert "Ungrouped" in repr(record)
+        assert "Node Overview" in repr(GraphRecord())

@@ -1,7 +1,7 @@
 use graphrecords_query::FailureKind as QueryFailureKind;
 use pyo3::prelude::*;
 
-#[pyclass(frozen, eq, hash)]
+#[pyclass(frozen, eq, hash, module = "graphrecords._graphrecords.querying")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PyFailureKind(QueryFailureKind);
 

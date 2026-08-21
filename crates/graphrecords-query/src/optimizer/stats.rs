@@ -1,6 +1,6 @@
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{GraphRecordAttribute, Group},
+    graphrecord::{AttributeName, GroupIndex, StateView},
 };
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use std::{
@@ -33,7 +33,7 @@ impl<'a> Stats<'a> {
     pub fn get<S: Statistic>(&self, key: &S::Key) -> S::Value {
         let mut cache = self.cache.borrow_mut();
 
-        #[allow(clippy::missing_panics_doc)]
+        #[expect(clippy::missing_panics_doc, reason = "infallible")]
         let map = cache
             .entry(TypeId::of::<S>())
             .or_insert_with(|| Box::new(GrHashMap::<S::Key, S::Value>::default()))
@@ -49,64 +49,76 @@ impl<'a> Stats<'a> {
 pub struct NodeGroupSize;
 
 impl Statistic for NodeGroupSize {
-    type Key = Group;
+    type Key = GroupIndex;
     type Value = usize;
 
     fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
-        graphrecord.nodes_in_group(key).map_or(0, Iterator::count)
+        let state = StateView::of(graphrecord);
+
+        state
+            .resolve_group_address(key)
+            .map_or(0, |group_address| state.group_node_count(group_address))
     }
 }
 
 pub struct EdgeGroupSize;
 
 impl Statistic for EdgeGroupSize {
-    type Key = Group;
+    type Key = GroupIndex;
     type Value = usize;
 
     fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
-        graphrecord.edges_in_group(key).map_or(0, Iterator::count)
+        let state = StateView::of(graphrecord);
+
+        state
+            .resolve_group_address(key)
+            .map_or(0, |group_address| state.group_edge_count(group_address))
     }
 }
 
 pub struct NodeAttributeCardinality;
 
 impl Statistic for NodeAttributeCardinality {
-    type Key = GraphRecordAttribute;
+    type Key = AttributeName;
     type Value = usize;
 
     fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
-        graphrecord
-            .node_indices()
-            .filter_map(|node_index| {
-                graphrecord
-                    .node_attributes(node_index)
-                    .expect("Node must exist")
-                    .get(key)
-                    .cloned()
+        let state = StateView::of(graphrecord);
+
+        state
+            .resolve_node_attribute_address(key)
+            .map_or(0, |attribute_address| {
+                state
+                    .node_addresses()
+                    .filter_map(|node_address| {
+                        state.node_attribute(node_address, attribute_address)
+                    })
+                    .collect::<GrHashSet<_>>()
+                    .len()
             })
-            .collect::<GrHashSet<_>>()
-            .len()
     }
 }
 
 pub struct EdgeAttributeCardinality;
 
 impl Statistic for EdgeAttributeCardinality {
-    type Key = GraphRecordAttribute;
+    type Key = AttributeName;
     type Value = usize;
 
     fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
-        graphrecord
-            .edge_indices()
-            .filter_map(|edge_index| {
-                graphrecord
-                    .edge_attributes(edge_index)
-                    .expect("Edge must exist")
-                    .get(key)
-                    .cloned()
+        let state = StateView::of(graphrecord);
+
+        state
+            .resolve_edge_attribute_address(key)
+            .map_or(0, |attribute_address| {
+                state
+                    .edge_addresses()
+                    .filter_map(|edge_address| {
+                        state.edge_attribute(edge_address, attribute_address)
+                    })
+                    .collect::<GrHashSet<_>>()
+                    .len()
             })
-            .collect::<GrHashSet<_>>()
-            .len()
     }
 }
 
@@ -114,6 +126,7 @@ impl Statistic for EdgeAttributeCardinality {
 pub enum CountKind {
     Nodes,
     Edges,
+    Groups,
 }
 
 pub struct Count;
@@ -126,6 +139,7 @@ impl Statistic for Count {
         match key {
             CountKind::Nodes => graphrecord.node_indices().count(),
             CountKind::Edges => graphrecord.edge_indices().count(),
+            CountKind::Groups => graphrecord.group_count(),
         }
     }
 }

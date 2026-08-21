@@ -1,43 +1,32 @@
 use crate::{
-    EntityDomain, EntityReference, Explain, IndexDomain, IndexValue, Indexed, Operand, QueryResult,
-    Unit,
+    EntityIndexDomain, EntityRef, EntityReference, Explain, IndexDomain, IndexValue, Indexed,
+    QueryResult, Unit,
     element::{Pipeline, Preserving},
-    execution::EvaluationCache,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Index,
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "Index")]
 #[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct IndexOperation;
-
-impl Prepare for IndexOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<K: IndexDomain> ElementKernel<Indexed<K, Unit>> for IndexOperation {
     type Emission = Preserving;
     type OutShape = Indexed<K, IndexValue<K>>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<K, Unit>, Self>> {
-        Ok(Pipeline::keyed(|index, value: QueryResult<_>| {
-            value.map(|()| K::to_owned(&index))
+        Ok(Pipeline::keyed(move |address, value: QueryResult<_>| {
+            value.map(|()| K::index(graphrecord, &address))
         }))
     }
 
@@ -49,7 +38,7 @@ impl<K: IndexDomain> ElementKernel<Indexed<K, Unit>> for IndexOperation {
     }
 }
 
-impl<E: EntityDomain, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
+impl<E: EntityIndexDomain, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
     for IndexOperation
 {
     type Emission = Preserving;
@@ -59,9 +48,9 @@ impl<E: EntityDomain, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E
         _graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
-        Ok(Pipeline::unkeyed(|reference: QueryResult<_>| {
-            reference.map(|entity| E::to_owned(&entity))
-        }))
+        Ok(Pipeline::unkeyed(
+            |reference: QueryResult<EntityRef<'a, E>>| reference.map(|entity| entity.index()),
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -69,11 +58,11 @@ impl<E: EntityDomain, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E
     }
 }
 
-impl<O: Apply<IndexOperation>> Index for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<IndexOperation>> Index for E {
+    type Output = E::Output;
 
-    fn index(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), IndexOperation))
+    fn index(&self) -> Self::Output {
+        self.build(IndexOperation)
     }
 }
 
@@ -90,7 +79,7 @@ operation_manifest! {
         }
 
         kernel {
-            parameters: <E: EntityDomain, I: IndexDomain>;
+            parameters: <E: EntityIndexDomain, I: IndexDomain>;
             input: Indexed<I, EntityReference<E>>;
             output: Indexed<I, IndexValue<E>>;
             emission: Preserving;

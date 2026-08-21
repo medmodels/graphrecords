@@ -2,8 +2,8 @@ use crate::{
     Diagnostic,
     registry::{
         ArgumentDescriptor, ArgumentMissingPolicy, ArgumentValueSource, ArityDescriptor,
-        IndexDescriptor, LaneShapeDescriptor, OperandDescriptor, OrderDescriptor, ValueDescriptor,
-        ValueRole,
+        ExpressionDescriptor, IndexDescriptor, LaneShapeDescriptor, OrderDescriptor,
+        ValueArgumentDescriptor, ValueDescriptor, ValueRole,
     },
 };
 use std::{
@@ -28,7 +28,7 @@ impl Display for IndexState<'_> {
             IndexDescriptor::Expanded { parent, child } => {
                 write!(formatter, "{} expanded by {}", Self(parent), Self(child))
             }
-            IndexDescriptor::ExpandedSource { parent } => {
+            IndexDescriptor::ExpandedParent { parent } => {
                 write!(formatter, "{} expansion sources", Self(parent))
             }
         }
@@ -50,12 +50,12 @@ impl Display for ValueState<'_> {
     }
 }
 
-struct OperandState<'a>(&'a OperandDescriptor);
+struct ExpressionState<'a>(&'a ExpressionDescriptor);
 
-impl Display for OperandState<'_> {
+impl Display for ExpressionState<'_> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
-            OperandDescriptor::Lane { shape, arity } => {
+            ExpressionDescriptor::Lane { shape, arity } => {
                 let arity = match arity {
                     ArityDescriptor::Multiple {
                         order: OrderDescriptor::Ordered,
@@ -70,16 +70,16 @@ impl Display for OperandState<'_> {
                 match shape {
                     LaneShapeDescriptor::Indexed { index, value } => write!(
                         formatter,
-                        "{arity} lane of {} indexed by {}",
+                        "{arity} values of {} indexed by {}",
                         ValueState(value),
                         IndexState(index)
                     ),
                     LaneShapeDescriptor::Bare { value } => {
-                        write!(formatter, "{arity} bare lane of {}", ValueState(value))
+                        write!(formatter, "{arity} bare values of {}", ValueState(value))
                     }
                 }
             }
-            OperandDescriptor::Group {
+            ExpressionDescriptor::Group {
                 member,
                 key,
                 payload,
@@ -102,9 +102,27 @@ impl Display for ArgumentSourceState<'_> {
             ArgumentValueSource::Literal(value) => {
                 write!(formatter, "a literal of {}", ValueState(value))
             }
-            ArgumentValueSource::Operand(operand) => {
-                write!(formatter, "values from {}", OperandState(operand))
+            ArgumentValueSource::Expression(expression) => {
+                write!(formatter, "values from {}", ExpressionState(expression))
             }
+        }
+    }
+}
+
+struct ValueArgumentState<'a>(&'a ValueArgumentDescriptor);
+
+impl Display for ValueArgumentState<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        ArgumentSourceState(self.0.source()).fmt(formatter)?;
+
+        match self.0.missing() {
+            ArgumentMissingPolicy::None => Ok(()),
+            ArgumentMissingPolicy::Drop => formatter.write_str(" dropping missing values"),
+            ArgumentMissingPolicy::Replace(replacement) => write!(
+                formatter,
+                " replacing missing values with {}",
+                Self(replacement)
+            ),
         }
     }
 }
@@ -114,26 +132,16 @@ struct ArgumentState<'a>(&'a ArgumentDescriptor);
 impl Display for ArgumentState<'_> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
-            ArgumentDescriptor::Value(argument) => {
-                ArgumentSourceState(argument.source()).fmt(formatter)?;
-
-                match argument.missing() {
-                    ArgumentMissingPolicy::None => Ok(()),
-                    ArgumentMissingPolicy::Drop => formatter.write_str(" dropping missing values"),
-                    ArgumentMissingPolicy::Replace(replacement) => write!(
-                        formatter,
-                        " replacing missing values with {}",
-                        ArgumentSourceState(replacement)
-                    ),
-                }
-            }
+            ArgumentDescriptor::Value(argument) => ValueArgumentState(argument).fmt(formatter),
             ArgumentDescriptor::Field(domain) => {
                 write!(formatter, "a field of type {}", TypeName(domain.name()))
             }
             ArgumentDescriptor::Selector(domain) => {
                 write!(formatter, "a selector of type {}", TypeName(domain.name()))
             }
-            ArgumentDescriptor::Operand(operand) => OperandState(operand).fmt(formatter),
+            ArgumentDescriptor::Expression(expression) => {
+                ExpressionState(expression).fmt(formatter)
+            }
         }
     }
 }
@@ -141,7 +149,7 @@ impl Display for ArgumentState<'_> {
 #[derive(Debug)]
 pub struct OperationNotApplicable {
     method: String,
-    input: OperandDescriptor,
+    input: ExpressionDescriptor,
     arguments: Vec<ArgumentDescriptor>,
 }
 
@@ -149,7 +157,7 @@ impl OperationNotApplicable {
     #[must_use]
     pub const fn new(
         method: String,
-        input: OperandDescriptor,
+        input: ExpressionDescriptor,
         arguments: Vec<ArgumentDescriptor>,
     ) -> Self {
         Self {
@@ -165,7 +173,7 @@ impl OperationNotApplicable {
     }
 
     #[must_use]
-    pub const fn input(&self) -> &OperandDescriptor {
+    pub const fn input(&self) -> &ExpressionDescriptor {
         &self.input
     }
 
@@ -181,7 +189,7 @@ impl Display for OperationNotApplicable {
             formatter,
             "operation `{}` is not applicable to {}",
             self.method,
-            OperandState(&self.input)
+            ExpressionState(&self.input)
         )?;
 
         let Some(first) = self.arguments.first() else {
@@ -205,7 +213,7 @@ impl Diagnostic for OperationNotApplicable {
     }
 
     fn help(&self) -> Option<String> {
-        Some("choose an operation and arguments supported by the operand descriptor".to_string())
+        Some("choose an operation and arguments this expression supports".to_string())
     }
 }
 
@@ -250,9 +258,9 @@ impl Diagnostic for UnsupportedValueRole {
     }
 
     fn help(&self) -> Option<String> {
-        Some(
-            "handle the failing elements with `on_error(...)` before using them as grouping keys"
-                .to_string(),
-        )
+        Some(format!(
+            "handle the failing elements with `on_error(...)` before using them for {}",
+            self.capability
+        ))
     }
 }

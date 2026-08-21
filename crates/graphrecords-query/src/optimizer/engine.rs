@@ -6,7 +6,7 @@ use super::{
     rule::{ErasedRule, Rule, Transformed},
     stats::Stats,
 };
-use crate::Operand;
+use crate::Expression;
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use std::{
     any::{Any, TypeId, type_name},
@@ -140,7 +140,7 @@ impl Error for OptimizerError {}
 struct RuleEntry {
     identity: TypeId,
     name: &'static str,
-    operand_type: TypeId,
+    expression_type: TypeId,
     direction: Option<Direction>,
     before: Vec<RuleIdentity>,
     after: Vec<RuleIdentity>,
@@ -228,20 +228,20 @@ impl OptimizerBuilder {
         }
     }
 
-    pub fn add_rule<O: Operand + 'static, R: Rule<O>>(
+    pub fn add_rule<E: Expression + 'static, R: Rule<E>>(
         &mut self,
         phase: impl PhaseLabel,
         rule: R,
     ) -> RuleHandle<'_> {
         let erased: ErasedRule<_> =
-            Box::new(move |operand, session| rule.apply(operand, session.stats()));
+            Box::new(move |expression, session| rule.apply(expression, session.stats()));
 
         self.rules.push(PendingRule {
             phase: PhaseId::new(phase),
             entry: RuleEntry {
                 identity: TypeId::of::<R>(),
                 name: type_name::<R>(),
-                operand_type: TypeId::of::<O>(),
+                expression_type: TypeId::of::<E>(),
                 direction: None,
                 before: Vec::new(),
                 after: Vec::new(),
@@ -589,7 +589,7 @@ fn compile_phase(
         by_direction
             .entry(direction)
             .or_default()
-            .entry(entry.operand_type)
+            .entry(entry.expression_type)
             .or_default()
             .push(entry);
     }
@@ -604,10 +604,10 @@ fn compile_phase(
 
         let mut buckets = GrHashMap::default();
 
-        for (operand_type, entries) in direction_buckets {
+        for (expression_type, entries) in direction_buckets {
             match order_bucket(&id, entries) {
                 Ok(ordered) => {
-                    buckets.insert(operand_type, ordered);
+                    buckets.insert(expression_type, ordered);
                 }
                 Err(cycle_finding) => findings.push(cycle_finding),
             }
@@ -686,15 +686,15 @@ impl Optimizer {
         self.phases.is_empty()
     }
 
-    pub fn run<'a, O: Operand + Clone + 'static>(&'a self, stats: &'a Stats<'a>, root: &O) -> O {
+    pub fn run<'a, E: Expression + Clone + 'static>(&'a self, stats: &'a Stats<'a>, root: &E) -> E {
         self.run_reported(stats, root).0
     }
 
-    pub fn run_reported<'a, O: Operand + Clone + 'static>(
+    pub fn run_reported<'a, E: Expression + Clone + 'static>(
         &'a self,
         stats: &'a Stats<'a>,
-        root: &O,
-    ) -> (O, OptimizationReport) {
+        root: &E,
+    ) -> (E, OptimizationReport) {
         let mut current = root.clone();
         let mut phases = Vec::with_capacity(self.phases.len());
 
@@ -712,11 +712,11 @@ impl Optimizer {
         (current, OptimizationReport { phases })
     }
 
-    fn run_phase<O: Operand + Clone + 'static>(
+    fn run_phase<E: Expression + Clone + 'static>(
         phase: &CompiledPhase,
         stats: &Stats,
-        current: O,
-    ) -> (O, StopReason) {
+        current: E,
+    ) -> (E, StopReason) {
         if phase
             .run_if
             .as_ref()
@@ -750,7 +750,7 @@ impl Optimizer {
             }
             FixpointPolicy::Fixpoint { max_iterations } => {
                 let mut current = current;
-                let mut seen: GrHashMap<_, Vec<O>> = GrHashMap::default();
+                let mut seen: GrHashMap<_, Vec<E>> = GrHashMap::default();
 
                 seen.entry(signature(&current))
                     .or_default()
@@ -816,9 +816,9 @@ fn enabled_rules(passes: &[CompiledPass], stats: &Stats) -> Option<EnabledPasses
                 Some(
                     pass.buckets
                         .iter()
-                        .map(|(&operand_type, rules)| {
+                        .map(|(&expression_type, rules)| {
                             (
-                                operand_type,
+                                expression_type,
                                 rules
                                     .iter()
                                     .map(|rule| {
@@ -836,12 +836,12 @@ fn enabled_rules(passes: &[CompiledPass], stats: &Stats) -> Option<EnabledPasses
     )
 }
 
-fn apply_passes<O: Operand + Clone + 'static>(
+fn apply_passes<E: Expression + Clone + 'static>(
     passes: &[CompiledPass],
     enabled: Option<&[Option<EnabledBuckets>]>,
-    mut current: O,
+    mut current: E,
     stats: &Stats,
-) -> (O, bool) {
+) -> (E, bool) {
     let mut changed = false;
 
     for (pass_index, pass) in passes.iter().enumerate() {
@@ -874,21 +874,11 @@ impl Session<'_> {
         self.stats
     }
 
-    pub fn optimize<O: Operand + Clone + 'static>(&self, operand: &O) -> Transformed<O> {
+    pub fn optimize<E: Expression + Clone + 'static>(&self, expression: &E) -> Transformed<E> {
         match self.direction {
-            Direction::BottomUp => {
-                let (rebuilt, rebuilt_changed) =
-                    operand.context().optimize(operand, self).into_parts();
-                let (applied, applied_changed) = self.apply_rules(rebuilt).into_parts();
-
-                if rebuilt_changed || applied_changed {
-                    Transformed::changed(applied)
-                } else {
-                    Transformed::unchanged(applied)
-                }
-            }
             Direction::TopDown => {
-                let (rewritten, rewritten_changed) = self.apply_rules(operand.clone()).into_parts();
+                let (rewritten, rewritten_changed) =
+                    self.apply_rules(expression.clone()).into_parts();
                 let (rebuilt, rebuilt_changed) =
                     rewritten.context().optimize(&rewritten, self).into_parts();
 
@@ -898,18 +888,29 @@ impl Session<'_> {
                     Transformed::unchanged(rebuilt)
                 }
             }
-            Direction::Manual => self.apply_rules(operand.clone()),
+            Direction::BottomUp => {
+                let (rebuilt, rebuilt_changed) =
+                    expression.context().optimize(expression, self).into_parts();
+                let (applied, applied_changed) = self.apply_rules(rebuilt).into_parts();
+
+                if rebuilt_changed || applied_changed {
+                    Transformed::changed(applied)
+                } else {
+                    Transformed::unchanged(applied)
+                }
+            }
+            Direction::Manual => self.apply_rules(expression.clone()),
         }
     }
 
-    fn apply_rules<O: Operand + 'static>(&self, mut operand: O) -> Transformed<O> {
-        let Some(rules) = self.buckets.get(&TypeId::of::<O>()) else {
-            return Transformed::unchanged(operand);
+    fn apply_rules<E: Expression + 'static>(&self, mut expression: E) -> Transformed<E> {
+        let Some(rules) = self.buckets.get(&TypeId::of::<E>()) else {
+            return Transformed::unchanged(expression);
         };
 
         let bucket_enabled = self
             .enabled
-            .and_then(|buckets_enabled| buckets_enabled.get(&TypeId::of::<O>()));
+            .and_then(|buckets_enabled| buckets_enabled.get(&TypeId::of::<E>()));
 
         let mut changed = false;
 
@@ -920,25 +921,25 @@ impl Session<'_> {
 
             let rule = compiled
                 .rule
-                .downcast_ref::<ErasedRule<O>>()
-                .expect("Compiled rule must hold an erased rule matching its operand bucket");
-            let (value, was_changed) = rule(operand, self).into_parts();
+                .downcast_ref::<ErasedRule<E>>()
+                .expect("Compiled rule must hold an erased rule matching its expression bucket");
+            let (value, was_changed) = rule(expression, self).into_parts();
 
-            operand = value;
+            expression = value;
             changed |= was_changed;
         }
 
         if changed {
-            Transformed::changed(operand)
+            Transformed::changed(expression)
         } else {
-            Transformed::unchanged(operand)
+            Transformed::unchanged(expression)
         }
     }
 }
 
-fn signature<O: Operand>(operand: &O) -> u64 {
+fn signature<E: Expression>(expression: &E) -> u64 {
     let mut hasher = DefaultHasher::new();
-    operand.as_plan_node().dyn_hash(&mut hasher);
+    expression.as_plan_node().dyn_hash(&mut hasher);
     hasher.finish()
 }
 

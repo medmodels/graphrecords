@@ -1,23 +1,23 @@
 use super::{
-    DynArgumentSource, DynArity, DynArityHandle, DynGroupHandle, DynHandle, DynIndex,
-    DynInvokeArgument, DynOperand, DynPayload, DynPayloadOutput, DynStream, DynStreamShape,
-    DynYield, IntoDynArityHandle, IntoDynLaneHandle, IntoDynOperand,
+    DynArgumentLane, DynArgumentSource, DynArity, DynArityHandle, DynExpression, DynGroupHandle,
+    DynHandle, DynIndex, DynInvokeArgument, DynPayload, DynPayloadOutput, DynStream,
+    DynStreamShape, DynYield, IntoDynArityHandle, IntoDynExpression, IntoDynLaneHandle,
 };
 use crate::{
-    EdgeDirection, EvaluateContext, EvaluateOperand, Explain, Mask, Operand, QueryResult,
+    EdgeDirection, EvaluateContext, EvaluateExpression, Explain, Expression, Mask, QueryResult,
     execution::EvaluationCache,
     explain::ExplainFormatter,
-    operands::{OperandContext, OperandHandle, Partition},
+    expressions::{ExpressionContext, ExpressionHandle, Partition},
     operations::{Apply, GroupKernel, Operation, OperationContext, OperationScope},
     optimizer::{
         EmptyRule, Estimate, Estimated, MatchInputs, OperationInputs, OptimizePlan, OptimizerHints,
         PlanInputs, PlanNode, Session, Stats, Transformed,
     },
-    registry::{IndexDescriptor, LaneShapeDescriptor, OperandDescriptor, ValueRole},
+    registry::{ExpressionDescriptor, IndexDescriptor, LaneShapeDescriptor, ValueRole},
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, GraphRecordAttribute, Group, NodeIndex},
+    graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex},
 };
 use std::{
     any::Any,
@@ -27,12 +27,14 @@ use std::{
     sync::Arc,
 };
 
-pub type DynApplier = fn(&DynOperand, &[DynInvokeArgument], OperandDescriptor) -> DynOperand;
+pub type DynApplier =
+    fn(&DynExpression, &[DynInvokeArgument], ExpressionDescriptor) -> DynExpression;
 
 #[derive(Clone, Copy)]
 pub enum DynEntityDomain {
     Node,
     Edge,
+    Group,
 }
 
 #[derive(Clone, Copy)]
@@ -45,12 +47,12 @@ pub enum DynLaneKind {
 }
 
 pub struct OperationCapture<P: Operation> {
-    context: Arc<dyn OperandContext<Self>>,
+    context: Arc<dyn ExpressionContext<Self>>,
     marker: PhantomData<fn() -> P>,
 }
 
 pub struct CapturedOperation<P: Operation> {
-    context: Arc<dyn OperandContext<Self>>,
+    context: Arc<dyn ExpressionContext<Self>>,
     marker: PhantomData<fn() -> P>,
 }
 
@@ -131,18 +133,18 @@ impl<P: Operation> OptimizePlan for CaptureContext<P> {
 }
 
 impl<P: Operation> EvaluateContext for CaptureContext<P> {
-    type Operand = OperationCapture<P>;
+    type Expression = OperationCapture<P>;
 
     fn evaluate<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
+        _cache: &'a EvaluationCache,
+    ) -> QueryResult<<Self::Expression as EvaluateExpression>::ReturnValue<'a>> {
         panic!("dynamic operation capture reached evaluation")
     }
 }
 
-impl<P: Operation> EvaluateOperand for OperationCapture<P> {
+impl<P: Operation> EvaluateExpression for OperationCapture<P> {
     type ReturnValue<'a>
         = ()
     where
@@ -151,14 +153,14 @@ impl<P: Operation> EvaluateOperand for OperationCapture<P> {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<Self::ReturnValue<'a>> {
         self.context.evaluate(graphrecord, cache)
     }
 }
 
-impl<P: Operation> Operand for OperationCapture<P> {
-    fn context(&self) -> &dyn OperandContext<Self> {
+impl<P: Operation> Expression for OperationCapture<P> {
+    fn context(&self) -> &dyn ExpressionContext<Self> {
         self.context.as_ref()
     }
 
@@ -166,7 +168,7 @@ impl<P: Operation> Operand for OperationCapture<P> {
         self.context.as_ref()
     }
 
-    fn from_context(context: Arc<dyn OperandContext<Self>>) -> Self {
+    fn from_context(context: Arc<dyn ExpressionContext<Self>>) -> Self {
         Self {
             context,
             marker: PhantomData,
@@ -174,7 +176,7 @@ impl<P: Operation> Operand for OperationCapture<P> {
     }
 }
 
-impl<P: Operation> EvaluateOperand for CapturedOperation<P> {
+impl<P: Operation> EvaluateExpression for CapturedOperation<P> {
     type ReturnValue<'a>
         = ()
     where
@@ -183,14 +185,14 @@ impl<P: Operation> EvaluateOperand for CapturedOperation<P> {
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
+        cache: &'a EvaluationCache,
     ) -> QueryResult<Self::ReturnValue<'a>> {
         self.context.evaluate(graphrecord, cache)
     }
 }
 
-impl<P: Operation> Operand for CapturedOperation<P> {
-    fn context(&self) -> &dyn OperandContext<Self> {
+impl<P: Operation> Expression for CapturedOperation<P> {
+    fn context(&self) -> &dyn ExpressionContext<Self> {
         self.context.as_ref()
     }
 
@@ -198,7 +200,7 @@ impl<P: Operation> Operand for CapturedOperation<P> {
         self.context.as_ref()
     }
 
-    fn from_context(context: Arc<dyn OperandContext<Self>>) -> Self {
+    fn from_context(context: Arc<dyn ExpressionContext<Self>>) -> Self {
         Self {
             context,
             marker: PhantomData,
@@ -217,7 +219,7 @@ where
         _graphrecord: &'a GraphRecord,
         _values: Self::ReturnValue<'a>,
         _prepared: P::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>>
     where
         Self: 'a,
     {
@@ -239,7 +241,7 @@ where
         graphrecord: &'a GraphRecord,
         values: Self::ReturnValue<'a>,
         prepared: P::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>>
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>>
     where
         Self: 'a,
     {
@@ -251,11 +253,15 @@ where
     }
 }
 
-pub fn apply_operation<I, P>(input: I, operation: P, descriptor: OperandDescriptor) -> DynOperand
+pub fn apply_operation<I, P>(
+    input: I,
+    operation: P,
+    descriptor: ExpressionDescriptor,
+) -> DynExpression
 where
     I: Apply<P>,
     P: Operation,
-    I::Output: IntoDynOperand,
+    I::Output: IntoDynExpression,
 {
     <I as Apply<P>>::Output::new(OperationContext::new(input, operation)).into_dyn(descriptor)
 }
@@ -263,14 +269,14 @@ where
 pub fn apply_lane_operation<S, C, P>(
     handles: &DynArityHandle<S>,
     operation: P,
-    descriptor: OperandDescriptor,
-) -> DynOperand
+    descriptor: ExpressionDescriptor,
+) -> DynExpression
 where
     S: DynStreamShape + IntoDynLaneHandle,
     C: IntoDynArityHandle,
     P: Operation,
-    OperandHandle<S, C>: Apply<P>,
-    <OperandHandle<S, C> as Apply<P>>::Output: IntoDynOperand,
+    ExpressionHandle<S, C>: Apply<P>,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: IntoDynExpression,
 {
     apply_operation(C::clone_handle(handles), operation, descriptor)
 }
@@ -291,8 +297,8 @@ where
     P: Operation,
     S: DynStreamShape,
     C: DynArity,
-    OperandHandle<S, C>: Apply<P>,
-    <OperandHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
+    ExpressionHandle<S, C>: Apply<P>,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
 {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         let mut inputs = vec![self.input.as_plan_node()];
@@ -322,8 +328,8 @@ where
     P: Operation,
     S: DynStreamShape,
     C: DynArity,
-    OperandHandle<S, C>: Apply<P>,
-    <OperandHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
+    ExpressionHandle<S, C>: Apply<P>,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
 {
     fn commutes_with_filter(&self) -> bool {
         self.operation.commutes_with_filter()
@@ -347,8 +353,8 @@ where
     P: Operation,
     S: DynStreamShape,
     C: DynArity,
-    OperandHandle<S, C>: Apply<P>,
-    <OperandHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
+    ExpressionHandle<S, C>: Apply<P>,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
 {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         formatter.child(&self.input);
@@ -361,8 +367,8 @@ where
     P: Operation,
     S: DynStreamShape,
     C: DynArity,
-    OperandHandle<S, C>: Apply<P>,
-    <OperandHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
+    ExpressionHandle<S, C>: Apply<P>,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
 {
     fn estimate(&self, stats: &Stats) -> Estimate {
         estimate_grouped_operation::<S, C, P>(
@@ -378,8 +384,8 @@ where
     P: Operation,
     S: DynStreamShape,
     C: DynArity,
-    OperandHandle<S, C>: Apply<P>,
-    <OperandHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
+    ExpressionHandle<S, C>: Apply<P>,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
 {
     type Output = DynGroupHandle;
 
@@ -404,16 +410,16 @@ where
     P: Operation,
     S: DynStreamShape,
     C: DynArity,
-    OperandHandle<S, C>: Apply<P>,
-    <OperandHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
+    ExpressionHandle<S, C>: Apply<P>,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
 {
-    type Operand = DynGroupHandle;
+    type Expression = DynGroupHandle;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
+        cache: &'a EvaluationCache,
+    ) -> QueryResult<<Self::Expression as EvaluateExpression>::ReturnValue<'a>> {
         let partition = self.input.evaluate(graphrecord, cache)?;
         let prepared = self.operation.prepare(graphrecord, cache)?;
 
@@ -426,19 +432,19 @@ where
 }
 
 pub fn apply_grouped_operation<S, C, P>(
-    input: &DynOperand,
+    input: &DynExpression,
     operation: P,
-    descriptor: OperandDescriptor,
-) -> DynOperand
+    descriptor: ExpressionDescriptor,
+) -> DynExpression
 where
     S: DynStreamShape,
     C: DynArity,
     P: Operation,
-    OperandHandle<S, C>: Apply<P>,
-    <OperandHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
+    ExpressionHandle<S, C>: Apply<P>,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
 {
     let DynHandle::Group(input) = &input.handle else {
-        panic!("registry selected dynamic grouped lifting for an ungrouped operand")
+        panic!("registry selected dynamic grouped lifting for an ungrouped expression")
     };
 
     let handle = DynGroupHandle::new(DynGroupedOperationContext {
@@ -447,7 +453,7 @@ where
         marker: PhantomData,
     });
 
-    DynOperand::from_group(handle, descriptor)
+    DynExpression::from_group(handle, descriptor)
 }
 
 fn lift_grouped_operation<'a, S, C, P>(
@@ -459,16 +465,17 @@ where
     S: DynStreamShape,
     C: DynArity,
     P: Operation,
-    OperandHandle<S, C>: Apply<P>,
-    <OperandHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
+    ExpressionHandle<S, C>: Apply<P>,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
 {
     partition.map_payloads(|_, _, payload| {
         payload.and_then(|yielded| match yielded {
             DynYield::Lane(stream) => {
                 let values = project_stream::<S, C>(stream);
 
-                <OperandHandle<S, C> as Apply<P>>::apply(graphrecord, values, prepared.clone()).map(
-                    <<OperandHandle<S, C> as Apply<P>>::Output as DynPayloadOutput>::into_yield,
+                <ExpressionHandle<S, C> as Apply<P>>::apply(graphrecord, values, prepared.clone())
+                    .map(
+                    <<ExpressionHandle<S, C> as Apply<P>>::Output as DynPayloadOutput>::into_yield,
                 )
             }
             DynYield::Group(partition) => Ok(DynYield::Group(lift_grouped_operation::<S, C, P>(
@@ -482,7 +489,7 @@ where
 
 fn project_stream<S: DynStreamShape, C: DynArity>(
     stream: DynStream<'_>,
-) -> <OperandHandle<S, C> as EvaluateOperand>::ReturnValue<'_> {
+) -> <ExpressionHandle<S, C> as EvaluateExpression>::ReturnValue<'_> {
     S::project::<C>(stream)
 }
 
@@ -495,8 +502,8 @@ where
     S: DynStreamShape,
     C: DynArity,
     P: Operation,
-    OperandHandle<S, C>: Apply<P>,
-    <OperandHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
+    ExpressionHandle<S, C>: Apply<P>,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: DynPayloadOutput,
 {
     let Some(payload) = estimate.per_group.take() else {
         panic!("registry selected dynamic grouped lifting for an estimate without group payload")
@@ -505,7 +512,7 @@ where
     let payload = if payload.per_group.is_some() {
         estimate_grouped_operation::<S, C, P>(operation, *payload, stats)
     } else {
-        <OperandHandle<S, C> as Apply<P>>::estimate(operation, *payload, stats)
+        <ExpressionHandle<S, C> as Apply<P>>::estimate(operation, *payload, stats)
     };
 
     estimate.per_group = Some(Box::new(payload));
@@ -513,10 +520,21 @@ where
     estimate
 }
 
+impl<P: Operation> MatchInputs for DynNestedGroupContext<P> {
+    type Inputs<'a>
+        = P::Inputs<'a, DynGroupHandle>
+    where
+        Self: 'a;
+
+    fn inputs(&self) -> Self::Inputs<'_> {
+        OperationInputs::inputs(&self.operation, &self.input)
+    }
+}
+
 impl<P> PlanNode for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynOperand,
+    P::Output: DynPayloadOutput + IntoDynExpression,
 {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         let mut inputs = vec![self.input.as_plan_node()];
@@ -546,7 +564,7 @@ where
 impl<P> OptimizerHints for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynOperand,
+    P::Output: DynPayloadOutput + IntoDynExpression,
 {
     fn commutes_with_filter(&self) -> bool {
         self.operation.commutes_with_filter()
@@ -568,7 +586,7 @@ where
 impl<P> Explain for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynOperand,
+    P::Output: DynPayloadOutput + IntoDynExpression,
 {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         formatter.child(&self.input);
@@ -579,7 +597,7 @@ where
 impl<P> Estimated for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynOperand,
+    P::Output: DynPayloadOutput + IntoDynExpression,
 {
     fn estimate(&self, stats: &Stats) -> Estimate {
         estimate_nested_group_operation(
@@ -594,7 +612,7 @@ where
 impl<P> OptimizePlan for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynOperand,
+    P::Output: DynPayloadOutput + IntoDynExpression,
 {
     type Output = DynGroupHandle;
 
@@ -617,15 +635,15 @@ where
 impl<P> EvaluateContext for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynOperand,
+    P::Output: DynPayloadOutput + IntoDynExpression,
 {
-    type Operand = DynGroupHandle;
+    type Expression = DynGroupHandle;
 
     fn evaluate<'a>(
         &'a self,
         graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<<Self::Operand as EvaluateOperand>::ReturnValue<'a>> {
+        cache: &'a EvaluationCache,
+    ) -> QueryResult<<Self::Expression as EvaluateExpression>::ReturnValue<'a>> {
         let partition = self.input.evaluate(graphrecord, cache)?;
         let prepared = self.operation.prepare(graphrecord, cache)?;
 
@@ -639,16 +657,16 @@ where
 }
 
 pub fn apply_group_operation<P>(
-    input: &DynOperand,
+    input: &DynExpression,
     operation: P,
-    descriptor: OperandDescriptor,
-) -> DynOperand
+    descriptor: ExpressionDescriptor,
+) -> DynExpression
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynOperand,
+    P::Output: DynPayloadOutput + IntoDynExpression,
 {
     let DynHandle::Group(handle) = &input.handle else {
-        panic!("registry selected a dynamic group operation for an ungrouped operand")
+        panic!("registry selected a dynamic group operation for an ungrouped expression")
     };
 
     let depth = input.descriptor().group_depth();
@@ -663,7 +681,7 @@ where
         layers: depth - 1,
     });
 
-    DynOperand::from_group(handle, descriptor)
+    DynExpression::from_group(handle, descriptor)
 }
 
 fn apply_nested_group_operation<'a, P>(
@@ -674,7 +692,7 @@ fn apply_nested_group_operation<'a, P>(
 ) -> Partition<'a, DynIndex, DynIndex, DynPayload>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynOperand,
+    P::Output: DynPayloadOutput + IntoDynExpression,
 {
     if layers != 0 {
         return partition.map_payloads(|_, _, payload| {
@@ -713,7 +731,7 @@ fn estimate_nested_group_operation<P>(
 ) -> Estimate
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynOperand,
+    P::Output: DynPayloadOutput + IntoDynExpression,
 {
     let Some(payload) = estimate.per_group.take() else {
         panic!("registry selected a nested group operation for an estimate without group payload")
@@ -741,15 +759,15 @@ pub fn invoke_argument_source(
     source
 }
 
-pub fn invoke_operand(arguments: &[DynInvokeArgument], position: usize) -> &DynOperand {
-    let Some(DynInvokeArgument::Operand(operand)) = arguments.get(position) else {
-        panic!("registry routed an operation without its declared dynamic operand argument")
+pub fn invoke_lane(arguments: &[DynInvokeArgument], position: usize) -> &DynArgumentLane {
+    let Some(DynInvokeArgument::Lane(lane)) = arguments.get(position) else {
+        panic!("registry routed an operation without its declared dynamic lane argument")
     };
 
-    operand
+    lane
 }
 
-pub fn invoke_attribute(arguments: &[DynInvokeArgument], position: usize) -> GraphRecordAttribute {
+pub fn invoke_attribute(arguments: &[DynInvokeArgument], position: usize) -> AttributeName {
     let Some(DynInvokeArgument::Attribute(attribute)) = arguments.get(position) else {
         panic!("registry routed an operation without its declared attribute argument")
     };
@@ -757,12 +775,12 @@ pub fn invoke_attribute(arguments: &[DynInvokeArgument], position: usize) -> Gra
     attribute.clone()
 }
 
-pub fn invoke_group(arguments: &[DynInvokeArgument], position: usize) -> Group {
-    let Some(DynInvokeArgument::Group(group)) = arguments.get(position) else {
+pub fn invoke_group(arguments: &[DynInvokeArgument], position: usize) -> GroupIndex {
+    let Some(DynInvokeArgument::Group(group_index)) = arguments.get(position) else {
         panic!("registry routed an operation without its declared group argument")
     };
 
-    group.clone()
+    group_index.clone()
 }
 
 pub fn invoke_direction(arguments: &[DynInvokeArgument], position: usize) -> EdgeDirection {
@@ -781,10 +799,10 @@ pub fn invoke_position(arguments: &[DynInvokeArgument], position: usize) -> usiz
     *value
 }
 
-pub fn entity_domain(input: &DynOperand) -> DynEntityDomain {
+pub fn entity_domain(input: &DynExpression) -> DynEntityDomain {
     let lane = input.descriptor().lane_shape();
 
-    if let ValueRole::EntityReference(index) = lane.value().role() {
+    if let ValueRole::EntityReference(index) | ValueRole::Index(index) = lane.value().role() {
         return index_entity_domain(index);
     }
 
@@ -795,7 +813,7 @@ pub fn entity_domain(input: &DynOperand) -> DynEntityDomain {
     index_entity_domain(index)
 }
 
-pub fn innermost_lane_kind(descriptor: &OperandDescriptor) -> DynLaneKind {
+pub fn innermost_lane_kind(descriptor: &ExpressionDescriptor) -> DynLaneKind {
     match descriptor.lane_shape() {
         LaneShapeDescriptor::Indexed { value, .. } if value.domain().is::<Mask>() => {
             DynLaneKind::IndexedMask
@@ -813,8 +831,9 @@ fn index_entity_domain(index: &IndexDescriptor) -> DynEntityDomain {
     match index {
         IndexDescriptor::Domain(domain) if domain.is::<NodeIndex>() => DynEntityDomain::Node,
         IndexDescriptor::Domain(domain) if domain.is::<EdgeIndex>() => DynEntityDomain::Edge,
+        IndexDescriptor::Domain(domain) if domain.is::<GroupIndex>() => DynEntityDomain::Group,
         IndexDescriptor::Expanded { child, .. } => index_entity_domain(child),
-        IndexDescriptor::Domain(_) | IndexDescriptor::ExpandedSource { .. } => {
+        IndexDescriptor::Domain(_) | IndexDescriptor::ExpandedParent { .. } => {
             panic!("registry selected an entity operation for a non-entity dynamic index domain")
         }
     }

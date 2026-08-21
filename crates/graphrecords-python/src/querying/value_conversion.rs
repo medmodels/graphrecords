@@ -1,13 +1,14 @@
 use crate::{
-    graphrecord::{attribute::PyGraphRecordAttribute, value::PyGraphRecordValue},
+    graphrecord::{PyAttributeName, PyEdgeIndex, PyGroupIndex, PyNodeIndex, value::PyValue},
     querying::{
         exception::FailureConversion, failure_kind::PyFailureKind,
         index_conversion::IndexConversion,
     },
 };
+use graphrecords_core::graphrecord::AttributeName;
 use graphrecords_query::{
-    AttributeName, FailureKindValue, Scalar,
-    dynamic::{DynIndexOwned, DynValue},
+    FailureKindValue, Scalar,
+    dynamic::{DynEntityReferenceKind, DynIndexOwned, DynValue},
     registry::{ValueDescriptor, ValueRole},
 };
 use pyo3::{exceptions::PyTypeError, prelude::*};
@@ -23,12 +24,10 @@ impl ValueConversion for DynValue {
         match descriptor.role() {
             ValueRole::Value => {
                 if descriptor.domain().is::<Scalar>() {
-                    return Ok(Self::Scalar(object.extract::<PyGraphRecordValue>()?.into()));
+                    return Ok(Self::Scalar(object.extract::<PyValue>()?.into()));
                 }
                 if descriptor.domain().is::<AttributeName>() {
-                    return Ok(Self::Attribute(
-                        object.extract::<PyGraphRecordAttribute>()?.into(),
-                    ));
+                    return Ok(Self::Attribute(object.extract::<PyAttributeName>()?.into()));
                 }
                 if descriptor.domain().is::<FailureKindValue>() {
                     return Ok(Self::FailureKind(object.extract::<PyFailureKind>()?.into()));
@@ -41,7 +40,7 @@ impl ValueConversion for DynValue {
             }
             ValueRole::Index(index) => DynIndexOwned::from_python(object, index).map(Self::Index),
             ValueRole::EntityReference(_) => Err(PyTypeError::new_err(
-                "a verified reference has no literal form; pass an operand instead",
+                "a verified reference has no literal form; compare indices via `index()` instead",
             )),
             ValueRole::Unit => Err(PyTypeError::new_err(
                 "a membership lane carries no value, so it has no literal form",
@@ -51,26 +50,23 @@ impl ValueConversion for DynValue {
 
     fn to_python(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match self {
-            Self::Scalar(value) => Ok(PyGraphRecordValue::from(value.clone())
-                .into_pyobject(py)?
-                .unbind()),
-            Self::Attribute(attribute) => Ok(PyGraphRecordAttribute::from(attribute.clone())
+            Self::Scalar(value) => Ok(PyValue::from(value.clone()).into_pyobject(py)?.unbind()),
+            Self::Attribute(attribute) => Ok(PyAttributeName::from(attribute.clone())
                 .into_pyobject(py)?
                 .unbind()),
             Self::Index(index) => index.to_python(py),
-            Self::EntityReference(reference) => {
-                match (reference.node_index(), reference.edge_index()) {
-                    (Some(index), None) => Ok(PyGraphRecordAttribute::from(index.clone())
-                        .into_pyobject(py)?
-                        .unbind()),
-                    (None, Some(index)) => Ok(index.into_pyobject(py)?.into_any().unbind()),
-                    _ => {
-                        panic!(
-                            "dynamic entity-reference data violated its closed node-or-edge domain"
-                        )
-                    }
+            Self::EntityReference(reference) => match reference.kind() {
+                DynEntityReferenceKind::Node(index) => {
+                    Ok(PyNodeIndex::from(index.clone()).into_pyobject(py)?.unbind())
                 }
-            }
+                DynEntityReferenceKind::Edge(index) => Ok(PyEdgeIndex::from(*index)
+                    .into_pyobject(py)?
+                    .into_any()
+                    .unbind()),
+                DynEntityReferenceKind::Group(index) => Ok(PyGroupIndex::from(index.clone())
+                    .into_pyobject(py)?
+                    .unbind()),
+            },
             Self::Failure(failure) => Ok(failure.to_python(py)),
             Self::FailureKind(kind) => Ok(PyFailureKind::from(*kind)
                 .into_pyobject(py)?

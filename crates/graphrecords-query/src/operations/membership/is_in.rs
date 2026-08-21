@@ -1,11 +1,8 @@
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Mask, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Mask, QueryResult,
     capabilities::ValueEquality,
     element::{Pipeline, Preserving},
-    execution::EvaluationCache,
-    operations::{
-        Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare, SetSource,
-    },
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare, SetSource},
     optimizer::{
         Estimate, Estimated, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats,
     },
@@ -15,28 +12,15 @@ use crate::{
 use graphrecords_core::GraphRecord;
 use std::hash::Hash;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "IsIn")]
-#[plan(optimizer_hints(empty = if_all))]
+#[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_all))]
 pub struct IsInOperation<A> {
     #[argument]
     argument: A,
-}
-
-impl<A: Prepare> Prepare for IsInOperation<A> {
-    type Prepared<'a>
-        = A::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.argument.prepare(graphrecord, cache)
-    }
 }
 
 fn membership_estimate<A: Estimated>(
@@ -70,10 +54,10 @@ where
     type OutShape = Indexed<I, Mask>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        let set = A::set(prepared)?;
+        let set = A::set(graphrecord, prepared, Self::LABEL)?;
 
         Ok(Pipeline::unkeyed(move |outcome: QueryResult<_>| {
             outcome.map(|value| set.contains(&value))
@@ -95,10 +79,10 @@ where
     type OutShape = Bare<Mask>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        let set = A::set(prepared)?;
+        let set = A::set(graphrecord, prepared, Self::LABEL)?;
 
         Ok(Pipeline::new(move |outcome: QueryResult<_>| {
             outcome.map(|value| set.contains(&value))
@@ -110,18 +94,15 @@ where
     }
 }
 
-impl<O, A> IsIn<A> for O
+impl<E, A> IsIn<A> for E
 where
     IsInOperation<A>: Operation,
-    O: Apply<IsInOperation<A>>,
+    E: Build<IsInOperation<A>>,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn is_in(&self, argument: A) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            IsInOperation { argument },
-        ))
+    fn is_in(&self, argument: A) -> Self::Output {
+        self.build(IsInOperation { argument })
     }
 }
 

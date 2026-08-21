@@ -2,9 +2,9 @@ use super::{
     super::{
         AlignmentDescriptor, ArityDescriptor, ArityDescriptorTemplate, ArityPattern,
         CapabilityIdentifier, CapabilitySet, DomainDescriptor, EmissionKind, EmissionSpec,
-        IndexDescriptor, IndexDescriptorTemplate, IndexPattern, LaneShapeDescriptorTemplate,
-        OperandDescriptorTemplate, OrderDescriptor, OrderDescriptorTemplate, OrderPattern,
-        RetentionDescriptor, RetentionPattern, ShapePattern, StatePattern, ValueDescriptor,
+        ExpressionDescriptorTemplate, ExpressionPattern, IndexDescriptor, IndexDescriptorTemplate,
+        IndexPattern, LaneShapeDescriptorTemplate, OrderDescriptor, OrderDescriptorTemplate,
+        OrderPattern, RetentionDescriptor, RetentionPattern, ShapePattern, ValueDescriptor,
         ValueDescriptorTemplate, ValuePattern,
     },
     witness::{
@@ -16,27 +16,32 @@ use super::{
         MedianCapability, ModeCapability, ModuloCapability, MultiplyCapability, NegateCapability,
         OrderingCapability, PowerCapability, RoundCapability, ScalarCapability,
         ScalarKindTestCapability, SignCapability, SortableCapability, SquareRootCapability,
-        StringCapability, SubtractCapability,
+        StringCapability, SubtractCapability, TransitionAttributeNameCapability,
+        TransitionAttributeNameIndexCapability, TransitionBoolIndexCapability,
+        TransitionFailureKindIndexCapability, TransitionFailureKindValueCapability,
+        TransitionGroupIndexCapability, TransitionMaskCapability, TransitionNodeIndexCapability,
+        TransitionPositionalIndexCapability, TransitionScalarCapability,
+        TransitionValueIndexCapability,
     },
 };
 use crate::{
-    AttributeName, Bare, BareValueDomain, Definite, EdgeEndpointRole, EntityReference,
-    ExpandedIndex, FailureKind, FailureKindValue, FailureValue, IndexDomain, IndexValue, Indexed,
-    Mask, Multiple, OrderState, Ordered, Positional, QueryResult, Scalar, Single, Unit, Unordered,
-    ValueDomain,
-    capabilities::GroupingValue,
+    Bare, BareValueDomain, Definite, EdgeEndpointRole, EntityReference, ExpandedIndex, FailureKind,
+    FailureKindValue, FailureValue, IndexDomain, IndexValue, Indexed, Mask, Multiple, OrderState,
+    Ordered, Positional, QueryResult, Scalar, Single, Unit, Unordered, ValueDomain,
+    capabilities::{ValueEquivalence, ValueGrouping},
     element::{Arity, Dropping, ElementEmission, ElementShape, Expanding, Preserving, Retention},
     execution::EvaluationCache,
-    index::{EntityDomain, GroupKey},
-    operands::{EvaluateOperand, GroupOperand, Operand, OperandContext, OperandHandle},
-    operations::{Alignment, Keyed, Unaligned},
+    expressions::{
+        EvaluateExpression, Expression, ExpressionContext, ExpressionHandle, GroupedExpression,
+    },
+    index::EntityIndexDomain,
+    operations::{Alignment, IndexTiebreak, Keyed, Unaligned},
     optimizer::{Estimate, PlanNode},
     sealed::Sealed,
 };
 use graphrecords_core::{
     GraphRecord,
-    errors::GraphRecordResult,
-    graphrecord::{EdgeIndex, GraphRecordValue, NodeIndex},
+    graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value},
 };
 use std::{marker::PhantomData, sync::Arc};
 
@@ -46,9 +51,7 @@ pub struct EntityPatternVariable<const N: usize>;
 
 pub struct EntityAttributesPatternVariable<const N: usize>;
 
-pub struct IndicesInGroupPatternVariable<const N: usize>;
-
-pub struct SortableIndexPatternVariable<const N: usize>;
+pub struct GroupMembershipPatternVariable<const N: usize>;
 
 pub struct GroupKeyPatternVariable<const N: usize>;
 
@@ -139,6 +142,17 @@ capability_marker!(
     SquareRootCapability => SquareRoot,
     StringCapability => String,
     SubtractCapability => Subtract,
+    TransitionAttributeNameCapability => TransitionAttributeName,
+    TransitionAttributeNameIndexCapability => TransitionAttributeNameIndex,
+    TransitionBoolIndexCapability => TransitionBoolIndex,
+    TransitionFailureKindIndexCapability => TransitionFailureKindIndex,
+    TransitionFailureKindValueCapability => TransitionFailureKindValue,
+    TransitionGroupIndexCapability => TransitionGroupIndex,
+    TransitionMaskCapability => TransitionMask,
+    TransitionNodeIndexCapability => TransitionNodeIndex,
+    TransitionPositionalIndexCapability => TransitionPositionalIndex,
+    TransitionScalarCapability => TransitionScalar,
+    TransitionValueIndexCapability => TransitionValueIndex,
 );
 
 impl<A: CapabilityMarkers, B: CapabilityMarkers> CapabilityMarkers for (A, B) {
@@ -156,14 +170,37 @@ impl<const N: usize> Clone for IndexPatternVariable<N> {
 }
 
 impl<const N: usize> IndexDomain for IndexPatternVariable<N> {
+    type Address = i8;
     type Index<'a> = i8;
     type Owned = i8;
 
-    fn to_owned(_index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, _address: &Self::Address) -> Self::Index<'a> {
         unreachable!("manifest pattern variables must never execute")
     }
 
-    fn from_owned(_owned: &Self::Owned) -> Self::Index<'_> {
+    fn own_index(_index: &Self::Index<'_>) -> Self::Owned {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn borrow_index(_owned: &Self::Owned) -> Self::Index<'_> {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        _owned: &Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Address> {
+        unreachable!("manifest pattern variables must never execute")
+    }
+}
+
+impl<const N: usize> IndexTiebreak for IndexPatternVariable<N> {
+    fn tiebreak<T, F: Fn(&T) -> &Self::Address>(
+        _graphrecord: &GraphRecord,
+        _run: &mut [T],
+        _address: F,
+    ) {
         unreachable!("manifest pattern variables must never execute")
     }
 }
@@ -175,26 +212,32 @@ impl<const N: usize> Clone for EntityPatternVariable<N> {
 }
 
 impl<const N: usize> IndexDomain for EntityPatternVariable<N> {
+    type Address = i8;
     type Index<'a> = i8;
     type Owned = i8;
 
-    fn to_owned(_index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, _address: &Self::Address) -> Self::Index<'a> {
         unreachable!("manifest pattern variables must never execute")
     }
 
-    fn from_owned(_owned: &Self::Owned) -> Self::Index<'_> {
+    fn own_index(_index: &Self::Index<'_>) -> Self::Owned {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn borrow_index(_owned: &Self::Owned) -> Self::Index<'_> {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        _owned: &Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Address> {
         unreachable!("manifest pattern variables must never execute")
     }
 }
 
-impl<const N: usize> EntityDomain for EntityPatternVariable<N> {
-    fn resolve_index<'a>(
-        _graphrecord: &'a GraphRecord,
-        _index: &Self::Owned,
-    ) -> GraphRecordResult<Self::Index<'a>> {
-        unreachable!("manifest pattern variables must never execute")
-    }
-}
+impl<const N: usize> EntityIndexDomain for EntityPatternVariable<N> {}
 
 impl<const N: usize> Clone for EntityAttributesPatternVariable<N> {
     fn clone(&self) -> Self {
@@ -203,73 +246,66 @@ impl<const N: usize> Clone for EntityAttributesPatternVariable<N> {
 }
 
 impl<const N: usize> IndexDomain for EntityAttributesPatternVariable<N> {
+    type Address = i8;
     type Index<'a> = i8;
     type Owned = i8;
 
-    fn to_owned(_index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, _address: &Self::Address) -> Self::Index<'a> {
         unreachable!("manifest pattern variables must never execute")
     }
 
-    fn from_owned(_owned: &Self::Owned) -> Self::Index<'_> {
+    fn own_index(_index: &Self::Index<'_>) -> Self::Owned {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn borrow_index(_owned: &Self::Owned) -> Self::Index<'_> {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        _owned: &Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Address> {
         unreachable!("manifest pattern variables must never execute")
     }
 }
 
-impl<const N: usize> EntityDomain for EntityAttributesPatternVariable<N> {
-    fn resolve_index<'a>(
-        _graphrecord: &'a GraphRecord,
-        _index: &Self::Owned,
-    ) -> GraphRecordResult<Self::Index<'a>> {
-        unreachable!("manifest pattern variables must never execute")
-    }
-}
+impl<const N: usize> EntityIndexDomain for EntityAttributesPatternVariable<N> {}
 
-impl<const N: usize> Clone for IndicesInGroupPatternVariable<N> {
+impl<const N: usize> Clone for GroupMembershipPatternVariable<N> {
     fn clone(&self) -> Self {
         Self
     }
 }
 
-impl<const N: usize> IndexDomain for IndicesInGroupPatternVariable<N> {
+impl<const N: usize> IndexDomain for GroupMembershipPatternVariable<N> {
+    type Address = i8;
     type Index<'a> = i8;
     type Owned = i8;
 
-    fn to_owned(_index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, _address: &Self::Address) -> Self::Index<'a> {
         unreachable!("manifest pattern variables must never execute")
     }
 
-    fn from_owned(_owned: &Self::Owned) -> Self::Index<'_> {
-        unreachable!("manifest pattern variables must never execute")
-    }
-}
-
-impl<const N: usize> EntityDomain for IndicesInGroupPatternVariable<N> {
-    fn resolve_index<'a>(
-        _graphrecord: &'a GraphRecord,
-        _index: &Self::Owned,
-    ) -> GraphRecordResult<Self::Index<'a>> {
-        unreachable!("manifest pattern variables must never execute")
-    }
-}
-
-impl<const N: usize> Clone for SortableIndexPatternVariable<N> {
-    fn clone(&self) -> Self {
-        Self
-    }
-}
-
-impl<const N: usize> IndexDomain for SortableIndexPatternVariable<N> {
-    type Index<'a> = i8;
-    type Owned = i8;
-
-    fn to_owned(_index: &Self::Index<'_>) -> Self::Owned {
+    fn own_index(_index: &Self::Index<'_>) -> Self::Owned {
         unreachable!("manifest pattern variables must never execute")
     }
 
-    fn from_owned(_owned: &Self::Owned) -> Self::Index<'_> {
+    fn borrow_index(_owned: &Self::Owned) -> Self::Index<'_> {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        _owned: &Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Address> {
         unreachable!("manifest pattern variables must never execute")
     }
 }
+
+impl<const N: usize> EntityIndexDomain for GroupMembershipPatternVariable<N> {}
 
 impl<const N: usize> Clone for GroupKeyPatternVariable<N> {
     fn clone(&self) -> Self {
@@ -278,29 +314,33 @@ impl<const N: usize> Clone for GroupKeyPatternVariable<N> {
 }
 
 impl<const N: usize> IndexDomain for GroupKeyPatternVariable<N> {
+    type Address = i8;
     type Index<'a> = i8;
     type Owned = i8;
 
-    fn to_owned(_index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, _address: &Self::Address) -> Self::Index<'a> {
         unreachable!("manifest pattern variables must never execute")
     }
 
-    fn from_owned(_owned: &Self::Owned) -> Self::Index<'_> {
+    fn own_index(_index: &Self::Index<'_>) -> Self::Owned {
         unreachable!("manifest pattern variables must never execute")
     }
-}
 
-impl<const N: usize> GroupKey for GroupKeyPatternVariable<N> {
-    fn resolve_key<'a>(
+    fn borrow_index(_owned: &Self::Owned) -> Self::Index<'_> {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        _owned: &Self::Owned,
         _label: &'static str,
-        _graphrecord: &'a GraphRecord,
-        _key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
+    ) -> QueryResult<Self::Address> {
         unreachable!("manifest pattern variables must never execute")
     }
 }
 
 impl<const N: usize, M: 'static> ValueDomain for ValuePatternVariable<N, M> {
+    type Cached = ();
     type Owned = ();
     type Value<'a> = ();
 
@@ -308,7 +348,22 @@ impl<const N: usize, M: 'static> ValueDomain for ValuePatternVariable<N, M> {
         unreachable!("manifest pattern variables must never execute")
     }
 
-    fn from_owned(_owned: &Self::Owned) -> Self::Value<'_> {
+    fn from_owned<'a>(
+        _graphrecord: &'a GraphRecord,
+        _owned: &'a Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Value<'a>> {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn into_cached(_value: Self::Value<'_>) -> Self::Cached {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn from_cached<'a>(
+        _graphrecord: &'a GraphRecord,
+        _cached: &'a Self::Cached,
+    ) -> Self::Value<'a> {
         unreachable!("manifest pattern variables must never execute")
     }
 }
@@ -316,6 +371,7 @@ impl<const N: usize, M: 'static> ValueDomain for ValuePatternVariable<N, M> {
 impl<const N: usize, M: 'static> BareValueDomain for ValuePatternVariable<N, M> {}
 
 impl<const N: usize, K: 'static> ValueDomain for GroupingValuePatternVariable<N, K> {
+    type Cached = ();
     type Owned = ();
     type Value<'a> = ();
 
@@ -323,15 +379,38 @@ impl<const N: usize, K: 'static> ValueDomain for GroupingValuePatternVariable<N,
         unreachable!("manifest pattern variables must never execute")
     }
 
-    fn from_owned(_owned: &Self::Owned) -> Self::Value<'_> {
+    fn from_owned<'a>(
+        _graphrecord: &'a GraphRecord,
+        _owned: &'a Self::Owned,
+        _label: &'static str,
+    ) -> QueryResult<Self::Value<'a>> {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn into_cached(_value: Self::Value<'_>) -> Self::Cached {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn from_cached<'a>(
+        _graphrecord: &'a GraphRecord,
+        _cached: &'a Self::Cached,
+    ) -> Self::Value<'a> {
         unreachable!("manifest pattern variables must never execute")
     }
 }
 
-impl<const N: usize> GroupingValue for ValuePatternVariable<N, GroupingCapability> {
-    type Key = GroupKeyOf<N>;
+impl<const N: usize> ValueEquivalence for ValuePatternVariable<N, GroupingCapability> {
+    type Key<'a> = ();
 
-    fn to_group_key(_value: &Self::Value<'_>) -> <Self::Key as IndexDomain>::Owned {
+    fn equivalence_key<'a>(_value: &Self::Value<'a>) -> Self::Key<'a> {
+        unreachable!("manifest pattern variables must never execute")
+    }
+}
+
+impl<const N: usize> ValueGrouping for ValuePatternVariable<N, GroupingCapability> {
+    type KeyDomain = GroupKeyOf<N>;
+
+    fn to_group_key(_value: &Self::Value<'_>) -> <Self::KeyDomain as IndexDomain>::Owned {
         unreachable!("manifest pattern variables must never execute")
     }
 }
@@ -386,20 +465,20 @@ impl<const N: usize> Clone for LanePatternVariable<N> {
     }
 }
 
-impl<const N: usize> EvaluateOperand for LanePatternVariable<N> {
+impl<const N: usize> EvaluateExpression for LanePatternVariable<N> {
     type ReturnValue<'a> = ();
 
     fn evaluate<'a>(
         &'a self,
         _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
+        _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::ReturnValue<'a>> {
         unreachable!("manifest pattern variables must never execute")
     }
 }
 
-impl<const N: usize> Operand for LanePatternVariable<N> {
-    fn context(&self) -> &dyn OperandContext<Self> {
+impl<const N: usize> Expression for LanePatternVariable<N> {
+    fn context(&self) -> &dyn ExpressionContext<Self> {
         unreachable!("manifest pattern variables must never execute")
     }
 
@@ -407,7 +486,7 @@ impl<const N: usize> Operand for LanePatternVariable<N> {
         unreachable!("manifest pattern variables must never execute")
     }
 
-    fn from_context(_context: Arc<dyn OperandContext<Self>>) -> Self {
+    fn from_context(_context: Arc<dyn ExpressionContext<Self>>) -> Self {
         unreachable!("manifest pattern variables must never execute")
     }
 }
@@ -419,24 +498,27 @@ impl<const N: usize> Clone for GroupKeyOf<N> {
 }
 
 impl<const N: usize> IndexDomain for GroupKeyOf<N> {
+    type Address = i8;
     type Index<'a> = i8;
     type Owned = i8;
 
-    fn to_owned(_index: &Self::Index<'_>) -> Self::Owned {
+    fn index<'a>(_graphrecord: &'a GraphRecord, _address: &Self::Address) -> Self::Index<'a> {
         unreachable!("manifest pattern variables must never execute")
     }
 
-    fn from_owned(_owned: &Self::Owned) -> Self::Index<'_> {
+    fn own_index(_index: &Self::Index<'_>) -> Self::Owned {
         unreachable!("manifest pattern variables must never execute")
     }
-}
 
-impl<const N: usize> GroupKey for GroupKeyOf<N> {
-    fn resolve_key<'a>(
+    fn borrow_index(_owned: &Self::Owned) -> Self::Index<'_> {
+        unreachable!("manifest pattern variables must never execute")
+    }
+
+    fn resolve(
+        _graphrecord: &GraphRecord,
+        _owned: &Self::Owned,
         _label: &'static str,
-        _graphrecord: &'a GraphRecord,
-        _key: &Self::Owned,
-    ) -> QueryResult<Self::Index<'a>> {
+    ) -> QueryResult<Self::Address> {
         unreachable!("manifest pattern variables must never execute")
     }
 }
@@ -564,10 +646,10 @@ pub trait DescribeEmission: 'static {
     fn emission_spec() -> EmissionSpec;
 }
 
-pub trait DescribeOperand: 'static {
-    fn state_pattern() -> StatePattern;
+pub trait DescribeExpression: 'static {
+    fn expression_pattern() -> ExpressionPattern;
 
-    fn operand_template() -> OperandDescriptorTemplate;
+    fn expression_template() -> ExpressionDescriptorTemplate;
 }
 
 impl<const N: usize> DescribeIndex for IndexPatternVariable<N> {
@@ -605,27 +687,12 @@ impl<const N: usize> DescribeIndex for EntityAttributesPatternVariable<N> {
     }
 }
 
-impl<const N: usize> DescribeIndex for IndicesInGroupPatternVariable<N> {
+impl<const N: usize> DescribeIndex for GroupMembershipPatternVariable<N> {
     fn index_pattern() -> IndexPattern {
         IndexPattern::Variable(
             N,
             Box::new(IndexPattern::Capable(CapabilitySet::new(vec![
-                CapabilityIdentifier::IndicesInGroup,
-            ]))),
-        )
-    }
-
-    fn index_template() -> IndexDescriptorTemplate {
-        IndexDescriptorTemplate::Variable(N)
-    }
-}
-
-impl<const N: usize> DescribeIndex for SortableIndexPatternVariable<N> {
-    fn index_pattern() -> IndexPattern {
-        IndexPattern::Variable(
-            N,
-            Box::new(IndexPattern::Capable(CapabilitySet::new(vec![
-                CapabilityIdentifier::Sortable,
+                CapabilityIdentifier::GroupMembership,
             ]))),
         )
     }
@@ -669,13 +736,14 @@ macro_rules! describe_concrete_index {
 }
 
 describe_concrete_index!(
-    GraphRecordValue,
+    Value,
     bool,
     AttributeName,
     FailureKind,
     Positional,
     NodeIndex,
     EdgeIndex,
+    GroupIndex,
     EdgeEndpointRole,
 );
 
@@ -726,7 +794,7 @@ impl<const N: usize, M: CapabilityMarkers + 'static> DescribeValue for ValuePatt
     }
 }
 
-impl<const N: usize, K: DescribeIndex + GroupKey> DescribeValue
+impl<const N: usize, K: DescribeIndex + IndexDomain> DescribeValue
     for GroupingValuePatternVariable<N, K>
 {
     fn value_pattern() -> ValuePattern {
@@ -779,7 +847,7 @@ impl<I: DescribeIndex + IndexDomain> DescribeValue for IndexValue<I> {
     }
 }
 
-impl<E: DescribeIndex + EntityDomain> DescribeValue for EntityReference<E> {
+impl<E: DescribeIndex + EntityIndexDomain> DescribeValue for EntityReference<E> {
     fn value_pattern() -> ValuePattern {
         ValuePattern::EntityReference(E::index_pattern())
     }
@@ -963,61 +1031,61 @@ impl DescribeEmission for Expanding<Unordered> {
     }
 }
 
-impl<const N: usize> DescribeOperand for LanePatternVariable<N> {
-    fn state_pattern() -> StatePattern {
-        StatePattern::Variable(
+impl<const N: usize> DescribeExpression for LanePatternVariable<N> {
+    fn expression_pattern() -> ExpressionPattern {
+        ExpressionPattern::Variable(
             N,
-            Box::new(StatePattern::Lane {
+            Box::new(ExpressionPattern::Lane {
                 shape: ShapePattern::Any,
                 arity: ArityPattern::Any,
             }),
         )
     }
 
-    fn operand_template() -> OperandDescriptorTemplate {
-        OperandDescriptorTemplate::Variable(N)
+    fn expression_template() -> ExpressionDescriptorTemplate {
+        ExpressionDescriptorTemplate::Variable(N)
     }
 }
 
-impl<S, C> DescribeOperand for OperandHandle<S, C>
+impl<S, C> DescribeExpression for ExpressionHandle<S, C>
 where
     S: DescribeShape + ElementShape,
     C: DescribeArity + Arity,
 {
-    fn state_pattern() -> StatePattern {
-        StatePattern::Lane {
+    fn expression_pattern() -> ExpressionPattern {
+        ExpressionPattern::Lane {
             shape: S::shape_pattern(),
             arity: C::arity_pattern(),
         }
     }
 
-    fn operand_template() -> OperandDescriptorTemplate {
-        OperandDescriptorTemplate::Lane {
+    fn expression_template() -> ExpressionDescriptorTemplate {
+        ExpressionDescriptorTemplate::Lane {
             shape: S::shape_template(),
             arity: C::arity_template(),
         }
     }
 }
 
-impl<M, K, O> DescribeOperand for GroupOperand<M, K, O>
+impl<M, K, E> DescribeExpression for GroupedExpression<M, K, E>
 where
     M: DescribeIndex + IndexDomain,
-    K: DescribeIndex + GroupKey,
-    O: DescribeOperand + Operand,
+    K: DescribeIndex + IndexDomain,
+    E: DescribeExpression + Expression,
 {
-    fn state_pattern() -> StatePattern {
-        StatePattern::Group {
+    fn expression_pattern() -> ExpressionPattern {
+        ExpressionPattern::Group {
             member: M::index_pattern(),
             key: K::index_pattern(),
-            payload: Box::new(O::state_pattern()),
+            payload: Box::new(E::expression_pattern()),
         }
     }
 
-    fn operand_template() -> OperandDescriptorTemplate {
-        OperandDescriptorTemplate::Group {
+    fn expression_template() -> ExpressionDescriptorTemplate {
+        ExpressionDescriptorTemplate::Group {
             member: M::index_template(),
             key: K::index_template(),
-            payload: Box::new(O::operand_template()),
+            payload: Box::new(E::expression_template()),
         }
     }
 }

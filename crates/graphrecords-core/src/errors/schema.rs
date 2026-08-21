@@ -1,4 +1,4 @@
-use crate::graphrecord::{EdgeIndex, GraphRecordAttribute, Group, NodeIndex, datatypes::DataType};
+use crate::graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, datatypes::DataType};
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -6,41 +6,41 @@ use std::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SchemaError {
-    GroupNotInSchema {
-        group: Group,
-    },
-    GroupAlreadyInSchema {
-        group: Group,
-    },
     NodeAttributeMissing {
         node_index: NodeIndex,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
     },
     EdgeAttributeMissing {
         edge_index: EdgeIndex,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
     },
     NodeAttributeDataTypeMismatch {
         node_index: NodeIndex,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         expected_data_type: DataType,
     },
     EdgeAttributeDataTypeMismatch {
         edge_index: EdgeIndex,
-        attribute: GraphRecordAttribute,
+        attribute: AttributeName,
         data_type: DataType,
         expected_data_type: DataType,
     },
     NodeAttributesNotInSchema {
         node_index: NodeIndex,
-        attributes: Vec<GraphRecordAttribute>,
+        attributes: Vec<AttributeName>,
     },
     EdgeAttributesNotInSchema {
         edge_index: EdgeIndex,
-        attributes: Vec<GraphRecordAttribute>,
+        attributes: Vec<AttributeName>,
+    },
+    GroupNotInSchema {
+        group_index: GroupIndex,
+    },
+    GroupAlreadyInSchema {
+        group_index: GroupIndex,
     },
     ContinuousAttributeNotNumeric,
     TemporalAttributeNotTemporal,
@@ -48,7 +48,7 @@ pub enum SchemaError {
 
 impl Error for SchemaError {}
 
-fn join_attributes(attributes: &[GraphRecordAttribute]) -> String {
+fn join_attributes(attributes: &[AttributeName]) -> String {
     attributes
         .iter()
         .map(ToString::to_string)
@@ -59,12 +59,6 @@ fn join_attributes(attributes: &[GraphRecordAttribute]) -> String {
 impl Display for SchemaError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Self::GroupNotInSchema { group } => {
-                write!(f, "Group `{group}` is not defined in the schema")
-            }
-            Self::GroupAlreadyInSchema { group } => {
-                write!(f, "Group `{group}` already exists in the schema")
-            }
             Self::NodeAttributeMissing {
                 node_index,
                 attribute,
@@ -115,6 +109,18 @@ impl Display for SchemaError {
                 "Attributes [{}] of edge with index `{edge_index}` do not exist in schema.",
                 join_attributes(attributes)
             ),
+            Self::GroupNotInSchema { group_index } => {
+                write!(
+                    f,
+                    "Group with index `{group_index}` is not defined in the schema"
+                )
+            }
+            Self::GroupAlreadyInSchema { group_index } => {
+                write!(
+                    f,
+                    "Group with index `{group_index}` already exists in the schema"
+                )
+            }
             Self::ContinuousAttributeNotNumeric => {
                 write!(
                     f,
@@ -134,21 +140,21 @@ impl Display for SchemaError {
 #[cfg(test)]
 mod test {
     use super::SchemaError;
-    use crate::graphrecord::datatypes::DataType;
+    use crate::graphrecord::{EdgeIndex, datatypes::DataType};
 
     #[test]
     fn test_display_groups() {
         assert_eq!(
-            "Group `\"test\"` is not defined in the schema",
+            "Group with index `\"test\"` is not defined in the schema",
             SchemaError::GroupNotInSchema {
-                group: "test".into()
+                group_index: "test".into()
             }
             .to_string()
         );
         assert_eq!(
-            "Group `\"test\"` already exists in the schema",
+            "Group with index `\"test\"` already exists in the schema",
             SchemaError::GroupAlreadyInSchema {
-                group: "test".into()
+                group_index: "test".into()
             }
             .to_string()
         );
@@ -166,9 +172,9 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Attribute `\"key\"` of type `Int` not found on edge with index `0`",
+            "Attribute `\"key\"` of type `Int` not found on edge with index `0000000000000000:0`",
             SchemaError::EdgeAttributeMissing {
-                edge_index: 0,
+                edge_index: EdgeIndex::new(0, 0),
                 attribute: "key".into(),
                 data_type: DataType::Int,
             }
@@ -185,9 +191,9 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Attribute `\"key\"` of edge with index `0` is of type `Int`. Expected `Float`.",
+            "Attribute `\"key\"` of edge with index `0000000000000000:0` is of type `Int`. Expected `Float`.",
             SchemaError::EdgeAttributeDataTypeMismatch {
-                edge_index: 0,
+                edge_index: EdgeIndex::new(0, 0),
                 attribute: "key".into(),
                 data_type: DataType::Int,
                 expected_data_type: DataType::Float,
@@ -203,9 +209,9 @@ mod test {
             .to_string()
         );
         assert_eq!(
-            "Attributes [\"key1\", \"key2\"] of edge with index `0` do not exist in schema.",
+            "Attributes [\"key1\", \"key2\"] of edge with index `0000000000000000:0` do not exist in schema.",
             SchemaError::EdgeAttributesNotInSchema {
-                edge_index: 0,
+                edge_index: EdgeIndex::new(0, 0),
                 attributes: vec!["key1".into(), "key2".into()],
             }
             .to_string()

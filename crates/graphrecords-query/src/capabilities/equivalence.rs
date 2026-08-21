@@ -1,52 +1,68 @@
 use crate::{
-    AttributeName, FailureKind, FailureKindValue, IndexDomain, IndexValue, Mask, Scalar,
-    ValueDomain,
+    EntityIndexDomain, EntityRef, EntityReference, FailureKind, FailureKindValue, IndexDomain,
+    IndexValue, Mask, Scalar, ValueDomain,
 };
-use graphrecords_core::graphrecord::{GraphRecordAttribute, GraphRecordValue};
+use graphrecords_core::graphrecord::{AttributeName, ValueView, datatypes::AttributeNameView};
 use std::hash::Hash;
 
 pub trait ValueEquivalence: ValueDomain {
-    type Key: Eq + Hash;
+    type Key<'a>: Eq + Hash
+    where
+        Self: 'a;
 
-    fn equivalence_key(value: &Self::Value<'_>) -> Self::Key;
+    fn equivalence_key<'a>(value: &Self::Value<'a>) -> Self::Key<'a>;
 }
 
 impl ValueEquivalence for Scalar {
-    type Key = GraphRecordValue;
+    type Key<'a> = ValueView<'a>;
 
-    fn equivalence_key(value: &Self::Value<'_>) -> Self::Key {
+    fn equivalence_key<'a>(value: &Self::Value<'a>) -> Self::Key<'a> {
         value.clone()
     }
 }
 
 impl ValueEquivalence for Mask {
-    type Key = bool;
+    type Key<'a> = bool;
 
-    fn equivalence_key(value: &Self::Value<'_>) -> Self::Key {
+    fn equivalence_key<'a>(value: &Self::Value<'a>) -> Self::Key<'a> {
         *value
     }
 }
 
 impl ValueEquivalence for AttributeName {
-    type Key = GraphRecordAttribute;
+    type Key<'a> = AttributeNameView<'a>;
 
-    fn equivalence_key(value: &Self::Value<'_>) -> Self::Key {
+    fn equivalence_key<'a>(value: &Self::Value<'a>) -> Self::Key<'a> {
         value.clone()
     }
 }
 
 impl<I: IndexDomain> ValueEquivalence for IndexValue<I> {
-    type Key = I::Owned;
+    type Key<'a>
+        = I::Index<'a>
+    where
+        Self: 'a;
 
-    fn equivalence_key(value: &Self::Value<'_>) -> Self::Key {
+    fn equivalence_key<'a>(value: &Self::Value<'a>) -> Self::Key<'a> {
+        value.clone()
+    }
+}
+
+impl<E: EntityIndexDomain> ValueEquivalence for EntityReference<E> {
+    type Key<'a>
+        = EntityRef<'a, E>
+    where
+        Self: 'a;
+
+    fn equivalence_key<'a>(value: &Self::Value<'a>) -> Self::Key<'a> {
         value.clone()
     }
 }
 
 impl ValueEquivalence for FailureKindValue {
-    type Key = FailureKind;
+    type Key<'a> = FailureKind;
 
-    fn equivalence_key(value: &Self::Value<'_>) -> Self::Key {
+    fn equivalence_key<'a>(value: &Self::Value<'a>) -> Self::Key<'a> {
         *value
     }
 }

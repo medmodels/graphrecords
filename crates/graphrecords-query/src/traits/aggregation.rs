@@ -1,83 +1,83 @@
 pub trait All {
-    type ReturnOperand;
+    type Output;
 
-    fn all(&self) -> Self::ReturnOperand;
+    fn all(&self) -> Self::Output;
 }
 
 pub trait Any {
-    type ReturnOperand;
+    type Output;
 
-    fn any(&self) -> Self::ReturnOperand;
+    fn any(&self) -> Self::Output;
 }
 
 pub trait Count {
-    type ReturnOperand;
+    type Output;
 
-    fn count(&self) -> Self::ReturnOperand;
+    fn count(&self) -> Self::Output;
 }
 
 pub trait Maximum {
-    type ReturnOperand;
+    type Output;
 
-    fn max(&self) -> Self::ReturnOperand;
+    fn max(&self) -> Self::Output;
 }
 
 pub trait Mean {
-    type ReturnOperand;
+    type Output;
 
-    fn mean(&self) -> Self::ReturnOperand;
+    fn mean(&self) -> Self::Output;
 }
 
 pub trait Median {
-    type ReturnOperand;
+    type Output;
 
-    fn median(&self) -> Self::ReturnOperand;
+    fn median(&self) -> Self::Output;
 }
 
 pub trait Minimum {
-    type ReturnOperand;
+    type Output;
 
-    fn min(&self) -> Self::ReturnOperand;
+    fn min(&self) -> Self::Output;
 }
 
 pub trait Mode {
-    type ReturnOperand;
+    type Output;
 
-    fn mode(&self) -> Self::ReturnOperand;
+    fn mode(&self) -> Self::Output;
 }
 
 pub trait UniqueCount {
-    type ReturnOperand;
+    type Output;
 
-    fn n_unique(&self) -> Self::ReturnOperand;
+    fn n_unique(&self) -> Self::Output;
 }
 
 pub trait Product {
-    type ReturnOperand;
+    type Output;
 
-    fn product(&self) -> Self::ReturnOperand;
+    fn product(&self) -> Self::Output;
 }
 
 pub trait Random {
-    type ReturnOperand;
+    type Output;
 
-    fn random(&self) -> Self::ReturnOperand;
+    fn random(&self) -> Self::Output;
 }
 
 pub trait StandardDeviation {
-    type ReturnOperand;
+    type Output;
 
-    fn std(&self) -> Self::ReturnOperand;
+    fn std(&self) -> Self::Output;
 }
 
 pub trait Sum {
-    type ReturnOperand;
+    type Output;
 
-    fn sum(&self) -> Self::ReturnOperand;
+    fn sum(&self) -> Self::Output;
 }
 
 pub trait Variance {
-    type ReturnOperand;
+    type Output;
 
-    fn var(&self) -> Self::ReturnOperand;
+    fn var(&self) -> Self::Output;
 }

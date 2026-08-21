@@ -1,47 +1,49 @@
 use crate::{
-    ValueDomain,
+    Expression, ValueDomain,
     cast::CastTarget,
     operations::{Apply, TransitionOperation},
 };
 
 pub trait Cast<T: CastTarget> {
-    type ReturnOperand;
+    type Output;
 
-    fn cast(&self, target: T) -> Self::ReturnOperand;
+    fn cast(&self, target: T) -> Self::Output;
 }
 
 pub trait DiscardIndex {
-    type ReturnOperand;
+    type Output;
 
-    fn discard_index(&self) -> Self::ReturnOperand;
+    fn discard_index(&self) -> Self::Output;
 }
 
 pub trait DiscardValue {
-    type ReturnOperand;
+    type Output;
 
-    fn discard_value(&self) -> Self::ReturnOperand;
+    fn discard_value(&self) -> Self::Output;
 }
 
 pub trait Enumerate {
-    type ReturnOperand;
+    type Output;
 
-    fn enumerate(&self) -> Self::ReturnOperand;
+    fn enumerate(&self) -> Self::Output;
 }
 
-pub trait ExpandTo<T> {
-    type ReturnOperand;
+pub trait Inherit<S> {
+    type Output;
 
-    fn expand_to(&self, template: &T) -> Self::ReturnOperand;
+    fn inherit(&self, values: S) -> Self::Output;
 }
 
 pub trait Transition {
-    type ReturnOperand<T>
-    where
-        T: ValueDomain,
-        Self: Apply<TransitionOperation<T>>;
+    type Expression: Expression;
 
-    fn transition<T>(&self) -> Self::ReturnOperand<T>
+    type Output<T>
     where
         T: ValueDomain,
-        Self: Apply<TransitionOperation<T>>;
+        Self::Expression: Apply<TransitionOperation<T>>;
+
+    fn transition<T>(&self) -> Self::Output<T>
+    where
+        T: ValueDomain,
+        Self::Expression: Apply<TransitionOperation<T>>;
 }

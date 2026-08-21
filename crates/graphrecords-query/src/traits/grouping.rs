@@ -1,43 +1,43 @@
 use crate::IndexDomain;
 
 pub trait GroupBy<K> {
-    type ReturnOperand;
+    type Output;
 
-    fn group_by(&self, key: K) -> Self::ReturnOperand;
+    fn group_by(&self, key: K) -> Self::Output;
 }
 
 pub trait Having<P> {
-    type ReturnOperand;
+    type Output;
 
-    fn having(&self, predicate: P) -> Self::ReturnOperand;
+    fn having(&self, predicate: P) -> Self::Output;
 }
 
 pub trait Broadcast {
-    type ReturnOperand;
+    type Output;
 
-    fn broadcast(&self) -> Self::ReturnOperand;
+    fn broadcast(&self) -> Self::Output;
 }
 
 pub trait BroadcastVia<I: IndexDomain, A> {
-    type ReturnOperand;
+    type Output;
 
-    fn broadcast_via(&self, via: A) -> Self::ReturnOperand;
+    fn broadcast_via(&self, via: A) -> Self::Output;
 }
 
 pub trait Keys {
-    type ReturnOperand;
+    type Output;
 
-    fn keys(&self) -> Self::ReturnOperand;
+    fn keys(&self) -> Self::Output;
 }
 
 pub trait Ungroup {
-    type ReturnOperand;
+    type Output;
 
-    fn ungroup(&self) -> Self::ReturnOperand;
+    fn ungroup(&self) -> Self::Output;
 }
 
 pub trait UngroupKeyed {
-    type ReturnOperand;
+    type Output;
 
-    fn ungroup_keyed(&self) -> Self::ReturnOperand;
+    fn ungroup_keyed(&self) -> Self::Output;
 }

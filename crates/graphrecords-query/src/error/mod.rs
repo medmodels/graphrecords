@@ -11,11 +11,12 @@ pub mod groups;
 pub mod index;
 pub mod numeric;
 pub mod ordering;
+pub mod policy;
 pub mod string;
 pub mod structure;
 
 use crate::{IndexDomain, OwnedIndex};
-use graphrecords_core::errors::GraphRecordError;
+use graphrecords_core::{GraphRecord, errors::GraphRecordError};
 use std::{
     any::{Any, TypeId},
     error::Error,
@@ -99,7 +100,8 @@ pub struct Failure {
 }
 
 impl Failure {
-    pub fn new<D: Diagnostic>(operation: &'static str, cause: D) -> Box<Self> {
+    #[must_use]
+    pub fn new<D: Diagnostic>(cause: D, operation: &'static str) -> Box<Self> {
         Box::new(Self {
             operation,
             element: None,
@@ -108,23 +110,43 @@ impl Failure {
         })
     }
 
+    #[must_use]
     pub fn new_at<I: IndexDomain, D: Diagnostic>(
-        operation: &'static str,
         cause: D,
         index: &I::Index<'_>,
+        operation: &'static str,
     ) -> Box<Self> {
         Box::new(Self {
             operation,
-            element: Some(Arc::new(I::to_owned(index))),
+            element: Some(Arc::new(I::own_index(index))),
             kind: FailureKind::of::<D>(),
             cause: Arc::new(cause),
         })
     }
 
     #[must_use]
+    pub fn new_at_address<I: IndexDomain, D: Diagnostic>(
+        cause: D,
+        graphrecord: &GraphRecord,
+        address: &I::Address,
+        operation: &'static str,
+    ) -> Box<Self> {
+        Self::new_at::<I, _>(cause, &I::index(graphrecord, address), operation)
+    }
+
+    #[must_use]
     pub fn at<I: IndexDomain>(mut self: Box<Self>, index: &I::Index<'_>) -> Box<Self> {
-        self.element = Some(Arc::new(I::to_owned(index)));
+        self.element = Some(Arc::new(I::own_index(index)));
         self
+    }
+
+    #[must_use]
+    pub fn at_address<I: IndexDomain>(
+        self: Box<Self>,
+        graphrecord: &GraphRecord,
+        address: &I::Address,
+    ) -> Box<Self> {
+        self.at::<I>(&I::index(graphrecord, address))
     }
 
     #[must_use]
@@ -171,6 +193,10 @@ impl Failure {
         loop {
             if let Some(cause) = current.downcast_ref() {
                 return Some(cause);
+            }
+
+            if let Some(bundle) = current.downcast_ref::<policy::RaisedFailures>() {
+                return bundle.failures().iter().find_map(Self::downcast_cause::<T>);
             }
 
             current = current.source()?;
@@ -241,6 +267,14 @@ impl<E: Error + Send + Sync + 'static> Diagnostic for External<E> {
     }
 }
 
+impl From<Box<Failure>> for GraphRecordError {
+    fn from(failure: Box<Failure>) -> Self {
+        Self::QueryFailure {
+            cause: Arc::new(*failure),
+        }
+    }
+}
+
 impl Diagnostic for GraphRecordError {
     fn name() -> &'static str {
         "GraphRecordError"
@@ -248,7 +282,7 @@ impl Diagnostic for GraphRecordError {
 
     fn help(&self) -> Option<String> {
         match self {
-            Self::IncompatibleValueOperands { .. } | Self::IncompatibleAttributeOperands { .. } => {
+            Self::IncompatibleValueOperands { .. } | Self::IncompatibleIdentifierOperands { .. } => {
                 Some(
                     "narrow the values down first using is_string(), is_int(), is_float(), is_bool(), is_datetime() or is_duration()"
                         .to_string(),

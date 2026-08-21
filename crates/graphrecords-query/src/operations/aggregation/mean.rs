@@ -1,74 +1,63 @@
 use crate::{
-    Bare, BareValueDomain, EvaluateOperand, Explain, Failure, IndexDomain, Indexed, Labeled,
-    Multiple, Operand, OrderState, QueryResult, Single,
+    Bare, BareValueDomain, EvaluateExpression, Explain, Failure, IndexDomain, Indexed, Labeled,
+    Multiple, OrderState, QueryResult, Single,
     capabilities::ValueScalar,
-    execution::EvaluationCache,
-    operands::OperandHandle,
-    operations::{
-        Apply, BareStream, KeyedStream, LaneKernel, Operation, OperationContext, Prepare,
-    },
+    expressions::ExpressionHandle,
+    operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
     traits::Mean,
 };
-use graphrecords_core::{GraphRecord, graphrecord::GraphRecordValue};
+use graphrecords_core::{GraphRecord, graphrecord::Value};
 use std::ops::{Add, Div};
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Lane)]
 #[explain(label = "Mean")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct MeanOperation;
 
-impl Prepare for MeanOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<I, V, O> LaneKernel<Indexed<I, V>, Multiple<O>> for MeanOperation
-where
-    I: IndexDomain,
-    V: ValueScalar + BareValueDomain,
-    O: OrderState,
+impl<I: IndexDomain, V: ValueScalar + BareValueDomain, O: OrderState>
+    LaneKernel<Indexed<I, V>, Multiple<O>> for MeanOperation
 {
-    type Output = OperandHandle<Bare<V>, Single>;
+    type Output = ExpressionHandle<Bare<V>, Single>;
 
     fn execute<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         mut values: KeyedStream<'a, I, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let mean = values
             .try_fold(
                 (None, 0_i64, None),
-                |(sum, count, role): (Option<GraphRecordValue>, _, _), (index, value)| {
+                |(sum, count, original): (Option<Value>, _, _), (address, value)| {
                     let value = value?;
-                    let role = role.or_else(|| Some(value.clone()));
-                    let value = V::into_scalar(Self::LABEL, value)
-                        .map_err(|failure| failure.at::<I>(&index))?;
+                    let original = original.or_else(|| Some(value.clone()));
+                    let value = V::into_scalar(value, Self::LABEL)
+                        .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
                     let sum = match sum {
-                        Some(sum) => sum
-                            .add(value)
-                            .map_err(|error| Failure::new_at::<I, _>(Self::LABEL, error, &index))?,
+                        Some(sum) => sum.add(value).map_err(|error| {
+                            Failure::new_at_address::<I, _>(
+                                error,
+                                graphrecord,
+                                &address,
+                                Self::LABEL,
+                            )
+                        })?,
                         None => value,
                     };
 
-                    Ok((Some(sum), count + 1, role))
+                    Ok((Some(sum), count + 1, original))
                 },
             )
-            .and_then(|(sum, count, role)| {
-                sum.zip(role)
-                    .map(|(sum, role)| {
-                        sum.div(GraphRecordValue::Int(count))
-                            .map(|value| V::from_scalar(&role, value))
-                            .map_err(|error| Failure::new(Self::LABEL, error))
+            .and_then(|(sum, count, original)| {
+                sum.zip(original)
+                    .map(|(sum, original)| {
+                        sum.div(Value::Int(count))
+                            .map(|value| V::from_scalar(&original, value))
+                            .map_err(|error| Failure::new(error, Self::LABEL))
                     })
                     .transpose()
             });
@@ -81,41 +70,39 @@ where
     }
 }
 
-impl<V, O> LaneKernel<Bare<V>, Multiple<O>> for MeanOperation
-where
-    V: ValueScalar + BareValueDomain,
-    O: OrderState,
+impl<V: ValueScalar + BareValueDomain, O: OrderState> LaneKernel<Bare<V>, Multiple<O>>
+    for MeanOperation
 {
-    type Output = OperandHandle<Bare<V>, Single>;
+    type Output = ExpressionHandle<Bare<V>, Single>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
         mut values: BareStream<'a, V, Multiple<O>>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         let mean = values
             .try_fold(
                 (None, 0_i64, None),
-                |(sum, count, role): (Option<GraphRecordValue>, _, _), value| {
+                |(sum, count, original): (Option<Value>, _, _), value| {
                     let value = value?;
-                    let role = role.or_else(|| Some(value.clone()));
-                    let value = V::into_scalar(Self::LABEL, value)?;
+                    let original = original.or_else(|| Some(value.clone()));
+                    let value = V::into_scalar(value, Self::LABEL)?;
                     let sum = match sum {
                         Some(sum) => sum
                             .add(value)
-                            .map_err(|error| Failure::new(Self::LABEL, error))?,
+                            .map_err(|error| Failure::new(error, Self::LABEL))?,
                         None => value,
                     };
 
-                    Ok((Some(sum), count + 1, role))
+                    Ok((Some(sum), count + 1, original))
                 },
             )
-            .and_then(|(sum, count, role)| {
-                sum.zip(role)
-                    .map(|(sum, role)| {
-                        sum.div(GraphRecordValue::Int(count))
-                            .map(|value| V::from_scalar(&role, value))
-                            .map_err(|error| Failure::new(Self::LABEL, error))
+            .and_then(|(sum, count, original)| {
+                sum.zip(original)
+                    .map(|(sum, original)| {
+                        sum.div(Value::Int(count))
+                            .map(|value| V::from_scalar(&original, value))
+                            .map_err(|error| Failure::new(error, Self::LABEL))
                     })
                     .transpose()
             });
@@ -128,11 +115,11 @@ where
     }
 }
 
-impl<O: Apply<MeanOperation>> Mean for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<MeanOperation>> Mean for E {
+    type Output = E::Output;
 
-    fn mean(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), MeanOperation))
+    fn mean(&self) -> Self::Output {
+        self.build(MeanOperation)
     }
 }
 
@@ -148,7 +135,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Indexed<I, V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Single>;
+            output: ExpressionHandle<Bare<V>, Single>;
         }
 
         kernel {
@@ -157,7 +144,7 @@ operation_manifest! {
                 O: OrderState,
             >;
             input: (Bare<V>, Multiple<O>);
-            output: OperandHandle<Bare<V>, Single>;
+            output: ExpressionHandle<Bare<V>, Single>;
         }
     }
 }

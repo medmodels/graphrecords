@@ -1,33 +1,22 @@
 use crate::{
-    AttributeName, EntityReference, ExpandedChild, ExpandedIndex, Explain, IndexDomain, Indexed,
-    Operand, QueryResult, Unit, Unordered,
+    EntityRef, EntityReference, ExpandedChild, ExpandedIndex, Explain, IndexDomain, Indexed,
+    QueryResult, Unit, Unordered,
     element::{Expanding, Pipeline},
-    execution::EvaluationCache,
     index::EntityAttributes,
-    operations::{Apply, ElementKernel, ElementPipeline, Operation, OperationContext, Prepare},
+    operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
     optimizer::{OperationInputs, OptimizerHints, PlanIdentity, PlanInputs},
     registry::operation_manifest,
     traits::Attributes,
 };
-use graphrecords_core::GraphRecord;
+use graphrecords_core::{GraphRecord, graphrecord::AttributeName};
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "Attributes")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct AttributesOperation;
-
-impl Prepare for AttributesOperation {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
 
 impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributesOperation {
     type Emission = Expanding<Unordered>;
@@ -37,14 +26,22 @@ impl<I: EntityAttributes> ElementKernel<Indexed<I, Unit>> for AttributesOperatio
         graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Unit>, Self>> {
-        Ok(Pipeline::keyed(move |parent_index, ()| {
-            let attributes = I::attributes(graphrecord, &parent_index).expect("Entity must exist");
+        Ok(Pipeline::keyed(move |element_address, ()| {
+            let children = I::attribute_addresses(graphrecord)
+                .filter(|&attribute_address| {
+                    I::attribute(graphrecord, &element_address, attribute_address).is_some()
+                })
+                .map(|attribute_address| {
+                    let attribute_name = I::attribute_name(graphrecord, attribute_address);
 
-            Ok(attributes
-                .keys()
-                .cloned()
-                .map(|attribute| ExpandedChild::success(attribute.clone(), attribute))
-                .collect())
+                    ExpandedChild::success(
+                        AttributeName::from(attribute_name.clone()),
+                        attribute_name,
+                    )
+                })
+                .collect();
+
+            Ok(children)
         }))
     }
 }
@@ -59,23 +56,31 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
         graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<E>>, Self>> {
-        Ok(Pipeline::unkeyed(move |entity| {
-            let attributes = E::attributes(graphrecord, &entity).expect("Entity must exist");
+        Ok(Pipeline::unkeyed(move |entity: EntityRef<'a, E>| {
+            let children = E::attribute_addresses(graphrecord)
+                .filter(|&attribute_address| {
+                    E::attribute(graphrecord, entity.address(), attribute_address).is_some()
+                })
+                .map(|attribute_address| {
+                    let attribute_name = E::attribute_name(graphrecord, attribute_address);
 
-            Ok(attributes
-                .keys()
-                .cloned()
-                .map(|attribute| ExpandedChild::success(attribute.clone(), attribute))
-                .collect())
+                    ExpandedChild::success(
+                        AttributeName::from(attribute_name.clone()),
+                        attribute_name,
+                    )
+                })
+                .collect();
+
+            Ok(children)
         }))
     }
 }
 
-impl<O: Apply<AttributesOperation>> Attributes for O {
-    type ReturnOperand = O::Output;
+impl<E: Build<AttributesOperation>> Attributes for E {
+    type Output = E::Output;
 
-    fn attributes(&self) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(self.clone(), AttributesOperation))
+    fn attributes(&self) -> Self::Output {
+        self.build(AttributesOperation)
     }
 }
 

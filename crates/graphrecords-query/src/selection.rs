@@ -1,350 +1,865 @@
 use crate::{
-    Arity, EvaluateOperand, Explanation, IndexDomain, NodesOperand, Operand, QueryResult,
-    ReturnShape, Unordered,
-    execution::EvaluationCache,
-    index::GroupKey,
-    operands::{
-        AllEdges, AllNodes, EdgesOperand, GroupOperand, OperandHandle, Partition, ReturnPartition,
-    },
-    optimizer::{OptimizationReport, Optimizer, Stats},
+    Bare, Definite, Failure, IndexDomain, IndexValue, Indexed, Mask, Multiple, OrderState,
+    Queryable, Series, Single, Unit,
+    error::{index::UncoveredIndices, policy::RaisedFailures},
+    expressions::ExpressionHandle,
+    operations::{Keyed, WithMissing, policy::Drop},
 };
-use graphrecords_core::GraphRecord;
-use std::fmt::{self, Display, Formatter};
+use graphrecords_core::{
+    GraphRecord, StateView,
+    errors::{GraphRecordError, GraphRecordResult},
+    graphrecord::{
+        EdgeIndex, EntityDomain, GroupIndex, MultipleSelection, NodeIndex, SingleSelection,
+    },
+};
+use graphrecords_utils::{aliases::GrHashMap, distinct::Distinct};
+use std::hash::Hash;
 
-pub trait ReturnOperand<'a>: Clone {
-    type ReturnValue;
+pub const LABEL: &str = "Selection";
 
-    fn evaluate(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::ReturnValue>;
+impl<E, O> MultipleSelection<E> for ExpressionHandle<Indexed<E, Unit>, Multiple<O>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|elements| {
+            let mut collected = Vec::new();
+            let mut raised = Vec::new();
 
-    #[allow(unused_variables)]
-    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport)
-    where
-        Self: Sized,
-    {
-        (self, OptimizationReport::default())
-    }
-
-    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result;
-}
-
-pub trait IntoReturn: Operand {
-    type Return<'a>: 'a
-    where
-        Self: 'a;
-
-    fn into_return<'a>(values: Self::ReturnValue<'a>) -> Self::Return<'a>
-    where
-        Self: 'a;
-}
-
-impl<S: ReturnShape, C: Arity> IntoReturn for OperandHandle<S, C> {
-    type Return<'a>
-        = C::Container<'a, S::ReturnElement<'a>>
-    where
-        Self: 'a;
-
-    fn into_return<'a>(values: Self::ReturnValue<'a>) -> Self::Return<'a>
-    where
-        Self: 'a,
-    {
-        C::map_elements(values, S::into_return_element)
-    }
-}
-
-impl<M: IndexDomain, K: GroupKey, O: IntoReturn> IntoReturn for GroupOperand<M, K, O> {
-    type Return<'a>
-        = ReturnPartition<'a, M, K, O::Return<'a>>
-    where
-        Self: 'a;
-
-    fn into_return<'a>(values: Partition<'a, M, K, O>) -> Self::Return<'a>
-    where
-        Self: 'a,
-    {
-        values.into_return_partition(|payload| payload.map(O::into_return))
-    }
-}
-
-impl<'a, S: ReturnShape, C: Arity> ReturnOperand<'a> for OperandHandle<S, C> {
-    type ReturnValue = <Self as IntoReturn>::Return<'a>;
-
-    fn evaluate(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::ReturnValue> {
-        let values = EvaluateOperand::evaluate(self, graphrecord, cache)?;
-
-        Ok(Self::into_return(values))
-    }
-
-    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
-        optimizer.run_reported(stats, &self)
-    }
-
-    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}", Explanation::new(self))
-    }
-}
-
-impl<'a, M: IndexDomain, K: GroupKey, O: IntoReturn> ReturnOperand<'a> for GroupOperand<M, K, O> {
-    type ReturnValue = <Self as IntoReturn>::Return<'a>;
-
-    fn evaluate(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::ReturnValue> {
-        let values = EvaluateOperand::evaluate(self, graphrecord, cache)?;
-
-        Ok(Self::into_return(values))
-    }
-
-    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
-        optimizer.run_reported(stats, &self)
-    }
-
-    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}", Explanation::new(self))
-    }
-}
-
-macro_rules! impl_return_operand_for_tuples {
-    ($($T:ident),+) => {
-        impl<'a, $($T: ReturnOperand<'a>),+> ReturnOperand<'a> for ($($T,)+) {
-            type ReturnValue = ($($T::ReturnValue,)+);
-
-            #[allow(non_snake_case)]
-            fn evaluate(&'a self, graphrecord: &'a GraphRecord, cache: &'a EvaluationCache<'a>) -> QueryResult<Self::ReturnValue> {
-                let ($($T,)+) = self;
-
-                $(let $T = $T.evaluate(graphrecord, cache)?;)+
-
-                Ok(($($T,)+))
+            for outcome in elements {
+                match outcome {
+                    Ok(index) => collected.push(index),
+                    Err(failure) => raised.push(*failure),
+                }
             }
 
-            #[allow(non_snake_case)]
-            fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
-                let ($($T,)+) = self;
-
-                let mut report = OptimizationReport::default();
-                $(
-                    let ($T, sub_report) = $T.optimize(optimizer, stats);
-                    report.phases.extend(sub_report.phases);
-                )+
-
-                (($($T,)+), report)
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
             }
 
-            #[allow(non_snake_case)]
-            fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-                let ($($T,)+) = self;
+            Ok(collected)
+        });
 
-                let mut index = 0;
-                $(
-                    if index > 0 {
-                        writeln!(formatter)?;
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> MultipleSelection<E> for ExpressionHandle<Indexed<E, Unit>, Single>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|element| match element {
+            Some(Ok(index)) => Ok(vec![index]),
+            Some(Err(failure)) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+            None => Ok(Vec::new()),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for ExpressionHandle<Indexed<E, Unit>, Single> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<E, O> MultipleSelection<E> for Series<ExpressionHandle<Indexed<E, Unit>, Multiple<O>>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    O: OrderState,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|elements| {
+            let mut collected = Vec::new();
+            let mut raised = Vec::new();
+
+            for outcome in elements {
+                match outcome {
+                    Ok(index) => collected.push(index),
+                    Err(failure) => raised.push(*failure),
+                }
+            }
+
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
+
+            Ok(collected)
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> MultipleSelection<E> for Series<ExpressionHandle<Indexed<E, Unit>, Single>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|element| match element {
+            Some(Ok(index)) => Ok(vec![index]),
+            Some(Err(failure)) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+            None => Ok(Vec::new()),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for Series<ExpressionHandle<Indexed<E, Unit>, Single>> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<E> MultipleSelection<E> for ExpressionHandle<Indexed<E, Unit>, Definite>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|element| match element {
+            Ok(index) => Ok(vec![index]),
+            Err(failure) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for ExpressionHandle<Indexed<E, Unit>, Definite> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<E> MultipleSelection<E> for Series<ExpressionHandle<Indexed<E, Unit>, Definite>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|element| match element {
+            Ok(index) => Ok(vec![index]),
+            Err(failure) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for Series<ExpressionHandle<Indexed<E, Unit>, Definite>> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<O: OrderState> MultipleSelection<NodeIndex>
+    for ExpressionHandle<Indexed<NodeIndex, Mask>, Multiple<O>>
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<NodeIndex>> {
+        graphrecord.query(self).resolve(graphrecord)
+    }
+}
+
+impl<O: OrderState> MultipleSelection<EdgeIndex>
+    for ExpressionHandle<Indexed<EdgeIndex, Mask>, Multiple<O>>
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<EdgeIndex>> {
+        graphrecord.query(self).resolve(graphrecord)
+    }
+}
+
+impl<O: OrderState> MultipleSelection<GroupIndex>
+    for ExpressionHandle<Indexed<GroupIndex, Mask>, Multiple<O>>
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<GroupIndex>> {
+        graphrecord.query(self).resolve(graphrecord)
+    }
+}
+
+impl<E> MultipleSelection<E> for ExpressionHandle<Indexed<E, Mask>, Single>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|element| match element {
+            Some((index, Ok(true))) => Ok(vec![E::own_index(&index)]),
+            Some((_, Ok(false))) | None => Ok(Vec::new()),
+            Some((_, Err(failure))) => {
+                Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL))
+            }
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for ExpressionHandle<Indexed<E, Mask>, Single> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<O: OrderState> MultipleSelection<NodeIndex>
+    for Series<ExpressionHandle<Indexed<NodeIndex, Mask>, Multiple<O>>>
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<NodeIndex>> {
+        let selected = self.evaluate().and_then(|elements| {
+            let mut values: GrHashMap<_, _> = GrHashMap::default();
+            let mut raised = Vec::new();
+
+            for (index, outcome) in elements {
+                match outcome {
+                    Ok(value) => {
+                        values.insert(NodeIndex::own_index(&index), value);
                     }
-                    writeln!(formatter, "[{index}]")?;
-                    $T.fmt_plan(formatter)?;
-                    index += 1;
-                )+
-                let _ = index;
-
-                Ok(())
+                    Err(failure) => raised.push(*failure),
+                }
             }
-        }
-    };
-}
 
-impl_return_operand_for_tuples!(R1);
-impl_return_operand_for_tuples!(R1, R2);
-impl_return_operand_for_tuples!(R1, R2, R3);
-impl_return_operand_for_tuples!(R1, R2, R3, R4);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13);
-impl_return_operand_for_tuples!(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14);
-impl_return_operand_for_tuples!(
-    R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15
-);
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
 
-pub struct Selection<'a, R: ReturnOperand<'a>> {
-    graphrecord: &'a GraphRecord,
-    cache: EvaluationCache<'a>,
-    unoptimized_return_operand: R,
-    optimized_return_operand: R,
-    report: OptimizationReport,
-}
+            let state_view = StateView::of(graphrecord);
+            let mut collected = Vec::new();
+            let mut uncovered = Vec::new();
 
-impl<'a, R: ReturnOperand<'a>> Selection<'a, R> {
-    pub fn new_node<Q>(graphrecord: &'a GraphRecord, query: Q) -> Self
-    where
-        Q: FnOnce(&NodesOperand<Unordered>) -> R,
-    {
-        Self::new_node_with(graphrecord, Optimizer::shared_builtin(), query)
-    }
+            for address in state_view.node_addresses() {
+                let index = NodeIndex::own_index(&state_view.node_index(address));
 
-    pub fn new_node_with<Q>(graphrecord: &'a GraphRecord, optimizer: &Optimizer, query: Q) -> Self
-    where
-        Q: FnOnce(&NodesOperand<Unordered>) -> R,
-    {
-        let operand = NodesOperand::new(AllNodes);
-        let unoptimized_return_operand = query(&operand);
-        let (optimized_return_operand, report) =
-            Self::optimize(unoptimized_return_operand.clone(), optimizer, graphrecord);
+                match values.get(&index).copied() {
+                    Some(true) => collected.push(index),
+                    Some(false) => {}
+                    None => uncovered.push(index),
+                }
+            }
 
-        Self {
-            graphrecord,
-            cache: EvaluationCache::new(graphrecord),
-            unoptimized_return_operand,
-            optimized_return_operand,
-            report,
-        }
-    }
+            if !uncovered.is_empty() {
+                return Err(Failure::new(
+                    UncoveredIndices::<NodeIndex>::new(uncovered),
+                    LABEL,
+                ));
+            }
 
-    pub fn new_edge<Q>(graphrecord: &'a GraphRecord, query: Q) -> Self
-    where
-        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
-    {
-        Self::new_edge_with(graphrecord, Optimizer::shared_builtin(), query)
-    }
+            Ok(collected)
+        });
 
-    pub fn new_edge_with<Q>(graphrecord: &'a GraphRecord, optimizer: &Optimizer, query: Q) -> Self
-    where
-        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
-    {
-        let operand = EdgesOperand::new(AllEdges);
-        let unoptimized_return_operand = query(&operand);
-        let (optimized_return_operand, report) =
-            Self::optimize(unoptimized_return_operand.clone(), optimizer, graphrecord);
-
-        Self {
-            graphrecord,
-            cache: EvaluationCache::new(graphrecord),
-            unoptimized_return_operand,
-            optimized_return_operand,
-            report,
-        }
-    }
-
-    fn optimize(
-        return_operand: R,
-        optimizer: &Optimizer,
-        graphrecord: &GraphRecord,
-    ) -> (R, OptimizationReport) {
-        if optimizer.is_empty() {
-            return (return_operand, OptimizationReport::default());
-        }
-
-        let stats = Stats::new(graphrecord);
-
-        return_operand.optimize(optimizer, &stats)
-    }
-
-    pub fn evaluate(&'a self) -> QueryResult<R::ReturnValue> {
-        self.optimized_return_operand
-            .evaluate(self.graphrecord, &self.cache)
-    }
-
-    pub const fn explain(&'a self) -> QueryExplanation<'a, R> {
-        QueryExplanation {
-            operand: &self.optimized_return_operand,
-            report: Some(&self.report),
-        }
-    }
-
-    pub const fn explain_unoptimized(&'a self) -> QueryExplanation<'a, R> {
-        QueryExplanation {
-            operand: &self.unoptimized_return_operand,
-            report: None,
-        }
+        selected.map_err(GraphRecordError::from)
     }
 }
 
-pub struct QueryExplanation<'a, R> {
-    operand: &'a R,
-    report: Option<&'a OptimizationReport>,
-}
+impl<O: OrderState> MultipleSelection<EdgeIndex>
+    for Series<ExpressionHandle<Indexed<EdgeIndex, Mask>, Multiple<O>>>
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<EdgeIndex>> {
+        let selected = self.evaluate().and_then(|elements| {
+            let mut values: GrHashMap<_, _> = GrHashMap::default();
+            let mut raised = Vec::new();
 
-impl<'a, R: ReturnOperand<'a>> Display for QueryExplanation<'a, R> {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        self.operand.fmt_plan(formatter)?;
+            for (index, outcome) in elements {
+                match outcome {
+                    Ok(value) => {
+                        values.insert(EdgeIndex::own_index(&index), value);
+                    }
+                    Err(failure) => raised.push(*failure),
+                }
+            }
 
-        if let Some(report) = self.report.filter(|report| !report.phases.is_empty()) {
-            write!(formatter, "\n\noptimization:\n{}", report.display())?;
-        }
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
 
-        Ok(())
+            let state_view = StateView::of(graphrecord);
+            let mut collected = Vec::new();
+            let mut uncovered = Vec::new();
+
+            for address in state_view.edge_addresses() {
+                let index = state_view.edge_index(address);
+
+                match values.get(&index).copied() {
+                    Some(true) => collected.push(index),
+                    Some(false) => {}
+                    None => uncovered.push(index),
+                }
+            }
+
+            if !uncovered.is_empty() {
+                return Err(Failure::new(
+                    UncoveredIndices::<EdgeIndex>::new(uncovered),
+                    LABEL,
+                ));
+            }
+
+            Ok(collected)
+        });
+
+        selected.map_err(GraphRecordError::from)
     }
 }
 
-pub trait QueryNodes {
-    fn query_nodes<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&NodesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>;
+impl<O: OrderState> MultipleSelection<GroupIndex>
+    for Series<ExpressionHandle<Indexed<GroupIndex, Mask>, Multiple<O>>>
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<GroupIndex>> {
+        let selected = self.evaluate().and_then(|elements| {
+            let mut values: GrHashMap<_, _> = GrHashMap::default();
+            let mut raised = Vec::new();
 
-    fn query_nodes_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&NodesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>;
+            for (index, outcome) in elements {
+                match outcome {
+                    Ok(value) => {
+                        values.insert(GroupIndex::own_index(&index), value);
+                    }
+                    Err(failure) => raised.push(*failure),
+                }
+            }
+
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
+
+            let state_view = StateView::of(graphrecord);
+            let mut collected = Vec::new();
+            let mut uncovered = Vec::new();
+
+            for address in state_view.group_addresses() {
+                let index = state_view.group_index(address).clone();
+
+                match values.get(&index).copied() {
+                    Some(true) => collected.push(index),
+                    Some(false) => {}
+                    None => uncovered.push(index),
+                }
+            }
+
+            if !uncovered.is_empty() {
+                return Err(Failure::new(
+                    UncoveredIndices::<GroupIndex>::new(uncovered),
+                    LABEL,
+                ));
+            }
+
+            Ok(collected)
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
 }
 
-impl QueryNodes for GraphRecord {
-    fn query_nodes<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&NodesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>,
-    {
-        Selection::new_node(self, query)
-    }
+impl<E> MultipleSelection<E> for Series<ExpressionHandle<Indexed<E, Mask>, Single>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|element| match element {
+            Some((index, Ok(true))) => Ok(vec![E::own_index(&index)]),
+            Some((_, Ok(false))) | None => Ok(Vec::new()),
+            Some((_, Err(failure))) => {
+                Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL))
+            }
+        });
 
-    fn query_nodes_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&NodesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>,
-    {
-        Selection::new_node_with(self, optimizer, query)
+        selected.map_err(GraphRecordError::from)
     }
 }
 
-pub trait QueryEdges {
-    fn query_edges<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>;
-
-    fn query_edges_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>;
+impl<E> SingleSelection<E> for Series<ExpressionHandle<Indexed<E, Mask>, Single>> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
 }
 
-impl QueryEdges for GraphRecord {
-    fn query_edges<'a, Q, R>(&'a self, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>,
-    {
-        Selection::new_edge(self, query)
-    }
+impl<E> MultipleSelection<E> for ExpressionHandle<Indexed<E, Mask>, Definite>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|element| match element {
+            (index, Ok(true)) => Ok(vec![E::own_index(&index)]),
+            (_, Ok(false)) => Ok(Vec::new()),
+            (_, Err(failure)) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+        });
 
-    fn query_edges_with<'a, Q, R>(&'a self, optimizer: &Optimizer, query: Q) -> Selection<'a, R>
-    where
-        Q: FnOnce(&EdgesOperand<Unordered>) -> R,
-        R: ReturnOperand<'a>,
-    {
-        Selection::new_edge_with(self, optimizer, query)
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for ExpressionHandle<Indexed<E, Mask>, Definite> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<E> MultipleSelection<E> for Series<ExpressionHandle<Indexed<E, Mask>, Definite>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|element| match element {
+            (index, Ok(true)) => Ok(vec![E::own_index(&index)]),
+            (_, Ok(false)) => Ok(Vec::new()),
+            (_, Err(failure)) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for Series<ExpressionHandle<Indexed<E, Mask>, Definite>> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<E, I, O> MultipleSelection<E> for ExpressionHandle<Indexed<I, IndexValue<E>>, Multiple<O>>
+where
+    E: EntityDomain + IndexDomain<Owned = E> + Eq + Hash,
+    I: IndexDomain,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|elements| {
+            let mut collected = Vec::new();
+            let mut raised = Vec::new();
+
+            for (_, outcome) in elements {
+                match outcome {
+                    Ok(index) => collected.push(E::own_index(&index)),
+                    Err(failure) => raised.push(*failure),
+                }
+            }
+
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
+
+            let collected: Vec<_> = collected.into_iter().collect::<Distinct<_>>().into();
+
+            Ok(collected)
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E, I> MultipleSelection<E> for ExpressionHandle<Indexed<I, IndexValue<E>>, Single>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    I: IndexDomain,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|element| match element {
+            Some((_, Ok(index))) => Ok(vec![E::own_index(&index)]),
+            Some((_, Err(failure))) => {
+                Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL))
+            }
+            None => Ok(Vec::new()),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E, I> SingleSelection<E> for ExpressionHandle<Indexed<I, IndexValue<E>>, Single>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    I: IndexDomain,
+{
+}
+
+impl<E, I, O> MultipleSelection<E>
+    for Series<ExpressionHandle<Indexed<I, IndexValue<E>>, Multiple<O>>>
+where
+    E: EntityDomain + IndexDomain<Owned = E> + Eq + Hash,
+    I: IndexDomain,
+    O: OrderState,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|elements| {
+            let mut collected = Vec::new();
+            let mut raised = Vec::new();
+
+            for (_, outcome) in elements {
+                match outcome {
+                    Ok(index) => collected.push(E::own_index(&index)),
+                    Err(failure) => raised.push(*failure),
+                }
+            }
+
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
+
+            let collected: Vec<_> = collected.into_iter().collect::<Distinct<_>>().into();
+
+            Ok(collected)
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E, I> MultipleSelection<E> for Series<ExpressionHandle<Indexed<I, IndexValue<E>>, Single>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    I: IndexDomain,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|element| match element {
+            Some((_, Ok(index))) => Ok(vec![E::own_index(&index)]),
+            Some((_, Err(failure))) => {
+                Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL))
+            }
+            None => Ok(Vec::new()),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E, I> SingleSelection<E> for Series<ExpressionHandle<Indexed<I, IndexValue<E>>, Single>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    I: IndexDomain,
+{
+}
+
+impl<E, I> MultipleSelection<E> for ExpressionHandle<Indexed<I, IndexValue<E>>, Definite>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    I: IndexDomain,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|element| match element.1 {
+            Ok(index) => Ok(vec![E::own_index(&index)]),
+            Err(failure) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E, I> SingleSelection<E> for ExpressionHandle<Indexed<I, IndexValue<E>>, Definite>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    I: IndexDomain,
+{
+}
+
+impl<E, I> MultipleSelection<E> for Series<ExpressionHandle<Indexed<I, IndexValue<E>>, Definite>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    I: IndexDomain,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|element| match element.1 {
+            Ok(index) => Ok(vec![E::own_index(&index)]),
+            Err(failure) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E, I> SingleSelection<E> for Series<ExpressionHandle<Indexed<I, IndexValue<E>>, Definite>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    I: IndexDomain,
+{
+}
+
+impl<E, O> MultipleSelection<E> for ExpressionHandle<Bare<IndexValue<E>>, Multiple<O>>
+where
+    E: EntityDomain + IndexDomain<Owned = E> + Eq + Hash,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|elements| {
+            let mut collected = Vec::new();
+            let mut raised = Vec::new();
+
+            for outcome in elements {
+                match outcome {
+                    Ok(index) => collected.push(E::own_index(&index)),
+                    Err(failure) => raised.push(*failure),
+                }
+            }
+
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
+
+            let collected: Vec<_> = collected.into_iter().collect::<Distinct<_>>().into();
+
+            Ok(collected)
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> MultipleSelection<E> for ExpressionHandle<Bare<IndexValue<E>>, Single>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|element| match element {
+            Some(Ok(index)) => Ok(vec![E::own_index(&index)]),
+            Some(Err(failure)) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+            None => Ok(Vec::new()),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for ExpressionHandle<Bare<IndexValue<E>>, Single> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<E, O> MultipleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Multiple<O>>>
+where
+    E: EntityDomain + IndexDomain<Owned = E> + Eq + Hash,
+    O: OrderState,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|elements| {
+            let mut collected = Vec::new();
+            let mut raised = Vec::new();
+
+            for outcome in elements {
+                match outcome {
+                    Ok(index) => collected.push(E::own_index(&index)),
+                    Err(failure) => raised.push(*failure),
+                }
+            }
+
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
+
+            let collected: Vec<_> = collected.into_iter().collect::<Distinct<_>>().into();
+
+            Ok(collected)
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> MultipleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Single>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|element| match element {
+            Some(Ok(index)) => Ok(vec![E::own_index(&index)]),
+            Some(Err(failure)) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+            None => Ok(Vec::new()),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Single>> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<E> MultipleSelection<E> for ExpressionHandle<Bare<IndexValue<E>>, Definite>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|element| match element {
+            Ok(index) => Ok(vec![E::own_index(&index)]),
+            Err(failure) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for ExpressionHandle<Bare<IndexValue<E>>, Definite> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<E> MultipleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Definite>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|element| match element {
+            Ok(index) => Ok(vec![E::own_index(&index)]),
+            Err(failure) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Definite>> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
+impl<E, O> MultipleSelection<E>
+    for WithMissing<Keyed<E>, ExpressionHandle<Indexed<E, Unit>, Multiple<O>>, Drop>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        WithMissing::new(graphrecord.query(self.into_inner()), Drop).resolve(graphrecord)
+    }
+}
+
+impl<E, O> MultipleSelection<E>
+    for WithMissing<Keyed<E>, ExpressionHandle<Indexed<E, Mask>, Multiple<O>>, Drop>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        WithMissing::new(graphrecord.query(self.into_inner()), Drop).resolve(graphrecord)
+    }
+}
+
+impl<E, I, O> MultipleSelection<E>
+    for WithMissing<Keyed<I>, ExpressionHandle<Indexed<I, IndexValue<E>>, Multiple<O>>, Drop>
+where
+    E: EntityDomain + IndexDomain<Owned = E> + Eq + Hash,
+    I: IndexDomain,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        WithMissing::new(graphrecord.query(self.into_inner()), Drop).resolve(graphrecord)
+    }
+}
+
+impl<E, O> MultipleSelection<E>
+    for WithMissing<Keyed<E>, Series<ExpressionHandle<Indexed<E, Unit>, Multiple<O>>>, Drop>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = self.into_inner();
+        let selected = series.evaluate().and_then(|elements| {
+            let mut collected = Vec::new();
+            let mut raised = Vec::new();
+
+            for outcome in elements {
+                match outcome {
+                    Ok(index) => collected.push(index),
+                    Err(failure) => raised.push(*failure),
+                }
+            }
+
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
+
+            Ok(collected)
+        });
+
+        selected
+            .map(|selected| {
+                selected
+                    .into_iter()
+                    .filter(|index| E::contains(graphrecord, index))
+                    .collect()
+            })
+            .map_err(GraphRecordError::from)
+    }
+}
+
+impl<E, O> MultipleSelection<E>
+    for WithMissing<Keyed<E>, Series<ExpressionHandle<Indexed<E, Mask>, Multiple<O>>>, Drop>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = self.into_inner();
+        let selected = series.evaluate().and_then(|elements| {
+            let mut collected = Vec::new();
+            let mut raised = Vec::new();
+
+            for (index, outcome) in elements {
+                match outcome {
+                    Ok(true) => collected.push(E::own_index(&index)),
+                    Ok(false) => {}
+                    Err(failure) => raised.push(*failure),
+                }
+            }
+
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
+
+            Ok(collected)
+        });
+
+        selected
+            .map(|selected| {
+                selected
+                    .into_iter()
+                    .filter(|index| E::contains(graphrecord, index))
+                    .collect()
+            })
+            .map_err(GraphRecordError::from)
+    }
+}
+
+impl<E, I, O> MultipleSelection<E>
+    for WithMissing<
+        Keyed<I>,
+        Series<ExpressionHandle<Indexed<I, IndexValue<E>>, Multiple<O>>>,
+        Drop,
+    >
+where
+    E: EntityDomain + IndexDomain<Owned = E> + Eq + Hash,
+    I: IndexDomain,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = self.into_inner();
+        let selected = series.evaluate().and_then(|elements| {
+            let mut collected = Vec::new();
+            let mut raised = Vec::new();
+
+            for (_, outcome) in elements {
+                match outcome {
+                    Ok(index) => collected.push(E::own_index(&index)),
+                    Err(failure) => raised.push(*failure),
+                }
+            }
+
+            if !raised.is_empty() {
+                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
+            }
+
+            Ok(collected)
+        });
+
+        selected
+            .map(|selected| {
+                selected
+                    .into_iter()
+                    .filter(|index| E::contains(graphrecord, index))
+                    .collect::<Distinct<_>>()
+                    .into()
+            })
+            .map_err(GraphRecordError::from)
     }
 }

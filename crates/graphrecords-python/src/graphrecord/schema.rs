@@ -1,23 +1,29 @@
 use super::{
-    PyAttributes, PyGraphRecord, PyGroup, PyNodeIndex,
-    attribute::PyGraphRecordAttribute,
+    PyAttributeName, PyAttributes, PyGraphRecord, PyGroupIndex, PyNodeIndex,
     datatype::PyDataType,
+    edge_index::PyEdgeIndex,
     errors::PyGraphRecordError,
     traits::{DeepFrom, DeepInto},
 };
 use graphrecords_core::{
     errors::SchemaError,
     graphrecord::{
-        EdgeIndex, Group,
-        schema::{AttributeDataType, AttributeType, GroupSchema, Schema, SchemaType},
+        AttributeName,
+        datatypes::DataType,
+        schema::{
+            AttributeDataType, AttributeSchema, AttributeType, GroupSchema, Schema, SchemaType,
+        },
     },
 };
-use parking_lot::RwLock;
-use pyo3::prelude::*;
-use std::collections::HashMap;
+use pyo3::{
+    exceptions::PyTypeError,
+    prelude::*,
+    types::{PyBytes, PyBytesMethods, PyTuple},
+};
+use std::{collections::HashMap, hash::BuildHasher};
 
-#[pyclass(frozen, eq, eq_int)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[pyclass(frozen, eq, eq_int, hash, module = "graphrecords._graphrecords.schema")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PyAttributeType {
     Categorical = 0,
     Continuous = 1,
@@ -55,7 +61,7 @@ impl PyAttributeType {
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "graphrecords._graphrecords.schema")]
 #[derive(Debug, Clone)]
 pub struct PyAttributeDataType {
     data_type: PyDataType,
@@ -85,15 +91,30 @@ impl DeepFrom<AttributeDataType> for PyAttributeDataType {
     }
 }
 
+impl<H: BuildHasher + Default> DeepFrom<&AttributeSchema>
+    for HashMap<PyAttributeName, PyAttributeDataType, H>
+{
+    fn deep_from(value: &AttributeSchema) -> Self {
+        let mapping: &HashMap<AttributeName, AttributeDataType> = value;
+
+        mapping.deep_into()
+    }
+}
+
 #[pymethods]
 impl PyAttributeDataType {
     #[new]
-    #[pyo3(signature = (data_type, attribute_type))]
-    pub const fn new(data_type: PyDataType, attribute_type: PyAttributeType) -> Self {
-        Self {
-            data_type,
-            attribute_type,
-        }
+    #[pyo3(signature = (data_type, attribute_type=None))]
+    pub fn new(data_type: PyDataType, attribute_type: Option<PyAttributeType>) -> PyResult<Self> {
+        let data_type = DataType::from(data_type);
+
+        let attribute_data_type = match attribute_type {
+            Some(attribute_type) => AttributeDataType::new(data_type, attribute_type.into())
+                .map_err(PyGraphRecordError::from)?,
+            None => AttributeDataType::from(data_type),
+        };
+
+        Ok(attribute_data_type.into())
     }
 
     #[getter]
@@ -102,14 +123,40 @@ impl PyAttributeDataType {
     }
 
     #[getter]
-    pub fn attribute_type(&self) -> PyAttributeType {
-        self.attribute_type.clone()
+    pub const fn attribute_type(&self) -> PyAttributeType {
+        self.attribute_type
+    }
+
+    #[staticmethod]
+    pub fn _from_bytes(data: &Bound<'_, PyBytes>) -> PyResult<Self> {
+        let attribute_data_type: AttributeDataType = bincode::deserialize(data.as_bytes())
+            .map_err(|_| {
+                PyGraphRecordError::Conversion(
+                    "Failed to deserialize AttributeDataType".to_string(),
+                )
+            })?;
+
+        Ok(attribute_data_type.into())
+    }
+
+    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
+        let attribute_data_type = AttributeDataType::from((
+            DataType::from(self.data_type.clone()),
+            AttributeType::from(self.attribute_type),
+        ));
+        let bytes = bincode::serialize(&attribute_data_type).map_err(|_| {
+            PyGraphRecordError::Conversion("Failed to serialize AttributeDataType".to_string())
+        })?;
+        let constructor = py.get_type::<Self>().getattr("_from_bytes")?.unbind();
+        let arguments = (PyBytes::new(py, &bytes),).into_pyobject(py)?;
+
+        Ok((constructor, arguments))
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, eq, module = "graphrecords._graphrecords.schema")]
 #[repr(transparent)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PyGroupSchema(GroupSchema);
 
 impl From<GroupSchema> for PyGroupSchema {
@@ -140,18 +187,22 @@ impl DeepFrom<PyGroupSchema> for GroupSchema {
 impl PyGroupSchema {
     #[new]
     pub fn new(
-        nodes: HashMap<PyGraphRecordAttribute, PyAttributeDataType>,
-        edges: HashMap<PyGraphRecordAttribute, PyAttributeDataType>,
+        nodes: HashMap<PyAttributeName, PyAttributeDataType>,
+        edges: HashMap<PyAttributeName, PyAttributeDataType>,
     ) -> PyResult<Self> {
         let nodes = nodes
             .into_iter()
-            .map(|(k, v)| Ok((k.into(), v.try_into()?)))
+            .map(|(attribute_name, attribute_data_type)| {
+                Ok((attribute_name.into(), attribute_data_type.try_into()?))
+            })
             .collect::<Result<HashMap<_, _>, SchemaError>>()
             .map_err(PyGraphRecordError::from)?
             .into();
         let edges = edges
             .into_iter()
-            .map(|(k, v)| Ok((k.into(), v.try_into()?)))
+            .map(|(attribute_name, attribute_data_type)| {
+                Ok((attribute_name.into(), attribute_data_type.try_into()?))
+            })
             .collect::<Result<HashMap<_, _>, SchemaError>>()
             .map_err(PyGraphRecordError::from)?
             .into();
@@ -160,32 +211,59 @@ impl PyGroupSchema {
     }
 
     #[getter]
-    pub fn nodes(&self) -> HashMap<PyGraphRecordAttribute, PyAttributeDataType> {
-        self.0.nodes().clone().deep_into()
+    pub fn nodes(&self) -> HashMap<PyAttributeName, PyAttributeDataType> {
+        self.0.nodes().deep_into()
     }
 
     #[getter]
-    pub fn edges(&self) -> HashMap<PyGraphRecordAttribute, PyAttributeDataType> {
-        self.0.edges().clone().deep_into()
+    pub fn edges(&self) -> HashMap<PyAttributeName, PyAttributeDataType> {
+        self.0.edges().deep_into()
     }
 
-    pub fn validate_node(&self, index: PyNodeIndex, attributes: PyAttributes) -> PyResult<()> {
+    pub fn validate_node(&self, node_index: PyNodeIndex, attributes: PyAttributes) -> PyResult<()> {
         Ok(self
             .0
-            .validate_node(&index.into(), &attributes.deep_into())
+            .validate_node(&node_index.into(), &attributes.deep_into())
             .map_err(PyGraphRecordError::from)?)
     }
 
-    pub fn validate_edge(&self, index: EdgeIndex, attributes: PyAttributes) -> PyResult<()> {
+    pub fn validate_edge(&self, edge_index: PyEdgeIndex, attributes: PyAttributes) -> PyResult<()> {
         Ok(self
             .0
-            .validate_edge(&index, &attributes.deep_into())
+            .validate_edge(&edge_index, &attributes.deep_into())
             .map_err(PyGraphRecordError::from)?)
+    }
+
+    #[staticmethod]
+    pub fn _from_bytes(data: &Bound<'_, PyBytes>) -> PyResult<Self> {
+        let group_schema: GroupSchema = bincode::deserialize(data.as_bytes()).map_err(|_| {
+            PyGraphRecordError::Conversion("Failed to deserialize GroupSchema".to_string())
+        })?;
+
+        Ok(Self(group_schema))
+    }
+
+    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
+        let bytes = bincode::serialize(&self.0).map_err(|_| {
+            PyGraphRecordError::Conversion("Failed to serialize GroupSchema".to_string())
+        })?;
+        let constructor = py.get_type::<Self>().getattr("_from_bytes")?.unbind();
+        let arguments = (PyBytes::new(py, &bytes),).into_pyobject(py)?;
+
+        Ok((constructor, arguments))
+    }
+
+    pub fn __hash__(&self) -> PyResult<isize> {
+        Err(PyTypeError::new_err("unhashable type: 'GroupSchema'"))
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }
 
-#[pyclass(frozen, eq, eq_int)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[pyclass(frozen, eq, eq_int, hash, module = "graphrecords._graphrecords.schema")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PySchemaType {
     Provided = 0,
     Inferred = 1,
@@ -209,26 +287,20 @@ impl From<PySchemaType> for SchemaType {
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, eq, module = "graphrecords._graphrecords.schema")]
 #[repr(transparent)]
-#[derive(Debug)]
-pub struct PySchema(RwLock<Schema>);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PySchema(Schema);
 
 impl From<Schema> for PySchema {
     fn from(value: Schema) -> Self {
-        Self(RwLock::new(value))
+        Self(value)
     }
 }
 
 impl From<PySchema> for Schema {
     fn from(value: PySchema) -> Self {
-        value.0.into_inner()
-    }
-}
-
-impl Clone for PySchema {
-    fn clone(&self) -> Self {
-        Self(RwLock::new(self.0.read().clone()))
+        value.0
     }
 }
 
@@ -237,7 +309,7 @@ impl PySchema {
     #[new]
     #[pyo3(signature = (groups, ungrouped, schema_type=PySchemaType::Provided))]
     pub fn new(
-        groups: HashMap<PyGroup, PyGroupSchema>,
+        groups: HashMap<PyGroupIndex, PyGroupSchema>,
         ungrouped: PyGroupSchema,
         schema_type: PySchemaType,
     ) -> Self {
@@ -252,191 +324,243 @@ impl PySchema {
     }
 
     #[staticmethod]
-    pub fn infer(graphrecord: Bound<'_, PyGraphRecord>) -> PyResult<Self> {
-        let graphrecord = graphrecord.get();
-
-        Ok(Schema::infer(&*graphrecord.inner()?).into())
+    pub fn infer(graphrecord: &PyGraphRecord) -> Self {
+        Schema::infer(graphrecord.record()).into()
     }
 
     #[getter]
-    pub fn groups(&self) -> Vec<PyGroup> {
-        self.0
-            .read()
-            .groups()
-            .keys()
-            .cloned()
-            .collect::<Vec<Group>>()
-            .deep_into()
+    pub fn groups(&self) -> HashMap<PyGroupIndex, PyGroupSchema> {
+        self.0.groups().deep_into()
     }
 
-    pub fn group(&self, group: PyGroup) -> PyResult<PyGroupSchema> {
+    pub fn group(&self, group_index: PyGroupIndex) -> PyResult<PyGroupSchema> {
         Ok(self
             .0
-            .read()
-            .group(&group.into())
-            .map(|g| g.clone().into())
+            .group(&group_index.into())
+            .map(|group_schema| group_schema.clone().into())
             .map_err(PyGraphRecordError::from)?)
     }
 
     #[getter]
     pub fn ungrouped(&self) -> PyGroupSchema {
-        self.0.read().ungrouped().clone().into()
+        self.0.ungrouped().clone().into()
     }
 
     #[getter]
     pub fn schema_type(&self) -> PySchemaType {
-        self.0.read().schema_type().clone().into()
+        self.0.schema_type().clone().into()
     }
 
-    #[pyo3(signature = (index, attributes, group=None))]
+    #[pyo3(signature = (node_index, attributes, group_index=None))]
     pub fn validate_node(
         &self,
-        index: PyNodeIndex,
+        node_index: PyNodeIndex,
         attributes: PyAttributes,
-        group: Option<PyGroup>,
+        group_index: Option<PyGroupIndex>,
     ) -> PyResult<()> {
         Ok(self
             .0
-            .read()
             .validate_node(
-                &index.into(),
+                &node_index.into(),
                 &attributes.deep_into(),
-                group.map(std::convert::Into::into).as_ref(),
+                group_index.map(Into::into).as_ref(),
             )
             .map_err(PyGraphRecordError::from)?)
     }
 
-    #[pyo3(signature = (index, attributes, group=None))]
+    #[pyo3(signature = (edge_index, attributes, group_index=None))]
     pub fn validate_edge(
         &self,
-        index: EdgeIndex,
+        edge_index: PyEdgeIndex,
         attributes: PyAttributes,
-        group: Option<PyGroup>,
+        group_index: Option<PyGroupIndex>,
     ) -> PyResult<()> {
         Ok(self
             .0
-            .read()
             .validate_edge(
-                &index,
+                &edge_index,
                 &attributes.deep_into(),
-                group.map(std::convert::Into::into).as_ref(),
+                group_index.map(Into::into).as_ref(),
             )
             .map_err(PyGraphRecordError::from)?)
     }
 
-    #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
+    #[pyo3(signature = (attribute_name, data_type, attribute_type, group_index=None))]
     pub fn set_node_attribute(
         &self,
-        attribute: PyGraphRecordAttribute,
+        attribute_name: PyAttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
-        group: Option<PyGroup>,
-    ) -> PyResult<()> {
-        Ok(self
-            .0
-            .write()
+        group_index: Option<PyGroupIndex>,
+    ) -> PyResult<Self> {
+        let mut schema = self.0.clone();
+
+        schema
             .set_node_attribute(
-                &attribute.into(),
+                &attribute_name.into(),
                 data_type.into(),
                 attribute_type.into(),
-                group.map(std::convert::Into::into).as_ref(),
+                group_index.map(Into::into).as_ref(),
             )
-            .map_err(PyGraphRecordError::from)?)
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(schema.into())
     }
 
-    #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
+    #[pyo3(signature = (attribute_name, data_type, attribute_type, group_index=None))]
     pub fn set_edge_attribute(
         &self,
-        attribute: PyGraphRecordAttribute,
+        attribute_name: PyAttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
-        group: Option<PyGroup>,
-    ) -> PyResult<()> {
-        Ok(self
-            .0
-            .write()
+        group_index: Option<PyGroupIndex>,
+    ) -> PyResult<Self> {
+        let mut schema = self.0.clone();
+
+        schema
             .set_edge_attribute(
-                &attribute.into(),
+                &attribute_name.into(),
                 data_type.into(),
                 attribute_type.into(),
-                group.map(std::convert::Into::into).as_ref(),
+                group_index.map(Into::into).as_ref(),
             )
-            .map_err(PyGraphRecordError::from)?)
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(schema.into())
     }
 
-    #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
+    #[pyo3(signature = (attribute_name, data_type, attribute_type, group_index=None))]
     pub fn update_node_attribute(
         &self,
-        attribute: PyGraphRecordAttribute,
+        attribute_name: PyAttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
-        group: Option<PyGroup>,
-    ) -> PyResult<()> {
-        Ok(self
-            .0
-            .write()
+        group_index: Option<PyGroupIndex>,
+    ) -> PyResult<Self> {
+        let mut schema = self.0.clone();
+
+        schema
             .update_node_attribute(
-                &attribute.into(),
+                &attribute_name.into(),
                 data_type.into(),
                 attribute_type.into(),
-                group.map(std::convert::Into::into).as_ref(),
+                group_index.map(Into::into).as_ref(),
             )
-            .map_err(PyGraphRecordError::from)?)
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(schema.into())
     }
 
-    #[pyo3(signature = (attribute, data_type, attribute_type, group=None))]
+    #[pyo3(signature = (attribute_name, data_type, attribute_type, group_index=None))]
     pub fn update_edge_attribute(
         &self,
-        attribute: PyGraphRecordAttribute,
+        attribute_name: PyAttributeName,
         data_type: PyDataType,
         attribute_type: PyAttributeType,
-        group: Option<PyGroup>,
-    ) -> PyResult<()> {
-        Ok(self
-            .0
-            .write()
+        group_index: Option<PyGroupIndex>,
+    ) -> PyResult<Self> {
+        let mut schema = self.0.clone();
+
+        schema
             .update_edge_attribute(
-                &attribute.into(),
+                &attribute_name.into(),
                 data_type.into(),
                 attribute_type.into(),
-                group.map(std::convert::Into::into).as_ref(),
+                group_index.map(Into::into).as_ref(),
             )
-            .map_err(PyGraphRecordError::from)?)
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(schema.into())
     }
 
-    #[pyo3(signature = (attribute, group=None))]
-    pub fn remove_node_attribute(&self, attribute: PyGraphRecordAttribute, group: Option<PyGroup>) {
-        self.0.write().remove_node_attribute(
-            &attribute.into(),
-            group.map(std::convert::Into::into).as_ref(),
-        );
+    #[pyo3(signature = (attribute_name, group_index=None))]
+    pub fn remove_node_attribute(
+        &self,
+        attribute_name: PyAttributeName,
+        group_index: Option<PyGroupIndex>,
+    ) -> Self {
+        let mut schema = self.0.clone();
+
+        schema.remove_node_attribute(&attribute_name.into(), group_index.map(Into::into).as_ref());
+
+        schema.into()
     }
 
-    #[pyo3(signature = (attribute, group=None))]
-    pub fn remove_edge_attribute(&self, attribute: PyGraphRecordAttribute, group: Option<PyGroup>) {
-        self.0.write().remove_edge_attribute(
-            &attribute.into(),
-            group.map(std::convert::Into::into).as_ref(),
-        );
+    #[pyo3(signature = (attribute_name, group_index=None))]
+    pub fn remove_edge_attribute(
+        &self,
+        attribute_name: PyAttributeName,
+        group_index: Option<PyGroupIndex>,
+    ) -> Self {
+        let mut schema = self.0.clone();
+
+        schema.remove_edge_attribute(&attribute_name.into(), group_index.map(Into::into).as_ref());
+
+        schema.into()
     }
 
-    pub fn add_group(&self, group: PyGroup, schema: PyGroupSchema) -> PyResult<()> {
-        Ok(self
-            .0
-            .write()
-            .add_group(group.into(), schema.into())
-            .map_err(PyGraphRecordError::from)?)
+    pub fn add_group(
+        &self,
+        group_index: PyGroupIndex,
+        group_schema: PyGroupSchema,
+    ) -> PyResult<Self> {
+        let mut schema = self.0.clone();
+
+        schema
+            .add_group(group_index.into(), group_schema.into())
+            .map_err(PyGraphRecordError::from)?;
+
+        Ok(schema.into())
     }
 
-    pub fn remove_group(&self, group: PyGroup) {
-        self.0.write().remove_group(&group.into());
+    pub fn remove_group(&self, group_index: PyGroupIndex) -> Self {
+        let mut schema = self.0.clone();
+
+        schema.remove_group(&group_index.into());
+
+        schema.into()
     }
 
-    pub fn freeze(&self) {
-        self.0.write().freeze();
+    pub fn freeze(&self) -> Self {
+        let mut schema = self.0.clone();
+
+        schema.freeze();
+
+        schema.into()
     }
 
-    pub fn unfreeze(&self) {
-        self.0.write().unfreeze();
+    pub fn unfreeze(&self) -> Self {
+        let mut schema = self.0.clone();
+
+        schema.unfreeze();
+
+        schema.into()
+    }
+
+    #[staticmethod]
+    pub fn _from_bytes(data: &Bound<'_, PyBytes>) -> PyResult<Self> {
+        let schema: Schema = bincode::deserialize(data.as_bytes()).map_err(|_| {
+            PyGraphRecordError::Conversion("Failed to deserialize Schema".to_string())
+        })?;
+
+        Ok(Self(schema))
+    }
+
+    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
+        let bytes = bincode::serialize(&self.0).map_err(|_| {
+            PyGraphRecordError::Conversion("Failed to serialize Schema".to_string())
+        })?;
+        let constructor = py.get_type::<Self>().getattr("_from_bytes")?.unbind();
+        let arguments = (PyBytes::new(py, &bytes),).into_pyobject(py)?;
+
+        Ok((constructor, arguments))
+    }
+
+    pub fn __hash__(&self) -> PyResult<isize> {
+        Err(PyTypeError::new_err("unhashable type: 'Schema'"))
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }

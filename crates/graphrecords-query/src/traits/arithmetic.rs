@@ -1,35 +1,35 @@
 pub trait Add<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn add(&self, argument: A) -> Self::ReturnOperand;
+    fn add(&self, argument: A) -> Self::Output;
 }
 
 pub trait Subtract<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn subtract(&self, argument: A) -> Self::ReturnOperand;
+    fn subtract(&self, argument: A) -> Self::Output;
 }
 
 pub trait Multiply<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn multiply(&self, argument: A) -> Self::ReturnOperand;
+    fn multiply(&self, argument: A) -> Self::Output;
 }
 
 pub trait Divide<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn divide(&self, argument: A) -> Self::ReturnOperand;
+    fn divide(&self, argument: A) -> Self::Output;
 }
 
 pub trait Power<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn power(&self, argument: A) -> Self::ReturnOperand;
+    fn power(&self, argument: A) -> Self::Output;
 }
 
 pub trait Modulo<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn modulo(&self, argument: A) -> Self::ReturnOperand;
+    fn modulo(&self, argument: A) -> Self::Output;
 }

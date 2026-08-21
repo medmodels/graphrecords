@@ -1,11 +1,9 @@
 use super::{arithmetic_bare, arithmetic_indexed};
 use crate::{
-    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, Operand, QueryResult,
+    Bare, BareValueDomain, Explain, IndexDomain, Indexed, Labeled, QueryResult,
     capabilities::ValueAdd,
-    execution::EvaluationCache,
     operations::{
-        Apply, ArgumentSource, ElementKernel, ElementPipeline, Keyed, Operation, OperationContext,
-        Prepare, Unaligned,
+        ArgumentSource, Build, ElementKernel, ElementPipeline, Keyed, Operation, Prepare, Unaligned,
     },
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::{describe::ArgumentRetention, operation_manifest},
@@ -13,7 +11,9 @@ use crate::{
 };
 use graphrecords_core::GraphRecord;
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Element)]
 #[explain(label = "Add")]
 #[plan(optimizer_hints(empty = if_all))]
@@ -22,35 +22,22 @@ pub struct AddOperation<A> {
     argument: A,
 }
 
-impl<A: Prepare> Prepare for AddOperation<A> {
-    type Prepared<'a>
-        = A::Prepared<'a>
-    where
-        Self: 'a;
-
-    fn prepare<'a>(
-        &'a self,
-        graphrecord: &'a GraphRecord,
-        cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        self.argument.prepare(graphrecord, cache)
-    }
-}
-
-impl<I, V, A> ElementKernel<Indexed<I, V>> for AddOperation<A>
-where
-    I: IndexDomain,
-    V: ValueAdd,
-    A: ArgumentSource<Keyed<I>, V>,
+impl<I: IndexDomain, V: ValueAdd, A: ArgumentSource<Keyed<I>, V>> ElementKernel<Indexed<I, V>>
+    for AddOperation<A>
 {
     type Emission = A::Retention;
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(arithmetic_indexed::<_, V, A>(prepared, Self::LABEL, V::add))
+        Ok(arithmetic_indexed::<_, V, A>(
+            graphrecord,
+            prepared,
+            V::add,
+            Self::LABEL,
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -58,19 +45,22 @@ where
     }
 }
 
-impl<V, A> ElementKernel<Bare<V>> for AddOperation<A>
-where
-    V: ValueAdd + BareValueDomain,
-    A: ArgumentSource<Unaligned, V>,
+impl<V: ValueAdd + BareValueDomain, A: ArgumentSource<Unaligned, V>> ElementKernel<Bare<V>>
+    for AddOperation<A>
 {
     type Emission = A::Retention;
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
-        _graphrecord: &'a GraphRecord,
+        graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(arithmetic_bare::<V, A>(prepared, Self::LABEL, V::add))
+        Ok(arithmetic_bare::<V, A>(
+            graphrecord,
+            prepared,
+            V::add,
+            Self::LABEL,
+        ))
     }
 
     fn estimate(&self, input: Estimate, _stats: &Stats) -> Estimate {
@@ -78,18 +68,15 @@ where
     }
 }
 
-impl<O, A> Add<A> for O
+impl<E, A> Add<A> for E
 where
     AddOperation<A>: Operation,
-    O: Apply<AddOperation<A>>,
+    E: Build<AddOperation<A>>,
 {
-    type ReturnOperand = O::Output;
+    type Output = E::Output;
 
-    fn add(&self, argument: A) -> Self::ReturnOperand {
-        Self::ReturnOperand::new(OperationContext::new(
-            self.clone(),
-            AddOperation { argument },
-        ))
+    fn add(&self, argument: A) -> Self::Output {
+        self.build(AddOperation { argument })
     }
 }
 

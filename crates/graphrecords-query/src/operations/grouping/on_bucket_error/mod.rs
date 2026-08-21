@@ -2,7 +2,7 @@ pub(super) mod drop;
 pub(super) mod raise;
 
 use crate::{
-    Diagnostic, ErrorGroup, Operand,
+    Diagnostic, ErrorGroup, Expression, Series,
     traits::{OnBucketError, OnBucketErrorIn, OnBucketErrorOf, OnBucketErrorWithCause},
 };
 pub use drop::{
@@ -13,80 +13,152 @@ pub use raise::{
 };
 use std::error::Error;
 
-pub trait BucketErrorPolicy<I: Operand>: Clone + 'static {
-    type Output: Operand;
+pub trait BucketErrorPolicy<E: Expression>: Clone + 'static {
+    type Output: Expression;
 
-    fn build(&self, input: I) -> Self::Output;
+    fn build(&self, input: E) -> Self::Output;
 }
 
-pub trait BucketErrorPolicyOf<I: Operand, D: Diagnostic>: Clone + 'static {
-    type Output: Operand;
+pub trait BucketErrorPolicyOf<E: Expression, D: Diagnostic>: Clone + 'static {
+    type Output: Expression;
 
-    fn build(&self, input: I) -> Self::Output;
+    fn build(&self, input: E) -> Self::Output;
 }
 
-pub trait BucketErrorPolicyIn<I: Operand, G: ErrorGroup>: Clone + 'static {
-    type Output: Operand;
+pub trait BucketErrorPolicyIn<E: Expression, G: ErrorGroup>: Clone + 'static {
+    type Output: Expression;
 
-    fn build(&self, input: I) -> Self::Output;
+    fn build(&self, input: E) -> Self::Output;
 }
 
-pub trait BucketErrorPolicyWithCause<I: Operand, C: Error + 'static>: Clone + 'static {
-    type Output: Operand;
+pub trait BucketErrorPolicyWithCause<E: Expression, C: Error + 'static>: Clone + 'static {
+    type Output: Expression;
 
-    fn build(&self, input: I) -> Self::Output;
+    fn build(&self, input: E) -> Self::Output;
 }
 
-impl<O: Operand> OnBucketError for O {
-    fn on_bucket_error<A: BucketErrorPolicy<Self>>(&self, policy: A) -> A::Output {
+impl<E: Expression> OnBucketError for E {
+    type Expression = E;
+    type Output<A>
+        = A::Output
+    where
+        A: BucketErrorPolicy<E>;
+
+    fn on_bucket_error<A: BucketErrorPolicy<E>>(&self, policy: A) -> Self::Output<A> {
         A::build(&policy, self.clone())
     }
 }
 
-impl<O: Operand, A> OnBucketErrorOf<A> for O {
-    type ReturnOperand<D>
+impl<E: Expression> OnBucketError for Series<E> {
+    type Expression = E;
+    type Output<A>
+        = Series<A::Output>
+    where
+        A: BucketErrorPolicy<E>;
+
+    fn on_bucket_error<A: BucketErrorPolicy<E>>(&self, policy: A) -> Self::Output<A> {
+        self.bind(self.expression().on_bucket_error(policy))
+    }
+}
+
+impl<E: Expression, A> OnBucketErrorOf<A> for E {
+    type Expression = E;
+    type Output<D>
         = A::Output
     where
         D: Diagnostic,
-        A: BucketErrorPolicyOf<Self, D>;
+        A: BucketErrorPolicyOf<E, D>;
 
-    fn on_bucket_error_of<D>(&self, policy: A) -> Self::ReturnOperand<D>
+    fn on_bucket_error_of<D>(&self, policy: A) -> Self::Output<D>
     where
         D: Diagnostic,
-        A: BucketErrorPolicyOf<Self, D>,
+        A: BucketErrorPolicyOf<E, D>,
     {
         A::build(&policy, self.clone())
     }
 }
 
-impl<O: Operand, A> OnBucketErrorIn<A> for O {
-    type ReturnOperand<G>
+impl<E: Expression, A> OnBucketErrorOf<A> for Series<E> {
+    type Expression = E;
+    type Output<D>
+        = Series<A::Output>
+    where
+        D: Diagnostic,
+        A: BucketErrorPolicyOf<E, D>;
+
+    fn on_bucket_error_of<D>(&self, policy: A) -> Self::Output<D>
+    where
+        D: Diagnostic,
+        A: BucketErrorPolicyOf<E, D>,
+    {
+        self.bind(self.expression().on_bucket_error_of(policy))
+    }
+}
+
+impl<E: Expression, A> OnBucketErrorIn<A> for E {
+    type Expression = E;
+    type Output<G>
         = A::Output
     where
         G: ErrorGroup,
-        A: BucketErrorPolicyIn<Self, G>;
+        A: BucketErrorPolicyIn<E, G>;
 
-    fn on_bucket_error_in<G>(&self, policy: A) -> Self::ReturnOperand<G>
+    fn on_bucket_error_in<G>(&self, policy: A) -> Self::Output<G>
     where
         G: ErrorGroup,
-        A: BucketErrorPolicyIn<Self, G>,
+        A: BucketErrorPolicyIn<E, G>,
     {
         A::build(&policy, self.clone())
     }
 }
 
-impl<O: Operand, A> OnBucketErrorWithCause<A> for O {
-    type ReturnOperand<C>
+impl<E: Expression, A> OnBucketErrorIn<A> for Series<E> {
+    type Expression = E;
+    type Output<G>
+        = Series<A::Output>
+    where
+        G: ErrorGroup,
+        A: BucketErrorPolicyIn<E, G>;
+
+    fn on_bucket_error_in<G>(&self, policy: A) -> Self::Output<G>
+    where
+        G: ErrorGroup,
+        A: BucketErrorPolicyIn<E, G>,
+    {
+        self.bind(self.expression().on_bucket_error_in(policy))
+    }
+}
+
+impl<E: Expression, A> OnBucketErrorWithCause<A> for E {
+    type Expression = E;
+    type Output<C>
         = A::Output
     where
         C: Error + 'static,
-        A: BucketErrorPolicyWithCause<Self, C>;
+        A: BucketErrorPolicyWithCause<E, C>;
 
-    fn on_bucket_error_with_cause<C>(&self, policy: A) -> Self::ReturnOperand<C>
+    fn on_bucket_error_with_cause<C>(&self, policy: A) -> Self::Output<C>
     where
         C: Error + 'static,
-        A: BucketErrorPolicyWithCause<Self, C>,
+        A: BucketErrorPolicyWithCause<E, C>,
     {
         A::build(&policy, self.clone())
+    }
+}
+
+impl<E: Expression, A> OnBucketErrorWithCause<A> for Series<E> {
+    type Expression = E;
+    type Output<C>
+        = Series<A::Output>
+    where
+        C: Error + 'static,
+        A: BucketErrorPolicyWithCause<E, C>;
+
+    fn on_bucket_error_with_cause<C>(&self, policy: A) -> Self::Output<C>
+    where
+        C: Error + 'static,
+        A: BucketErrorPolicyWithCause<E, C>,
+    {
+        self.bind(self.expression().on_bucket_error_with_cause(policy))
     }
 }

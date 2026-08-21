@@ -1,5 +1,5 @@
 pub trait IsIn<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn is_in(&self, argument: A) -> Self::ReturnOperand;
+    fn is_in(&self, argument: A) -> Self::Output;
 }

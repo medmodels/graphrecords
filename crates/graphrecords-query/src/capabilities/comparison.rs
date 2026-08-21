@@ -1,4 +1,5 @@
-use crate::{AttributeName, FailureKindValue, IndexDomain, IndexValue, Mask, Scalar, ValueDomain};
+use crate::{FailureKindValue, IndexDomain, IndexValue, Mask, Scalar, ValueDomain};
+use graphrecords_core::graphrecord::AttributeName;
 use std::cmp::Ordering;
 
 pub trait ValueEquality: ValueDomain {
@@ -48,7 +49,7 @@ impl<I: IndexDomain> ValueEquality for IndexValue<I> {
 impl<I> ValueOrdering for IndexValue<I>
 where
     I: IndexDomain,
-    I::Owned: PartialOrd,
+    for<'a> I::Index<'a>: PartialOrd,
 {
     fn ordering<'a>(value: &Self::Value<'a>, argument: &Self::Value<'a>) -> Option<Ordering> {
         value.partial_cmp(argument)

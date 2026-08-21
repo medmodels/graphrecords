@@ -1,113 +1,113 @@
 pub trait Trim {
-    type ReturnOperand;
+    type Output;
 
-    fn trim(&self) -> Self::ReturnOperand;
+    fn trim(&self) -> Self::Output;
 }
 
 pub trait TrimStart {
-    type ReturnOperand;
+    type Output;
 
-    fn trim_start(&self) -> Self::ReturnOperand;
+    fn trim_start(&self) -> Self::Output;
 }
 
 pub trait TrimEnd {
-    type ReturnOperand;
+    type Output;
 
-    fn trim_end(&self) -> Self::ReturnOperand;
+    fn trim_end(&self) -> Self::Output;
 }
 
 pub trait Lowercase {
-    type ReturnOperand;
+    type Output;
 
-    fn lowercase(&self) -> Self::ReturnOperand;
+    fn lowercase(&self) -> Self::Output;
 }
 
 pub trait Uppercase {
-    type ReturnOperand;
+    type Output;
 
-    fn uppercase(&self) -> Self::ReturnOperand;
+    fn uppercase(&self) -> Self::Output;
 }
 
 pub trait Slice {
-    type ReturnOperand;
+    type Output;
 
-    fn slice(&self, start: usize, end: usize) -> Self::ReturnOperand;
+    fn slice(&self, start: usize, end: usize) -> Self::Output;
 }
 
 pub trait Split<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn split(&self, delimiter: A) -> Self::ReturnOperand;
+    fn split(&self, delimiter: A) -> Self::Output;
 }
 
 pub trait StartsWith<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn starts_with(&self, argument: A) -> Self::ReturnOperand;
+    fn starts_with(&self, argument: A) -> Self::Output;
 }
 
 pub trait EndsWith<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn ends_with(&self, argument: A) -> Self::ReturnOperand;
+    fn ends_with(&self, argument: A) -> Self::Output;
 }
 
 pub trait Contains<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn contains(&self, argument: A) -> Self::ReturnOperand;
+    fn contains(&self, argument: A) -> Self::Output;
 }
 
 pub trait Replace<A, B> {
-    type ReturnOperand;
+    type Output;
 
-    fn replace(&self, old: A, new: B) -> Self::ReturnOperand;
+    fn replace(&self, old: A, new: B) -> Self::Output;
 }
 
 pub trait ReplaceAll<A, B> {
-    type ReturnOperand;
+    type Output;
 
-    fn replace_all(&self, old: A, new: B) -> Self::ReturnOperand;
+    fn replace_all(&self, old: A, new: B) -> Self::Output;
 }
 
 pub trait Length {
-    type ReturnOperand;
+    type Output;
 
-    fn length(&self) -> Self::ReturnOperand;
+    fn length(&self) -> Self::Output;
 }
 
 pub trait StripPrefix<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn strip_prefix(&self, prefix: A) -> Self::ReturnOperand;
+    fn strip_prefix(&self, prefix: A) -> Self::Output;
 }
 
 pub trait StripSuffix<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn strip_suffix(&self, suffix: A) -> Self::ReturnOperand;
+    fn strip_suffix(&self, suffix: A) -> Self::Output;
 }
 
 pub trait Reverse {
-    type ReturnOperand;
+    type Output;
 
-    fn reverse(&self) -> Self::ReturnOperand;
+    fn reverse(&self) -> Self::Output;
 }
 
-pub trait PadStart<W, C> {
-    type ReturnOperand;
+pub trait PadStart<A> {
+    type Output;
 
-    fn pad_start(&self, width: W, character: C) -> Self::ReturnOperand;
+    fn pad_start(&self, width: usize, character: A) -> Self::Output;
 }
 
-pub trait PadEnd<W, C> {
-    type ReturnOperand;
+pub trait PadEnd<A> {
+    type Output;
 
-    fn pad_end(&self, width: W, character: C) -> Self::ReturnOperand;
+    fn pad_end(&self, width: usize, character: A) -> Self::Output;
 }
 
 pub trait Matches<A> {
-    type ReturnOperand;
+    type Output;
 
-    fn matches(&self, pattern: A) -> Self::ReturnOperand;
+    fn matches(&self, pattern: A) -> Self::Output;
 }

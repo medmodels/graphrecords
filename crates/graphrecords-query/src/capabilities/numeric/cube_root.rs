@@ -1,28 +1,31 @@
 use crate::{
     Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::numeric::NonNumericValue,
 };
-use graphrecords_core::graphrecord::GraphRecordValue;
+use graphrecords_core::graphrecord::{Value, ValueView};
 
 pub trait ValueCubeRoot: ValueDomain {
-    fn cube_root<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>>;
+    fn cube_root<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>>;
 }
 
 impl ValueCubeRoot for Scalar {
-    fn cube_root<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
+    fn cube_root<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>> {
         match value {
-            GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Float((integer as f64).cbrt())),
-            GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(float.cbrt())),
-            value => Err(Failure::new(label, NonNumericValue::new(value))),
+            ValueView::Int(integer) => Ok(ValueView::Float((integer as f64).cbrt())),
+            ValueView::Float(float) => Ok(ValueView::Float(float.cbrt())),
+            value => Err(Failure::new(
+                NonNumericValue::new(Value::from(value)),
+                label,
+            )),
         }
     }
 }
 
-impl ValueCubeRoot for IndexValue<GraphRecordValue> {
-    fn cube_root<'a>(label: &'static str, value: Self::Value<'a>) -> QueryResult<Self::Value<'a>> {
+impl ValueCubeRoot for IndexValue<Value> {
+    fn cube_root<'a>(value: Self::Value<'a>, label: &'static str) -> QueryResult<Self::Value<'a>> {
         match value {
-            GraphRecordValue::Int(integer) => Ok(GraphRecordValue::Float((integer as f64).cbrt())),
-            GraphRecordValue::Float(float) => Ok(GraphRecordValue::Float(float.cbrt())),
-            value => Err(Failure::new(label, NonNumericValue::new(value))),
+            Value::Int(integer) => Ok(Value::Float((integer as f64).cbrt())),
+            Value::Float(float) => Ok(Value::Float(float.cbrt())),
+            value => Err(Failure::new(NonNumericValue::new(value), label)),
         }
     }
 }

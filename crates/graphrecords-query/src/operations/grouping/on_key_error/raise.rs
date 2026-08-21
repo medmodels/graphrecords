@@ -1,10 +1,9 @@
 use super::{KeyErrorPolicy, KeyErrorPolicyIn, KeyErrorPolicyOf, KeyErrorPolicyWithCause};
 use crate::{
-    Diagnostic, ErrorGroup, EvaluateOperand, Explain, IndexDomain, Operand, QueryResult,
-    execution::EvaluationCache,
+    Diagnostic, ErrorGroup, EvaluateExpression, Explain, Expression, IndexDomain, Labeled,
+    QueryResult,
     explain::ExplainFormatter,
-    index::GroupKey,
-    operands::{GroupOperand, KeyFailureChange, Partition},
+    expressions::{GroupedExpression, KeyFailureChange, Partition},
     operations::{Apply, GroupKernel, Operation, OperationContext, Prepare, policy::Raise},
     optimizer::{Estimate, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Stats},
     registry::operation_manifest,
@@ -18,17 +17,23 @@ use std::{
     marker::PhantomData,
 };
 
-#[derive(Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(
+    Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
+)]
 #[operation(scope = Group)]
 #[explain(label = "RaiseKeyErrors")]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseKeyErrors;
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Group)]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseKeyErrorsOf<D: Diagnostic> {
     marker: PhantomData<fn() -> D>,
+}
+
+impl<D: Diagnostic> Labeled for RaiseKeyErrorsOf<D> {
+    const LABEL: &'static str = "RaiseKeyErrorsOf";
 }
 
 impl<D: Diagnostic> RaiseKeyErrorsOf<D> {
@@ -47,15 +52,19 @@ impl<D: Diagnostic> Clone for RaiseKeyErrorsOf<D> {
 
 impl<D: Diagnostic> Explain for RaiseKeyErrorsOf<D> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "RaiseKeyErrorsOf kind={}", D::name())
+        write!(formatter, "{} kind={}", Self::LABEL, D::name())
     }
 }
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Group)]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseKeyErrorsIn<G: ErrorGroup> {
     marker: PhantomData<fn() -> G>,
+}
+
+impl<G: ErrorGroup> Labeled for RaiseKeyErrorsIn<G> {
+    const LABEL: &'static str = "RaiseKeyErrorsIn";
 }
 
 impl<G: ErrorGroup> RaiseKeyErrorsIn<G> {
@@ -74,15 +83,19 @@ impl<G: ErrorGroup> Clone for RaiseKeyErrorsIn<G> {
 
 impl<G: ErrorGroup> Explain for RaiseKeyErrorsIn<G> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(formatter, "RaiseKeyErrorsIn group={}", G::name())
+        write!(formatter, "{} group={}", Self::LABEL, G::name())
     }
 }
 
-#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs)]
+#[derive(Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Group)]
 #[plan(optimizer_hints(empty = if_any))]
 pub struct RaiseKeyErrorsWithCause<E: Error + 'static> {
     marker: PhantomData<fn() -> E>,
+}
+
+impl<E: Error + 'static> Labeled for RaiseKeyErrorsWithCause<E> {
+    const LABEL: &'static str = "RaiseKeyErrorsWithCause";
 }
 
 impl<E: Error + 'static> RaiseKeyErrorsWithCause<E> {
@@ -101,70 +114,18 @@ impl<E: Error + 'static> Clone for RaiseKeyErrorsWithCause<E> {
 
 impl<E: Error + 'static> Explain for RaiseKeyErrorsWithCause<E> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
-        write!(
-            formatter,
-            "RaiseKeyErrorsWithCause cause={}",
-            type_name::<E>()
-        )
+        write!(formatter, "{} cause={}", Self::LABEL, type_name::<E>())
     }
 }
 
-impl Prepare for RaiseKeyErrors {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<D: Diagnostic> Prepare for RaiseKeyErrorsOf<D> {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<G: ErrorGroup> Prepare for RaiseKeyErrorsIn<G> {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<E: Error + 'static> Prepare for RaiseKeyErrorsWithCause<E> {
-    type Prepared<'a> = ();
-
-    fn prepare<'a>(
-        &'a self,
-        _graphrecord: &'a GraphRecord,
-        _cache: &'a EvaluationCache<'a>,
-    ) -> QueryResult<Self::Prepared<'a>> {
-        Ok(())
-    }
-}
-
-impl<M: IndexDomain, K: GroupKey, O: Operand> GroupKernel<M, K, O> for RaiseKeyErrors {
-    type Output = GroupOperand<M, K, O>;
+impl<M: IndexDomain, K: IndexDomain, E: Expression> GroupKernel<M, K, E> for RaiseKeyErrors {
+    type Output = GroupedExpression<M, K, E>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, O>,
+        partition: Partition<'a, M, K, E>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         partition.change_key_failures(|_| Some(KeyFailureChange::Raise))
     }
 
@@ -173,16 +134,16 @@ impl<M: IndexDomain, K: GroupKey, O: Operand> GroupKernel<M, K, O> for RaiseKeyE
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, O: Operand, D: Diagnostic> GroupKernel<M, K, O>
+impl<M: IndexDomain, K: IndexDomain, E: Expression, D: Diagnostic> GroupKernel<M, K, E>
     for RaiseKeyErrorsOf<D>
 {
-    type Output = GroupOperand<M, K, O>;
+    type Output = GroupedExpression<M, K, E>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, O>,
+        partition: Partition<'a, M, K, E>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         partition.change_key_failures(|key_failure| {
             let failure = key_failure.failure();
 
@@ -199,16 +160,16 @@ impl<M: IndexDomain, K: GroupKey, O: Operand, D: Diagnostic> GroupKernel<M, K, O
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, O: Operand, G: ErrorGroup> GroupKernel<M, K, O>
+impl<M: IndexDomain, K: IndexDomain, E: Expression, G: ErrorGroup> GroupKernel<M, K, E>
     for RaiseKeyErrorsIn<G>
 {
-    type Output = GroupOperand<M, K, O>;
+    type Output = GroupedExpression<M, K, E>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, O>,
+        partition: Partition<'a, M, K, E>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         partition.change_key_failures(|key_failure| {
             let failure = key_failure.failure();
 
@@ -225,20 +186,20 @@ impl<M: IndexDomain, K: GroupKey, O: Operand, G: ErrorGroup> GroupKernel<M, K, O
     }
 }
 
-impl<M: IndexDomain, K: GroupKey, O: Operand, E: Error + 'static> GroupKernel<M, K, O>
-    for RaiseKeyErrorsWithCause<E>
+impl<M: IndexDomain, K: IndexDomain, E: Expression, C: Error + 'static> GroupKernel<M, K, E>
+    for RaiseKeyErrorsWithCause<C>
 {
-    type Output = GroupOperand<M, K, O>;
+    type Output = GroupedExpression<M, K, E>;
 
     fn execute<'a>(
         _graphrecord: &'a GraphRecord,
-        partition: Partition<'a, M, K, O>,
+        partition: Partition<'a, M, K, E>,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<<Self::Output as EvaluateOperand>::ReturnValue<'a>> {
+    ) -> QueryResult<<Self::Output as EvaluateExpression>::ReturnValue<'a>> {
         partition.change_key_failures(|key_failure| {
             let failure = key_failure.failure();
 
-            if failure.has_cause::<E>() {
+            if failure.has_cause::<C>() {
                 Some(KeyFailureChange::Raise)
             } else {
                 None
@@ -251,36 +212,36 @@ impl<M: IndexDomain, K: GroupKey, O: Operand, E: Error + 'static> GroupKernel<M,
     }
 }
 
-impl<I: Apply<RaiseKeyErrors>> KeyErrorPolicy<I> for Raise {
-    type Output = I::Output;
+impl<E: Apply<RaiseKeyErrors>> KeyErrorPolicy<E> for Raise {
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(input, RaiseKeyErrors))
     }
 }
 
-impl<I: Apply<RaiseKeyErrorsOf<D>>, D: Diagnostic> KeyErrorPolicyOf<I, D> for Raise {
-    type Output = I::Output;
+impl<E: Apply<RaiseKeyErrorsOf<D>>, D: Diagnostic> KeyErrorPolicyOf<E, D> for Raise {
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(input, RaiseKeyErrorsOf::new()))
     }
 }
 
-impl<I: Apply<RaiseKeyErrorsIn<G>>, G: ErrorGroup> KeyErrorPolicyIn<I, G> for Raise {
-    type Output = I::Output;
+impl<E: Apply<RaiseKeyErrorsIn<G>>, G: ErrorGroup> KeyErrorPolicyIn<E, G> for Raise {
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(input, RaiseKeyErrorsIn::new()))
     }
 }
 
-impl<I: Apply<RaiseKeyErrorsWithCause<E>>, E: Error + 'static> KeyErrorPolicyWithCause<I, E>
+impl<E: Apply<RaiseKeyErrorsWithCause<C>>, C: Error + 'static> KeyErrorPolicyWithCause<E, C>
     for Raise
 {
-    type Output = I::Output;
+    type Output = E::Output;
 
-    fn build(&self, input: I) -> Self::Output {
+    fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(input, RaiseKeyErrorsWithCause::new()))
     }
 }
@@ -292,10 +253,10 @@ operation_manifest! {
         scope: group;
 
         kernel {
-            group: <M: IndexDomain, K: GroupKey>;
-            parameters: <O: Lane>;
-            input: O;
-            output: GroupOperand<M, K, O>;
+            group: <M: IndexDomain, K: IndexDomain>;
+            parameters: <E: Lane>;
+            input: E;
+            output: GroupedExpression<M, K, E>;
         }
     }
 }
