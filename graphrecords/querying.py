@@ -1,26 +1,27 @@
 # ruff: noqa: D100, D101, D102, D103, D105, D107
 from __future__ import annotations
 
-from dataclasses import dataclass
+from enum import Enum, auto
 from typing import (
-    TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
     Generic,
+    Iterator,
     List,
     Optional,
     Sequence,
     Tuple,
     TypeAlias,
     Union,
+    cast,
     overload,
 )
 
 from typing_extensions import TypeVar, TypeVarTuple, Unpack
 
+from graphrecords._graphrecords.graphrecord import PyEdgeIndex
 from graphrecords._graphrecords.querying import (
-    ArgumentAbsentError as ArgumentAbsentError,
+    ArgumentMissingError as ArgumentMissingError,
 )
 from graphrecords._graphrecords.querying import (
     DivisionByZeroError as DivisionByZeroError,
@@ -92,13 +93,13 @@ from graphrecords._graphrecords.querying import (
     MissingGroupAggregateError as MissingGroupAggregateError,
 )
 from graphrecords._graphrecords.querying import (
+    MissingGroupBucketError as MissingGroupBucketError,
+)
+from graphrecords._graphrecords.querying import (
     MissingTraversedAttributeError as MissingTraversedAttributeError,
 )
 from graphrecords._graphrecords.querying import (
     ModuloByZeroError as ModuloByZeroError,
-)
-from graphrecords._graphrecords.querying import (
-    NegativeLengthError as NegativeLengthError,
 )
 from graphrecords._graphrecords.querying import (
     NegativeSquareRootError as NegativeSquareRootError,
@@ -121,14 +122,22 @@ from graphrecords._graphrecords.querying import (
 from graphrecords._graphrecords.querying import (
     PyArgument,
     PyCastTarget,
-    PyEdgeDirection,
     PyEdgeEndpointRole,
+    PyExpression,
     PyFailureKind,
-    PyOperand,
+    PyGroupedResult,
+    PyResultView,
+    PySeries,
     PyValueTarget,
 )
 from graphrecords._graphrecords.querying import (
     QueryError as QueryError,
+)
+from graphrecords._graphrecords.querying import (
+    RaisedFailuresError as RaisedFailuresError,
+)
+from graphrecords._graphrecords.querying import (
+    ResultConsumedError as ResultConsumedError,
 )
 from graphrecords._graphrecords.querying import (
     StringLengthOverflowError as StringLengthOverflowError,
@@ -137,20 +146,38 @@ from graphrecords._graphrecords.querying import (
     StringPaddingOverflowError as StringPaddingOverflowError,
 )
 from graphrecords._graphrecords.querying import (
+    UncoveredIndicesError as UncoveredIndicesError,
+)
+from graphrecords._graphrecords.querying import (
     UnresolvedBucketFailuresError as UnresolvedBucketFailuresError,
 )
 from graphrecords._graphrecords.querying import (
     UnresolvedGroupKeyFailuresError as UnresolvedGroupKeyFailuresError,
 )
 from graphrecords._graphrecords.querying import (
+    UnresolvedIndexError as UnresolvedIndexError,
+)
+from graphrecords._graphrecords.querying import (
     UnsupportedValueRoleError as UnsupportedValueRoleError,
 )
+from graphrecords._graphrecords.querying import (
+    edges as py_edges,
+)
+from graphrecords._graphrecords.querying import (
+    groups as py_groups,
+)
+from graphrecords._graphrecords.querying import (
+    nodes as py_nodes,
+)
+from graphrecords.types import (
+    AttributeName as Attribute,
+)
+from graphrecords.types import EdgeDirection
 from graphrecords.types import (
     EdgeIndex as EdgeIndexPayload,
 )
 from graphrecords.types import (
-    Group,
-    Identifier,
+    GroupIndex as GroupIndexPayload,
 )
 from graphrecords.types import (
     NodeIndex as NodeIndexPayload,
@@ -159,24 +186,65 @@ from graphrecords.types import (
     Value as ValuePayload,
 )
 
-if TYPE_CHECKING:
-    from graphrecords.graphrecord import GraphRecord
+
+class EdgeEndpointRole(Enum):
+    Source = auto()
+    Target = auto()
+
+    @staticmethod
+    def _from_py_edge_endpoint_role(py_role: PyEdgeEndpointRole) -> EdgeEndpointRole:
+        if py_role == PyEdgeEndpointRole.Source:
+            return EdgeEndpointRole.Source
+        if py_role == PyEdgeEndpointRole.Target:
+            return EdgeEndpointRole.Target
+        msg = "Should never be reached"
+        raise NotImplementedError(msg)
+
+    def _into_py_edge_endpoint_role(self) -> PyEdgeEndpointRole:
+        if self == EdgeEndpointRole.Source:
+            return PyEdgeEndpointRole.Source
+        if self == EdgeEndpointRole.Target:
+            return PyEdgeEndpointRole.Target
+        msg = "Should never be reached"
+        raise NotImplementedError(msg)
 
 
-EdgeDirection = PyEdgeDirection
-EdgeEndpointRole = PyEdgeEndpointRole
-FailureKind = PyFailureKind
+class FailureKind:
+    _py_failure_kind: PyFailureKind
 
-Attribute: TypeAlias = Identifier
+    @classmethod
+    def _from_py_failure_kind(cls, py_kind: PyFailureKind) -> FailureKind:
+        kind = cls.__new__(cls)
+        kind._py_failure_kind = py_kind
+
+        return kind
+
+    @property
+    def name(self) -> str:
+        return self._py_failure_kind.name
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, FailureKind):
+            return NotImplemented
+
+        return self._py_failure_kind == other._py_failure_kind
+
+    def __hash__(self) -> int:
+        return hash(self._py_failure_kind)
+
+    def __repr__(self) -> str:
+        return f"FailureKind.{self.name}"
+
+
 ScalarValue: TypeAlias = ValuePayload
 _BooleanValue: TypeAlias = bool
 IndexPayload: TypeAlias = Union[
     ValuePayload,
+    EdgeIndexPayload,
     EdgeEndpointRole,
     FailureKind,
     Tuple["IndexPayload", Optional["IndexPayload"]],
 ]
-
 
 PayloadType = TypeVar("PayloadType", covariant=True)
 
@@ -198,6 +266,9 @@ class NodeIndex(Index[NodeIndexPayload]): ...
 
 
 class EdgeIndex(Index[EdgeIndexPayload]): ...
+
+
+class GroupIndex(Index[GroupIndexPayload]): ...
 
 
 class Positional(Index[int]): ...
@@ -225,7 +296,7 @@ class Expanded(
 
 SortableIndex: TypeAlias = Union[
     NodeIndex,
-    EdgeIndex,
+    GroupIndex,
     Positional,
     ValueIndex,
     AttributeNameIndex,
@@ -258,10 +329,13 @@ class FailureValue(ReturnValue[QueryError]): ...
 class FailureKindValue(ReturnValue[FailureKind]): ...
 
 
-class NodeReference(ReturnValue[Attribute]): ...
+class NodeReference(ReturnValue[NodeIndexPayload]): ...
 
 
-class EdgeReference(ReturnValue[int]): ...
+class EdgeReference(ReturnValue[EdgeIndexPayload]): ...
+
+
+class GroupReference(ReturnValue[GroupIndexPayload]): ...
 
 
 V = TypeVar("V", bound=Value, covariant=True)
@@ -309,8 +383,18 @@ class Preserving(Retention): ...
 class Dropping(Retention): ...
 
 
-S = TypeVar("S", bound=Shape, covariant=True)
-C = TypeVar("C", bound=Container)
+class Binding: ...
+
+
+class Unbound(Binding): ...
+
+
+class Bound(Binding): ...
+
+
+BindingType = TypeVar("BindingType", bound=Binding, default=Any)
+S = TypeVar("S", bound=Shape, covariant=True, default=Any)
+C = TypeVar("C", bound=Container, default=Any)
 IndexType = TypeVar("IndexType", bound=Index[IndexPayload])
 ValueIndexType = TypeVar("ValueIndexType", bound=Index[IndexPayload])
 ContainerType = TypeVar("ContainerType", bound=Container)
@@ -318,6 +402,7 @@ PopulationContainerType = TypeVar("PopulationContainerType", bound=Container)
 MemberIndexType = TypeVar("MemberIndexType", bound=Index[IndexPayload], covariant=True)
 KeyIndexType = TypeVar("KeyIndexType", bound=Index[IndexPayload], covariant=True)
 PopulationIndexType = TypeVar("PopulationIndexType", bound=Index[IndexPayload])
+PopulationOrderType = TypeVar("PopulationOrderType")
 IndexPayloadType = TypeVar("IndexPayloadType", bound=IndexPayload)
 LaneIndexPayloadType = TypeVar("LaneIndexPayloadType", bound=IndexPayload)
 ParentPayloadType = TypeVar("ParentPayloadType", bound=IndexPayload)
@@ -329,24 +414,25 @@ InnerMemberIndexType = TypeVar(
 InnerKeyIndexType = TypeVar(
     "InnerKeyIndexType", bound=Index[IndexPayload], covariant=True
 )
-BucketPayloadType = TypeVar("BucketPayloadType")
+ElementType = TypeVar("ElementType", covariant=True, default=Any)
 LeafType = TypeVar("LeafType")
-Levels = TypeVarTuple("Levels")
+Levels = TypeVarTuple("Levels", default=Unpack[Tuple[()]])
 InnerLevels = TypeVarTuple("InnerLevels")
 OuterLevels = TypeVarTuple("OuterLevels")
 TemplateValueType = TypeVar("TemplateValueType", bound=Value)
-ExpandedValueType = TypeVar("ExpandedValueType", bound=ReturnValue[object])
+InheritedValueType = TypeVar("InheritedValueType", bound=ReturnValue[object])
 TransitionValueType = TypeVar("TransitionValueType", bound=Value)
 EntityType = TypeVar("EntityType", NodeIndex, EdgeIndex)
 IntegerIndexType = TypeVar("IntegerIndexType", EdgeIndex, Positional)
-SortableIndexType = TypeVar("SortableIndexType", bound=SortableIndex)
 BareValueType = TypeVar("BareValueType", bound=ReturnValue[object])
-ReferenceType = TypeVar("ReferenceType", NodeReference, EdgeReference)
-RetentionType = TypeVar("RetentionType", bound=Retention)
+ReferenceType = TypeVar("ReferenceType", NodeReference, EdgeReference, GroupReference)
+EntityReferenceType = TypeVar("EntityReferenceType", NodeReference, EdgeReference)
+RetentionType = TypeVar("RetentionType", bound=Retention, default=Any)
+ArgumentBindingType = TypeVar("ArgumentBindingType", bound=Binding)
 ArgumentOrderType = TypeVar("ArgumentOrderType")
 ReplacementType = TypeVar("ReplacementType", covariant=True)
 ReplaceableValueType = TypeVar("ReplaceableValueType", bound=ReturnValue[object])
-LiteralValueType = TypeVar("LiteralValueType", bound=Union["ScalarValue", FailureKind])
+ScalarValueType = TypeVar("ScalarValueType", bound="ScalarValue")
 NumericValueType = TypeVar(
     "NumericValueType",
     Scalar,
@@ -361,6 +447,7 @@ StringValueType = TypeVar(
     Scalar,
     AttributeName,
     IndexValue[NodeIndex],
+    IndexValue[GroupIndex],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
 )
@@ -369,6 +456,7 @@ StringArgumentValueType = TypeVar(
     Scalar,
     AttributeName,
     IndexValue[NodeIndex],
+    IndexValue[GroupIndex],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
 )
@@ -377,6 +465,7 @@ OldStringValueType = TypeVar(
     Scalar,
     AttributeName,
     IndexValue[NodeIndex],
+    IndexValue[GroupIndex],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
 )
@@ -385,6 +474,7 @@ NewStringValueType = TypeVar(
     Scalar,
     AttributeName,
     IndexValue[NodeIndex],
+    IndexValue[GroupIndex],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
 )
@@ -393,7 +483,6 @@ IntegerValueType = TypeVar(
     Scalar,
     AttributeName,
     IndexValue[NodeIndex],
-    IndexValue[EdgeIndex],
     IndexValue[Positional],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
@@ -415,8 +504,12 @@ EquivalentValueType = TypeVar(
     Mask,
     AttributeName,
     FailureKindValue,
+    NodeReference,
+    EdgeReference,
+    GroupReference,
     IndexValue[NodeIndex],
     IndexValue[EdgeIndex],
+    IndexValue[GroupIndex],
     IndexValue[Positional],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
@@ -432,7 +525,6 @@ ArithmeticValueType = TypeVar(
     Scalar,
     AttributeName,
     IndexValue[NodeIndex],
-    IndexValue[EdgeIndex],
     IndexValue[Positional],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
@@ -445,6 +537,7 @@ EquatableValueType = TypeVar(
     FailureKindValue,
     IndexValue[NodeIndex],
     IndexValue[EdgeIndex],
+    IndexValue[GroupIndex],
     IndexValue[Positional],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
@@ -459,6 +552,7 @@ ModeValueType = TypeVar(
     AttributeName,
     IndexValue[NodeIndex],
     IndexValue[EdgeIndex],
+    IndexValue[GroupIndex],
     IndexValue[Positional],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
@@ -472,7 +566,6 @@ MultipliableValueType = TypeVar(
     Scalar,
     AttributeName,
     IndexValue[NodeIndex],
-    IndexValue[EdgeIndex],
     IndexValue[Positional],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
@@ -510,6 +603,7 @@ AttributeMembershipValueType = TypeVar(
     "AttributeMembershipValueType",
     AttributeName,
     IndexValue[NodeIndex],
+    IndexValue[GroupIndex],
     IndexValue[AttributeNameIndex],
 )
 FailureKindMembershipValueType = TypeVar(
@@ -521,9 +615,6 @@ AttributeClipValueType = TypeVar(
     AttributeName,
     IndexValue[NodeIndex],
     IndexValue[AttributeNameIndex],
-)
-IntegerClipValueType = TypeVar(
-    "IntegerClipValueType", IndexValue[EdgeIndex], IndexValue[Positional]
 )
 CastableValueType = TypeVar(
     "CastableValueType",
@@ -541,7 +632,7 @@ ScalarTransitionValueType = TypeVar(
     Mask,
     AttributeName,
     IndexValue[NodeIndex],
-    IndexValue[EdgeIndex],
+    IndexValue[GroupIndex],
     IndexValue[Positional],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
@@ -553,7 +644,7 @@ ValueIndexTransitionValueType = TypeVar(
     Mask,
     AttributeName,
     IndexValue[NodeIndex],
-    IndexValue[EdgeIndex],
+    IndexValue[GroupIndex],
     IndexValue[Positional],
     IndexValue[AttributeNameIndex],
     IndexValue[BoolIndex],
@@ -562,7 +653,7 @@ AttributeNameTransitionValueType = TypeVar(
     "AttributeNameTransitionValueType",
     Scalar,
     IndexValue[NodeIndex],
-    IndexValue[EdgeIndex],
+    IndexValue[GroupIndex],
     IndexValue[Positional],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
@@ -571,7 +662,14 @@ NodeIndexTransitionValueType = TypeVar(
     "NodeIndexTransitionValueType",
     Scalar,
     AttributeName,
-    IndexValue[EdgeIndex],
+    IndexValue[Positional],
+    IndexValue[ValueIndex],
+    IndexValue[AttributeNameIndex],
+)
+GroupIndexTransitionValueType = TypeVar(
+    "GroupIndexTransitionValueType",
+    Scalar,
+    AttributeName,
     IndexValue[Positional],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
@@ -581,25 +679,16 @@ AttributeNameIndexTransitionValueType = TypeVar(
     Scalar,
     AttributeName,
     IndexValue[NodeIndex],
-    IndexValue[EdgeIndex],
+    IndexValue[GroupIndex],
     IndexValue[Positional],
     IndexValue[ValueIndex],
-)
-EdgeIndexTransitionValueType = TypeVar(
-    "EdgeIndexTransitionValueType",
-    Scalar,
-    AttributeName,
-    IndexValue[NodeIndex],
-    IndexValue[Positional],
-    IndexValue[ValueIndex],
-    IndexValue[AttributeNameIndex],
 )
 PositionalTransitionValueType = TypeVar(
     "PositionalTransitionValueType",
     Scalar,
     AttributeName,
     IndexValue[NodeIndex],
-    IndexValue[EdgeIndex],
+    IndexValue[GroupIndex],
     IndexValue[ValueIndex],
     IndexValue[AttributeNameIndex],
 )
@@ -620,28 +709,42 @@ class ValueTarget(Generic[TransitionValueType]):
     AttributeName: ClassVar[ValueTarget[AttributeName]]
     AttributeNameIndex: ClassVar[ValueTarget[IndexValue[AttributeNameIndex]]]
     NodeIndex: ClassVar[ValueTarget[IndexValue[NodeIndex]]]
-    EdgeIndex: ClassVar[ValueTarget[IndexValue[EdgeIndex]]]
+    GroupIndex: ClassVar[ValueTarget[IndexValue[GroupIndex]]]
     PositionalIndex: ClassVar[ValueTarget[IndexValue[Positional]]]
     BoolIndex: ClassVar[ValueTarget[IndexValue[BoolIndex]]]
     Mask: ClassVar[ValueTarget[Mask]]
     FailureKind: ClassVar[ValueTarget[FailureKindValue]]
     FailureKindIndex: ClassVar[ValueTarget[IndexValue[FailureKindIndex]]]
 
-    def __init__(self, target: PyValueTarget) -> None:
-        self._target = target
+    _py_value_target: PyValueTarget
+
+    @classmethod
+    def _from_py_value_target(cls, py_target: PyValueTarget) -> ValueTarget[Any]:
+        target = cls.__new__(cls)
+        target._py_value_target = py_target
+
+        return target
 
 
-ValueTarget.Value = ValueTarget(PyValueTarget.Value)
-ValueTarget.ValueIndex = ValueTarget(PyValueTarget.ValueIndex)
-ValueTarget.AttributeName = ValueTarget(PyValueTarget.AttributeName)
-ValueTarget.AttributeNameIndex = ValueTarget(PyValueTarget.AttributeNameIndex)
-ValueTarget.NodeIndex = ValueTarget(PyValueTarget.NodeIndex)
-ValueTarget.EdgeIndex = ValueTarget(PyValueTarget.EdgeIndex)
-ValueTarget.PositionalIndex = ValueTarget(PyValueTarget.PositionalIndex)
-ValueTarget.BoolIndex = ValueTarget(PyValueTarget.BoolIndex)
-ValueTarget.Mask = ValueTarget(PyValueTarget.Mask)
-ValueTarget.FailureKind = ValueTarget(PyValueTarget.FailureKind)
-ValueTarget.FailureKindIndex = ValueTarget(PyValueTarget.FailureKindIndex)
+ValueTarget.Value = ValueTarget._from_py_value_target(PyValueTarget.Value)
+ValueTarget.ValueIndex = ValueTarget._from_py_value_target(PyValueTarget.ValueIndex)
+ValueTarget.AttributeName = ValueTarget._from_py_value_target(
+    PyValueTarget.AttributeName
+)
+ValueTarget.AttributeNameIndex = ValueTarget._from_py_value_target(
+    PyValueTarget.AttributeNameIndex
+)
+ValueTarget.NodeIndex = ValueTarget._from_py_value_target(PyValueTarget.NodeIndex)
+ValueTarget.GroupIndex = ValueTarget._from_py_value_target(PyValueTarget.GroupIndex)
+ValueTarget.PositionalIndex = ValueTarget._from_py_value_target(
+    PyValueTarget.PositionalIndex
+)
+ValueTarget.BoolIndex = ValueTarget._from_py_value_target(PyValueTarget.BoolIndex)
+ValueTarget.Mask = ValueTarget._from_py_value_target(PyValueTarget.Mask)
+ValueTarget.FailureKind = ValueTarget._from_py_value_target(PyValueTarget.FailureKind)
+ValueTarget.FailureKindIndex = ValueTarget._from_py_value_target(
+    PyValueTarget.FailureKindIndex
+)
 
 
 class CastTarget(Generic[CastReceiverValueType]):
@@ -672,16 +775,22 @@ class CastTarget(Generic[CastReceiverValueType]):
         ]
     ]
 
-    def __init__(self, target: PyCastTarget) -> None:
-        self._target = target
+    _py_cast_target: PyCastTarget
+
+    @classmethod
+    def _from_py_cast_target(cls, py_target: PyCastTarget) -> CastTarget[Any]:
+        target = cls.__new__(cls)
+        target._py_cast_target = py_target
+
+        return target
 
 
-CastTarget.Bool = CastTarget(PyCastTarget.Bool)
-CastTarget.DateTime = CastTarget(PyCastTarget.DateTime)
-CastTarget.Duration = CastTarget(PyCastTarget.Duration)
-CastTarget.Float = CastTarget(PyCastTarget.Float)
-CastTarget.Int = CastTarget(PyCastTarget.Int)
-CastTarget.String = CastTarget(PyCastTarget.String)
+CastTarget.Bool = CastTarget._from_py_cast_target(PyCastTarget.Bool)
+CastTarget.DateTime = CastTarget._from_py_cast_target(PyCastTarget.DateTime)
+CastTarget.Duration = CastTarget._from_py_cast_target(PyCastTarget.Duration)
+CastTarget.Float = CastTarget._from_py_cast_target(PyCastTarget.Float)
+CastTarget.Int = CastTarget._from_py_cast_target(PyCastTarget.Int)
+CastTarget.String = CastTarget._from_py_cast_target(PyCastTarget.String)
 
 
 class Policy: ...
@@ -692,16 +801,12 @@ class Drop(Policy): ...
 
 class Raise(Policy):
     @staticmethod
-    def when(
-        condition: Union[_BooleanValue, BareOperandArgument[Mask]],
-    ) -> _RaiseWhen:
+    def when(condition: BareMaskArgument) -> _RaiseWhen:
         return _RaiseWhen(condition)
 
 
 class _RaiseWhen(Policy):
-    def __init__(
-        self, condition: Union[_BooleanValue, BareOperandArgument[Mask]]
-    ) -> None:
+    def __init__(self, condition: BareMaskArgument) -> None:
         self._condition = condition
 
 
@@ -711,159 +816,649 @@ class Replace(Policy, Generic[ReplacementType]):
 
 
 class Argument(Generic[S, RetentionType]):
-    _argument: PyArgument
+    _py_argument: PyArgument
 
     @classmethod
-    def _from_py_argument(cls, argument: PyArgument) -> Argument[Any, Any]:
-        new_argument = cls.__new__(cls)
-        new_argument._argument = argument
+    def _from_py_argument(cls, py_argument: PyArgument) -> Argument[Any, Any]:
+        argument = cls.__new__(cls)
+        argument._py_argument = py_argument
 
-        return new_argument
+        return argument
 
 
-class Operand(Generic[S, C, Unpack[Levels]]):
-    _operand: PyOperand
+class Expression(Generic[BindingType, S, C, Unpack[Levels]]):
+    _py_carrier: Union[PyExpression, PySeries]
 
     @classmethod
-    def _from_py_operand(cls, operand: PyOperand) -> Operand[S, C, Unpack[Levels]]:
-        new_operand = cls.__new__(cls)
-        new_operand._operand = operand
+    def _from_py_expression(
+        cls, py_expression: PyExpression
+    ) -> Expression[BindingType, S, C, Unpack[Levels]]:
+        expression = cls.__new__(cls)
+        expression._py_carrier = py_expression
 
-        return new_operand
+        return expression
+
+    def _rebuild(self, py_carrier: Union[PyExpression, PySeries]) -> Any:  # noqa: ANN401
+        wrapper = type(self)
+        rebuilt = wrapper.__new__(wrapper)
+        rebuilt._py_carrier = py_carrier
+
+        return rebuilt
+
+    @property
+    def _py_expression(self) -> PyExpression:
+        if isinstance(self._py_carrier, PyExpression):
+            return self._py_carrier
+
+        msg = "the expression must be free"
+        raise TypeError(msg)
+
+    @property
+    def _py_series(self) -> PySeries:
+        if isinstance(self._py_carrier, PySeries):
+            return self._py_carrier
+
+        msg = "the expression must be bound to a record"
+        raise TypeError(msg)
+
+    @overload
+    @staticmethod
+    def _to_argument(
+        value: Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+    ) -> Union[PyExpression, PySeries]: ...
+
+    @overload
+    @staticmethod
+    def _to_argument(value: Argument[Any, Any]) -> PyArgument: ...
+
+    @overload
+    @staticmethod
+    def _to_argument(value: FailureKind) -> PyFailureKind: ...
+
+    @overload
+    @staticmethod
+    def _to_argument(value: EdgeEndpointRole) -> PyEdgeEndpointRole: ...
+
+    @overload
+    @staticmethod
+    def _to_argument(value: EdgeIndexPayload) -> PyEdgeIndex: ...
+
+    @overload
+    @staticmethod
+    def _to_argument(value: ScalarValueType) -> ScalarValueType: ...
 
     @staticmethod
-    def _to_py_argument(
+    def _to_argument(
         value: Union[
-            LiteralValueType,
-            Operand[Any, Any, Unpack[Tuple[Any, ...]]],
+            ScalarValue,
+            EdgeIndexPayload,
+            FailureKind,
+            EdgeEndpointRole,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
             Argument[Any, Any],
         ],
-    ) -> Union[PyOperand, PyArgument, LiteralValueType]:
-        if isinstance(value, Operand):
-            return value._operand
+    ) -> Union[
+        ScalarValue,
+        PyExpression,
+        PySeries,
+        PyArgument,
+        PyFailureKind,
+        PyEdgeIndex,
+        PyEdgeEndpointRole,
+    ]:
+        if isinstance(value, Expression):
+            return value._py_carrier
 
         if isinstance(value, Argument):
-            return value._argument
+            return value._py_argument
+
+        if isinstance(value, FailureKind):
+            return value._py_failure_kind
+
+        if isinstance(value, EdgeEndpointRole):
+            return value._into_py_edge_endpoint_role()
+
+        if isinstance(value, EdgeIndexPayload):
+            return value._py_edge_index
 
         return value
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self._py_carrier!r})"
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound, Indexed[Index[IndexPayloadType], Unit], Multiple[OrderType]
+        ],
+    ) -> MembershipResult[IndexPayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[IndexPayloadType], Unit],
+            Multiple[OrderType],
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        MembershipResult[IndexPayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[Bound, Indexed[Index[IndexPayloadType], Unit], Single],
+    ) -> MembershipSingleResult[IndexPayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[IndexPayloadType], Unit],
+            Single,
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        MembershipSingleResult[IndexPayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[Bound, Indexed[Index[IndexPayloadType], Unit], Definite],
+    ) -> MembershipDefiniteResult[IndexPayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[IndexPayloadType], Unit],
+            Definite,
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        MembershipDefiniteResult[IndexPayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
+            Multiple[OrderType],
+        ],
+    ) -> IndexedResult[LaneIndexPayloadType, IndexPayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
+            Multiple[OrderType],
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        IndexedResult[LaneIndexPayloadType, IndexPayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
+            Single,
+        ],
+    ) -> IndexedSingleResult[LaneIndexPayloadType, IndexPayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
+            Single,
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        IndexedSingleResult[LaneIndexPayloadType, IndexPayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
+            Definite,
+        ],
+    ) -> IndexedDefiniteResult[LaneIndexPayloadType, IndexPayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
+            Definite,
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        IndexedDefiniteResult[LaneIndexPayloadType, IndexPayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
+            Multiple[OrderType],
+        ],
+    ) -> IndexedResult[LaneIndexPayloadType, PayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
+            Multiple[OrderType],
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        IndexedResult[LaneIndexPayloadType, PayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
+            Single,
+        ],
+    ) -> IndexedSingleResult[LaneIndexPayloadType, PayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
+            Single,
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        IndexedSingleResult[LaneIndexPayloadType, PayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
+            Definite,
+        ],
+    ) -> IndexedDefiniteResult[LaneIndexPayloadType, PayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
+            Definite,
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        IndexedDefiniteResult[LaneIndexPayloadType, PayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound, Bare[IndexValue[Index[IndexPayloadType]]], Multiple[OrderType]
+        ],
+    ) -> BareResult[IndexPayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Bare[IndexValue[Index[IndexPayloadType]]],
+            Multiple[OrderType],
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        BareResult[IndexPayloadType], MemberIndexType, KeyIndexType, Unpack[InnerLevels]
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[Bound, Bare[IndexValue[Index[IndexPayloadType]]], Single],
+    ) -> BareSingleResult[IndexPayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Bare[IndexValue[Index[IndexPayloadType]]],
+            Single,
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        BareSingleResult[IndexPayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[Bound, Bare[IndexValue[Index[IndexPayloadType]]], Definite],
+    ) -> BareDefiniteResult[IndexPayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Bare[IndexValue[Index[IndexPayloadType]]],
+            Definite,
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        BareDefiniteResult[IndexPayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[Bound, Bare[ReturnValue[PayloadType]], Multiple[OrderType]],
+    ) -> BareResult[PayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Bare[ReturnValue[PayloadType]],
+            Multiple[OrderType],
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        BareResult[PayloadType], MemberIndexType, KeyIndexType, Unpack[InnerLevels]
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[Bound, Bare[ReturnValue[PayloadType]], Single],
+    ) -> BareSingleResult[PayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Bare[ReturnValue[PayloadType]],
+            Single,
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        BareSingleResult[PayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[Bound, Bare[ReturnValue[PayloadType]], Definite],
+    ) -> BareDefiniteResult[PayloadType]: ...
+
+    @overload
+    def evaluate(
+        self: Expression[
+            Bound,
+            Bare[ReturnValue[PayloadType]],
+            Definite,
+            Grouped[MemberIndexType, KeyIndexType],
+            Unpack[InnerLevels],
+        ],
+    ) -> GroupedResult[
+        BareDefiniteResult[PayloadType],
+        MemberIndexType,
+        KeyIndexType,
+        Unpack[InnerLevels],
+    ]: ...
+
+    def evaluate(self) -> object:
+        terminal = self._py_series.evaluate()
+
+        if isinstance(terminal, PyResultView):
+            return ResultView._from_py_result_view(terminal)
+
+        if isinstance(terminal, PyGroupedResult):
+            return GroupedResult._from_py_grouped_result(terminal)
+
+        return _Result._from_py_payload(terminal)
+
+    def explain(self) -> str:
+        return self._py_carrier.explain()
+
+    def explain_unoptimized(
+        self: Expression[Bound, S, C, Unpack[Levels]],
+    ) -> str:
+        return self._py_series.explain_unoptimized()
+
     @overload
     def on_missing(
-        self: Operand[Indexed[IndexType, V], Multiple[OrderType]],
+        self: Expression[BindingType, Indexed[IndexType, V], Multiple[OrderType]],
         policy: Drop,
     ) -> Argument[Indexed[IndexType, V], Dropping]: ...
 
     @overload
     def on_missing(
-        self: Operand[Bare[BareValueType], Single], policy: Drop
+        self: Expression[BindingType, Bare[BareValueType], Single], policy: Drop
     ) -> Argument[Bare[BareValueType], Dropping]: ...
 
     @overload
     def on_missing(
-        self: Operand[Indexed[IndexType, V], Multiple[OrderType]],
-        policy: Replace[Operand[Indexed[IndexType, V], Multiple[ArgumentOrderType]]],
+        self: Expression[BindingType, Indexed[IndexType, V], Multiple[OrderType]],
+        policy: Union[
+            Replace[
+                Expression[
+                    ArgumentBindingType,
+                    Indexed[IndexType, V],
+                    Multiple[ArgumentOrderType],
+                ]
+            ],
+            Replace[IndexedExpressionArgument[IndexType, V, ArgumentOrderType]],
+            Replace[IndexedDroppingArgument[IndexType, V]],
+        ],
     ) -> Argument[Indexed[IndexType, V], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Indexed[IndexType, BareValueType], Multiple[OrderType]],
-        policy: BareReplacement[BareValueType],
-    ) -> Argument[Indexed[IndexType, BareValueType], Preserving]: ...
-
-    @overload
-    def on_missing(
-        self: Operand[Bare[BareValueType], Single],
+        self: Expression[BindingType, Bare[BareValueType], Single],
         policy: BareReplacement[BareValueType],
     ) -> Argument[Bare[BareValueType], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Indexed[IndexType, Scalar], Multiple[OrderType]],
+        self: Expression[BindingType, Indexed[IndexType, Scalar], Multiple[OrderType]],
         policy: Replace[ScalarValue],
     ) -> Argument[Indexed[IndexType, Scalar], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Bare[Scalar], Single], policy: Replace[ScalarValue]
+        self: Expression[BindingType, Bare[Scalar], Single],
+        policy: Replace[ScalarValue],
     ) -> Argument[Bare[Scalar], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Indexed[IndexType, Mask], Multiple[OrderType]],
+        self: Expression[BindingType, Indexed[IndexType, Mask], Multiple[OrderType]],
         policy: Replace[_BooleanValue],
     ) -> Argument[Indexed[IndexType, Mask], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Bare[Mask], Single],
+        self: Expression[BindingType, Bare[Mask], Single],
         policy: Replace[_BooleanValue],
     ) -> Argument[Bare[Mask], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Indexed[IndexType, AttributeName], Multiple[OrderType]],
+        self: Expression[
+            BindingType, Indexed[IndexType, AttributeName], Multiple[OrderType]
+        ],
         policy: Replace[Attribute],
     ) -> Argument[Indexed[IndexType, AttributeName], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Bare[AttributeName], Single],
+        self: Expression[BindingType, Bare[AttributeName], Single],
         policy: Replace[Attribute],
     ) -> Argument[Bare[AttributeName], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Indexed[IndexType, FailureKindValue], Multiple[OrderType]],
+        self: Expression[
+            BindingType, Indexed[IndexType, FailureKindValue], Multiple[OrderType]
+        ],
         policy: Replace[FailureKind],
     ) -> Argument[Indexed[IndexType, FailureKindValue], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Bare[FailureKindValue], Single],
+        self: Expression[BindingType, Bare[FailureKindValue], Single],
         policy: Replace[FailureKind],
     ) -> Argument[Bare[FailureKindValue], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[
-            Indexed[IndexType, IndexValue[FailureKindIndex]], Multiple[OrderType]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[FailureKindIndex]],
+            Multiple[OrderType],
         ],
         policy: Replace[FailureKind],
     ) -> Argument[Indexed[IndexType, IndexValue[FailureKindIndex]], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Bare[IndexValue[FailureKindIndex]], Single],
+        self: Expression[BindingType, Bare[IndexValue[FailureKindIndex]], Single],
         policy: Replace[FailureKind],
     ) -> Argument[Bare[IndexValue[FailureKindIndex]], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Indexed[IndexType, IndexValue[NodeIndex]], Multiple[OrderType]],
-        policy: Replace[Attribute],
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[EndpointRole]],
+            Multiple[OrderType],
+        ],
+        policy: Replace[EdgeEndpointRole],
+    ) -> Argument[Indexed[IndexType, IndexValue[EndpointRole]], Preserving]: ...
+
+    @overload
+    def on_missing(
+        self: Expression[BindingType, Bare[IndexValue[EndpointRole]], Single],
+        policy: Replace[EdgeEndpointRole],
+    ) -> Argument[Bare[IndexValue[EndpointRole]], Preserving]: ...
+
+    @overload
+    def on_missing(
+        self: Expression[
+            BindingType, Indexed[IndexType, IndexValue[NodeIndex]], Multiple[OrderType]
+        ],
+        policy: Replace[NodeIndexPayload],
     ) -> Argument[Indexed[IndexType, IndexValue[NodeIndex]], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Bare[IndexValue[NodeIndex]], Single],
-        policy: Replace[Attribute],
+        self: Expression[BindingType, Bare[IndexValue[NodeIndex]], Single],
+        policy: Replace[NodeIndexPayload],
     ) -> Argument[Bare[IndexValue[NodeIndex]], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Indexed[IndexType, IndexValue[ValueIndex]], Multiple[OrderType]],
+        self: Expression[
+            BindingType, Indexed[IndexType, IndexValue[GroupIndex]], Multiple[OrderType]
+        ],
+        policy: Replace[GroupIndexPayload],
+    ) -> Argument[Indexed[IndexType, IndexValue[GroupIndex]], Preserving]: ...
+
+    @overload
+    def on_missing(
+        self: Expression[BindingType, Bare[IndexValue[GroupIndex]], Single],
+        policy: Replace[GroupIndexPayload],
+    ) -> Argument[Bare[IndexValue[GroupIndex]], Preserving]: ...
+
+    @overload
+    def on_missing(
+        self: Expression[
+            BindingType, Indexed[IndexType, IndexValue[EdgeIndex]], Multiple[OrderType]
+        ],
+        policy: Replace[EdgeIndexPayload],
+    ) -> Argument[Indexed[IndexType, IndexValue[EdgeIndex]], Preserving]: ...
+
+    @overload
+    def on_missing(
+        self: Expression[BindingType, Bare[IndexValue[EdgeIndex]], Single],
+        policy: Replace[EdgeIndexPayload],
+    ) -> Argument[Bare[IndexValue[EdgeIndex]], Preserving]: ...
+
+    @overload
+    def on_missing(
+        self: Expression[
+            BindingType, Indexed[IndexType, IndexValue[ValueIndex]], Multiple[OrderType]
+        ],
         policy: Replace[ScalarValue],
     ) -> Argument[Indexed[IndexType, IndexValue[ValueIndex]], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Bare[IndexValue[ValueIndex]], Single],
+        self: Expression[BindingType, Bare[IndexValue[ValueIndex]], Single],
         policy: Replace[ScalarValue],
     ) -> Argument[Bare[IndexValue[ValueIndex]], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             Multiple[OrderType],
         ],
@@ -872,1684 +1467,2193 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def on_missing(
-        self: Operand[Bare[IndexValue[AttributeNameIndex]], Single],
+        self: Expression[BindingType, Bare[IndexValue[AttributeNameIndex]], Single],
         policy: Replace[Attribute],
     ) -> Argument[Bare[IndexValue[AttributeNameIndex]], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Indexed[IndexType, IndexValue[BoolIndex]], Multiple[OrderType]],
+        self: Expression[
+            BindingType, Indexed[IndexType, IndexValue[BoolIndex]], Multiple[OrderType]
+        ],
         policy: Replace[_BooleanValue],
     ) -> Argument[Indexed[IndexType, IndexValue[BoolIndex]], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Bare[IndexValue[BoolIndex]], Single],
+        self: Expression[BindingType, Bare[IndexValue[BoolIndex]], Single],
         policy: Replace[_BooleanValue],
     ) -> Argument[Bare[IndexValue[BoolIndex]], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
-            Multiple[OrderType],
+        self: Expression[
+            BindingType, Indexed[IndexType, IndexValue[Positional]], Multiple[OrderType]
         ],
         policy: Replace[int],
-    ) -> Argument[Indexed[IndexType, IndexValue[IntegerIndexType]], Preserving]: ...
+    ) -> Argument[Indexed[IndexType, IndexValue[Positional]], Preserving]: ...
 
     @overload
     def on_missing(
-        self: Operand[Bare[IndexValue[IntegerIndexType]], Single],
+        self: Expression[BindingType, Bare[IndexValue[Positional]], Single],
         policy: Replace[int],
-    ) -> Argument[Bare[IndexValue[IntegerIndexType]], Preserving]: ...
+    ) -> Argument[Bare[IndexValue[Positional]], Preserving]: ...
 
     def on_missing(
         self,
         policy: Union[
             Drop,
-            Replace[ScalarValue],
-            Replace[FailureKind],
-            Replace[Operand[Any, Any, Unpack[Tuple[Any, ...]]]],
+            Replace[
+                Union[
+                    ScalarValue,
+                    EdgeIndexPayload,
+                    FailureKind,
+                    EdgeEndpointRole,
+                    Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+                    Argument[Any, Any],
+                ]
+            ],
         ],
     ) -> Argument[Any, Any]:
         resolved = (
-            self._operand.on_missing_replace(
-                Operand._to_py_argument(policy._replacement)
+            self._py_carrier.on_missing_replace(
+                Expression._to_argument(policy._replacement)
             )
             if isinstance(policy, Replace)
-            else self._operand.on_missing_drop()
+            else self._py_carrier.on_missing_drop()
         )
 
         return Argument._from_py_argument(resolved)
 
-    def cache(self) -> Operand[S, C, Unpack[Levels]]:
-        return Operand._from_py_operand(self._operand.cache())
+    def cache(self) -> Expression[BindingType, S, C, Unpack[Levels]]:
+        return self._rebuild(self._py_carrier.cache())
 
     @overload
     def filter(
-        self: Operand[Indexed[IndexType, V], Definite, Unpack[Levels]],
+        self: Expression[BindingType, Indexed[IndexType, V], Definite, Unpack[Levels]],
         mask: MaskArgument[IndexType, ArgumentOrderType],
-    ) -> Operand[Indexed[IndexType, V], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Indexed[IndexType, V], Single, Unpack[Levels]]: ...
 
     @overload
     def filter(
-        self: Operand[Indexed[IndexType, V], DroppedContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, V], DroppedContainerType, Unpack[Levels]
+        ],
         mask: MaskArgument[IndexType, ArgumentOrderType],
-    ) -> Operand[Indexed[IndexType, V], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def filter(
-        self: Operand[Bare[BareValueType], Definite, Unpack[Levels]],
+        self: Expression[BindingType, Bare[BareValueType], Definite, Unpack[Levels]],
         mask: BareMaskArgument,
-    ) -> Operand[Bare[BareValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[BareValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def filter(
-        self: Operand[Bare[BareValueType], DroppedContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[BareValueType], DroppedContainerType, Unpack[Levels]
+        ],
         mask: BareMaskArgument,
-    ) -> Operand[Bare[BareValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[BareValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     def filter(
         self,
         mask: Union[
             _BooleanValue,
-            Operand[Any, Any, Unpack[Tuple[Any, ...]]],
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
             Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.filter(Operand._to_py_argument(mask))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.filter(Expression._to_argument(mask)))
 
     @overload
     def and_(
-        self: Operand[Indexed[IndexType, Mask], Definite, Unpack[Levels]],
-        other: IndexedDroppingArgument[IndexType, Mask],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def and_(
-        self: Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]],
-        other: IndexedDroppingArgument[IndexType, Mask],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def and_(
-        self: Operand[Bare[Mask], Definite, Unpack[Levels]],
-        other: BareDroppingArgument[Mask],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def and_(
-        self: Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]],
-        other: BareDroppingArgument[Mask],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def and_(
-        self: Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]],
-        other: Union[
-            _BooleanValue, IndexedOperandArgument[IndexType, Mask, ArgumentOrderType]
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], Definite, Unpack[Levels]
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        other: IndexedDroppingArgument[IndexType, Mask],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def and_(
-        self: Operand[Bare[Mask], ContainerType, Unpack[Levels]],
-        other: Union[_BooleanValue, BareOperandArgument[Mask]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+        ],
+        other: IndexedDroppingArgument[IndexType, Mask],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def and_(
+        self: Expression[BindingType, Bare[Mask], Definite, Unpack[Levels]],
+        other: BareDroppingArgument[Mask],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
+
+    @overload
+    def and_(
+        self: Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]],
+        other: BareDroppingArgument[Mask],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def and_(
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+        ],
+        other: Union[
+            _BooleanValue, IndexedExpressionArgument[IndexType, Mask, ArgumentOrderType]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def and_(
+        self: Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]],
+        other: Union[_BooleanValue, BareExpressionArgument[Mask]],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def and_(
         self,
         other: Union[
             _BooleanValue,
-            Operand[Any, Any, Unpack[Tuple[Any, ...]]],
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
             Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.and_(Operand._to_py_argument(other))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.and_(Expression._to_argument(other)))
 
     @overload
     def or_(
-        self: Operand[Indexed[IndexType, Mask], Definite, Unpack[Levels]],
-        other: IndexedDroppingArgument[IndexType, Mask],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def or_(
-        self: Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]],
-        other: IndexedDroppingArgument[IndexType, Mask],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def or_(
-        self: Operand[Bare[Mask], Definite, Unpack[Levels]],
-        other: BareDroppingArgument[Mask],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def or_(
-        self: Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]],
-        other: BareDroppingArgument[Mask],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def or_(
-        self: Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]],
-        other: Union[
-            _BooleanValue, IndexedOperandArgument[IndexType, Mask, ArgumentOrderType]
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], Definite, Unpack[Levels]
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        other: IndexedDroppingArgument[IndexType, Mask],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def or_(
-        self: Operand[Bare[Mask], ContainerType, Unpack[Levels]],
-        other: Union[_BooleanValue, BareOperandArgument[Mask]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+        ],
+        other: IndexedDroppingArgument[IndexType, Mask],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def or_(
+        self: Expression[BindingType, Bare[Mask], Definite, Unpack[Levels]],
+        other: BareDroppingArgument[Mask],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
+
+    @overload
+    def or_(
+        self: Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]],
+        other: BareDroppingArgument[Mask],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def or_(
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+        ],
+        other: Union[
+            _BooleanValue, IndexedExpressionArgument[IndexType, Mask, ArgumentOrderType]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def or_(
+        self: Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]],
+        other: Union[_BooleanValue, BareExpressionArgument[Mask]],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def or_(
         self,
         other: Union[
             _BooleanValue,
-            Operand[Any, Any, Unpack[Tuple[Any, ...]]],
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
             Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.or_(Operand._to_py_argument(other))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.or_(Expression._to_argument(other)))
 
     @overload
     def xor(
-        self: Operand[Indexed[IndexType, Mask], Definite, Unpack[Levels]],
-        other: IndexedDroppingArgument[IndexType, Mask],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def xor(
-        self: Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]],
-        other: IndexedDroppingArgument[IndexType, Mask],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def xor(
-        self: Operand[Bare[Mask], Definite, Unpack[Levels]],
-        other: BareDroppingArgument[Mask],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def xor(
-        self: Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]],
-        other: BareDroppingArgument[Mask],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def xor(
-        self: Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]],
-        other: Union[
-            _BooleanValue, IndexedOperandArgument[IndexType, Mask, ArgumentOrderType]
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], Definite, Unpack[Levels]
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        other: IndexedDroppingArgument[IndexType, Mask],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def xor(
-        self: Operand[Bare[Mask], ContainerType, Unpack[Levels]],
-        other: Union[_BooleanValue, BareOperandArgument[Mask]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+        ],
+        other: IndexedDroppingArgument[IndexType, Mask],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def xor(
+        self: Expression[BindingType, Bare[Mask], Definite, Unpack[Levels]],
+        other: BareDroppingArgument[Mask],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
+
+    @overload
+    def xor(
+        self: Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]],
+        other: BareDroppingArgument[Mask],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def xor(
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+        ],
+        other: Union[
+            _BooleanValue, IndexedExpressionArgument[IndexType, Mask, ArgumentOrderType]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def xor(
+        self: Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]],
+        other: Union[_BooleanValue, BareExpressionArgument[Mask]],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def xor(
         self,
         other: Union[
             _BooleanValue,
-            Operand[Any, Any, Unpack[Tuple[Any, ...]]],
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
             Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.xor(Operand._to_py_argument(other))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.xor(Expression._to_argument(other)))
 
     @overload
     def not_(
-        self: Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def not_(
-        self: Operand[Bare[Mask], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
-    def not_(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.not_())
-
-    @overload
-    def first(
-        self: Operand[Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, V], Single, Unpack[Levels]]: ...
+    def not_(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.not_())
 
     @overload
     def first(
-        self: Operand[Bare[BareValueType], Multiple[Ordered], Unpack[Levels]],
-    ) -> Operand[Bare[BareValueType], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Indexed[IndexType, V], Single, Unpack[Levels]]: ...
 
-    def first(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.first())
+    @overload
+    def first(
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[BareValueType], Single, Unpack[Levels]]: ...
+
+    def first(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.first())
 
     @overload
     def last(
-        self: Operand[Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, V], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Indexed[IndexType, V], Single, Unpack[Levels]]: ...
 
     @overload
     def last(
-        self: Operand[Bare[BareValueType], Multiple[Ordered], Unpack[Levels]],
-    ) -> Operand[Bare[BareValueType], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[BareValueType], Single, Unpack[Levels]]: ...
 
-    def last(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.last())
-
-    @overload
-    def reverse_order(
-        self: Operand[Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]]: ...
+    def last(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.last())
 
     @overload
     def reverse_order(
-        self: Operand[Bare[BareValueType], Multiple[Ordered], Unpack[Levels]],
-    ) -> Operand[Bare[BareValueType], Multiple[Ordered], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+    ]: ...
 
-    def reverse_order(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.reverse_order())
+    @overload
+    def reverse_order(
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+    ]: ...
+
+    def reverse_order(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.reverse_order())
 
     @overload
     def shuffle(
-        self: Operand[Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def shuffle(
-        self: Operand[Bare[BareValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[BareValueType], Multiple[Ordered], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+    ]: ...
 
-    def shuffle(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.shuffle())
+    def shuffle(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.shuffle())
 
     @overload
     def unorder(
-        self: Operand[Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, V], Multiple[Unordered], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], Multiple[Unordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def unorder(
-        self: Operand[Bare[BareValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[BareValueType], Multiple[Unordered], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[BareValueType], Multiple[Unordered], Unpack[Levels]
+    ]: ...
 
-    def unorder(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.unorder())
+    def unorder(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.unorder())
 
     @overload
     def sort(
-        self: Operand[
-            Indexed[SortableIndexType, OrderableValueType],
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[SortableIndexType, OrderableValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, OrderableValueType],
         Multiple[Ordered],
         Unpack[Levels],
     ]: ...
 
     @overload
     def sort(
-        self: Operand[Bare[OrderableValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[OrderableValueType], Multiple[Ordered], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[OrderableValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[OrderableValueType], Multiple[Ordered], Unpack[Levels]
+    ]: ...
 
-    def sort(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.sort())
+    def sort(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.sort())
 
     def sort_by(
-        self: Operand[
-            Indexed[SortableIndexType, V], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]
         ],
-        key: IndexedAnyScalarArgument[
-            SortableIndexType, SortKeyValueType, ArgumentOrderType
-        ],
-    ) -> Operand[Indexed[SortableIndexType, V], Multiple[Ordered], Unpack[Levels]]:
-        return Operand._from_py_operand(
-            self._operand.sort_by(Operand._to_py_argument(key))
-        )
+        key: IndexedAnyScalarArgument[IndexType, SortKeyValueType, ArgumentOrderType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+    ]:
+        return self._rebuild(self._py_carrier.sort_by(Expression._to_argument(key)))
 
     @overload
     def drop_duplicates(
-        self: Operand[
-            Indexed[IndexType, EquivalentValueType], Multiple[Ordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EquivalentValueType],
+            Multiple[Ordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, EquivalentValueType], Multiple[Ordered], Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, EquivalentValueType],
+        Multiple[Ordered],
+        Unpack[Levels],
     ]: ...
 
     @overload
     def drop_duplicates(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[ValueIndexType]],
             Multiple[Ordered],
             Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, IndexValue[ValueIndexType]],
         Multiple[Ordered],
         Unpack[Levels],
     ]: ...
 
-    def drop_duplicates(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.drop_duplicates())
+    def drop_duplicates(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.drop_duplicates())
 
     @overload
     def is_duplicated(
-        self: Operand[
-            Indexed[IndexType, EquivalentValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EquivalentValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, Mask], Multiple[OrderType], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], Multiple[OrderType], Unpack[Levels]
+    ]: ...
 
     @overload
     def is_duplicated(
-        self: Operand[Bare[EquivalentValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[Mask], Multiple[OrderType], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[EquivalentValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Mask], Multiple[OrderType], Unpack[Levels]]: ...
 
     @overload
     def is_duplicated(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[ValueIndexType]],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, Mask], Multiple[OrderType], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], Multiple[OrderType], Unpack[Levels]
+    ]: ...
 
     @overload
     def is_duplicated(
-        self: Operand[
-            Bare[IndexValue[ValueIndexType]], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[ValueIndexType]],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[Bare[Mask], Multiple[OrderType], Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[Mask], Multiple[OrderType], Unpack[Levels]]: ...
 
-    def is_duplicated(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.is_duplicated())
+    def is_duplicated(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.is_duplicated())
 
     @overload
     def unique(
-        self: Operand[Bare[EquivalentValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[EquivalentValueType], Multiple[OrderType], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[EquivalentValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[EquivalentValueType], Multiple[OrderType], Unpack[Levels]
+    ]: ...
 
     @overload
     def unique(
-        self: Operand[
-            Bare[IndexValue[ValueIndexType]], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[ValueIndexType]],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Bare[IndexValue[ValueIndexType]], Multiple[OrderType], Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Bare[IndexValue[ValueIndexType]],
+        Multiple[OrderType],
+        Unpack[Levels],
     ]: ...
 
-    def unique(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.unique())
+    def unique(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.unique())
 
     @overload
     def take(
-        self: Operand[Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+        ],
         elements: int,
-    ) -> Operand[Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def take(
-        self: Operand[Bare[BareValueType], Multiple[Ordered], Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+        ],
         elements: int,
-    ) -> Operand[Bare[BareValueType], Multiple[Ordered], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+    ]: ...
 
-    def take(self, elements: int) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.take(elements))
+    def take(self, elements: int) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.take(elements))
 
     @overload
     def is_bool(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ScalarInspectableValueType],
             ContainerType,
             Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_bool(
-        self: Operand[Bare[ScalarInspectableValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[ScalarInspectableValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
-    def is_bool(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.is_bool())
+    def is_bool(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.is_bool())
 
     @overload
     def is_datetime(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ScalarInspectableValueType],
             ContainerType,
             Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_datetime(
-        self: Operand[Bare[ScalarInspectableValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[ScalarInspectableValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
-    def is_datetime(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.is_datetime())
+    def is_datetime(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.is_datetime())
 
     @overload
     def is_duration(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ScalarInspectableValueType],
             ContainerType,
             Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_duration(
-        self: Operand[Bare[ScalarInspectableValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[ScalarInspectableValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
-    def is_duration(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.is_duration())
+    def is_duration(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.is_duration())
 
     @overload
     def is_float(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ScalarInspectableValueType],
             ContainerType,
             Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_float(
-        self: Operand[Bare[ScalarInspectableValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[ScalarInspectableValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
-    def is_float(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.is_float())
+    def is_float(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.is_float())
 
     @overload
     def is_null(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ScalarInspectableValueType],
             ContainerType,
             Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_null(
-        self: Operand[Bare[ScalarInspectableValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[ScalarInspectableValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
-    def is_null(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.is_null())
+    def is_null(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.is_null())
 
     @overload
     def is_int(
-        self: Operand[
-            Indexed[IndexType, InspectableValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, InspectableValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_int(
-        self: Operand[Bare[InspectableValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[InspectableValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
-    def is_int(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.is_int())
+    def is_int(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.is_int())
 
     @overload
     def is_string(
-        self: Operand[
-            Indexed[IndexType, InspectableValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, InspectableValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_string(
-        self: Operand[Bare[InspectableValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[InspectableValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
-    def is_string(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.is_string())
+    def is_string(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.is_string())
 
     @overload
     def abs(
-        self: Operand[
-            Indexed[IndexType, NumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, NumericValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, NumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, NumericValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def abs(
-        self: Operand[Bare[NumericValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[NumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[NumericValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[NumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def abs(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.abs())
+    def abs(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.abs())
 
     @overload
     def neg(
-        self: Operand[
-            Indexed[IndexType, NumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, NumericValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, NumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, NumericValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def neg(
-        self: Operand[Bare[NumericValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[NumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[NumericValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[NumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def neg(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.neg())
+    def neg(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.neg())
 
     @overload
     def sign(
-        self: Operand[
-            Indexed[IndexType, NumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, NumericValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, NumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, NumericValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def sign(
-        self: Operand[Bare[NumericValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[NumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[NumericValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[NumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def sign(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.sign())
+    def sign(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.sign())
 
     @overload
     def ceil(
-        self: Operand[
-            Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, RealNumericValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, RealNumericValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def ceil(
-        self: Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def ceil(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.ceil())
+    def ceil(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.ceil())
 
     @overload
     def cbrt(
-        self: Operand[
-            Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, RealNumericValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, RealNumericValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def cbrt(
-        self: Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def cbrt(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.cbrt())
+    def cbrt(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.cbrt())
 
     @overload
     def exp(
-        self: Operand[
-            Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, RealNumericValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, RealNumericValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def exp(
-        self: Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def exp(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.exp())
+    def exp(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.exp())
 
     @overload
     def floor(
-        self: Operand[
-            Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, RealNumericValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, RealNumericValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def floor(
-        self: Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def floor(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.floor())
+    def floor(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.floor())
 
     @overload
     def log(
-        self: Operand[
-            Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, RealNumericValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, RealNumericValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def log(
-        self: Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def log(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.log())
+    def log(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.log())
 
     @overload
     def round(
-        self: Operand[
-            Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, RealNumericValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, RealNumericValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def round(
-        self: Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def round(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.round())
+    def round(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.round())
 
     @overload
     def sqrt(
-        self: Operand[
-            Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, RealNumericValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, RealNumericValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def sqrt(
-        self: Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def sqrt(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.sqrt())
+    def sqrt(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.sqrt())
 
     @overload
     def trim(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def trim(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def trim(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.trim())
+    def trim(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.trim())
 
     @overload
     def trim_start(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def trim_start(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def trim_start(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.trim_start())
+    def trim_start(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.trim_start())
 
     @overload
     def trim_end(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def trim_end(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def trim_end(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.trim_end())
+    def trim_end(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.trim_end())
 
     @overload
     def lowercase(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def lowercase(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def lowercase(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.lowercase())
+    def lowercase(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.lowercase())
 
     @overload
     def uppercase(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def uppercase(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def uppercase(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.uppercase())
+    def uppercase(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.uppercase())
 
     @overload
     def reverse(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def reverse(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
-
-    def reverse(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.reverse())
-
-    @overload
-    def length(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
         ],
-    ) -> Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
+
+    def reverse(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.reverse())
 
     @overload
     def length(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Scalar], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def length(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.length())
+    @overload
+    def length(
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]]: ...
+
+    def length(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.length())
 
     @overload
     def slice(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
         start: int,
         end: int,
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def slice(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
         start: int,
         end: int,
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def slice(self, start: int, end: int) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.slice(start, end))
-
-    @overload
-    def starts_with(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        prefix: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
+    def slice(self, start: int, end: int) -> Any:
+        return self._rebuild(self._py_carrier.slice(start, end))
 
     @overload
     def starts_with(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
-        prefix: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, StringArgumentValueType],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def starts_with(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
-        prefix: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def starts_with(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
-        prefix: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def starts_with(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        prefix: IndexedOperandArgument[
+        argument: IndexedDroppingArgument[IndexType, StringArgumentValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def starts_with(
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
+        argument: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
+
+    @overload
+    def starts_with(
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def starts_with(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
             IndexType, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def starts_with(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        prefix: BareOperandArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def starts_with(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
         ],
-        prefix: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareExpressionArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def starts_with(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        prefix: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def starts_with(
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def starts_with(
         self,
-        prefix: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.starts_with(Operand._to_py_argument(prefix))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.starts_with(Expression._to_argument(argument))
         )
 
     @overload
     def ends_with(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        suffix: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def ends_with(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
-        suffix: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, StringArgumentValueType],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def ends_with(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
-        suffix: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def ends_with(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
-        suffix: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def ends_with(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        suffix: IndexedOperandArgument[
+        argument: IndexedDroppingArgument[IndexType, StringArgumentValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def ends_with(
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
+        argument: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
+
+    @overload
+    def ends_with(
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def ends_with(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
             IndexType, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def ends_with(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        suffix: BareOperandArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def ends_with(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
         ],
-        suffix: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareExpressionArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def ends_with(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        suffix: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def ends_with(
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def ends_with(
         self,
-        suffix: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.ends_with(Operand._to_py_argument(suffix))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.ends_with(Expression._to_argument(argument))
         )
 
     @overload
     def contains(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        part: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def contains(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
-        part: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, StringArgumentValueType],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def contains(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
-        part: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def contains(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
-        part: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def contains(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        part: IndexedOperandArgument[
+        argument: IndexedDroppingArgument[IndexType, StringArgumentValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def contains(
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
+        argument: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
+
+    @overload
+    def contains(
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def contains(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
             IndexType, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def contains(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        part: BareOperandArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def contains(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
         ],
-        part: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareExpressionArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def contains(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        part: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def contains(
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def contains(
         self,
-        part: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.contains(Operand._to_py_argument(part))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.contains(Expression._to_argument(argument))
         )
 
     @overload
     def matches(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
+        ],
         pattern: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def matches(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
         pattern: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def matches(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
         pattern: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def matches(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
-        pattern: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def matches(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
         ],
-        pattern: IndexedOperandArgument[
+        pattern: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def matches(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        pattern: IndexedExpressionArgument[
             IndexType, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def matches(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        pattern: BareOperandArgument[StringArgumentValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+        pattern: BareExpressionArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def matches(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
         pattern: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def matches(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
         pattern: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def matches(
         self,
         pattern: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.matches(Operand._to_py_argument(pattern))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.matches(Expression._to_argument(pattern)))
 
     @overload
     def strip_prefix(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        prefix: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def strip_prefix(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
         prefix: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def strip_prefix(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
-        prefix: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def strip_prefix(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
-        prefix: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def strip_prefix(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        prefix: IndexedOperandArgument[
+        prefix: IndexedDroppingArgument[IndexType, StringArgumentValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, StringValueType],
+        DroppedContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def strip_prefix(
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
+        prefix: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[StringValueType], Single, Unpack[Levels]]: ...
+
+    @overload
+    def strip_prefix(
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        prefix: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[
+        BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def strip_prefix(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        prefix: IndexedExpressionArgument[
             IndexType, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def strip_prefix(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        prefix: BareOperandArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+        prefix: BareExpressionArgument[StringArgumentValueType],
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def strip_prefix(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
         prefix: ScalarValue,
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def strip_prefix(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
         prefix: ScalarValue,
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     def strip_prefix(
         self,
         prefix: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.strip_prefix(Operand._to_py_argument(prefix))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.strip_prefix(Expression._to_argument(prefix))
         )
 
     @overload
     def strip_suffix(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        suffix: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def strip_suffix(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
         suffix: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def strip_suffix(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
-        suffix: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def strip_suffix(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
-        suffix: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def strip_suffix(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        suffix: IndexedOperandArgument[
+        suffix: IndexedDroppingArgument[IndexType, StringArgumentValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, StringValueType],
+        DroppedContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def strip_suffix(
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
+        suffix: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[BindingType, Bare[StringValueType], Single, Unpack[Levels]]: ...
+
+    @overload
+    def strip_suffix(
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        suffix: BareDroppingArgument[StringArgumentValueType],
+    ) -> Expression[
+        BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def strip_suffix(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        suffix: IndexedExpressionArgument[
             IndexType, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def strip_suffix(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        suffix: BareOperandArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+        suffix: BareExpressionArgument[StringArgumentValueType],
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def strip_suffix(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
         suffix: ScalarValue,
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def strip_suffix(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
         suffix: ScalarValue,
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     def strip_suffix(
         self,
         suffix: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.strip_suffix(Operand._to_py_argument(suffix))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.strip_suffix(Expression._to_argument(suffix))
         )
 
     @overload
     def replace(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
         old: IndexedStringArgument[IndexType, OldStringValueType, ArgumentOrderType],
         new: IndexedStringArgument[IndexType, NewStringValueType, ArgumentOrderType],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def replace(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        old: IndexedDroppingArgument[IndexType, OldStringValueType],
-        new: IndexedAnyStringArgument[IndexType, NewStringValueType, ArgumentOrderType],
-    ) -> Operand[Indexed[IndexType, StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def replace(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
         old: IndexedDroppingArgument[IndexType, OldStringValueType],
         new: IndexedAnyStringArgument[IndexType, NewStringValueType, ArgumentOrderType],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def replace(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        old: IndexedStringArgument[IndexType, OldStringValueType, ArgumentOrderType],
-        new: IndexedDroppingArgument[IndexType, NewStringValueType],
-    ) -> Operand[Indexed[IndexType, StringValueType], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        old: IndexedDroppingArgument[IndexType, OldStringValueType],
+        new: IndexedAnyStringArgument[IndexType, NewStringValueType, ArgumentOrderType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, StringValueType],
+        DroppedContainerType,
+        Unpack[Levels],
+    ]: ...
 
     @overload
     def replace(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
         old: IndexedStringArgument[IndexType, OldStringValueType, ArgumentOrderType],
         new: IndexedDroppingArgument[IndexType, NewStringValueType],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def replace(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        old: IndexedStringArgument[IndexType, OldStringValueType, ArgumentOrderType],
+        new: IndexedDroppingArgument[IndexType, NewStringValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, StringValueType],
+        DroppedContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def replace(
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
         old: BareStringArgument[OldStringValueType],
         new: BareStringArgument[NewStringValueType],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def replace(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
         old: BareDroppingArgument[OldStringValueType],
         new: BareAnyStringArgument[NewStringValueType],
-    ) -> Operand[Bare[StringValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[StringValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def replace(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
         old: BareDroppingArgument[OldStringValueType],
         new: BareAnyStringArgument[NewStringValueType],
-    ) -> Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def replace(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
         old: BareStringArgument[OldStringValueType],
         new: BareDroppingArgument[NewStringValueType],
-    ) -> Operand[Bare[StringValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[StringValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def replace(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
         old: BareStringArgument[OldStringValueType],
         new: BareDroppingArgument[NewStringValueType],
-    ) -> Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     def replace(
         self,
         old: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
         new: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.replace(
-                Operand._to_py_argument(old), Operand._to_py_argument(new)
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.replace(
+                Expression._to_argument(old), Expression._to_argument(new)
             )
         )
 
     @overload
     def replace_all(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
         old: IndexedStringArgument[IndexType, OldStringValueType, ArgumentOrderType],
         new: IndexedStringArgument[IndexType, NewStringValueType, ArgumentOrderType],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def replace_all(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        old: IndexedDroppingArgument[IndexType, OldStringValueType],
-        new: IndexedAnyStringArgument[IndexType, NewStringValueType, ArgumentOrderType],
-    ) -> Operand[Indexed[IndexType, StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def replace_all(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
         old: IndexedDroppingArgument[IndexType, OldStringValueType],
         new: IndexedAnyStringArgument[IndexType, NewStringValueType, ArgumentOrderType],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def replace_all(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        old: IndexedStringArgument[IndexType, OldStringValueType, ArgumentOrderType],
-        new: IndexedDroppingArgument[IndexType, NewStringValueType],
-    ) -> Operand[Indexed[IndexType, StringValueType], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        old: IndexedDroppingArgument[IndexType, OldStringValueType],
+        new: IndexedAnyStringArgument[IndexType, NewStringValueType, ArgumentOrderType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, StringValueType],
+        DroppedContainerType,
+        Unpack[Levels],
+    ]: ...
 
     @overload
     def replace_all(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
         old: IndexedStringArgument[IndexType, OldStringValueType, ArgumentOrderType],
         new: IndexedDroppingArgument[IndexType, NewStringValueType],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def replace_all(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        old: IndexedStringArgument[IndexType, OldStringValueType, ArgumentOrderType],
+        new: IndexedDroppingArgument[IndexType, NewStringValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, StringValueType],
+        DroppedContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def replace_all(
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
         old: BareStringArgument[OldStringValueType],
         new: BareStringArgument[NewStringValueType],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def replace_all(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
         old: BareDroppingArgument[OldStringValueType],
         new: BareAnyStringArgument[NewStringValueType],
-    ) -> Operand[Bare[StringValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[StringValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def replace_all(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
         old: BareDroppingArgument[OldStringValueType],
         new: BareAnyStringArgument[NewStringValueType],
-    ) -> Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def replace_all(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
         old: BareStringArgument[OldStringValueType],
         new: BareDroppingArgument[NewStringValueType],
-    ) -> Operand[Bare[StringValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[StringValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def replace_all(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
         old: BareStringArgument[OldStringValueType],
         new: BareDroppingArgument[NewStringValueType],
-    ) -> Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     def replace_all(
         self,
         old: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
         new: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.replace_all(
-                Operand._to_py_argument(old), Operand._to_py_argument(new)
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.replace_all(
+                Expression._to_argument(old), Expression._to_argument(new)
             )
         )
 
     @overload
     def pad_start(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-        width: IndexedIntegerArgument[IndexType, IntegerValueType, ArgumentOrderType],
+        width: int,
         character: IndexedStringArgument[
             IndexType, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def pad_start(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        width: IndexedDroppingArgument[IndexType, IntegerValueType],
-        character: IndexedAnyStringArgument[
-            IndexType, StringArgumentValueType, ArgumentOrderType
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
-    ) -> Operand[Indexed[IndexType, StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def pad_start(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
-        ],
-        width: IndexedDroppingArgument[IndexType, IntegerValueType],
-        character: IndexedAnyStringArgument[
-            IndexType, StringArgumentValueType, ArgumentOrderType
-        ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
-    ]: ...
-
-    @overload
-    def pad_start(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        width: IndexedIntegerArgument[IndexType, IntegerValueType, ArgumentOrderType],
+        width: int,
         character: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def pad_start(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
-        ],
-        width: IndexedIntegerArgument[IndexType, IntegerValueType, ArgumentOrderType],
-        character: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def pad_start(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        width: BareIntegerArgument[IntegerValueType],
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        width: int,
+        character: IndexedDroppingArgument[IndexType, StringArgumentValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, StringValueType],
+        DroppedContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def pad_start(
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+        width: int,
         character: BareStringArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def pad_start(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
-        width: BareDroppingArgument[IntegerValueType],
-        character: BareAnyStringArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def pad_start(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
-        width: BareDroppingArgument[IntegerValueType],
-        character: BareAnyStringArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def pad_start(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
-        width: BareIntegerArgument[IntegerValueType],
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
+        width: int,
         character: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[StringValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def pad_start(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
-        width: BareIntegerArgument[IntegerValueType],
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        width: int,
         character: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     def pad_start(
         self,
-        width: Union[
-            int, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
-        ],
+        width: int,
         character: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.pad_start(
-                Operand._to_py_argument(width), Operand._to_py_argument(character)
-            )
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.pad_start(width, Expression._to_argument(character))
         )
 
     @overload
     def pad_end(
-        self: Operand[
-            Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-        width: IndexedIntegerArgument[IndexType, IntegerValueType, ArgumentOrderType],
+        width: int,
         character: IndexedStringArgument[
             IndexType, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def pad_end(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        width: IndexedDroppingArgument[IndexType, IntegerValueType],
-        character: IndexedAnyStringArgument[
-            IndexType, StringArgumentValueType, ArgumentOrderType
+        self: Expression[
+            BindingType, Indexed[IndexType, StringValueType], Definite, Unpack[Levels]
         ],
-    ) -> Operand[Indexed[IndexType, StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def pad_end(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
-        ],
-        width: IndexedDroppingArgument[IndexType, IntegerValueType],
-        character: IndexedAnyStringArgument[
-            IndexType, StringArgumentValueType, ArgumentOrderType
-        ],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
-    ]: ...
-
-    @overload
-    def pad_end(
-        self: Operand[Indexed[IndexType, StringValueType], Definite, Unpack[Levels]],
-        width: IndexedIntegerArgument[IndexType, IntegerValueType, ArgumentOrderType],
+        width: int,
         character: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[Indexed[IndexType, StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def pad_end(
-        self: Operand[
-            Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
-        ],
-        width: IndexedIntegerArgument[IndexType, IntegerValueType, ArgumentOrderType],
-        character: IndexedDroppingArgument[IndexType, StringArgumentValueType],
-    ) -> Operand[
-        Indexed[IndexType, StringValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, StringValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def pad_end(
-        self: Operand[Bare[StringValueType], ContainerType, Unpack[Levels]],
-        width: BareIntegerArgument[IntegerValueType],
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, StringValueType],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        width: int,
+        character: IndexedDroppingArgument[IndexType, StringArgumentValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, StringValueType],
+        DroppedContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def pad_end(
+        self: Expression[
+            BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+        ],
+        width: int,
         character: BareStringArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def pad_end(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
-        width: BareDroppingArgument[IntegerValueType],
-        character: BareAnyStringArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def pad_end(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
-        width: BareDroppingArgument[IntegerValueType],
-        character: BareAnyStringArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def pad_end(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
-        width: BareIntegerArgument[IntegerValueType],
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
+        width: int,
         character: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[StringValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def pad_end(
-        self: Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]],
-        width: BareIntegerArgument[IntegerValueType],
+        self: Expression[
+            BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        width: int,
         character: BareDroppingArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     def pad_end(
         self,
-        width: Union[
-            int, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
-        ],
+        width: int,
         character: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.pad_end(
-                Operand._to_py_argument(width), Operand._to_py_argument(character)
-            )
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.pad_end(width, Expression._to_argument(character))
         )
 
     @overload
     def split(
-        self: Operand[
-            Indexed[NodeIndex, StringValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[NodeIndex, StringValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
         delimiter: IndexedAnyStringArgument[
             NodeIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[NodeIndex, Positional, Tuple[NodeIndexPayload, Optional[int]]],
             StringValueType,
@@ -2560,13 +3664,17 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
-            Indexed[EdgeIndex, StringValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[EdgeIndex, StringValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
         delimiter: IndexedAnyStringArgument[
             EdgeIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[EdgeIndex, Positional, Tuple[EdgeIndexPayload, Optional[int]]],
             StringValueType,
@@ -2577,13 +3685,38 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
-            Indexed[Positional, StringValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[GroupIndex, StringValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
+        ],
+        delimiter: IndexedAnyStringArgument[
+            GroupIndex, StringArgumentValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[GroupIndex, Positional, Tuple[GroupIndexPayload, Optional[int]]],
+            StringValueType,
+        ],
+        Multiple[OrderType],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def split(
+        self: Expression[
+            BindingType,
+            Indexed[Positional, StringValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
         delimiter: IndexedAnyStringArgument[
             Positional, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[Positional, Positional, Tuple[int, Optional[int]]],
             StringValueType,
@@ -2594,13 +3727,17 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
-            Indexed[EndpointRole, StringValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[EndpointRole, StringValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
         delimiter: IndexedAnyStringArgument[
             EndpointRole, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[EndpointRole, Positional, Tuple[EdgeEndpointRole, Optional[int]]],
             StringValueType,
@@ -2611,13 +3748,17 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
-            Indexed[ValueIndex, StringValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[ValueIndex, StringValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
         delimiter: IndexedAnyStringArgument[
             ValueIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[ValueIndex, Positional, Tuple[ScalarValue, Optional[int]]],
             StringValueType,
@@ -2628,7 +3769,8 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[AttributeNameIndex, StringValueType],
             Multiple[OrderType],
             Unpack[Levels],
@@ -2636,7 +3778,8 @@ class Operand(Generic[S, C, Unpack[Levels]]):
         delimiter: IndexedAnyStringArgument[
             AttributeNameIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[AttributeNameIndex, Positional, Tuple[Attribute, Optional[int]]],
             StringValueType,
@@ -2647,13 +3790,17 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
-            Indexed[BoolIndex, StringValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[BoolIndex, StringValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
         delimiter: IndexedAnyStringArgument[
             BoolIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[BoolIndex, Positional, Tuple[bool, Optional[int]]],
             StringValueType,
@@ -2664,7 +3811,8 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[FailureKindIndex, StringValueType],
             Multiple[OrderType],
             Unpack[Levels],
@@ -2672,7 +3820,8 @@ class Operand(Generic[S, C, Unpack[Levels]]):
         delimiter: IndexedAnyStringArgument[
             FailureKindIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[FailureKindIndex, Positional, Tuple[FailureKind, Optional[int]]],
             StringValueType,
@@ -2683,7 +3832,8 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[Expanded[K, ChildType, ParentPayloadType], StringValueType],
             Multiple[OrderType],
             Unpack[Levels],
@@ -2693,7 +3843,8 @@ class Operand(Generic[S, C, Unpack[Levels]]):
             StringArgumentValueType,
             ArgumentOrderType,
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 Expanded[K, ChildType, ParentPayloadType],
@@ -2708,11 +3859,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[NodeIndex, StringValueType], Single, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[NodeIndex, StringValueType], Single, Unpack[Levels]
+        ],
         delimiter: IndexedAnyStringArgument[
             NodeIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[NodeIndex, Positional, Tuple[NodeIndexPayload, Optional[int]]],
             StringValueType,
@@ -2723,11 +3877,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[EdgeIndex, StringValueType], Single, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, StringValueType], Single, Unpack[Levels]
+        ],
         delimiter: IndexedAnyStringArgument[
             EdgeIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[EdgeIndex, Positional, Tuple[EdgeIndexPayload, Optional[int]]],
             StringValueType,
@@ -2738,11 +3895,32 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[Positional, StringValueType], Single, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[GroupIndex, StringValueType], Single, Unpack[Levels]
+        ],
+        delimiter: IndexedAnyStringArgument[
+            GroupIndex, StringArgumentValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[GroupIndex, Positional, Tuple[GroupIndexPayload, Optional[int]]],
+            StringValueType,
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def split(
+        self: Expression[
+            BindingType, Indexed[Positional, StringValueType], Single, Unpack[Levels]
+        ],
         delimiter: IndexedAnyStringArgument[
             Positional, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[Positional, Positional, Tuple[int, Optional[int]]],
             StringValueType,
@@ -2753,11 +3931,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[EndpointRole, StringValueType], Single, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[EndpointRole, StringValueType], Single, Unpack[Levels]
+        ],
         delimiter: IndexedAnyStringArgument[
             EndpointRole, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[EndpointRole, Positional, Tuple[EdgeEndpointRole, Optional[int]]],
             StringValueType,
@@ -2768,11 +3949,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[ValueIndex, StringValueType], Single, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[ValueIndex, StringValueType], Single, Unpack[Levels]
+        ],
         delimiter: IndexedAnyStringArgument[
             ValueIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[ValueIndex, Positional, Tuple[ScalarValue, Optional[int]]],
             StringValueType,
@@ -2783,13 +3967,17 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
-            Indexed[AttributeNameIndex, StringValueType], Single, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[AttributeNameIndex, StringValueType],
+            Single,
+            Unpack[Levels],
         ],
         delimiter: IndexedAnyStringArgument[
             AttributeNameIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[AttributeNameIndex, Positional, Tuple[Attribute, Optional[int]]],
             StringValueType,
@@ -2800,11 +3988,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[BoolIndex, StringValueType], Single, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[BoolIndex, StringValueType], Single, Unpack[Levels]
+        ],
         delimiter: IndexedAnyStringArgument[
             BoolIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[BoolIndex, Positional, Tuple[bool, Optional[int]]],
             StringValueType,
@@ -2815,13 +4006,17 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
-            Indexed[FailureKindIndex, StringValueType], Single, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, StringValueType],
+            Single,
+            Unpack[Levels],
         ],
         delimiter: IndexedAnyStringArgument[
             FailureKindIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[FailureKindIndex, Positional, Tuple[FailureKind, Optional[int]]],
             StringValueType,
@@ -2832,7 +4027,8 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[Expanded[K, ChildType, ParentPayloadType], StringValueType],
             Single,
             Unpack[Levels],
@@ -2842,7 +4038,8 @@ class Operand(Generic[S, C, Unpack[Levels]]):
             StringArgumentValueType,
             ArgumentOrderType,
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 Expanded[K, ChildType, ParentPayloadType],
@@ -2857,11 +4054,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[NodeIndex, StringValueType], Definite, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[NodeIndex, StringValueType], Definite, Unpack[Levels]
+        ],
         delimiter: IndexedAnyStringArgument[
             NodeIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[NodeIndex, Positional, Tuple[NodeIndexPayload, Optional[int]]],
             StringValueType,
@@ -2872,11 +4072,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[EdgeIndex, StringValueType], Definite, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, StringValueType], Definite, Unpack[Levels]
+        ],
         delimiter: IndexedAnyStringArgument[
             EdgeIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[EdgeIndex, Positional, Tuple[EdgeIndexPayload, Optional[int]]],
             StringValueType,
@@ -2887,13 +4090,16 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[Positional, StringValueType], Definite, Unpack[Levels]],
-        delimiter: IndexedAnyStringArgument[
-            Positional, StringArgumentValueType, ArgumentOrderType
+        self: Expression[
+            BindingType, Indexed[GroupIndex, StringValueType], Definite, Unpack[Levels]
         ],
-    ) -> Operand[
+        delimiter: IndexedAnyStringArgument[
+            GroupIndex, StringArgumentValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
-            Expanded[Positional, Positional, Tuple[int, Optional[int]]],
+            Expanded[GroupIndex, Positional, Tuple[GroupIndexPayload, Optional[int]]],
             StringValueType,
         ],
         Multiple[Ordered],
@@ -2902,11 +4108,34 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[EndpointRole, StringValueType], Definite, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[Positional, StringValueType], Definite, Unpack[Levels]
+        ],
+        delimiter: IndexedAnyStringArgument[
+            Positional, StringArgumentValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[Positional, Positional, Tuple[int, Optional[int]]], StringValueType
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def split(
+        self: Expression[
+            BindingType,
+            Indexed[EndpointRole, StringValueType],
+            Definite,
+            Unpack[Levels],
+        ],
         delimiter: IndexedAnyStringArgument[
             EndpointRole, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[EndpointRole, Positional, Tuple[EdgeEndpointRole, Optional[int]]],
             StringValueType,
@@ -2917,11 +4146,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[ValueIndex, StringValueType], Definite, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[ValueIndex, StringValueType], Definite, Unpack[Levels]
+        ],
         delimiter: IndexedAnyStringArgument[
             ValueIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[ValueIndex, Positional, Tuple[ScalarValue, Optional[int]]],
             StringValueType,
@@ -2932,13 +4164,17 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
-            Indexed[AttributeNameIndex, StringValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[AttributeNameIndex, StringValueType],
+            Definite,
+            Unpack[Levels],
         ],
         delimiter: IndexedAnyStringArgument[
             AttributeNameIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[AttributeNameIndex, Positional, Tuple[Attribute, Optional[int]]],
             StringValueType,
@@ -2949,14 +4185,16 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Indexed[BoolIndex, StringValueType], Definite, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[BoolIndex, StringValueType], Definite, Unpack[Levels]
+        ],
         delimiter: IndexedAnyStringArgument[
             BoolIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
-            Expanded[BoolIndex, Positional, Tuple[bool, Optional[int]]],
-            StringValueType,
+            Expanded[BoolIndex, Positional, Tuple[bool, Optional[int]]], StringValueType
         ],
         Multiple[Ordered],
         Unpack[Levels],
@@ -2964,13 +4202,17 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
-            Indexed[FailureKindIndex, StringValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, StringValueType],
+            Definite,
+            Unpack[Levels],
         ],
         delimiter: IndexedAnyStringArgument[
             FailureKindIndex, StringArgumentValueType, ArgumentOrderType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[FailureKindIndex, Positional, Tuple[FailureKind, Optional[int]]],
             StringValueType,
@@ -2981,7 +4223,8 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[Expanded[K, ChildType, ParentPayloadType], StringValueType],
             Definite,
             Unpack[Levels],
@@ -2991,7 +4234,8 @@ class Operand(Generic[S, C, Unpack[Levels]]):
             StringArgumentValueType,
             ArgumentOrderType,
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 Expanded[K, ChildType, ParentPayloadType],
@@ -3006,53 +4250,73 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def split(
-        self: Operand[Bare[StringValueType], Multiple[OrderType], Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[StringValueType], Multiple[OrderType], Unpack[Levels]
+        ],
         delimiter: BareAnyStringArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], Multiple[OrderType], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], Multiple[OrderType], Unpack[Levels]
+    ]: ...
 
     @overload
     def split(
-        self: Operand[Bare[StringValueType], Single, Unpack[Levels]],
+        self: Expression[BindingType, Bare[StringValueType], Single, Unpack[Levels]],
         delimiter: BareAnyStringArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], Multiple[Ordered], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], Multiple[Ordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def split(
-        self: Operand[Bare[StringValueType], Definite, Unpack[Levels]],
+        self: Expression[BindingType, Bare[StringValueType], Definite, Unpack[Levels]],
         delimiter: BareAnyStringArgument[StringArgumentValueType],
-    ) -> Operand[Bare[StringValueType], Multiple[Ordered], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[StringValueType], Multiple[Ordered], Unpack[Levels]
+    ]: ...
 
     def split(
         self,
         delimiter: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.split(Operand._to_py_argument(delimiter))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.split(Expression._to_argument(delimiter)))
 
     @overload
     def attribute(
-        self: Operand[Indexed[EntityType, Unit], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[EntityType, Unit], ContainerType, Unpack[Levels]
+        ],
         attribute: Attribute,
-    ) -> Operand[Indexed[EntityType, Scalar], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[EntityType, Scalar], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def attribute(
-        self: Operand[Indexed[IndexType, ReferenceType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
         attribute: Attribute,
-    ) -> Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def attribute(
-        self, attribute: Attribute
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.attribute(attribute))
+    def attribute(self, attribute: Attribute) -> Any:
+        return self._rebuild(self._py_carrier.attribute(attribute))
 
     @overload
     def attributes(
-        self: Operand[Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 NodeIndex,
@@ -3067,8 +4331,11 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def attributes(
-        self: Operand[Indexed[EdgeIndex, Unit], ContainerType, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EdgeIndex,
@@ -3083,8 +4350,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def attributes(
-        self: Operand[Indexed[NodeIndex, ReferenceType], ContainerType, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType,
+            Indexed[NodeIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 NodeIndex,
@@ -3099,8 +4372,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def attributes(
-        self: Operand[Indexed[EdgeIndex, ReferenceType], ContainerType, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType,
+            Indexed[EdgeIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EdgeIndex,
@@ -3115,10 +4394,36 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def attributes(
-        self: Operand[
-            Indexed[Positional, ReferenceType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[GroupIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                AttributeNameIndex,
+                Tuple[GroupIndexPayload, Optional[Attribute]],
+            ],
+            AttributeName,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def attributes(
+        self: Expression[
+            BindingType,
+            Indexed[Positional, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[Positional, AttributeNameIndex, Tuple[int, Optional[Attribute]]],
             AttributeName,
@@ -3129,10 +4434,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def attributes(
-        self: Operand[
-            Indexed[EndpointRole, ReferenceType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[EndpointRole, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EndpointRole,
@@ -3147,10 +4456,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def attributes(
-        self: Operand[
-            Indexed[ValueIndex, ReferenceType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[ValueIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 ValueIndex, AttributeNameIndex, Tuple[ScalarValue, Optional[Attribute]]
@@ -3163,10 +4476,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def attributes(
-        self: Operand[
-            Indexed[AttributeNameIndex, ReferenceType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[AttributeNameIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 AttributeNameIndex,
@@ -3181,8 +4498,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def attributes(
-        self: Operand[Indexed[BoolIndex, ReferenceType], ContainerType, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType,
+            Indexed[BoolIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[BoolIndex, AttributeNameIndex, Tuple[bool, Optional[Attribute]]],
             AttributeName,
@@ -3193,10 +4516,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def attributes(
-        self: Operand[
-            Indexed[FailureKindIndex, ReferenceType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 FailureKindIndex,
@@ -3211,12 +4538,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def attributes(
-        self: Operand[
-            Indexed[Expanded[K, ChildType, ParentPayloadType], ReferenceType],
+        self: Expression[
+            BindingType,
+            Indexed[Expanded[K, ChildType, ParentPayloadType], EntityReferenceType],
             ContainerType,
             Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 Expanded[K, ChildType, ParentPayloadType],
@@ -3229,294 +4558,511 @@ class Operand(Generic[S, C, Unpack[Levels]]):
         Unpack[Levels],
     ]: ...
 
-    def attributes(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.attributes())
+    def attributes(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.attributes())
 
     @overload
     def resolve(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, NodeReference], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, NodeReference], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def resolve(
-        self: Operand[
-            Indexed[IndexType, IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[EdgeIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, EdgeReference], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, EdgeReference], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def resolve(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[NodeReference], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[GroupIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, GroupReference], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def resolve(
-        self: Operand[Bare[IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[EdgeReference], ContainerType, Unpack[Levels]]: ...
-
-    def resolve(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.resolve())
-
-    @overload
-    def select(
-        self: Operand[
-            Indexed[IndexType, NodeReference], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
         ],
-    ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[NodeReference], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
-    def select(
-        self: Operand[
-            Indexed[IndexType, EdgeReference], Multiple[OrderType], Unpack[Levels]
+    def resolve(
+        self: Expression[
+            BindingType, Bare[IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]
         ],
-    ) -> Operand[Indexed[EdgeIndex, Unit], Multiple[Unordered], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[EdgeReference], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def resolve(
+        self: Expression[
+            BindingType, Bare[IndexValue[GroupIndex]], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[GroupReference], ContainerType, Unpack[Levels]
+    ]: ...
+
+    def resolve(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.resolve())
 
     @overload
     def select(
-        self: Operand[Bare[NodeReference], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, NodeReference],
+            Multiple[OrderType],
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def select(
-        self: Operand[Bare[EdgeReference], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Indexed[EdgeIndex, Unit], Multiple[Unordered], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EdgeReference],
+            Multiple[OrderType],
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[EdgeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def select(
-        self: Operand[Indexed[IndexType, NodeReference], Single, Unpack[Levels]],
-    ) -> Operand[Indexed[NodeIndex, Unit], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, GroupReference],
+            Multiple[OrderType],
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[GroupIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def select(
-        self: Operand[Indexed[IndexType, NodeReference], Definite, Unpack[Levels]],
-    ) -> Operand[Indexed[NodeIndex, Unit], Definite, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[NodeReference], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def select(
-        self: Operand[Indexed[IndexType, EdgeReference], Single, Unpack[Levels]],
-    ) -> Operand[Indexed[EdgeIndex, Unit], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[EdgeReference], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[EdgeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def select(
-        self: Operand[Indexed[IndexType, EdgeReference], Definite, Unpack[Levels]],
-    ) -> Operand[Indexed[EdgeIndex, Unit], Definite, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[GroupReference], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[GroupIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def select(
-        self: Operand[Bare[NodeReference], Single, Unpack[Levels]],
-    ) -> Operand[Indexed[NodeIndex, Unit], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, NodeReference], Single, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Indexed[NodeIndex, Unit], Single, Unpack[Levels]]: ...
 
     @overload
     def select(
-        self: Operand[Bare[NodeReference], Definite, Unpack[Levels]],
-    ) -> Operand[Indexed[NodeIndex, Unit], Definite, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, NodeReference], Definite, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[NodeIndex, Unit], Definite, Unpack[Levels]
+    ]: ...
 
     @overload
     def select(
-        self: Operand[Bare[EdgeReference], Single, Unpack[Levels]],
-    ) -> Operand[Indexed[EdgeIndex, Unit], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, EdgeReference], Single, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Indexed[EdgeIndex, Unit], Single, Unpack[Levels]]: ...
 
     @overload
     def select(
-        self: Operand[Bare[EdgeReference], Definite, Unpack[Levels]],
-    ) -> Operand[Indexed[EdgeIndex, Unit], Definite, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, GroupReference], Single, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Indexed[GroupIndex, Unit], Single, Unpack[Levels]]: ...
 
-    def select(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.select())
+    @overload
+    def select(
+        self: Expression[
+            BindingType, Indexed[IndexType, EdgeReference], Definite, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[EdgeIndex, Unit], Definite, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def select(
+        self: Expression[
+            BindingType, Indexed[IndexType, GroupReference], Definite, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[GroupIndex, Unit], Definite, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def select(
+        self: Expression[BindingType, Bare[NodeReference], Single, Unpack[Levels]],
+    ) -> Expression[BindingType, Indexed[NodeIndex, Unit], Single, Unpack[Levels]]: ...
+
+    @overload
+    def select(
+        self: Expression[BindingType, Bare[NodeReference], Definite, Unpack[Levels]],
+    ) -> Expression[
+        BindingType, Indexed[NodeIndex, Unit], Definite, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def select(
+        self: Expression[BindingType, Bare[EdgeReference], Single, Unpack[Levels]],
+    ) -> Expression[BindingType, Indexed[EdgeIndex, Unit], Single, Unpack[Levels]]: ...
+
+    @overload
+    def select(
+        self: Expression[BindingType, Bare[GroupReference], Single, Unpack[Levels]],
+    ) -> Expression[BindingType, Indexed[GroupIndex, Unit], Single, Unpack[Levels]]: ...
+
+    @overload
+    def select(
+        self: Expression[BindingType, Bare[EdgeReference], Definite, Unpack[Levels]],
+    ) -> Expression[
+        BindingType, Indexed[EdgeIndex, Unit], Definite, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def select(
+        self: Expression[BindingType, Bare[GroupReference], Definite, Unpack[Levels]],
+    ) -> Expression[
+        BindingType, Indexed[GroupIndex, Unit], Definite, Unpack[Levels]
+    ]: ...
+
+    def select(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.select())
 
     @overload
     def parent_index(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[Expanded[K, ChildType, ParentPayloadType]]],
             ContainerType,
             Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, IndexValue[K]], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, IndexValue[K]], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def parent_index(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Bare[IndexValue[Expanded[K, ChildType, ParentPayloadType]]],
             ContainerType,
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[IndexValue[K]], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[K]], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def parent_index(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.parent_index())
+    def parent_index(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.parent_index())
 
     @overload
     def child_index(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[Expanded[K, ChildType, ParentPayloadType]]],
             ContainerType,
             Unpack[Levels],
         ],
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[ChildType]], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[ChildType]],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def child_index(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Bare[IndexValue[Expanded[K, ChildType, ParentPayloadType]]],
             ContainerType,
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[IndexValue[ChildType]], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[ChildType]], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def child_index(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.child_index())
-
-    @overload
-    def has_attribute(
-        self: Operand[Indexed[EntityType, Unit], ContainerType, Unpack[Levels]],
-        attribute: Attribute,
-    ) -> Operand[Indexed[EntityType, Mask], ContainerType, Unpack[Levels]]: ...
+    def child_index(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.child_index())
 
     @overload
     def has_attribute(
-        self: Operand[Indexed[IndexType, ReferenceType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[EntityType, Unit], ContainerType, Unpack[Levels]
+        ],
         attribute: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[EntityType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
+    @overload
     def has_attribute(
-        self, attribute: Attribute
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.has_attribute(attribute))
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        attribute: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    def has_attribute(self, attribute: Attribute) -> Any:
+        return self._rebuild(self._py_carrier.has_attribute(attribute))
 
     @overload
     def in_group(
-        self: Operand[Indexed[EntityType, Unit], ContainerType, Unpack[Levels]],
-        group: Group,
-    ) -> Operand[Indexed[EntityType, Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[EntityType, Unit], ContainerType, Unpack[Levels]
+        ],
+        group_index: GroupIndexPayload,
+    ) -> Expression[
+        BindingType, Indexed[EntityType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def in_group(
-        self: Operand[Indexed[IndexType, ReferenceType], ContainerType, Unpack[Levels]],
-        group: Group,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    def in_group(self, group: Group) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.in_group(group))
-
-    @overload
-    def add(
-        self: Operand[
-            Indexed[IndexType, ArithmeticValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, ArithmeticValueType],
-    ) -> Operand[Indexed[IndexType, ArithmeticValueType], Single, Unpack[Levels]]: ...
+        group_index: GroupIndexPayload,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    def in_group(self, group_index: GroupIndexPayload) -> Any:
+        return self._rebuild(self._py_carrier.in_group(group_index))
 
     @overload
     def add(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ArithmeticValueType],
+            Definite,
+            Unpack[Levels],
+        ],
+        argument: IndexedDroppingArgument[IndexType, ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, ArithmeticValueType], Single, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def add(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ArithmeticValueType],
             DroppedContainerType,
             Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, ArithmeticValueType],
-    ) -> Operand[
-        Indexed[IndexType, ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+        argument: IndexedDroppingArgument[IndexType, ArithmeticValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ArithmeticValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def add(
-        self: Operand[Bare[ArithmeticValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def add(
-        self: Operand[Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def add(
-        self: Operand[
-            Indexed[IndexType, ArithmeticValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], Definite, Unpack[Levels]
         ],
-        value: IndexedOperandArgument[
+        argument: BareDroppingArgument[ArithmeticValueType],
+    ) -> Expression[BindingType, Bare[ArithmeticValueType], Single, Unpack[Levels]]: ...
+
+    @overload
+    def add(
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def add(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ArithmeticValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
             IndexType, ArithmeticValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, ArithmeticValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ArithmeticValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def add(
-        self: Operand[Bare[ArithmeticValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def add(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def add(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def add(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def add(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def add(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], ContainerType, Unpack[Levels]
         ],
-        value: Attribute,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        argument: BareExpressionArgument[ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Bare[ArithmeticValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def add(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def add(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
         ],
-        value: ScalarValue,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def add(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]]: ...
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def add(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def add(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def add(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[NodeIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def add(
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def add(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[ValueIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def add(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def add(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[
+        argument: Attribute,
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, IndexValue[AttributeNameIndex]],
         ContainerType,
         Unpack[Levels],
@@ -3524,159 +5070,230 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def add(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[
-        Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def add(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        argument: int,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[Positional]],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def add(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
         ],
-        value: int,
-    ) -> Operand[Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]]: ...
+        argument: int,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+    ]: ...
 
     def add(
         self,
-        value: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.add(Operand._to_py_argument(value))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.add(Expression._to_argument(argument)))
 
     @overload
     def subtract(
-        self: Operand[
-            Indexed[IndexType, ArithmeticValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ArithmeticValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, ArithmeticValueType],
-    ) -> Operand[Indexed[IndexType, ArithmeticValueType], Single, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, ArithmeticValueType], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def subtract(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ArithmeticValueType],
             DroppedContainerType,
             Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, ArithmeticValueType],
-    ) -> Operand[
-        Indexed[IndexType, ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+        argument: IndexedDroppingArgument[IndexType, ArithmeticValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ArithmeticValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def subtract(
-        self: Operand[Bare[ArithmeticValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def subtract(
-        self: Operand[Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def subtract(
-        self: Operand[
-            Indexed[IndexType, ArithmeticValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], Definite, Unpack[Levels]
         ],
-        value: IndexedOperandArgument[
+        argument: BareDroppingArgument[ArithmeticValueType],
+    ) -> Expression[BindingType, Bare[ArithmeticValueType], Single, Unpack[Levels]]: ...
+
+    @overload
+    def subtract(
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def subtract(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ArithmeticValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
             IndexType, ArithmeticValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, ArithmeticValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ArithmeticValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def subtract(
-        self: Operand[Bare[ArithmeticValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def subtract(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def subtract(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def subtract(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def subtract(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def subtract(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], ContainerType, Unpack[Levels]
         ],
-        value: Attribute,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        argument: BareExpressionArgument[ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Bare[ArithmeticValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def subtract(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def subtract(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
         ],
-        value: ScalarValue,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def subtract(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]]: ...
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def subtract(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def subtract(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def subtract(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[NodeIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def subtract(
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def subtract(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[ValueIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def subtract(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def subtract(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[
+        argument: Attribute,
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, IndexValue[AttributeNameIndex]],
         ContainerType,
         Unpack[Levels],
@@ -3684,159 +5301,232 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def subtract(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: Attribute,
-    ) -> Operand[
-        Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-    ]: ...
-
-    @overload
-    def subtract(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def subtract(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]]: ...
+        argument: int,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[Positional]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def subtract(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: int,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+    ]: ...
 
     def subtract(
         self,
-        value: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.subtract(Operand._to_py_argument(value))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.subtract(Expression._to_argument(argument))
         )
 
     @overload
     def multiply(
-        self: Operand[
-            Indexed[IndexType, ArithmeticValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ArithmeticValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, ArithmeticValueType],
-    ) -> Operand[Indexed[IndexType, ArithmeticValueType], Single, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, ArithmeticValueType], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def multiply(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ArithmeticValueType],
             DroppedContainerType,
             Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, ArithmeticValueType],
-    ) -> Operand[
-        Indexed[IndexType, ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+        argument: IndexedDroppingArgument[IndexType, ArithmeticValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ArithmeticValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def multiply(
-        self: Operand[Bare[ArithmeticValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def multiply(
-        self: Operand[Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def multiply(
-        self: Operand[
-            Indexed[IndexType, ArithmeticValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], Definite, Unpack[Levels]
         ],
-        value: IndexedOperandArgument[
+        argument: BareDroppingArgument[ArithmeticValueType],
+    ) -> Expression[BindingType, Bare[ArithmeticValueType], Single, Unpack[Levels]]: ...
+
+    @overload
+    def multiply(
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def multiply(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ArithmeticValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
             IndexType, ArithmeticValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, ArithmeticValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ArithmeticValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def multiply(
-        self: Operand[Bare[ArithmeticValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def multiply(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def multiply(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def multiply(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def multiply(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def multiply(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], ContainerType, Unpack[Levels]
         ],
-        value: Attribute,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        argument: BareExpressionArgument[ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Bare[ArithmeticValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def multiply(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def multiply(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
         ],
-        value: ScalarValue,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def multiply(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]]: ...
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def multiply(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def multiply(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def multiply(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[NodeIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def multiply(
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def multiply(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[ValueIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def multiply(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def multiply(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[
+        argument: Attribute,
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, IndexValue[AttributeNameIndex]],
         ContainerType,
         Unpack[Levels],
@@ -3844,159 +5534,232 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def multiply(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: Attribute,
-    ) -> Operand[
-        Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-    ]: ...
-
-    @overload
-    def multiply(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def multiply(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]]: ...
+        argument: int,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[Positional]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def multiply(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: int,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+    ]: ...
 
     def multiply(
         self,
-        value: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.multiply(Operand._to_py_argument(value))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.multiply(Expression._to_argument(argument))
         )
 
     @overload
     def power(
-        self: Operand[
-            Indexed[IndexType, ArithmeticValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ArithmeticValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, ArithmeticValueType],
-    ) -> Operand[Indexed[IndexType, ArithmeticValueType], Single, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, ArithmeticValueType], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def power(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ArithmeticValueType],
             DroppedContainerType,
             Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, ArithmeticValueType],
-    ) -> Operand[
-        Indexed[IndexType, ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+        argument: IndexedDroppingArgument[IndexType, ArithmeticValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ArithmeticValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def power(
-        self: Operand[Bare[ArithmeticValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def power(
-        self: Operand[Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def power(
-        self: Operand[
-            Indexed[IndexType, ArithmeticValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], Definite, Unpack[Levels]
         ],
-        value: IndexedOperandArgument[
+        argument: BareDroppingArgument[ArithmeticValueType],
+    ) -> Expression[BindingType, Bare[ArithmeticValueType], Single, Unpack[Levels]]: ...
+
+    @overload
+    def power(
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def power(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ArithmeticValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
             IndexType, ArithmeticValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, ArithmeticValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ArithmeticValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def power(
-        self: Operand[Bare[ArithmeticValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def power(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def power(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def power(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def power(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def power(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], ContainerType, Unpack[Levels]
         ],
-        value: Attribute,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        argument: BareExpressionArgument[ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Bare[ArithmeticValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def power(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def power(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
         ],
-        value: ScalarValue,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def power(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]]: ...
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def power(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def power(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def power(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[NodeIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def power(
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def power(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[ValueIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def power(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def power(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[
+        argument: Attribute,
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, IndexValue[AttributeNameIndex]],
         ContainerType,
         Unpack[Levels],
@@ -4004,159 +5767,230 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def power(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: Attribute,
-    ) -> Operand[
-        Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-    ]: ...
-
-    @overload
-    def power(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def power(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]]: ...
+        argument: int,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[Positional]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def power(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: int,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+    ]: ...
 
     def power(
         self,
-        value: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.power(Operand._to_py_argument(value))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.power(Expression._to_argument(argument)))
 
     @overload
     def modulo(
-        self: Operand[
-            Indexed[IndexType, ArithmeticValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ArithmeticValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, ArithmeticValueType],
-    ) -> Operand[Indexed[IndexType, ArithmeticValueType], Single, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, ArithmeticValueType], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def modulo(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ArithmeticValueType],
             DroppedContainerType,
             Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, ArithmeticValueType],
-    ) -> Operand[
-        Indexed[IndexType, ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+        argument: IndexedDroppingArgument[IndexType, ArithmeticValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ArithmeticValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def modulo(
-        self: Operand[Bare[ArithmeticValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def modulo(
-        self: Operand[Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def modulo(
-        self: Operand[
-            Indexed[IndexType, ArithmeticValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], Definite, Unpack[Levels]
         ],
-        value: IndexedOperandArgument[
+        argument: BareDroppingArgument[ArithmeticValueType],
+    ) -> Expression[BindingType, Bare[ArithmeticValueType], Single, Unpack[Levels]]: ...
+
+    @overload
+    def modulo(
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Bare[ArithmeticValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def modulo(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ArithmeticValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
             IndexType, ArithmeticValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, ArithmeticValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ArithmeticValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def modulo(
-        self: Operand[Bare[ArithmeticValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[ArithmeticValueType],
-    ) -> Operand[Bare[ArithmeticValueType], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def modulo(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def modulo(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def modulo(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def modulo(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def modulo(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[ArithmeticValueType], ContainerType, Unpack[Levels]
         ],
-        value: Attribute,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        argument: BareExpressionArgument[ArithmeticValueType],
+    ) -> Expression[
+        BindingType, Bare[ArithmeticValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def modulo(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def modulo(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
         ],
-        value: ScalarValue,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def modulo(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]]: ...
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def modulo(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def modulo(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def modulo(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[NodeIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def modulo(
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def modulo(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[ValueIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def modulo(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def modulo(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[
+        argument: Attribute,
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, IndexValue[AttributeNameIndex]],
         ContainerType,
         Unpack[Levels],
@@ -4164,143 +5998,203 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def modulo(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: Attribute,
-    ) -> Operand[
-        Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-    ]: ...
-
-    @overload
-    def modulo(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def modulo(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]]: ...
+        argument: int,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[Positional]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def modulo(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: int,
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+    ]: ...
 
     def modulo(
         self,
-        value: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.modulo(Operand._to_py_argument(value))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.modulo(Expression._to_argument(argument)))
 
     @overload
     def divide(
-        self: Operand[
-            Indexed[IndexType, RealNumericValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, RealNumericValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, RealNumericValueType],
-    ) -> Operand[Indexed[IndexType, RealNumericValueType], Single, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, RealNumericValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, RealNumericValueType], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def divide(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, RealNumericValueType],
             DroppedContainerType,
             Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, RealNumericValueType],
-    ) -> Operand[
-        Indexed[IndexType, RealNumericValueType], DroppedContainerType, Unpack[Levels]
+        argument: IndexedDroppingArgument[IndexType, RealNumericValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, RealNumericValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def divide(
-        self: Operand[Bare[RealNumericValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[RealNumericValueType],
-    ) -> Operand[Bare[RealNumericValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def divide(
-        self: Operand[Bare[RealNumericValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[RealNumericValueType],
-    ) -> Operand[Bare[RealNumericValueType], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def divide(
-        self: Operand[
-            Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], Definite, Unpack[Levels]
         ],
-        value: IndexedOperandArgument[
+        argument: BareDroppingArgument[RealNumericValueType],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], Single, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def divide(
+        self: Expression[
+            BindingType,
+            Bare[RealNumericValueType],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        argument: BareDroppingArgument[RealNumericValueType],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def divide(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, RealNumericValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
             IndexType, RealNumericValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, RealNumericValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def divide(
-        self: Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[RealNumericValueType],
-    ) -> Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def divide(
-        self: Operand[
-            Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
         ],
-        value: ScalarValue,
-    ) -> Operand[
-        Indexed[IndexType, RealNumericValueType], ContainerType, Unpack[Levels]
+        argument: BareExpressionArgument[RealNumericValueType],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def divide(
-        self: Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[RealNumericValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, RealNumericValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, RealNumericValueType],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def divide(
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     def divide(
         self,
-        value: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.divide(Operand._to_py_argument(value))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.divide(Expression._to_argument(argument)))
 
     @overload
     def clip(
-        self: Operand[
-            Indexed[IndexType, ScalarClipValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ScalarClipValueType],
+            Definite,
+            Unpack[Levels],
         ],
         lower: IndexedDroppingArgument[IndexType, ScalarClipValueType],
         upper: IndexedAnyScalarArgument[
             IndexType, ScalarClipValueType, ArgumentOrderType
         ],
-    ) -> Operand[Indexed[IndexType, ScalarClipValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, ScalarClipValueType], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def clip(
-        self: Operand[
-            Indexed[IndexType, ScalarClipValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ScalarClipValueType],
+            Definite,
+            Unpack[Levels],
         ],
         lower: IndexedScalarArgument[IndexType, ScalarClipValueType, ArgumentOrderType],
         upper: IndexedDroppingArgument[IndexType, ScalarClipValueType],
-    ) -> Operand[Indexed[IndexType, ScalarClipValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, ScalarClipValueType], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def clip(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ScalarClipValueType],
             DroppedContainerType,
             Unpack[Levels],
@@ -4309,80 +6203,106 @@ class Operand(Generic[S, C, Unpack[Levels]]):
         upper: IndexedAnyScalarArgument[
             IndexType, ScalarClipValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, ScalarClipValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ScalarClipValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def clip(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ScalarClipValueType],
             DroppedContainerType,
             Unpack[Levels],
         ],
         lower: IndexedScalarArgument[IndexType, ScalarClipValueType, ArgumentOrderType],
         upper: IndexedDroppingArgument[IndexType, ScalarClipValueType],
-    ) -> Operand[
-        Indexed[IndexType, ScalarClipValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ScalarClipValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[ScalarClipValueType], Definite, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[ScalarClipValueType], Definite, Unpack[Levels]
+        ],
         lower: BareDroppingArgument[ScalarClipValueType],
         upper: BareAnyScalarArgument[ScalarClipValueType],
-    ) -> Operand[Bare[ScalarClipValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[ScalarClipValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[ScalarClipValueType], Definite, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[ScalarClipValueType], Definite, Unpack[Levels]
+        ],
         lower: BareScalarArgument[ScalarClipValueType],
         upper: BareDroppingArgument[ScalarClipValueType],
-    ) -> Operand[Bare[ScalarClipValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[ScalarClipValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[ScalarClipValueType], DroppedContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[ScalarClipValueType], DroppedContainerType, Unpack[Levels]
+        ],
         lower: BareDroppingArgument[ScalarClipValueType],
         upper: BareAnyScalarArgument[ScalarClipValueType],
-    ) -> Operand[Bare[ScalarClipValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[ScalarClipValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[ScalarClipValueType], DroppedContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[ScalarClipValueType], DroppedContainerType, Unpack[Levels]
+        ],
         lower: BareScalarArgument[ScalarClipValueType],
         upper: BareDroppingArgument[ScalarClipValueType],
-    ) -> Operand[Bare[ScalarClipValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[ScalarClipValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def clip(
-        self: Operand[
-            Indexed[IndexType, AttributeClipValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeClipValueType],
+            Definite,
+            Unpack[Levels],
         ],
         lower: IndexedDroppingArgument[IndexType, AttributeClipValueType],
         upper: IndexedAnyAttributeArgument[
             IndexType, AttributeClipValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, AttributeClipValueType], Single, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, AttributeClipValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def clip(
-        self: Operand[
-            Indexed[IndexType, AttributeClipValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeClipValueType],
+            Definite,
+            Unpack[Levels],
         ],
         lower: IndexedAttributeArgument[
             IndexType, AttributeClipValueType, ArgumentOrderType
         ],
         upper: IndexedDroppingArgument[IndexType, AttributeClipValueType],
-    ) -> Operand[
-        Indexed[IndexType, AttributeClipValueType], Single, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, AttributeClipValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def clip(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, AttributeClipValueType],
             DroppedContainerType,
             Unpack[Levels],
@@ -4391,13 +6311,17 @@ class Operand(Generic[S, C, Unpack[Levels]]):
         upper: IndexedAnyAttributeArgument[
             IndexType, AttributeClipValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, AttributeClipValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, AttributeClipValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def clip(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, AttributeClipValueType],
             DroppedContainerType,
             Unpack[Levels],
@@ -4406,148 +6330,218 @@ class Operand(Generic[S, C, Unpack[Levels]]):
             IndexType, AttributeClipValueType, ArgumentOrderType
         ],
         upper: IndexedDroppingArgument[IndexType, AttributeClipValueType],
-    ) -> Operand[
-        Indexed[IndexType, AttributeClipValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, AttributeClipValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[AttributeClipValueType], Definite, Unpack[Levels]],
-        lower: BareDroppingArgument[AttributeClipValueType],
-        upper: BareAnyAttributeArgument[AttributeClipValueType],
-    ) -> Operand[Bare[AttributeClipValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def clip(
-        self: Operand[Bare[AttributeClipValueType], Definite, Unpack[Levels]],
-        lower: BareAttributeArgument[AttributeClipValueType],
-        upper: BareDroppingArgument[AttributeClipValueType],
-    ) -> Operand[Bare[AttributeClipValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def clip(
-        self: Operand[
-            Bare[AttributeClipValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[AttributeClipValueType], Definite, Unpack[Levels]
         ],
         lower: BareDroppingArgument[AttributeClipValueType],
         upper: BareAnyAttributeArgument[AttributeClipValueType],
-    ) -> Operand[
-        Bare[AttributeClipValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Bare[AttributeClipValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def clip(
-        self: Operand[
-            Bare[AttributeClipValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[AttributeClipValueType], Definite, Unpack[Levels]
         ],
         lower: BareAttributeArgument[AttributeClipValueType],
         upper: BareDroppingArgument[AttributeClipValueType],
-    ) -> Operand[
-        Bare[AttributeClipValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Bare[AttributeClipValueType], Single, Unpack[Levels]
     ]: ...
 
     @overload
     def clip(
-        self: Operand[
-            Indexed[IndexType, IntegerClipValueType], Definite, Unpack[Levels]
-        ],
-        lower: IndexedDroppingArgument[IndexType, IntegerClipValueType],
-        upper: IndexedAnyIntegerArgument[
-            IndexType, IntegerClipValueType, ArgumentOrderType
-        ],
-    ) -> Operand[Indexed[IndexType, IntegerClipValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def clip(
-        self: Operand[
-            Indexed[IndexType, IntegerClipValueType], Definite, Unpack[Levels]
-        ],
-        lower: IndexedIntegerArgument[
-            IndexType, IntegerClipValueType, ArgumentOrderType
-        ],
-        upper: IndexedDroppingArgument[IndexType, IntegerClipValueType],
-    ) -> Operand[Indexed[IndexType, IntegerClipValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def clip(
-        self: Operand[
-            Indexed[IndexType, IntegerClipValueType],
+        self: Expression[
+            BindingType,
+            Bare[AttributeClipValueType],
             DroppedContainerType,
             Unpack[Levels],
         ],
-        lower: IndexedDroppingArgument[IndexType, IntegerClipValueType],
-        upper: IndexedAnyIntegerArgument[
-            IndexType, IntegerClipValueType, ArgumentOrderType
-        ],
-    ) -> Operand[
-        Indexed[IndexType, IntegerClipValueType], DroppedContainerType, Unpack[Levels]
+        lower: BareDroppingArgument[AttributeClipValueType],
+        upper: BareAnyAttributeArgument[AttributeClipValueType],
+    ) -> Expression[
+        BindingType, Bare[AttributeClipValueType], DroppedContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def clip(
-        self: Operand[
-            Indexed[IndexType, IntegerClipValueType],
+        self: Expression[
+            BindingType,
+            Bare[AttributeClipValueType],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        lower: BareAttributeArgument[AttributeClipValueType],
+        upper: BareDroppingArgument[AttributeClipValueType],
+    ) -> Expression[
+        BindingType, Bare[AttributeClipValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def clip(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            Definite,
+            Unpack[Levels],
+        ],
+        lower: IndexedDroppingArgument[IndexType, IndexValue[Positional]],
+        upper: IndexedAnyIntegerArgument[
+            IndexType, IndexValue[Positional], ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, IndexValue[Positional]], Single, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def clip(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            Definite,
+            Unpack[Levels],
+        ],
+        lower: IndexedIntegerArgument[
+            IndexType, IndexValue[Positional], ArgumentOrderType
+        ],
+        upper: IndexedDroppingArgument[IndexType, IndexValue[Positional]],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, IndexValue[Positional]], Single, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def clip(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        lower: IndexedDroppingArgument[IndexType, IndexValue[Positional]],
+        upper: IndexedAnyIntegerArgument[
+            IndexType, IndexValue[Positional], ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[Positional]],
+        DroppedContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def clip(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
             DroppedContainerType,
             Unpack[Levels],
         ],
         lower: IndexedIntegerArgument[
-            IndexType, IntegerClipValueType, ArgumentOrderType
+            IndexType, IndexValue[Positional], ArgumentOrderType
         ],
-        upper: IndexedDroppingArgument[IndexType, IntegerClipValueType],
-    ) -> Operand[
-        Indexed[IndexType, IntegerClipValueType], DroppedContainerType, Unpack[Levels]
+        upper: IndexedDroppingArgument[IndexType, IndexValue[Positional]],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[Positional]],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[IntegerClipValueType], Definite, Unpack[Levels]],
-        lower: BareDroppingArgument[IntegerClipValueType],
-        upper: BareAnyIntegerArgument[IntegerClipValueType],
-    ) -> Operand[Bare[IntegerClipValueType], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], Definite, Unpack[Levels]
+        ],
+        lower: BareDroppingArgument[IndexValue[Positional]],
+        upper: BareAnyIntegerArgument[IndexValue[Positional]],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[IntegerClipValueType], Definite, Unpack[Levels]],
-        lower: BareIntegerArgument[IntegerClipValueType],
-        upper: BareDroppingArgument[IntegerClipValueType],
-    ) -> Operand[Bare[IntegerClipValueType], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], Definite, Unpack[Levels]
+        ],
+        lower: BareIntegerArgument[IndexValue[Positional]],
+        upper: BareDroppingArgument[IndexValue[Positional]],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[IntegerClipValueType], DroppedContainerType, Unpack[Levels]],
-        lower: BareDroppingArgument[IntegerClipValueType],
-        upper: BareAnyIntegerArgument[IntegerClipValueType],
-    ) -> Operand[Bare[IntegerClipValueType], DroppedContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[Positional]],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        lower: BareDroppingArgument[IndexValue[Positional]],
+        upper: BareAnyIntegerArgument[IndexValue[Positional]],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[IntegerClipValueType], DroppedContainerType, Unpack[Levels]],
-        lower: BareIntegerArgument[IntegerClipValueType],
-        upper: BareDroppingArgument[IntegerClipValueType],
-    ) -> Operand[Bare[IntegerClipValueType], DroppedContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[Positional]],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        lower: BareIntegerArgument[IndexValue[Positional]],
+        upper: BareDroppingArgument[IndexValue[Positional]],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def clip(
-        self: Operand[
-            Indexed[IndexType, ScalarClipValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ScalarClipValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
         lower: IndexedScalarArgument[IndexType, ScalarClipValueType, ArgumentOrderType],
         upper: IndexedScalarArgument[IndexType, ScalarClipValueType, ArgumentOrderType],
-    ) -> Operand[
-        Indexed[IndexType, ScalarClipValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ScalarClipValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[ScalarClipValueType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[ScalarClipValueType], ContainerType, Unpack[Levels]
+        ],
         lower: BareScalarArgument[ScalarClipValueType],
         upper: BareScalarArgument[ScalarClipValueType],
-    ) -> Operand[Bare[ScalarClipValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[ScalarClipValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def clip(
-        self: Operand[
-            Indexed[IndexType, AttributeClipValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeClipValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
         lower: IndexedAttributeArgument[
             IndexType, AttributeClipValueType, ArgumentOrderType
@@ -4555,1577 +6549,2635 @@ class Operand(Generic[S, C, Unpack[Levels]]):
         upper: IndexedAttributeArgument[
             IndexType, AttributeClipValueType, ArgumentOrderType
         ],
-    ) -> Operand[
-        Indexed[IndexType, AttributeClipValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, AttributeClipValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[AttributeClipValueType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[AttributeClipValueType], ContainerType, Unpack[Levels]
+        ],
         lower: BareAttributeArgument[AttributeClipValueType],
         upper: BareAttributeArgument[AttributeClipValueType],
-    ) -> Operand[Bare[AttributeClipValueType], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def clip(
-        self: Operand[
-            Indexed[IndexType, IntegerClipValueType], ContainerType, Unpack[Levels]
-        ],
-        lower: IndexedIntegerArgument[
-            IndexType, IntegerClipValueType, ArgumentOrderType
-        ],
-        upper: IndexedIntegerArgument[
-            IndexType, IntegerClipValueType, ArgumentOrderType
-        ],
-    ) -> Operand[
-        Indexed[IndexType, IntegerClipValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Bare[AttributeClipValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def clip(
-        self: Operand[Bare[IntegerClipValueType], ContainerType, Unpack[Levels]],
-        lower: BareIntegerArgument[IntegerClipValueType],
-        upper: BareIntegerArgument[IntegerClipValueType],
-    ) -> Operand[Bare[IntegerClipValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        lower: IndexedIntegerArgument[
+            IndexType, IndexValue[Positional], ArgumentOrderType
+        ],
+        upper: IndexedIntegerArgument[
+            IndexType, IndexValue[Positional], ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[Positional]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def clip(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        lower: BareIntegerArgument[IndexValue[Positional]],
+        upper: BareIntegerArgument[IndexValue[Positional]],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+    ]: ...
 
     def clip(
         self,
         lower: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
         upper: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.clip(
-                Operand._to_py_argument(lower), Operand._to_py_argument(upper)
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.clip(
+                Expression._to_argument(lower), Expression._to_argument(upper)
             )
         )
 
     @overload
     def cast(
-        self: Operand[
-            Indexed[IndexType, CastableValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, CastableValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
         target: CastTarget[CastableValueType],
-    ) -> Operand[
-        Indexed[IndexType, CastableValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, CastableValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def cast(
-        self: Operand[Bare[CastableValueType], ContainerType, Unpack[Levels]],
-        target: CastTarget[CastableValueType],
-    ) -> Operand[Bare[CastableValueType], ContainerType, Unpack[Levels]]: ...
-
-    def cast(
-        self, target: CastTarget[Any]
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.cast(target._target))
-
-    @overload
-    def __eq__(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndexType]], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[CastableValueType], ContainerType, Unpack[Levels]
         ],
-        value: IndexedDroppingArgument[IndexType, IndexValue[ValueIndexType]],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
+        target: CastTarget[CastableValueType],
+    ) -> Expression[
+        BindingType, Bare[CastableValueType], ContainerType, Unpack[Levels]
+    ]: ...
+
+    def cast(self, target: CastTarget[Any]) -> Any:
+        return self._rebuild(self._py_carrier.cast(target._py_cast_target))
 
     @overload
     def __eq__(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndexType]],
+            Definite,
+            Unpack[Levels],
+        ],
+        argument: IndexedDroppingArgument[IndexType, IndexValue[ValueIndexType]],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[ValueIndexType]],
             DroppedContainerType,
             Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, IndexValue[ValueIndexType]],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, IndexValue[ValueIndexType]],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __eq__(
-        self: Operand[Bare[IndexValue[ValueIndexType]], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[IndexValue[ValueIndexType]],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[
-            Bare[IndexValue[ValueIndexType]], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndexType]], Definite, Unpack[Levels]
         ],
-        value: BareDroppingArgument[IndexValue[ValueIndexType]],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: BareDroppingArgument[IndexValue[ValueIndexType]],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def __eq__(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[ValueIndexType]],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        argument: BareDroppingArgument[IndexValue[ValueIndexType]],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[ValueIndexType]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: IndexedOperandArgument[
+        argument: IndexedExpressionArgument[
             IndexType, IndexValue[ValueIndexType], ArgumentOrderType
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __eq__(
-        self: Operand[Bare[IndexValue[ValueIndexType]], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[IndexValue[ValueIndexType]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[Indexed[IndexType, EquatableValueType], Definite, Unpack[Levels]],
-        value: IndexedDroppingArgument[IndexType, EquatableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[
-            Indexed[IndexType, EquatableValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndexType]], ContainerType, Unpack[Levels]
         ],
-        value: IndexedDroppingArgument[IndexType, EquatableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: BareExpressionArgument[IndexValue[ValueIndexType]],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def __eq__(
-        self: Operand[Bare[EquatableValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[EquatableValueType],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[Bare[EquatableValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[EquatableValueType],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[
-            Indexed[IndexType, EquatableValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EquatableValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedOperandArgument[IndexType, EquatableValueType, ArgumentOrderType],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, EquatableValueType],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def __eq__(
-        self: Operand[Bare[EquatableValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[EquatableValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]],
-        value: _BooleanValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[Bare[Mask], ContainerType, Unpack[Levels]],
-        value: _BooleanValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[
-            Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EquatableValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        value: FailureKind,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, EquatableValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __eq__(
-        self: Operand[Bare[FailureKindValue], ContainerType, Unpack[Levels]],
-        value: FailureKind,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[EquatableValueType], Definite, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[EquatableValueType],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def __eq__(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[EquatableValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[EquatableValueType],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EquatableValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
+            IndexType, EquatableValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType, Bare[EquatableValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: BareExpressionArgument[EquatableValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+        ],
+        argument: _BooleanValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]],
+        argument: _BooleanValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, FailureKindValue],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: FailureKind,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType, Bare[FailureKindValue], ContainerType, Unpack[Levels]
+        ],
+        argument: FailureKind,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[FailureKindIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: FailureKind,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: FailureKind,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __eq__(
-        self: Operand[
-            Bare[IndexValue[FailureKindIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[FailureKindIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: FailureKind,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        argument: FailureKind,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def __eq__(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[EndpointRole]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: EdgeEndpointRole,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __eq__(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[EndpointRole]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: EdgeEndpointRole,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def __eq__(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __eq__(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[GroupIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType, Bare[IndexValue[GroupIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __eq__(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[
-            Indexed[IndexType, IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: _BooleanValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]],
-        value: _BooleanValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __eq__(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def __eq__(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[BoolIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        argument: _BooleanValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType, Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: _BooleanValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[EdgeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: EdgeIndexPayload,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: int,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType, Bare[IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: EdgeIndexPayload,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __eq__(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: int,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def __eq__(
         self,
-        value: Union[
+        argument: Union[
             ScalarValue,
+            EdgeIndexPayload,
             FailureKind,
-            Operand[Any, Any, Unpack[Tuple[Any, ...]]],
+            EdgeEndpointRole,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
             Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.equal_to(Operand._to_py_argument(value))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.equal_to(Expression._to_argument(argument))
         )
 
     equal_to = __eq__
 
     @overload
     def __ne__(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndexType]], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndexType]],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, IndexValue[ValueIndexType]],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, IndexValue[ValueIndexType]],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def __ne__(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[ValueIndexType]],
             DroppedContainerType,
             Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, IndexValue[ValueIndexType]],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, IndexValue[ValueIndexType]],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __ne__(
-        self: Operand[Bare[IndexValue[ValueIndexType]], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[IndexValue[ValueIndexType]],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[
-            Bare[IndexValue[ValueIndexType]], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndexType]], Definite, Unpack[Levels]
         ],
-        value: BareDroppingArgument[IndexValue[ValueIndexType]],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: BareDroppingArgument[IndexValue[ValueIndexType]],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def __ne__(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[ValueIndexType]],
+            DroppedContainerType,
+            Unpack[Levels],
+        ],
+        argument: BareDroppingArgument[IndexValue[ValueIndexType]],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[ValueIndexType]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: IndexedOperandArgument[
+        argument: IndexedExpressionArgument[
             IndexType, IndexValue[ValueIndexType], ArgumentOrderType
         ],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __ne__(
-        self: Operand[Bare[IndexValue[ValueIndexType]], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[IndexValue[ValueIndexType]],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[Indexed[IndexType, EquatableValueType], Definite, Unpack[Levels]],
-        value: IndexedDroppingArgument[IndexType, EquatableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[
-            Indexed[IndexType, EquatableValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndexType]], ContainerType, Unpack[Levels]
         ],
-        value: IndexedDroppingArgument[IndexType, EquatableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: BareExpressionArgument[IndexValue[ValueIndexType]],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def __ne__(
-        self: Operand[Bare[EquatableValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[EquatableValueType],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[Bare[EquatableValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[EquatableValueType],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[
-            Indexed[IndexType, EquatableValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EquatableValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedOperandArgument[IndexType, EquatableValueType, ArgumentOrderType],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, EquatableValueType],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def __ne__(
-        self: Operand[Bare[EquatableValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[EquatableValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]],
-        value: _BooleanValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[Bare[Mask], ContainerType, Unpack[Levels]],
-        value: _BooleanValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[
-            Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EquatableValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        value: FailureKind,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, EquatableValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __ne__(
-        self: Operand[Bare[FailureKindValue], ContainerType, Unpack[Levels]],
-        value: FailureKind,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[EquatableValueType], Definite, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[EquatableValueType],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def __ne__(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[EquatableValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        argument: BareDroppingArgument[EquatableValueType],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EquatableValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
+            IndexType, EquatableValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType, Bare[EquatableValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: BareExpressionArgument[EquatableValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+        ],
+        argument: _BooleanValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]],
+        argument: _BooleanValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, FailureKindValue],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: FailureKind,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType, Bare[FailureKindValue], ContainerType, Unpack[Levels]
+        ],
+        argument: FailureKind,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[FailureKindIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: FailureKind,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: FailureKind,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __ne__(
-        self: Operand[
-            Bare[IndexValue[FailureKindIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[FailureKindIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: FailureKind,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        argument: FailureKind,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def __ne__(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[EndpointRole]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: EdgeEndpointRole,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __ne__(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[EndpointRole]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: EdgeEndpointRole,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def __ne__(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __ne__(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[GroupIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType, Bare[IndexValue[GroupIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def __ne__(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[
-            Indexed[IndexType, IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: _BooleanValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]],
-        value: _BooleanValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def __ne__(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def __ne__(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[BoolIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        argument: _BooleanValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType, Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: _BooleanValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[EdgeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: EdgeIndexPayload,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: int,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType, Bare[IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: EdgeIndexPayload,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def __ne__(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: int,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def __ne__(
         self,
-        value: Union[
+        argument: Union[
             ScalarValue,
+            EdgeIndexPayload,
             FailureKind,
-            Operand[Any, Any, Unpack[Tuple[Any, ...]]],
+            EdgeEndpointRole,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
             Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.not_equal_to(Operand._to_py_argument(value))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.not_equal_to(Expression._to_argument(argument))
         )
 
     not_equal_to = __ne__
 
     @overload
     def greater_than(
-        self: Operand[Indexed[IndexType, OrderableValueType], Definite, Unpack[Levels]],
-        value: IndexedDroppingArgument[IndexType, OrderableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[
-            Indexed[IndexType, OrderableValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, OrderableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, OrderableValueType],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def greater_than(
-        self: Operand[Bare[OrderableValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[Bare[OrderableValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[
-            Indexed[IndexType, OrderableValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        value: IndexedOperandArgument[IndexType, OrderableValueType, ArgumentOrderType],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, OrderableValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def greater_than(
-        self: Operand[Bare[OrderableValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[OrderableValueType], Definite, Unpack[Levels]
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareDroppingArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def greater_than(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[OrderableValueType], DroppedContainerType, Unpack[Levels]
         ],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareDroppingArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
 
     @overload
     def greater_than(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
+            IndexType, OrderableValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def greater_than(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[OrderableValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: BareExpressionArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[GroupIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType, Bare[IndexValue[GroupIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def greater_than(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[
-            Indexed[IndexType, IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: _BooleanValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]],
-        value: _BooleanValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def greater_than(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[BoolIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        argument: _BooleanValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType, Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: _BooleanValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: int,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: int,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def greater_than(
         self,
-        value: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.greater_than(Operand._to_py_argument(value))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.greater_than(Expression._to_argument(argument))
         )
 
     @overload
     def greater_than_or_equal_to(
-        self: Operand[Indexed[IndexType, OrderableValueType], Definite, Unpack[Levels]],
-        value: IndexedDroppingArgument[IndexType, OrderableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, OrderableValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, OrderableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, OrderableValueType],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def greater_than_or_equal_to(
-        self: Operand[Bare[OrderableValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[Bare[OrderableValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, OrderableValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        value: IndexedOperandArgument[IndexType, OrderableValueType, ArgumentOrderType],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, OrderableValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def greater_than_or_equal_to(
-        self: Operand[Bare[OrderableValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[OrderableValueType], Definite, Unpack[Levels]
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareDroppingArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def greater_than_or_equal_to(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[OrderableValueType], DroppedContainerType, Unpack[Levels]
         ],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareDroppingArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
 
     @overload
     def greater_than_or_equal_to(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
+            IndexType, OrderableValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def greater_than_or_equal_to(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[OrderableValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: BareExpressionArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[GroupIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[IndexValue[GroupIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def greater_than_or_equal_to(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: _BooleanValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]],
-        value: _BooleanValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def greater_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def greater_than_or_equal_to(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[BoolIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        argument: _BooleanValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: _BooleanValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: int,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def greater_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: int,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def greater_than_or_equal_to(
         self,
-        value: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.greater_than_or_equal_to(Operand._to_py_argument(value))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.greater_than_or_equal_to(Expression._to_argument(argument))
         )
 
     @overload
     def less_than(
-        self: Operand[Indexed[IndexType, OrderableValueType], Definite, Unpack[Levels]],
-        value: IndexedDroppingArgument[IndexType, OrderableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[
-            Indexed[IndexType, OrderableValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, OrderableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, OrderableValueType],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def less_than(
-        self: Operand[Bare[OrderableValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[Bare[OrderableValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[
-            Indexed[IndexType, OrderableValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        value: IndexedOperandArgument[IndexType, OrderableValueType, ArgumentOrderType],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, OrderableValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def less_than(
-        self: Operand[Bare[OrderableValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[OrderableValueType], Definite, Unpack[Levels]
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareDroppingArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def less_than(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[OrderableValueType], DroppedContainerType, Unpack[Levels]
         ],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareDroppingArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
 
     @overload
     def less_than(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
+            IndexType, OrderableValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def less_than(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[OrderableValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: BareExpressionArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than(
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[GroupIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType, Bare[IndexValue[GroupIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def less_than(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[
-            Indexed[IndexType, IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: _BooleanValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]],
-        value: _BooleanValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def less_than(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[BoolIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        argument: _BooleanValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType, Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: _BooleanValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: int,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: int,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def less_than(
         self,
-        value: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.less_than(Operand._to_py_argument(value))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.less_than(Expression._to_argument(argument))
         )
 
     @overload
     def less_than_or_equal_to(
-        self: Operand[Indexed[IndexType, OrderableValueType], Definite, Unpack[Levels]],
-        value: IndexedDroppingArgument[IndexType, OrderableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, OrderableValueType], DroppedContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            Definite,
+            Unpack[Levels],
         ],
-        value: IndexedDroppingArgument[IndexType, OrderableValueType],
-    ) -> Operand[Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, OrderableValueType],
+    ) -> Expression[BindingType, Indexed[IndexType, Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def less_than_or_equal_to(
-        self: Operand[Bare[OrderableValueType], Definite, Unpack[Levels]],
-        value: BareDroppingArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], Single, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[Bare[OrderableValueType], DroppedContainerType, Unpack[Levels]],
-        value: BareDroppingArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, OrderableValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            DroppedContainerType,
+            Unpack[Levels],
         ],
-        value: IndexedOperandArgument[IndexType, OrderableValueType, ArgumentOrderType],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: IndexedDroppingArgument[IndexType, OrderableValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def less_than_or_equal_to(
-        self: Operand[Bare[OrderableValueType], ContainerType, Unpack[Levels]],
-        value: BareOperandArgument[OrderableValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[OrderableValueType], Definite, Unpack[Levels]
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareDroppingArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], Single, Unpack[Levels]]: ...
 
     @overload
     def less_than_or_equal_to(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[OrderableValueType], DroppedContainerType, Unpack[Levels]
         ],
-        value: ScalarValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: BareDroppingArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], DroppedContainerType, Unpack[Levels]]: ...
 
     @overload
     def less_than_or_equal_to(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        value: ScalarValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: IndexedExpressionArgument[
+            IndexType, OrderableValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def less_than_or_equal_to(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[OrderableValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: BareExpressionArgument[OrderableValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[GroupIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[IndexValue[GroupIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: ScalarValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: ScalarValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: Attribute,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def less_than_or_equal_to(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: Attribute,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
-        ],
-        value: _BooleanValue,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]],
-        value: _BooleanValue,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def less_than_or_equal_to(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Attribute,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def less_than_or_equal_to(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[BoolIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        value: int,
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        argument: _BooleanValue,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: _BooleanValue,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: int,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def less_than_or_equal_to(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: int,
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def less_than_or_equal_to(
         self,
-        value: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+        argument: Union[
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.less_than_or_equal_to(Operand._to_py_argument(value))
+    ) -> Any:
+        return self._rebuild(
+            self._py_carrier.less_than_or_equal_to(Expression._to_argument(argument))
         )
 
     @overload
     def is_in(
-        self: Operand[
-            Indexed[IndexType, MembershipValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, MembershipValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-        values: MembershipArgument[MembershipValueType],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: MembershipArgument[MembershipValueType],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_in(
-        self: Operand[Bare[MembershipValueType], ContainerType, Unpack[Levels]],
-        values: MembershipArgument[MembershipValueType],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def is_in(
-        self: Operand[
-            Indexed[IndexType, ScalarMembershipValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[MembershipValueType], ContainerType, Unpack[Levels]
         ],
-        values: Sequence[ScalarValue],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: MembershipArgument[MembershipValueType],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def is_in(
-        self: Operand[Bare[ScalarMembershipValueType], ContainerType, Unpack[Levels]],
-        values: Sequence[ScalarValue],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ScalarMembershipValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Sequence[ScalarValue],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_in(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[ScalarMembershipValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: Sequence[ScalarValue],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def is_in(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, BooleanMembershipValueType],
             ContainerType,
             Unpack[Levels],
         ],
-        values: Sequence[_BooleanValue],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Sequence[_BooleanValue],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_in(
-        self: Operand[Bare[BooleanMembershipValueType], ContainerType, Unpack[Levels]],
-        values: Sequence[_BooleanValue],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[BooleanMembershipValueType], ContainerType, Unpack[Levels]
+        ],
+        argument: Sequence[_BooleanValue],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def is_in(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, AttributeMembershipValueType],
             ContainerType,
             Unpack[Levels],
         ],
-        values: Sequence[Attribute],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Sequence[Attribute],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_in(
-        self: Operand[
-            Bare[AttributeMembershipValueType], ContainerType, Unpack[Levels]
-        ],
-        values: Sequence[Attribute],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def is_in(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[AttributeMembershipValueType],
             ContainerType,
             Unpack[Levels],
         ],
-        values: Sequence[int],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Sequence[Attribute],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     @overload
     def is_in(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[EdgeIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        values: Sequence[int],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Sequence[EdgeIndexPayload],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_in(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Sequence[int],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def is_in(
+        self: Expression[
+            BindingType, Bare[IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]
+        ],
+        argument: Sequence[EdgeIndexPayload],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def is_in(
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
+        argument: Sequence[int],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def is_in(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, FailureKindMembershipValueType],
             ContainerType,
             Unpack[Levels],
         ],
-        values: Sequence[FailureKind],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Sequence[FailureKind],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def is_in(
-        self: Operand[
-            Bare[FailureKindMembershipValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[FailureKindMembershipValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
-        values: Sequence[FailureKind],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
+        argument: Sequence[FailureKind],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def is_in(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[EndpointRole]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Sequence[EdgeEndpointRole],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def is_in(
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[EndpointRole]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        argument: Sequence[EdgeEndpointRole],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
 
     def is_in(
         self,
-        values: Union[
+        argument: Union[
             Sequence[ScalarValue],
+            Sequence[EdgeIndexPayload],
             Sequence[FailureKind],
-            Operand[Any, Any, Unpack[Tuple[Any, ...]]],
+            Sequence[EdgeEndpointRole],
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        if isinstance(values, Operand):
-            return Operand._from_py_operand(self._operand.is_in(values._operand))
+    ) -> Any:
+        if isinstance(argument, Expression):
+            return self._rebuild(
+                self._py_carrier.is_in(Expression._to_argument(argument))
+            )
 
-        return Operand._from_py_operand(self._operand.is_in(values))
+        if isinstance(argument, (str, bytes)):
+            msg = "expected a sequence of values; `str` and `bytes` are single values"
+            raise TypeError(msg)
+
+        return self._rebuild(
+            self._py_carrier.is_in(
+                [Expression._to_argument(value) for value in argument]
+            )
+        )
 
     @overload
     def index(
-        self: Operand[Indexed[IndexType, Unit], ContainerType, Unpack[Levels]],
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[IndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[IndexType]],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def index(
-        self: Operand[Indexed[IndexType, NodeReference], ContainerType, Unpack[Levels]],
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, NodeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[NodeIndex]],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def index(
-        self: Operand[Indexed[IndexType, EdgeReference], ContainerType, Unpack[Levels]],
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EdgeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[EdgeIndex]],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
-    def index(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.index())
+    @overload
+    def index(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[GroupIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    def index(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.index())
 
     def discard_index(
-        self: Operand[Indexed[IndexType, BareValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[BareValueType], ContainerType, Unpack[Levels]]:
-        return Operand._from_py_operand(self._operand.discard_index())
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, BareValueType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[BindingType, Bare[BareValueType], ContainerType, Unpack[Levels]]:
+        return self._rebuild(self._py_carrier.discard_index())
 
     def discard_value(
-        self: Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, Unit], ContainerType, Unpack[Levels]]:
-        return Operand._from_py_operand(self._operand.discard_value())
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Unit], ContainerType, Unpack[Levels]
+    ]:
+        return self._rebuild(self._py_carrier.discard_value())
 
     @overload
     def enumerate(
-        self: Operand[Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]],
-    ) -> Operand[Indexed[Positional, V], Multiple[Ordered], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[Positional, V], Multiple[Ordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def enumerate(
-        self: Operand[Bare[BareValueType], Multiple[Ordered], Unpack[Levels]],
-    ) -> Operand[
-        Indexed[Positional, BareValueType], Multiple[Ordered], Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[Positional, BareValueType],
+        Multiple[Ordered],
+        Unpack[Levels],
     ]: ...
 
-    def enumerate(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.enumerate())
+    def enumerate(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.enumerate())
 
     @overload
     def errors(
-        self: Operand[Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[
-        Indexed[IndexType, FailureValue], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, FailureValue],
+        Multiple[OrderType],
+        Unpack[Levels],
     ]: ...
 
     @overload
     def errors(
-        self: Operand[Indexed[IndexType, V], Single, Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, FailureValue], Single, Unpack[Levels]]: ...
+        self: Expression[BindingType, Indexed[IndexType, V], Single, Unpack[Levels]],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, FailureValue], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def errors(
-        self: Operand[Indexed[IndexType, V], Definite, Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, FailureValue], Single, Unpack[Levels]]: ...
+        self: Expression[BindingType, Indexed[IndexType, V], Definite, Unpack[Levels]],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, FailureValue], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def errors(
-        self: Operand[Bare[BareValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[FailureValue], Multiple[OrderType], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[FailureValue], Multiple[OrderType], Unpack[Levels]
+    ]: ...
 
     @overload
     def errors(
-        self: Operand[Bare[BareValueType], Single, Unpack[Levels]],
-    ) -> Operand[Bare[FailureValue], Single, Unpack[Levels]]: ...
+        self: Expression[BindingType, Bare[BareValueType], Single, Unpack[Levels]],
+    ) -> Expression[BindingType, Bare[FailureValue], Single, Unpack[Levels]]: ...
 
     @overload
     def errors(
-        self: Operand[Bare[BareValueType], Definite, Unpack[Levels]],
-    ) -> Operand[Bare[FailureValue], Single, Unpack[Levels]]: ...
+        self: Expression[BindingType, Bare[BareValueType], Definite, Unpack[Levels]],
+    ) -> Expression[BindingType, Bare[FailureValue], Single, Unpack[Levels]]: ...
 
-    def errors(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.errors())
+    def errors(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.errors())
 
     @overload
     def on_error(
-        self: Operand[Indexed[IndexType, V], Definite, Unpack[Levels]], policy: Drop
-    ) -> Operand[Indexed[IndexType, V], Single, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[Indexed[IndexType, V], DroppedContainerType, Unpack[Levels]],
+        self: Expression[BindingType, Indexed[IndexType, V], Definite, Unpack[Levels]],
         policy: Drop,
-    ) -> Operand[Indexed[IndexType, V], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Indexed[IndexType, V], Single, Unpack[Levels]]: ...
 
     @overload
     def on_error(
-        self: Operand[Bare[BareValueType], Definite, Unpack[Levels]], policy: Drop
-    ) -> Operand[Bare[BareValueType], Single, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[Bare[BareValueType], DroppedContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, V], DroppedContainerType, Unpack[Levels]
+        ],
         policy: Drop,
-    ) -> Operand[Bare[BareValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def on_error(
-        self: Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]],
+        self: Expression[BindingType, Bare[BareValueType], Definite, Unpack[Levels]],
+        policy: Drop,
+    ) -> Expression[BindingType, Bare[BareValueType], Single, Unpack[Levels]]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType, Bare[BareValueType], DroppedContainerType, Unpack[Levels]
+        ],
+        policy: Drop,
+    ) -> Expression[
+        BindingType, Bare[BareValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
         policy: Union[Raise, _RaiseWhen],
-    ) -> Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def on_error(
-        self: Operand[Bare[BareValueType], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[BareValueType], ContainerType, Unpack[Levels]
+        ],
         policy: Union[Raise, _RaiseWhen],
-    ) -> Operand[Bare[BareValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[BareValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def on_error(
-        self: Operand[
-            Indexed[IndexType, ReplaceableValueType], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ReplaceableValueType],
+            Definite,
+            Unpack[Levels],
         ],
         policy: Replace[IndexedDroppingArgument[IndexType, ReplaceableValueType]],
-    ) -> Operand[Indexed[IndexType, ReplaceableValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, ReplaceableValueType], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def on_error(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, ReplaceableValueType],
             DroppedContainerType,
             Unpack[Levels],
         ],
         policy: Replace[IndexedDroppingArgument[IndexType, ReplaceableValueType]],
-    ) -> Operand[
-        Indexed[IndexType, ReplaceableValueType], DroppedContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ReplaceableValueType],
+        DroppedContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def on_error(
-        self: Operand[Bare[BareValueType], Definite, Unpack[Levels]],
+        self: Expression[BindingType, Bare[BareValueType], Definite, Unpack[Levels]],
         policy: Replace[BareDroppingArgument[BareValueType]],
-    ) -> Operand[Bare[BareValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[BareValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def on_error(
-        self: Operand[Bare[BareValueType], DroppedContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[BareValueType], DroppedContainerType, Unpack[Levels]
+        ],
         policy: Replace[BareDroppingArgument[BareValueType]],
-    ) -> Operand[Bare[BareValueType], DroppedContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[BareValueType], DroppedContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def on_error(
-        self: Operand[
-            Indexed[IndexType, ReplaceableValueType], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ReplaceableValueType],
+            ContainerType,
+            Unpack[Levels],
         ],
         policy: Replace[
-            IndexedOperandArgument[IndexType, ReplaceableValueType, ArgumentOrderType]
+            IndexedExpressionArgument[
+                IndexType, ReplaceableValueType, ArgumentOrderType
+            ]
         ],
-    ) -> Operand[
-        Indexed[IndexType, ReplaceableValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ReplaceableValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def on_error(
-        self: Operand[Bare[BareValueType], ContainerType, Unpack[Levels]],
-        policy: Replace[BareOperandArgument[BareValueType]],
-    ) -> Operand[Bare[BareValueType], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
-        policy: Replace[ScalarValue],
-    ) -> Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
-        policy: Replace[ScalarValue],
-    ) -> Operand[Bare[Scalar], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]],
-        policy: Replace[_BooleanValue],
-    ) -> Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[Bare[Mask], ContainerType, Unpack[Levels]],
-        policy: Replace[_BooleanValue],
-    ) -> Operand[Bare[Mask], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
-        policy: Replace[Attribute],
-    ) -> Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
-        policy: Replace[Attribute],
-    ) -> Operand[Bare[AttributeName], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[
-            Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[BareValueType], ContainerType, Unpack[Levels]
         ],
-        policy: Replace[FailureKind],
-    ) -> Operand[
-        Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
+        policy: Replace[BareExpressionArgument[BareValueType]],
+    ) -> Expression[
+        BindingType, Bare[BareValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def on_error(
-        self: Operand[Bare[FailureKindValue], ContainerType, Unpack[Levels]],
-        policy: Replace[FailureKind],
-    ) -> Operand[Bare[FailureKindValue], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+        ],
+        policy: Replace[ScalarValue],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def on_error(
-        self: Operand[
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
+        policy: Replace[ScalarValue],
+    ) -> Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+        ],
+        policy: Replace[_BooleanValue],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]],
+        policy: Replace[_BooleanValue],
+    ) -> Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        policy: Replace[Attribute],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
+        policy: Replace[Attribute],
+    ) -> Expression[
+        BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, FailureKindValue],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        policy: Replace[FailureKind],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType, Bare[FailureKindValue], ContainerType, Unpack[Levels]
+        ],
+        policy: Replace[FailureKind],
+    ) -> Expression[
+        BindingType, Bare[FailureKindValue], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[FailureKindIndex]],
             ContainerType,
             Unpack[Levels],
         ],
         policy: Replace[FailureKind],
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[FailureKindIndex]], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[FailureKindIndex]],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def on_error(
-        self: Operand[
-            Bare[IndexValue[FailureKindIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[FailureKindIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
         policy: Replace[FailureKind],
-    ) -> Operand[Bare[IndexValue[FailureKindIndex]], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
-        ],
-        policy: Replace[Attribute],
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Bare[IndexValue[FailureKindIndex]], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def on_error(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
-        policy: Replace[Attribute],
-    ) -> Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]]: ...
-
-    @overload
-    def on_error(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[EndpointRole]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        policy: Replace[ScalarValue],
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        policy: Replace[EdgeEndpointRole],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[EndpointRole]],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def on_error(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
-        policy: Replace[ScalarValue],
-    ) -> Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[EndpointRole]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        policy: Replace[EdgeEndpointRole],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[EndpointRole]], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def on_error(
-        self: Operand[
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        policy: Replace[NodeIndexPayload],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[NodeIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
+        policy: Replace[NodeIndexPayload],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[GroupIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        policy: Replace[GroupIndexPayload],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[GroupIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType, Bare[IndexValue[GroupIndex]], ContainerType, Unpack[Levels]
+        ],
+        policy: Replace[GroupIndexPayload],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[GroupIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[EdgeIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        policy: Replace[EdgeIndexPayload],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[EdgeIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType, Bare[IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]
+        ],
+        policy: Replace[EdgeIndexPayload],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        policy: Replace[ScalarValue],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[ValueIndex]],
+        ContainerType,
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
+        policy: Replace[ScalarValue],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def on_error(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
         policy: Replace[Attribute],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, IndexValue[AttributeNameIndex]],
         ContainerType,
         Unpack[Levels],
@@ -6133,49 +9185,68 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def on_error(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
         policy: Replace[Attribute],
-    ) -> Operand[
-        Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def on_error(
-        self: Operand[
-            Indexed[IndexType, IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[BoolIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
         policy: Replace[_BooleanValue],
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[BoolIndex]],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def on_error(
-        self: Operand[Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+        ],
         policy: Replace[_BooleanValue],
-    ) -> Operand[Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def on_error(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
             ContainerType,
             Unpack[Levels],
         ],
         policy: Replace[int],
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[Positional]],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def on_error(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
         ],
         policy: Replace[int],
-    ) -> Operand[Bare[IndexValue[IntegerIndexType]], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+    ]: ...
 
     def on_error(
         self,
@@ -6186,401 +9257,584 @@ class Operand(Generic[S, C, Unpack[Levels]]):
             Replace[
                 Union[
                     ScalarValue,
+                    EdgeIndexPayload,
                     FailureKind,
-                    Operand[Any, Any, Unpack[Tuple[Any, ...]]],
+                    EdgeEndpointRole,
+                    Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
                     Argument[Any, Any],
                 ]
             ],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
+    ) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
         if isinstance(policy, Drop):
-            return Operand._from_py_operand(self._operand.on_error_drop())
+            return self._rebuild(self._py_carrier.on_error_drop())
 
         if isinstance(policy, _RaiseWhen):
-            return Operand._from_py_operand(
-                self._operand.raise_when(Operand._to_py_argument(policy._condition))
-            )
-
-        if isinstance(policy, Replace):
-            return Operand._from_py_operand(
-                self._operand.on_error_replace(
-                    Operand._to_py_argument(policy._replacement)
+            return self._rebuild(
+                self._py_carrier.on_error_raise_when(
+                    Expression._to_argument(policy._condition)
                 )
             )
 
-        return Operand._from_py_operand(self._operand.on_error_raise())
+        if isinstance(policy, Replace):
+            return self._rebuild(
+                self._py_carrier.on_error_replace(
+                    Expression._to_argument(policy._replacement)
+                )
+            )
+
+        return self._rebuild(self._py_carrier.on_error_raise())
 
     @overload
     def kind(
-        self: Operand[Indexed[IndexType, FailureValue], ContainerType, Unpack[Levels]],
-    ) -> Operand[
-        Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[IndexType, FailureValue], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def kind(
-        self: Operand[Bare[FailureValue], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[FailureKindValue], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[FailureValue], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[FailureKindValue], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def kind(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.kind())
+    def kind(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.kind())
 
     @overload
     def name(
-        self: Operand[
-            Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, FailureKindValue],
+            ContainerType,
+            Unpack[Levels],
         ],
-    ) -> Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def name(
-        self: Operand[Bare[FailureKindValue], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Scalar], ContainerType, Unpack[Levels]]: ...
-
-    def name(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.name())
-
-    @overload
-    def count(
-        self: Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Scalar], Definite, Unpack[Levels]]: ...
-
-    @overload
-    def count(
-        self: Operand[Bare[BareValueType], ContainerType, Unpack[Levels]],
-    ) -> Operand[Bare[Scalar], Definite, Unpack[Levels]]: ...
-
-    def count(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.count())
-
-    @overload
-    def sum(
-        self: Operand[Indexed[IndexType, Scalar], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[Scalar], Single, Unpack[Levels]]: ...
-
-    @overload
-    def sum(
-        self: Operand[Bare[Scalar], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[Scalar], Single, Unpack[Levels]]: ...
-
-    @overload
-    def sum(
-        self: Operand[
-            Indexed[IndexType, AttributeName], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[FailureKindValue], ContainerType, Unpack[Levels]
         ],
-    ) -> Operand[Bare[AttributeName], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]]: ...
+
+    def name(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.name())
+
+    @overload
+    def count(
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Scalar], Definite, Unpack[Levels]]: ...
+
+    @overload
+    def count(
+        self: Expression[
+            BindingType, Bare[BareValueType], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Scalar], Definite, Unpack[Levels]]: ...
+
+    def count(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.count())
 
     @overload
     def sum(
-        self: Operand[Bare[AttributeName], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[AttributeName], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Scalar], Single, Unpack[Levels]]: ...
 
     @overload
     def sum(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[Scalar], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Scalar], Single, Unpack[Levels]]: ...
+
+    @overload
+    def sum(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            Multiple[OrderType],
+            Unpack[Levels],
+        ],
+    ) -> Expression[BindingType, Bare[AttributeName], Single, Unpack[Levels]]: ...
+
+    @overload
+    def sum(
+        self: Expression[
+            BindingType, Bare[AttributeName], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[AttributeName], Single, Unpack[Levels]]: ...
+
+    @overload
+    def sum(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[NodeIndex]],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[IndexValue[NodeIndex]], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[NodeIndex]], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def sum(
-        self: Operand[Bare[IndexValue[NodeIndex]], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[IndexValue[NodeIndex]], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[NodeIndex]],
+            Multiple[OrderType],
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[NodeIndex]], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def sum(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[IndexValue[AttributeNameIndex]], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[AttributeNameIndex]], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def sum(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[Bare[IndexValue[AttributeNameIndex]], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[AttributeNameIndex]], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def sum(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[ValueIndex]],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[IndexValue[ValueIndex]], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[ValueIndex]], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def sum(
-        self: Operand[
-            Bare[IndexValue[ValueIndex]], Multiple[OrderType], Unpack[Levels]
-        ],
-    ) -> Operand[Bare[IndexValue[ValueIndex]], Single, Unpack[Levels]]: ...
-
-    @overload
-    def sum(
-        self: Operand[
-            Indexed[IndexType, IndexValue[IntegerIndexType]],
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[ValueIndex]],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[IndexValue[IntegerIndexType]], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[ValueIndex]], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def sum(
-        self: Operand[
-            Bare[IndexValue[IntegerIndexType]], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[Bare[IndexValue[IntegerIndexType]], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], Single, Unpack[Levels]
+    ]: ...
 
-    def sum(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.sum())
+    @overload
+    def sum(
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[Positional]],
+            Multiple[OrderType],
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Bare[IndexValue[Positional]], Single, Unpack[Levels]
+    ]: ...
+
+    def sum(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.sum())
 
     @overload
     def mean(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, RealNumericValueType],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[RealNumericValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def mean(
-        self: Operand[Bare[RealNumericValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[RealNumericValueType], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[RealNumericValueType], Single, Unpack[Levels]
+    ]: ...
 
-    def mean(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.mean())
+    def mean(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.mean())
 
     @overload
     def std(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, RealNumericValueType],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[Scalar], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[Scalar], Single, Unpack[Levels]]: ...
 
     @overload
     def std(
-        self: Operand[Bare[RealNumericValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[Scalar], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Scalar], Single, Unpack[Levels]]: ...
 
-    def std(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.std())
+    def std(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.std())
 
     @overload
     def var(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, RealNumericValueType],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[Scalar], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[Scalar], Single, Unpack[Levels]]: ...
 
     @overload
     def var(
-        self: Operand[Bare[RealNumericValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[Scalar], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[RealNumericValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Scalar], Single, Unpack[Levels]]: ...
 
-    def var(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.var())
+    def var(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.var())
 
     @overload
     def all(
-        self: Operand[Indexed[IndexType, Mask], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[Mask], Definite, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Mask], Definite, Unpack[Levels]]: ...
 
     @overload
     def all(
-        self: Operand[Bare[Mask], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[Mask], Definite, Unpack[Levels]]: ...
+        self: Expression[BindingType, Bare[Mask], Multiple[OrderType], Unpack[Levels]],
+    ) -> Expression[BindingType, Bare[Mask], Definite, Unpack[Levels]]: ...
 
-    def all(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.all())
-
-    @overload
-    def any(
-        self: Operand[Indexed[IndexType, Mask], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[Mask], Definite, Unpack[Levels]]: ...
+    def all(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.all())
 
     @overload
     def any(
-        self: Operand[Bare[Mask], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[Mask], Definite, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Mask], Definite, Unpack[Levels]]: ...
 
-    def any(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.any())
+    @overload
+    def any(
+        self: Expression[BindingType, Bare[Mask], Multiple[OrderType], Unpack[Levels]],
+    ) -> Expression[BindingType, Bare[Mask], Definite, Unpack[Levels]]: ...
+
+    def any(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.any())
 
     @overload
     def max(
-        self: Operand[
-            Indexed[IndexType, OrderableValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[Bare[OrderableValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[OrderableValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def max(
-        self: Operand[Bare[OrderableValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[OrderableValueType], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[OrderableValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[OrderableValueType], Single, Unpack[Levels]]: ...
 
-    def max(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.max())
+    def max(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.max())
 
     @overload
     def min(
-        self: Operand[
-            Indexed[IndexType, OrderableValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, OrderableValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[Bare[OrderableValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[OrderableValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def min(
-        self: Operand[Bare[OrderableValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[OrderableValueType], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[OrderableValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[OrderableValueType], Single, Unpack[Levels]]: ...
 
-    def min(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.min())
+    def min(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.min())
 
     @overload
     def median(
-        self: Operand[
-            Indexed[IndexType, MedianValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, MedianValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[Bare[MedianValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[MedianValueType], Single, Unpack[Levels]]: ...
 
     @overload
     def median(
-        self: Operand[Bare[MedianValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[MedianValueType], Single, Unpack[Levels]]: ...
-
-    def median(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.median())
-
-    @overload
-    def mode(
-        self: Operand[
-            Indexed[IndexType, ModeValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType, Bare[MedianValueType], Multiple[OrderType], Unpack[Levels]
         ],
-    ) -> Operand[Bare[ModeValueType], Multiple[OrderType], Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[MedianValueType], Single, Unpack[Levels]]: ...
+
+    def median(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.median())
 
     @overload
     def mode(
-        self: Operand[Bare[ModeValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[ModeValueType], Multiple[OrderType], Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, ModeValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Bare[ModeValueType], Multiple[OrderType], Unpack[Levels]
+    ]: ...
 
     @overload
     def mode(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[ModeValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Bare[ModeValueType], Multiple[OrderType], Unpack[Levels]
+    ]: ...
+
+    @overload
+    def mode(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[ValueIndexType]],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[
-        Bare[IndexValue[ValueIndexType]], Multiple[OrderType], Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Bare[IndexValue[ValueIndexType]],
+        Multiple[OrderType],
+        Unpack[Levels],
     ]: ...
 
     @overload
     def mode(
-        self: Operand[
-            Bare[IndexValue[ValueIndexType]], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[ValueIndexType]],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[
-        Bare[IndexValue[ValueIndexType]], Multiple[OrderType], Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Bare[IndexValue[ValueIndexType]],
+        Multiple[OrderType],
+        Unpack[Levels],
     ]: ...
 
-    def mode(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.mode())
+    def mode(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.mode())
 
     @overload
     def product(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, MultipliableValueType],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[MultipliableValueType], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[MultipliableValueType], Single, Unpack[Levels]
+    ]: ...
 
     @overload
     def product(
-        self: Operand[Bare[MultipliableValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[MultipliableValueType], Single, Unpack[Levels]]: ...
-
-    def product(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.product())
-
-    @overload
-    def n_unique(
-        self: Operand[
-            Indexed[IndexType, EquivalentValueType], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[MultipliableValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[Bare[Scalar], Definite, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[MultipliableValueType], Single, Unpack[Levels]
+    ]: ...
+
+    def product(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.product())
 
     @overload
     def n_unique(
-        self: Operand[Bare[EquivalentValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[Scalar], Definite, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EquivalentValueType],
+            Multiple[OrderType],
+            Unpack[Levels],
+        ],
+    ) -> Expression[BindingType, Bare[Scalar], Definite, Unpack[Levels]]: ...
 
     @overload
     def n_unique(
-        self: Operand[
+        self: Expression[
+            BindingType, Bare[EquivalentValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[Scalar], Definite, Unpack[Levels]]: ...
+
+    @overload
+    def n_unique(
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[ValueIndexType]],
             Multiple[OrderType],
             Unpack[Levels],
         ],
-    ) -> Operand[Bare[Scalar], Definite, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[Scalar], Definite, Unpack[Levels]]: ...
 
     @overload
     def n_unique(
-        self: Operand[
-            Bare[IndexValue[ValueIndexType]], Multiple[OrderType], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[ValueIndexType]],
+            Multiple[OrderType],
+            Unpack[Levels],
         ],
-    ) -> Operand[Bare[Scalar], Definite, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Bare[Scalar], Definite, Unpack[Levels]]: ...
 
-    def n_unique(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.n_unique())
-
-    @overload
-    def random(
-        self: Operand[Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, V], Single, Unpack[Levels]]: ...
+    def n_unique(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.n_unique())
 
     @overload
     def random(
-        self: Operand[Bare[BareValueType], Multiple[OrderType], Unpack[Levels]],
-    ) -> Operand[Bare[BareValueType], Single, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Indexed[IndexType, V], Single, Unpack[Levels]]: ...
 
-    def random(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.random())
+    @overload
+    def random(
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+    ) -> Expression[BindingType, Bare[BareValueType], Single, Unpack[Levels]]: ...
 
+    def random(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.random())
+
+    @overload
     def edges(
         self: Union[
-            Operand[Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]],
-            Operand[Indexed[IndexType, NodeReference], ContainerType, Unpack[Levels]],
+            Expression[
+                BindingType, Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, NodeReference],
+                ContainerType,
+                Unpack[Levels],
+            ],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[Indexed[EdgeIndex, Unit], Multiple[Unordered], Unpack[Levels]]:
-        return Operand._from_py_operand(self._operand.edges(direction))
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType, Indexed[EdgeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]: ...
+
+    @overload
+    def edges(
+        self: Union[
+            Expression[
+                BindingType, Indexed[GroupIndex, Unit], ContainerType, Unpack[Levels]
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, GroupReference],
+                ContainerType,
+                Unpack[Levels],
+            ],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[EdgeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]: ...
+
+    def edges(self, direction: Optional[EdgeDirection] = None) -> Any:
+        followed = None if direction is None else direction._into_py_edge_direction()
+
+        return self._rebuild(self._py_carrier.edges(followed))
 
     def neighbors(
         self: Union[
-            Operand[Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]],
-            Operand[Indexed[IndexType, NodeReference], ContainerType, Unpack[Levels]],
+            Expression[
+                BindingType, Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, NodeReference],
+                ContainerType,
+                Unpack[Levels],
+            ],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]]:
-        return Operand._from_py_operand(self._operand.neighbors(direction))
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType, Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]:
+        return self._rebuild(
+            self._py_carrier.neighbors(direction._into_py_edge_direction())
+        )
 
     @overload
     def via_edges(
-        self: Operand[Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]],
-        direction: EdgeDirection,
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 NodeIndex,
@@ -6595,9 +9849,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_edges(
-        self: Operand[Indexed[NodeIndex, NodeReference], ContainerType, Unpack[Levels]],
-        direction: EdgeDirection,
-    ) -> Operand[
+        self: Expression[
+            BindingType,
+            Indexed[NodeIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 NodeIndex,
@@ -6612,9 +9872,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_edges(
-        self: Operand[Indexed[EdgeIndex, NodeReference], ContainerType, Unpack[Levels]],
-        direction: EdgeDirection,
-    ) -> Operand[
+        self: Expression[
+            BindingType,
+            Indexed[EdgeIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EdgeIndex,
@@ -6629,11 +9895,38 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_edges(
-        self: Operand[
-            Indexed[Positional, NodeReference], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[GroupIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                EdgeIndex,
+                Tuple[GroupIndexPayload, Optional[EdgeIndexPayload]],
+            ],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[Positional, NodeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[Positional, EdgeIndex, Tuple[int, Optional[EdgeIndexPayload]]],
             EdgeReference,
@@ -6644,11 +9937,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_edges(
-        self: Operand[
-            Indexed[EndpointRole, NodeReference], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[EndpointRole, NodeReference],
+            ContainerType,
+            Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EndpointRole,
@@ -6663,11 +9960,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_edges(
-        self: Operand[
-            Indexed[ValueIndex, NodeReference], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[ValueIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 ValueIndex, EdgeIndex, Tuple[ScalarValue, Optional[EdgeIndexPayload]]
@@ -6680,11 +9981,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_edges(
-        self: Operand[
-            Indexed[AttributeNameIndex, NodeReference], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[AttributeNameIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 AttributeNameIndex,
@@ -6699,9 +10004,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_edges(
-        self: Operand[Indexed[BoolIndex, NodeReference], ContainerType, Unpack[Levels]],
-        direction: EdgeDirection,
-    ) -> Operand[
+        self: Expression[
+            BindingType,
+            Indexed[BoolIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[BoolIndex, EdgeIndex, Tuple[bool, Optional[EdgeIndexPayload]]],
             EdgeReference,
@@ -6712,11 +10023,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_edges(
-        self: Operand[
-            Indexed[FailureKindIndex, NodeReference], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 FailureKindIndex,
@@ -6731,13 +10046,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_edges(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[Expanded[K, ChildType, ParentPayloadType], NodeReference],
             ContainerType,
             Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: Optional[EdgeDirection] = None,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 Expanded[K, ChildType, ParentPayloadType],
@@ -6750,16 +10067,248 @@ class Operand(Generic[S, C, Unpack[Levels]]):
         Unpack[Levels],
     ]: ...
 
+    @overload
     def via_edges(
-        self, direction: EdgeDirection
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.via_edges(direction))
+        self: Expression[
+            BindingType, Indexed[GroupIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                EdgeIndex,
+                Tuple[GroupIndexPayload, Optional[EdgeIndexPayload]],
+            ],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[NodeIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                NodeIndex,
+                EdgeIndex,
+                Tuple[NodeIndexPayload, Optional[EdgeIndexPayload]],
+            ],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[EdgeIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                EdgeIndex,
+                EdgeIndex,
+                Tuple[EdgeIndexPayload, Optional[EdgeIndexPayload]],
+            ],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[GroupIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                EdgeIndex,
+                Tuple[GroupIndexPayload, Optional[EdgeIndexPayload]],
+            ],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[Positional, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[Positional, EdgeIndex, Tuple[int, Optional[EdgeIndexPayload]]],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[EndpointRole, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                EndpointRole,
+                EdgeIndex,
+                Tuple[EdgeEndpointRole, Optional[EdgeIndexPayload]],
+            ],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[ValueIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                ValueIndex, EdgeIndex, Tuple[ScalarValue, Optional[EdgeIndexPayload]]
+            ],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[AttributeNameIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                AttributeNameIndex,
+                EdgeIndex,
+                Tuple[Attribute, Optional[EdgeIndexPayload]],
+            ],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[BoolIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[BoolIndex, EdgeIndex, Tuple[bool, Optional[EdgeIndexPayload]]],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                FailureKindIndex,
+                EdgeIndex,
+                Tuple[FailureKind, Optional[EdgeIndexPayload]],
+            ],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_edges(
+        self: Expression[
+            BindingType,
+            Indexed[Expanded[K, ChildType, ParentPayloadType], GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                Expanded[K, ChildType, ParentPayloadType],
+                EdgeIndex,
+                Tuple[ParentPayloadType, Optional[EdgeIndexPayload]],
+            ],
+            EdgeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    def via_edges(self, direction: Optional[EdgeDirection] = None) -> Any:
+        followed = None if direction is None else direction._into_py_edge_direction()
+
+        return self._rebuild(self._py_carrier.via_edges(followed))
 
     @overload
     def via_neighbors(
-        self: Operand[Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]],
-        direction: EdgeDirection,
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 NodeIndex,
@@ -6774,9 +10323,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_neighbors(
-        self: Operand[Indexed[NodeIndex, NodeReference], ContainerType, Unpack[Levels]],
-        direction: EdgeDirection,
-    ) -> Operand[
+        self: Expression[
+            BindingType,
+            Indexed[NodeIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 NodeIndex,
@@ -6791,9 +10346,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_neighbors(
-        self: Operand[Indexed[EdgeIndex, NodeReference], ContainerType, Unpack[Levels]],
-        direction: EdgeDirection,
-    ) -> Operand[
+        self: Expression[
+            BindingType,
+            Indexed[EdgeIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EdgeIndex,
@@ -6808,11 +10369,38 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_neighbors(
-        self: Operand[
-            Indexed[Positional, NodeReference], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[GroupIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                NodeIndex,
+                Tuple[GroupIndexPayload, Optional[NodeIndexPayload]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_neighbors(
+        self: Expression[
+            BindingType,
+            Indexed[Positional, NodeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[Positional, NodeIndex, Tuple[int, Optional[NodeIndexPayload]]],
             NodeReference,
@@ -6823,11 +10411,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_neighbors(
-        self: Operand[
-            Indexed[EndpointRole, NodeReference], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[EndpointRole, NodeReference],
+            ContainerType,
+            Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EndpointRole,
@@ -6842,11 +10434,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_neighbors(
-        self: Operand[
-            Indexed[ValueIndex, NodeReference], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[ValueIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 ValueIndex, NodeIndex, Tuple[ScalarValue, Optional[NodeIndexPayload]]
@@ -6859,11 +10455,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_neighbors(
-        self: Operand[
-            Indexed[AttributeNameIndex, NodeReference], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[AttributeNameIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 AttributeNameIndex,
@@ -6878,9 +10478,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_neighbors(
-        self: Operand[Indexed[BoolIndex, NodeReference], ContainerType, Unpack[Levels]],
-        direction: EdgeDirection,
-    ) -> Operand[
+        self: Expression[
+            BindingType,
+            Indexed[BoolIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[BoolIndex, NodeIndex, Tuple[bool, Optional[NodeIndexPayload]]],
             NodeReference,
@@ -6891,11 +10497,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_neighbors(
-        self: Operand[
-            Indexed[FailureKindIndex, NodeReference], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, NodeReference],
+            ContainerType,
+            Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 FailureKindIndex,
@@ -6910,13 +10520,15 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_neighbors(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[Expanded[K, ChildType, ParentPayloadType], NodeReference],
             ContainerType,
             Unpack[Levels],
         ],
-        direction: EdgeDirection,
-    ) -> Operand[
+        direction: EdgeDirection = EdgeDirection.Both,
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 Expanded[K, ChildType, ParentPayloadType],
@@ -6929,23 +10541,44 @@ class Operand(Generic[S, C, Unpack[Levels]]):
         Unpack[Levels],
     ]: ...
 
-    def via_neighbors(
-        self, direction: EdgeDirection
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.via_neighbors(direction))
+    def via_neighbors(self, direction: EdgeDirection = EdgeDirection.Both) -> Any:
+        return self._rebuild(
+            self._py_carrier.via_neighbors(direction._into_py_edge_direction())
+        )
 
     def nodes(
         self: Union[
-            Operand[Indexed[EdgeIndex, Unit], ContainerType, Unpack[Levels]],
-            Operand[Indexed[IndexType, EdgeReference], ContainerType, Unpack[Levels]],
+            Expression[
+                BindingType, Indexed[EdgeIndex, Unit], ContainerType, Unpack[Levels]
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, EdgeReference],
+                ContainerType,
+                Unpack[Levels],
+            ],
+            Expression[
+                BindingType, Indexed[GroupIndex, Unit], ContainerType, Unpack[Levels]
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, GroupReference],
+                ContainerType,
+                Unpack[Levels],
+            ],
         ],
-    ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]]:
-        return Operand._from_py_operand(self._operand.nodes())
+    ) -> Expression[
+        BindingType, Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]:
+        return self._rebuild(self._py_carrier.nodes())
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[EdgeIndex, Unit], Multiple[Unordered], Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EdgeIndex,
@@ -6960,58 +10593,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[EdgeIndex, Unit], Multiple[Ordered], Unpack[Levels]],
-    ) -> Operand[
-        Indexed[
-            Expanded[
-                EdgeIndex,
-                EndpointRole,
-                Tuple[EdgeIndexPayload, Optional[EdgeEndpointRole]],
-            ],
-            NodeReference,
+        self: Expression[
+            BindingType,
+            Indexed[NodeIndex, EdgeReference],
+            Multiple[Unordered],
+            Unpack[Levels],
         ],
-        Multiple[Ordered],
-        Unpack[Levels],
-    ]: ...
-
-    @overload
-    def via_nodes(
-        self: Operand[Indexed[EdgeIndex, Unit], Single, Unpack[Levels]],
-    ) -> Operand[
-        Indexed[
-            Expanded[
-                EdgeIndex,
-                EndpointRole,
-                Tuple[EdgeIndexPayload, Optional[EdgeEndpointRole]],
-            ],
-            NodeReference,
-        ],
-        Multiple[Ordered],
-        Unpack[Levels],
-    ]: ...
-
-    @overload
-    def via_nodes(
-        self: Operand[Indexed[EdgeIndex, Unit], Definite, Unpack[Levels]],
-    ) -> Operand[
-        Indexed[
-            Expanded[
-                EdgeIndex,
-                EndpointRole,
-                Tuple[EdgeIndexPayload, Optional[EdgeEndpointRole]],
-            ],
-            NodeReference,
-        ],
-        Multiple[Ordered],
-        Unpack[Levels],
-    ]: ...
-
-    @overload
-    def via_nodes(
-        self: Operand[
-            Indexed[NodeIndex, EdgeReference], Multiple[Unordered], Unpack[Levels]
-        ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 NodeIndex,
@@ -7026,10 +10615,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[EdgeIndex, EdgeReference], Multiple[Unordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[EdgeIndex, EdgeReference],
+            Multiple[Unordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EdgeIndex,
@@ -7044,10 +10637,36 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[Positional, EdgeReference], Multiple[Unordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[GroupIndex, EdgeReference],
+            Multiple[Unordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                EndpointRole,
+                Tuple[GroupIndexPayload, Optional[EdgeEndpointRole]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[Positional, EdgeReference],
+            Multiple[Unordered],
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[Positional, EndpointRole, Tuple[int, Optional[EdgeEndpointRole]]],
             NodeReference,
@@ -7058,10 +10677,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[EndpointRole, EdgeReference], Multiple[Unordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[EndpointRole, EdgeReference],
+            Multiple[Unordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EndpointRole,
@@ -7076,10 +10699,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[ValueIndex, EdgeReference], Multiple[Unordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[ValueIndex, EdgeReference],
+            Multiple[Unordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 ValueIndex, EndpointRole, Tuple[ScalarValue, Optional[EdgeEndpointRole]]
@@ -7092,12 +10719,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[AttributeNameIndex, EdgeReference],
             Multiple[Unordered],
             Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 AttributeNameIndex,
@@ -7112,10 +10741,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[BoolIndex, EdgeReference], Multiple[Unordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[BoolIndex, EdgeReference],
+            Multiple[Unordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[BoolIndex, EndpointRole, Tuple[bool, Optional[EdgeEndpointRole]]],
             NodeReference,
@@ -7126,12 +10759,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[FailureKindIndex, EdgeReference],
             Multiple[Unordered],
             Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 FailureKindIndex,
@@ -7146,12 +10781,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[Expanded[K, ChildType, ParentPayloadType], EdgeReference],
             Multiple[Unordered],
             Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 Expanded[K, ChildType, ParentPayloadType],
@@ -7166,28 +10803,11 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[NodeIndex, EdgeReference], Multiple[Ordered], Unpack[Levels]
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, Unit], Multiple[Ordered], Unpack[Levels]
         ],
-    ) -> Operand[
-        Indexed[
-            Expanded[
-                NodeIndex,
-                EndpointRole,
-                Tuple[NodeIndexPayload, Optional[EdgeEndpointRole]],
-            ],
-            NodeReference,
-        ],
-        Multiple[Ordered],
-        Unpack[Levels],
-    ]: ...
-
-    @overload
-    def via_nodes(
-        self: Operand[
-            Indexed[EdgeIndex, EdgeReference], Multiple[Ordered], Unpack[Levels]
-        ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EdgeIndex,
@@ -7202,10 +10822,80 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[Positional, EdgeReference], Multiple[Ordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[NodeIndex, EdgeReference],
+            Multiple[Ordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                NodeIndex,
+                EndpointRole,
+                Tuple[NodeIndexPayload, Optional[EdgeEndpointRole]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[EdgeIndex, EdgeReference],
+            Multiple[Ordered],
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                EdgeIndex,
+                EndpointRole,
+                Tuple[EdgeIndexPayload, Optional[EdgeEndpointRole]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[GroupIndex, EdgeReference],
+            Multiple[Ordered],
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                EndpointRole,
+                Tuple[GroupIndexPayload, Optional[EdgeEndpointRole]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[Positional, EdgeReference],
+            Multiple[Ordered],
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[Positional, EndpointRole, Tuple[int, Optional[EdgeEndpointRole]]],
             NodeReference,
@@ -7216,10 +10906,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[EndpointRole, EdgeReference], Multiple[Ordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[EndpointRole, EdgeReference],
+            Multiple[Ordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EndpointRole,
@@ -7234,10 +10928,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[ValueIndex, EdgeReference], Multiple[Ordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[ValueIndex, EdgeReference],
+            Multiple[Ordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 ValueIndex, EndpointRole, Tuple[ScalarValue, Optional[EdgeEndpointRole]]
@@ -7250,12 +10948,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[AttributeNameIndex, EdgeReference],
             Multiple[Ordered],
             Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 AttributeNameIndex,
@@ -7270,10 +10970,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[BoolIndex, EdgeReference], Multiple[Ordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[BoolIndex, EdgeReference],
+            Multiple[Ordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[BoolIndex, EndpointRole, Tuple[bool, Optional[EdgeEndpointRole]]],
             NodeReference,
@@ -7284,10 +10988,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[FailureKindIndex, EdgeReference], Multiple[Ordered], Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, EdgeReference],
+            Multiple[Ordered],
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 FailureKindIndex,
@@ -7302,12 +11010,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[Expanded[K, ChildType, ParentPayloadType], EdgeReference],
             Multiple[Ordered],
             Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 Expanded[K, ChildType, ParentPayloadType],
@@ -7322,24 +11032,9 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[NodeIndex, EdgeReference], Single, Unpack[Levels]],
-    ) -> Operand[
-        Indexed[
-            Expanded[
-                NodeIndex,
-                EndpointRole,
-                Tuple[NodeIndexPayload, Optional[EdgeEndpointRole]],
-            ],
-            NodeReference,
-        ],
-        Multiple[Ordered],
-        Unpack[Levels],
-    ]: ...
-
-    @overload
-    def via_nodes(
-        self: Operand[Indexed[EdgeIndex, EdgeReference], Single, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[BindingType, Indexed[EdgeIndex, Unit], Single, Unpack[Levels]],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EdgeIndex,
@@ -7354,8 +11049,68 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[Positional, EdgeReference], Single, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[NodeIndex, EdgeReference], Single, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                NodeIndex,
+                EndpointRole,
+                Tuple[NodeIndexPayload, Optional[EdgeEndpointRole]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, EdgeReference], Single, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                EdgeIndex,
+                EndpointRole,
+                Tuple[EdgeIndexPayload, Optional[EdgeEndpointRole]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType, Indexed[GroupIndex, EdgeReference], Single, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                EndpointRole,
+                Tuple[GroupIndexPayload, Optional[EdgeEndpointRole]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType, Indexed[Positional, EdgeReference], Single, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[Positional, EndpointRole, Tuple[int, Optional[EdgeEndpointRole]]],
             NodeReference,
@@ -7366,8 +11121,11 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[EndpointRole, EdgeReference], Single, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[EndpointRole, EdgeReference], Single, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EndpointRole,
@@ -7382,8 +11140,11 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[ValueIndex, EdgeReference], Single, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[ValueIndex, EdgeReference], Single, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 ValueIndex, EndpointRole, Tuple[ScalarValue, Optional[EdgeEndpointRole]]
@@ -7396,10 +11157,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[AttributeNameIndex, EdgeReference], Single, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[AttributeNameIndex, EdgeReference],
+            Single,
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 AttributeNameIndex,
@@ -7414,8 +11179,11 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[BoolIndex, EdgeReference], Single, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[BoolIndex, EdgeReference], Single, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[BoolIndex, EndpointRole, Tuple[bool, Optional[EdgeEndpointRole]]],
             NodeReference,
@@ -7426,8 +11194,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[FailureKindIndex, EdgeReference], Single, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, EdgeReference],
+            Single,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 FailureKindIndex,
@@ -7442,12 +11216,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[Expanded[K, ChildType, ParentPayloadType], EdgeReference],
             Single,
             Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 Expanded[K, ChildType, ParentPayloadType],
@@ -7462,24 +11238,11 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[NodeIndex, EdgeReference], Definite, Unpack[Levels]],
-    ) -> Operand[
-        Indexed[
-            Expanded[
-                NodeIndex,
-                EndpointRole,
-                Tuple[NodeIndexPayload, Optional[EdgeEndpointRole]],
-            ],
-            NodeReference,
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, Unit], Definite, Unpack[Levels]
         ],
-        Multiple[Ordered],
-        Unpack[Levels],
-    ]: ...
-
-    @overload
-    def via_nodes(
-        self: Operand[Indexed[EdgeIndex, EdgeReference], Definite, Unpack[Levels]],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EdgeIndex,
@@ -7494,8 +11257,68 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[Positional, EdgeReference], Definite, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[NodeIndex, EdgeReference], Definite, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                NodeIndex,
+                EndpointRole,
+                Tuple[NodeIndexPayload, Optional[EdgeEndpointRole]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, EdgeReference], Definite, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                EdgeIndex,
+                EndpointRole,
+                Tuple[EdgeIndexPayload, Optional[EdgeEndpointRole]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType, Indexed[GroupIndex, EdgeReference], Definite, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                EndpointRole,
+                Tuple[GroupIndexPayload, Optional[EdgeEndpointRole]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Ordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType, Indexed[Positional, EdgeReference], Definite, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[Positional, EndpointRole, Tuple[int, Optional[EdgeEndpointRole]]],
             NodeReference,
@@ -7506,8 +11329,11 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[EndpointRole, EdgeReference], Definite, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[EndpointRole, EdgeReference], Definite, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 EndpointRole,
@@ -7522,8 +11348,11 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[ValueIndex, EdgeReference], Definite, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[ValueIndex, EdgeReference], Definite, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 ValueIndex, EndpointRole, Tuple[ScalarValue, Optional[EdgeEndpointRole]]
@@ -7536,10 +11365,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[AttributeNameIndex, EdgeReference], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[AttributeNameIndex, EdgeReference],
+            Definite,
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 AttributeNameIndex,
@@ -7554,8 +11387,11 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[Indexed[BoolIndex, EdgeReference], Definite, Unpack[Levels]],
-    ) -> Operand[
+        self: Expression[
+            BindingType, Indexed[BoolIndex, EdgeReference], Definite, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[BoolIndex, EndpointRole, Tuple[bool, Optional[EdgeEndpointRole]]],
             NodeReference,
@@ -7566,10 +11402,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
-            Indexed[FailureKindIndex, EdgeReference], Definite, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, EdgeReference],
+            Definite,
+            Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 FailureKindIndex,
@@ -7584,12 +11424,14 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def via_nodes(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[Expanded[K, ChildType, ParentPayloadType], EdgeReference],
             Definite,
             Unpack[Levels],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[
             Expanded[
                 Expanded[K, ChildType, ParentPayloadType],
@@ -7602,98 +11444,700 @@ class Operand(Generic[S, C, Unpack[Levels]]):
         Unpack[Levels],
     ]: ...
 
-    def via_nodes(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.via_nodes())
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType, Indexed[GroupIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                NodeIndex,
+                Tuple[GroupIndexPayload, Optional[NodeIndexPayload]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
 
     @overload
-    def source_node(
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[NodeIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                NodeIndex,
+                NodeIndex,
+                Tuple[NodeIndexPayload, Optional[NodeIndexPayload]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[EdgeIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                EdgeIndex,
+                NodeIndex,
+                Tuple[EdgeIndexPayload, Optional[NodeIndexPayload]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[GroupIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                NodeIndex,
+                Tuple[GroupIndexPayload, Optional[NodeIndexPayload]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[Positional, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[Positional, NodeIndex, Tuple[int, Optional[NodeIndexPayload]]],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[EndpointRole, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                EndpointRole,
+                NodeIndex,
+                Tuple[EdgeEndpointRole, Optional[NodeIndexPayload]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[ValueIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                ValueIndex, NodeIndex, Tuple[ScalarValue, Optional[NodeIndexPayload]]
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[AttributeNameIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                AttributeNameIndex,
+                NodeIndex,
+                Tuple[Attribute, Optional[NodeIndexPayload]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[BoolIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[BoolIndex, NodeIndex, Tuple[bool, Optional[NodeIndexPayload]]],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                FailureKindIndex,
+                NodeIndex,
+                Tuple[FailureKind, Optional[NodeIndexPayload]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_nodes(
+        self: Expression[
+            BindingType,
+            Indexed[Expanded[K, ChildType, ParentPayloadType], GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                Expanded[K, ChildType, ParentPayloadType],
+                NodeIndex,
+                Tuple[ParentPayloadType, Optional[NodeIndexPayload]],
+            ],
+            NodeReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    def via_nodes(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.via_nodes())
+
+    def groups(
         self: Union[
-            Operand[Indexed[EdgeIndex, Unit], Multiple[OrderType], Unpack[Levels]],
-            Operand[
-                Indexed[IndexType, EdgeReference], Multiple[OrderType], Unpack[Levels]
+            Expression[
+                BindingType, Indexed[EntityType, Unit], ContainerType, Unpack[Levels]
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, EntityReferenceType],
+                ContainerType,
+                Unpack[Levels],
             ],
         ],
-    ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[GroupIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]:
+        return self._rebuild(self._py_carrier.groups())
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType, Indexed[NodeIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                NodeIndex,
+                GroupIndex,
+                Tuple[NodeIndexPayload, Optional[GroupIndexPayload]],
+            ],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                EdgeIndex,
+                GroupIndex,
+                Tuple[EdgeIndexPayload, Optional[GroupIndexPayload]],
+            ],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType,
+            Indexed[NodeIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                NodeIndex,
+                GroupIndex,
+                Tuple[NodeIndexPayload, Optional[GroupIndexPayload]],
+            ],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType,
+            Indexed[EdgeIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                EdgeIndex,
+                GroupIndex,
+                Tuple[EdgeIndexPayload, Optional[GroupIndexPayload]],
+            ],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType,
+            Indexed[GroupIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                GroupIndex,
+                GroupIndex,
+                Tuple[GroupIndexPayload, Optional[GroupIndexPayload]],
+            ],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType,
+            Indexed[Positional, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[Positional, GroupIndex, Tuple[int, Optional[GroupIndexPayload]]],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType,
+            Indexed[EndpointRole, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                EndpointRole,
+                GroupIndex,
+                Tuple[EdgeEndpointRole, Optional[GroupIndexPayload]],
+            ],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType,
+            Indexed[ValueIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                ValueIndex, GroupIndex, Tuple[ScalarValue, Optional[GroupIndexPayload]]
+            ],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType,
+            Indexed[AttributeNameIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                AttributeNameIndex,
+                GroupIndex,
+                Tuple[Attribute, Optional[GroupIndexPayload]],
+            ],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType,
+            Indexed[BoolIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[BoolIndex, GroupIndex, Tuple[bool, Optional[GroupIndexPayload]]],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType,
+            Indexed[FailureKindIndex, EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                FailureKindIndex,
+                GroupIndex,
+                Tuple[FailureKind, Optional[GroupIndexPayload]],
+            ],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    @overload
+    def via_groups(
+        self: Expression[
+            BindingType,
+            Indexed[Expanded[K, ChildType, ParentPayloadType], EntityReferenceType],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[
+            Expanded[
+                Expanded[K, ChildType, ParentPayloadType],
+                GroupIndex,
+                Tuple[ParentPayloadType, Optional[GroupIndexPayload]],
+            ],
+            GroupReference,
+        ],
+        Multiple[Unordered],
+        Unpack[Levels],
+    ]: ...
+
+    def via_groups(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.via_groups())
+
+    @overload
+    def node_count(
+        self: Expression[
+            BindingType, Indexed[GroupIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[GroupIndex, Scalar], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def node_count(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+    ]: ...
+
+    def node_count(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.node_count())
+
+    @overload
+    def edge_count(
+        self: Expression[
+            BindingType, Indexed[GroupIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[GroupIndex, Scalar], ContainerType, Unpack[Levels]
+    ]: ...
+
+    @overload
+    def edge_count(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, GroupReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+    ]: ...
+
+    def edge_count(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.edge_count())
 
     @overload
     def source_node(
         self: Union[
-            Operand[Indexed[EdgeIndex, Unit], Single, Unpack[Levels]],
-            Operand[Indexed[IndexType, EdgeReference], Single, Unpack[Levels]],
-        ],
-    ) -> Operand[Indexed[NodeIndex, Unit], Single, Unpack[Levels]]: ...
-
-    @overload
-    def source_node(
-        self: Union[
-            Operand[Indexed[EdgeIndex, Unit], Definite, Unpack[Levels]],
-            Operand[Indexed[IndexType, EdgeReference], Definite, Unpack[Levels]],
-        ],
-    ) -> Operand[Indexed[NodeIndex, Unit], Definite, Unpack[Levels]]: ...
-
-    def source_node(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.source_node())
-
-    @overload
-    def target_node(
-        self: Union[
-            Operand[Indexed[EdgeIndex, Unit], Multiple[OrderType], Unpack[Levels]],
-            Operand[
-                Indexed[IndexType, EdgeReference], Multiple[OrderType], Unpack[Levels]
+            Expression[
+                BindingType,
+                Indexed[EdgeIndex, Unit],
+                Multiple[OrderType],
+                Unpack[Levels],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, EdgeReference],
+                Multiple[OrderType],
+                Unpack[Levels],
             ],
         ],
-    ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]: ...
+
+    @overload
+    def source_node(
+        self: Union[
+            Expression[BindingType, Indexed[EdgeIndex, Unit], Single, Unpack[Levels]],
+            Expression[
+                BindingType, Indexed[IndexType, EdgeReference], Single, Unpack[Levels]
+            ],
+        ],
+    ) -> Expression[BindingType, Indexed[NodeIndex, Unit], Single, Unpack[Levels]]: ...
+
+    @overload
+    def source_node(
+        self: Union[
+            Expression[BindingType, Indexed[EdgeIndex, Unit], Definite, Unpack[Levels]],
+            Expression[
+                BindingType, Indexed[IndexType, EdgeReference], Definite, Unpack[Levels]
+            ],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[NodeIndex, Unit], Definite, Unpack[Levels]
+    ]: ...
+
+    def source_node(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.source_node())
 
     @overload
     def target_node(
         self: Union[
-            Operand[Indexed[EdgeIndex, Unit], Single, Unpack[Levels]],
-            Operand[Indexed[IndexType, EdgeReference], Single, Unpack[Levels]],
+            Expression[
+                BindingType,
+                Indexed[EdgeIndex, Unit],
+                Multiple[OrderType],
+                Unpack[Levels],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, EdgeReference],
+                Multiple[OrderType],
+                Unpack[Levels],
+            ],
         ],
-    ) -> Operand[Indexed[NodeIndex, Unit], Single, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[NodeIndex, Unit], Multiple[Unordered], Unpack[Levels]
+    ]: ...
 
     @overload
     def target_node(
         self: Union[
-            Operand[Indexed[EdgeIndex, Unit], Definite, Unpack[Levels]],
-            Operand[Indexed[IndexType, EdgeReference], Definite, Unpack[Levels]],
+            Expression[BindingType, Indexed[EdgeIndex, Unit], Single, Unpack[Levels]],
+            Expression[
+                BindingType, Indexed[IndexType, EdgeReference], Single, Unpack[Levels]
+            ],
         ],
-    ) -> Operand[Indexed[NodeIndex, Unit], Definite, Unpack[Levels]]: ...
+    ) -> Expression[BindingType, Indexed[NodeIndex, Unit], Single, Unpack[Levels]]: ...
 
-    def target_node(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.target_node())
+    @overload
+    def target_node(
+        self: Union[
+            Expression[BindingType, Indexed[EdgeIndex, Unit], Definite, Unpack[Levels]],
+            Expression[
+                BindingType, Indexed[IndexType, EdgeReference], Definite, Unpack[Levels]
+            ],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[NodeIndex, Unit], Definite, Unpack[Levels]
+    ]: ...
+
+    def target_node(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.target_node())
 
     @overload
     def via_source_node(
-        self: Operand[Indexed[EdgeIndex, Unit], ContainerType, Unpack[Levels]],
-    ) -> Operand[Indexed[EdgeIndex, NodeReference], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[EdgeIndex, NodeReference], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def via_source_node(
-        self: Operand[Indexed[IndexType, EdgeReference], ContainerType, Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, NodeReference], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EdgeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, NodeReference], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def via_source_node(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.via_source_node())
+    def via_source_node(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.via_source_node())
 
     @overload
     def via_target_node(
-        self: Operand[Indexed[EdgeIndex, Unit], ContainerType, Unpack[Levels]],
-    ) -> Operand[Indexed[EdgeIndex, NodeReference], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Indexed[EdgeIndex, Unit], ContainerType, Unpack[Levels]
+        ],
+    ) -> Expression[
+        BindingType, Indexed[EdgeIndex, NodeReference], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def via_target_node(
-        self: Operand[Indexed[IndexType, EdgeReference], ContainerType, Unpack[Levels]],
-    ) -> Operand[Indexed[IndexType, NodeReference], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, EdgeReference],
+            ContainerType,
+            Unpack[Levels],
+        ],
+    ) -> Expression[
+        BindingType, Indexed[IndexType, NodeReference], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def via_target_node(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.via_target_node())
+    def via_target_node(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.via_target_node())
 
     @overload
     def group_by(
-        self: Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
         key: Union[ScalarValue, GroupingArgument[IndexType, Scalar, ArgumentOrderType]],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, V],
         ContainerType,
         Unpack[Levels],
@@ -7702,9 +12146,12 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def group_by(
-        self: Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
         key: GroupingArgument[IndexType, Mask, ArgumentOrderType],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, V],
         ContainerType,
         Unpack[Levels],
@@ -7713,9 +12160,12 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def group_by(
-        self: Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
         key: GroupingArgument[IndexType, AttributeName, ArgumentOrderType],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, V],
         ContainerType,
         Unpack[Levels],
@@ -7724,9 +12174,12 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def group_by(
-        self: Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
         key: GroupingArgument[IndexType, FailureKindValue, ArgumentOrderType],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, V],
         ContainerType,
         Unpack[Levels],
@@ -7735,17 +12188,26 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def group_by(
-        self: Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
         key: GroupingArgument[IndexType, IndexValue[K], ArgumentOrderType],
-    ) -> Operand[
-        Indexed[IndexType, V], ContainerType, Unpack[Levels], Grouped[IndexType, K]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, V],
+        ContainerType,
+        Unpack[Levels],
+        Grouped[IndexType, K],
     ]: ...
 
     @overload
     def group_by(
-        self: Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
         key: GroupingArgument[IndexType, NodeReference, ArgumentOrderType],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, V],
         ContainerType,
         Unpack[Levels],
@@ -7754,149 +12216,207 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def group_by(
-        self: Operand[Indexed[IndexType, V], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
         key: GroupingArgument[IndexType, EdgeReference, ArgumentOrderType],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, V],
         ContainerType,
         Unpack[Levels],
         Grouped[IndexType, EdgeIndex],
     ]: ...
 
+    @overload
+    def group_by(
+        self: Expression[
+            BindingType, Indexed[IndexType, V], ContainerType, Unpack[Levels]
+        ],
+        key: GroupingArgument[IndexType, GroupReference, ArgumentOrderType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, V],
+        ContainerType,
+        Unpack[Levels],
+        Grouped[IndexType, GroupIndex],
+    ]: ...
+
     def group_by(
         self,
         key: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.group_by(Operand._to_py_argument(key))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.group_by(Expression._to_argument(key)))
 
     def having(
-        self: Operand[
-            S, C, Unpack[OuterLevels], Grouped[MemberIndexType, KeyIndexType]
+        self: Expression[
+            BindingType,
+            S,
+            C,
+            Unpack[OuterLevels],
+            Grouped[MemberIndexType, KeyIndexType],
         ],
         predicate: MaskArgument[KeyIndexType, ArgumentOrderType],
-    ) -> Operand[S, C, Unpack[OuterLevels], Grouped[MemberIndexType, KeyIndexType]]:
-        return Operand._from_py_operand(
-            self._operand.having(Operand._to_py_argument(predicate))
+    ) -> Expression[
+        BindingType, S, C, Unpack[OuterLevels], Grouped[MemberIndexType, KeyIndexType]
+    ]:
+        return self._rebuild(
+            self._py_carrier.having(Expression._to_argument(predicate))
         )
 
     def keys(
-        self: Operand[
-            S, C, Unpack[OuterLevels], Grouped[MemberIndexType, KeyIndexType]
+        self: Expression[
+            BindingType,
+            S,
+            C,
+            Unpack[OuterLevels],
+            Grouped[MemberIndexType, KeyIndexType],
         ],
-    ) -> Operand[Indexed[KeyIndexType, Unit], Multiple[Unordered], Unpack[OuterLevels]]:
-        return Operand._from_py_operand(self._operand.keys())
+    ) -> Expression[
+        BindingType,
+        Indexed[KeyIndexType, Unit],
+        Multiple[Unordered],
+        Unpack[OuterLevels],
+    ]:
+        return self._rebuild(self._py_carrier.keys())
 
     @overload
     def ungroup(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, V],
             ContainerType,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
-    ) -> Operand[Indexed[IndexType, V], Multiple[Unordered], Unpack[OuterLevels]]: ...
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], Multiple[Unordered], Unpack[OuterLevels]
+    ]: ...
 
     @overload
     def ungroup(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Bare[BareValueType],
             ContainerType,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
-    ) -> Operand[Bare[BareValueType], Multiple[Unordered], Unpack[OuterLevels]]: ...
+    ) -> Expression[
+        BindingType, Bare[BareValueType], Multiple[Unordered], Unpack[OuterLevels]
+    ]: ...
 
-    def ungroup(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.ungroup())
+    def ungroup(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.ungroup())
 
     @overload
     def ungroup_keyed(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, V],
             Single,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
-    ) -> Operand[
-        Indexed[KeyIndexType, V], Multiple[Unordered], Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType, Indexed[KeyIndexType, V], Multiple[Unordered], Unpack[OuterLevels]
     ]: ...
 
     @overload
     def ungroup_keyed(
-        self: Operand[
-            Indexed[IndexType, V],
-            Definite,
-            Unpack[OuterLevels],
-            Grouped[MemberIndexType, KeyIndexType],
-        ],
-    ) -> Operand[
-        Indexed[KeyIndexType, V], Multiple[Unordered], Unpack[OuterLevels]
-    ]: ...
-
-    @overload
-    def ungroup_keyed(
-        self: Operand[
-            Bare[BareValueType],
-            Single,
-            Unpack[OuterLevels],
-            Grouped[MemberIndexType, KeyIndexType],
-        ],
-    ) -> Operand[
-        Indexed[KeyIndexType, BareValueType], Multiple[Unordered], Unpack[OuterLevels]
-    ]: ...
-
-    @overload
-    def ungroup_keyed(
-        self: Operand[
-            Bare[BareValueType],
-            Definite,
-            Unpack[OuterLevels],
-            Grouped[MemberIndexType, KeyIndexType],
-        ],
-    ) -> Operand[
-        Indexed[KeyIndexType, BareValueType], Multiple[Unordered], Unpack[OuterLevels]
-    ]: ...
-
-    def ungroup_keyed(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.ungroup_keyed())
-
-    @overload
-    def broadcast(
-        self: Operand[
-            Indexed[IndexType, V],
-            Single,
-            Unpack[OuterLevels],
-            Grouped[MemberIndexType, KeyIndexType],
-        ],
-    ) -> Operand[
-        Indexed[MemberIndexType, V], Multiple[Unordered], Unpack[OuterLevels]
-    ]: ...
-
-    @overload
-    def broadcast(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, V],
             Definite,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
-    ) -> Operand[
-        Indexed[MemberIndexType, V], Multiple[Unordered], Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType, Indexed[KeyIndexType, V], Multiple[Unordered], Unpack[OuterLevels]
     ]: ...
 
     @overload
-    def broadcast(
-        self: Operand[
+    def ungroup_keyed(
+        self: Expression[
+            BindingType,
             Bare[BareValueType],
             Single,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
+        Indexed[KeyIndexType, BareValueType],
+        Multiple[Unordered],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def ungroup_keyed(
+        self: Expression[
+            BindingType,
+            Bare[BareValueType],
+            Definite,
+            Unpack[OuterLevels],
+            Grouped[MemberIndexType, KeyIndexType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[KeyIndexType, BareValueType],
+        Multiple[Unordered],
+        Unpack[OuterLevels],
+    ]: ...
+
+    def ungroup_keyed(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.ungroup_keyed())
+
+    @overload
+    def broadcast(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, V],
+            Single,
+            Unpack[OuterLevels],
+            Grouped[MemberIndexType, KeyIndexType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[MemberIndexType, V],
+        Multiple[Unordered],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast(
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, V],
+            Definite,
+            Unpack[OuterLevels],
+            Grouped[MemberIndexType, KeyIndexType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[MemberIndexType, V],
+        Multiple[Unordered],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast(
+        self: Expression[
+            BindingType,
+            Bare[BareValueType],
+            Single,
+            Unpack[OuterLevels],
+            Grouped[MemberIndexType, KeyIndexType],
+        ],
+    ) -> Expression[
+        BindingType,
         Indexed[MemberIndexType, BareValueType],
         Multiple[Unordered],
         Unpack[OuterLevels],
@@ -7904,64 +12424,102 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def broadcast(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Bare[BareValueType],
             Definite,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[MemberIndexType, BareValueType],
         Multiple[Unordered],
         Unpack[OuterLevels],
     ]: ...
 
-    def broadcast(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.broadcast())
+    def broadcast(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.broadcast())
 
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
                 Indexed[IndexType, V],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, ValueIndex],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Indexed[IndexType, V],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, ValueIndex],
             ],
         ],
-        population: Operand[
-            Indexed[PopulationIndexType, Scalar], PopulationContainerType
+        via: Expression[
+            Unbound, Indexed[PopulationIndexType, Scalar], PopulationContainerType
         ],
-    ) -> Operand[
-        Indexed[PopulationIndexType, V], PopulationContainerType, Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        PopulationContainerType,
+        Unpack[OuterLevels],
     ]: ...
 
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, ValueIndex],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, ValueIndex],
+            ],
+        ],
+        via: Expression[
+            Bound, Indexed[PopulationIndexType, Scalar], Multiple[PopulationOrderType]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, ValueIndex],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, ValueIndex],
             ],
         ],
-        population: Operand[
-            Indexed[PopulationIndexType, Scalar], PopulationContainerType
+        via: Expression[
+            Unbound, Indexed[PopulationIndexType, Scalar], PopulationContainerType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[PopulationIndexType, BareValueType],
         PopulationContainerType,
         Unpack[OuterLevels],
@@ -7970,46 +12528,110 @@ class Operand(Generic[S, C, Unpack[Levels]]):
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
-                Indexed[IndexType, V],
+            Expression[
+                BindingType,
+                Bare[BareValueType],
                 Single,
                 Unpack[OuterLevels],
-                Grouped[MemberIndexType, BoolIndex],
+                Grouped[MemberIndexType, ValueIndex],
             ],
-            Operand[
-                Indexed[IndexType, V],
+            Expression[
+                BindingType,
+                Bare[BareValueType],
                 Definite,
                 Unpack[OuterLevels],
-                Grouped[MemberIndexType, BoolIndex],
+                Grouped[MemberIndexType, ValueIndex],
             ],
         ],
-        population: Operand[
-            Indexed[PopulationIndexType, Mask], PopulationContainerType
+        via: Expression[
+            Bound, Indexed[PopulationIndexType, Scalar], Multiple[PopulationOrderType]
         ],
-    ) -> Operand[
-        Indexed[PopulationIndexType, V], PopulationContainerType, Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, BareValueType],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
     ]: ...
 
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, BoolIndex],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, BoolIndex],
+            ],
+        ],
+        via: Expression[
+            Unbound, Indexed[PopulationIndexType, Mask], PopulationContainerType
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        PopulationContainerType,
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, BoolIndex],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, BoolIndex],
+            ],
+        ],
+        via: Expression[
+            Bound, Indexed[PopulationIndexType, Mask], Multiple[PopulationOrderType]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, BoolIndex],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, BoolIndex],
             ],
         ],
-        population: Operand[
-            Indexed[PopulationIndexType, Mask], PopulationContainerType
+        via: Expression[
+            Unbound, Indexed[PopulationIndexType, Mask], PopulationContainerType
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[PopulationIndexType, BareValueType],
         PopulationContainerType,
         Unpack[OuterLevels],
@@ -8018,48 +12640,116 @@ class Operand(Generic[S, C, Unpack[Levels]]):
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
+                Bare[BareValueType],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, BoolIndex],
+            ],
+            Expression[
+                BindingType,
+                Bare[BareValueType],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, BoolIndex],
+            ],
+        ],
+        via: Expression[
+            Bound, Indexed[PopulationIndexType, Mask], Multiple[PopulationOrderType]
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, BareValueType],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
                 Indexed[IndexType, V],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, AttributeNameIndex],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Indexed[IndexType, V],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, AttributeNameIndex],
             ],
         ],
-        population: Operand[
+        via: Expression[
+            Unbound,
             Indexed[PopulationIndexType, AttributeName],
             PopulationContainerType,
         ],
-    ) -> Operand[
-        Indexed[PopulationIndexType, V], PopulationContainerType, Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        PopulationContainerType,
+        Unpack[OuterLevels],
     ]: ...
 
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, AttributeNameIndex],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, AttributeNameIndex],
+            ],
+        ],
+        via: Expression[
+            Bound,
+            Indexed[PopulationIndexType, AttributeName],
+            Multiple[PopulationOrderType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, AttributeNameIndex],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, AttributeNameIndex],
             ],
         ],
-        population: Operand[
+        via: Expression[
+            Unbound,
             Indexed[PopulationIndexType, AttributeName],
             PopulationContainerType,
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[PopulationIndexType, BareValueType],
         PopulationContainerType,
         Unpack[OuterLevels],
@@ -8068,48 +12758,118 @@ class Operand(Generic[S, C, Unpack[Levels]]):
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
+                Bare[BareValueType],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, AttributeNameIndex],
+            ],
+            Expression[
+                BindingType,
+                Bare[BareValueType],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, AttributeNameIndex],
+            ],
+        ],
+        via: Expression[
+            Bound,
+            Indexed[PopulationIndexType, AttributeName],
+            Multiple[PopulationOrderType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, BareValueType],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
                 Indexed[IndexType, V],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, FailureKindIndex],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Indexed[IndexType, V],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, FailureKindIndex],
             ],
         ],
-        population: Operand[
+        via: Expression[
+            Unbound,
             Indexed[PopulationIndexType, FailureKindValue],
             PopulationContainerType,
         ],
-    ) -> Operand[
-        Indexed[PopulationIndexType, V], PopulationContainerType, Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        PopulationContainerType,
+        Unpack[OuterLevels],
     ]: ...
 
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, FailureKindIndex],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, FailureKindIndex],
+            ],
+        ],
+        via: Expression[
+            Bound,
+            Indexed[PopulationIndexType, FailureKindValue],
+            Multiple[PopulationOrderType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, FailureKindIndex],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, FailureKindIndex],
             ],
         ],
-        population: Operand[
+        via: Expression[
+            Unbound,
             Indexed[PopulationIndexType, FailureKindValue],
             PopulationContainerType,
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[PopulationIndexType, BareValueType],
         PopulationContainerType,
         Unpack[OuterLevels],
@@ -8118,48 +12878,118 @@ class Operand(Generic[S, C, Unpack[Levels]]):
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
+                Bare[BareValueType],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, FailureKindIndex],
+            ],
+            Expression[
+                BindingType,
+                Bare[BareValueType],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, FailureKindIndex],
+            ],
+        ],
+        via: Expression[
+            Bound,
+            Indexed[PopulationIndexType, FailureKindValue],
+            Multiple[PopulationOrderType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, BareValueType],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
                 Indexed[IndexType, V],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, KeyIndexType],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Indexed[IndexType, V],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, KeyIndexType],
             ],
         ],
-        population: Operand[
+        via: Expression[
+            Unbound,
             Indexed[PopulationIndexType, IndexValue[KeyIndexType]],
             PopulationContainerType,
         ],
-    ) -> Operand[
-        Indexed[PopulationIndexType, V], PopulationContainerType, Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        PopulationContainerType,
+        Unpack[OuterLevels],
     ]: ...
 
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, KeyIndexType],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, KeyIndexType],
+            ],
+        ],
+        via: Expression[
+            Bound,
+            Indexed[PopulationIndexType, IndexValue[KeyIndexType]],
+            Multiple[PopulationOrderType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, KeyIndexType],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, KeyIndexType],
             ],
         ],
-        population: Operand[
+        via: Expression[
+            Unbound,
             Indexed[PopulationIndexType, IndexValue[KeyIndexType]],
             PopulationContainerType,
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[PopulationIndexType, BareValueType],
         PopulationContainerType,
         Unpack[OuterLevels],
@@ -8168,48 +12998,118 @@ class Operand(Generic[S, C, Unpack[Levels]]):
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
-                Indexed[IndexType, V],
+            Expression[
+                BindingType,
+                Bare[BareValueType],
                 Single,
                 Unpack[OuterLevels],
-                Grouped[MemberIndexType, NodeIndex],
+                Grouped[MemberIndexType, KeyIndexType],
             ],
-            Operand[
-                Indexed[IndexType, V],
+            Expression[
+                BindingType,
+                Bare[BareValueType],
                 Definite,
                 Unpack[OuterLevels],
-                Grouped[MemberIndexType, NodeIndex],
+                Grouped[MemberIndexType, KeyIndexType],
             ],
         ],
-        population: Operand[
-            Indexed[PopulationIndexType, NodeReference],
-            PopulationContainerType,
+        via: Expression[
+            Bound,
+            Indexed[PopulationIndexType, IndexValue[KeyIndexType]],
+            Multiple[PopulationOrderType],
         ],
-    ) -> Operand[
-        Indexed[PopulationIndexType, V], PopulationContainerType, Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, BareValueType],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
     ]: ...
 
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, NodeIndex],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, NodeIndex],
+            ],
+        ],
+        via: Expression[
+            Unbound,
+            Indexed[PopulationIndexType, NodeReference],
+            PopulationContainerType,
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        PopulationContainerType,
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, NodeIndex],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, NodeIndex],
+            ],
+        ],
+        via: Expression[
+            Bound,
+            Indexed[PopulationIndexType, NodeReference],
+            Multiple[PopulationOrderType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, NodeIndex],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, NodeIndex],
             ],
         ],
-        population: Operand[
+        via: Expression[
+            Unbound,
             Indexed[PopulationIndexType, NodeReference],
             PopulationContainerType,
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[PopulationIndexType, BareValueType],
         PopulationContainerType,
         Unpack[OuterLevels],
@@ -8218,107 +13118,222 @@ class Operand(Generic[S, C, Unpack[Levels]]):
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
-                Indexed[IndexType, V],
+            Expression[
+                BindingType,
+                Bare[BareValueType],
                 Single,
                 Unpack[OuterLevels],
-                Grouped[MemberIndexType, EdgeIndex],
+                Grouped[MemberIndexType, NodeIndex],
             ],
-            Operand[
-                Indexed[IndexType, V],
+            Expression[
+                BindingType,
+                Bare[BareValueType],
                 Definite,
                 Unpack[OuterLevels],
-                Grouped[MemberIndexType, EdgeIndex],
+                Grouped[MemberIndexType, NodeIndex],
             ],
         ],
-        population: Operand[
-            Indexed[PopulationIndexType, EdgeReference],
-            PopulationContainerType,
+        via: Expression[
+            Bound,
+            Indexed[PopulationIndexType, NodeReference],
+            Multiple[PopulationOrderType],
         ],
-    ) -> Operand[
-        Indexed[PopulationIndexType, V], PopulationContainerType, Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, BareValueType],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
     ]: ...
 
     @overload
     def broadcast_via(
         self: Union[
-            Operand[
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, EdgeIndex],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, EdgeIndex],
+            ],
+        ],
+        via: Expression[
+            Unbound,
+            Indexed[PopulationIndexType, EdgeReference],
+            PopulationContainerType,
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        PopulationContainerType,
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, EdgeIndex],
+            ],
+            Expression[
+                BindingType,
+                Indexed[IndexType, V],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, EdgeIndex],
+            ],
+        ],
+        via: Expression[
+            Bound,
+            Indexed[PopulationIndexType, EdgeReference],
+            Multiple[PopulationOrderType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, V],
+        Multiple[PopulationOrderType],
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Single,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, EdgeIndex],
             ],
-            Operand[
+            Expression[
+                BindingType,
                 Bare[BareValueType],
                 Definite,
                 Unpack[OuterLevels],
                 Grouped[MemberIndexType, EdgeIndex],
             ],
         ],
-        population: Operand[
+        via: Expression[
+            Unbound,
             Indexed[PopulationIndexType, EdgeReference],
             PopulationContainerType,
         ],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[PopulationIndexType, BareValueType],
         PopulationContainerType,
+        Unpack[OuterLevels],
+    ]: ...
+
+    @overload
+    def broadcast_via(
+        self: Union[
+            Expression[
+                BindingType,
+                Bare[BareValueType],
+                Single,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, EdgeIndex],
+            ],
+            Expression[
+                BindingType,
+                Bare[BareValueType],
+                Definite,
+                Unpack[OuterLevels],
+                Grouped[MemberIndexType, EdgeIndex],
+            ],
+        ],
+        via: Expression[
+            Bound,
+            Indexed[PopulationIndexType, EdgeReference],
+            Multiple[PopulationOrderType],
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[PopulationIndexType, BareValueType],
+        Multiple[PopulationOrderType],
         Unpack[OuterLevels],
     ]: ...
 
     def broadcast_via(
         self,
-        population: Operand[Any, Any],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.broadcast_via(population._operand)
-        )
+        via: Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+    ) -> Any:
+        return self._rebuild(self._py_carrier.broadcast_via(via._py_carrier))
 
     @overload
     def bucket_errors(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, V],
             ContainerType,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
-    ) -> Operand[
-        Indexed[KeyIndexType, FailureValue], Multiple[Unordered], Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType,
+        Indexed[KeyIndexType, FailureValue],
+        Multiple[Unordered],
+        Unpack[OuterLevels],
     ]: ...
 
     @overload
     def bucket_errors(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Bare[BareValueType],
             ContainerType,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
-    ) -> Operand[
-        Indexed[KeyIndexType, FailureValue], Multiple[Unordered], Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType,
+        Indexed[KeyIndexType, FailureValue],
+        Multiple[Unordered],
+        Unpack[OuterLevels],
     ]: ...
 
-    def bucket_errors(self) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.bucket_errors())
+    def bucket_errors(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.bucket_errors())
 
     def key_errors(
-        self: Operand[
-            S, C, Unpack[OuterLevels], Grouped[MemberIndexType, KeyIndexType]
+        self: Expression[
+            BindingType,
+            S,
+            C,
+            Unpack[OuterLevels],
+            Grouped[MemberIndexType, KeyIndexType],
         ],
-    ) -> Operand[
-        Indexed[MemberIndexType, FailureValue], Multiple[Unordered], Unpack[OuterLevels]
+    ) -> Expression[
+        BindingType,
+        Indexed[MemberIndexType, FailureValue],
+        Multiple[Unordered],
+        Unpack[OuterLevels],
     ]:
-        return Operand._from_py_operand(self._operand.key_errors())
+        return self._rebuild(self._py_carrier.key_errors())
 
     @overload
     def on_bucket_error(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, V],
             ContainerType,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
         policy: Union[Drop, Raise],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, V],
         ContainerType,
         Unpack[OuterLevels],
@@ -8327,14 +13342,16 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def on_bucket_error(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Bare[BareValueType],
             ContainerType,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
         policy: Union[Drop, Raise],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Bare[BareValueType],
         ContainerType,
         Unpack[OuterLevels],
@@ -8343,22 +13360,24 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     def on_bucket_error(
         self, policy: Union[Drop, Raise]
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
+    ) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
         if isinstance(policy, Drop):
-            return Operand._from_py_operand(self._operand.on_bucket_error_drop())
+            return self._rebuild(self._py_carrier.on_bucket_error_drop())
 
-        return Operand._from_py_operand(self._operand.on_bucket_error_raise())
+        return self._rebuild(self._py_carrier.on_bucket_error_raise())
 
     @overload
     def on_key_error(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, V],
             ContainerType,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
         policy: Union[Drop, Raise],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, V],
         ContainerType,
         Unpack[OuterLevels],
@@ -8367,14 +13386,16 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def on_key_error(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Bare[BareValueType],
             ContainerType,
             Unpack[OuterLevels],
             Grouped[MemberIndexType, KeyIndexType],
         ],
         policy: Union[Drop, Raise],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Bare[BareValueType],
         ContainerType,
         Unpack[OuterLevels],
@@ -8383,49 +13404,70 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     def on_key_error(
         self, policy: Union[Drop, Raise]
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
+    ) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
         if isinstance(policy, Drop):
-            return Operand._from_py_operand(self._operand.on_key_error_drop())
+            return self._rebuild(self._py_carrier.on_key_error_drop())
 
-        return Operand._from_py_operand(self._operand.on_key_error_raise())
+        return self._rebuild(self._py_carrier.on_key_error_raise())
 
     @overload
     def transition(
-        self: Operand[Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, Scalar], ContainerType, Unpack[Levels]
+        ],
         target: ValueTarget[ScalarTransitionValueType],
-    ) -> Operand[
-        Indexed[IndexType, ScalarTransitionValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ScalarTransitionValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def transition(
-        self: Operand[Bare[Scalar], ContainerType, Unpack[Levels]],
+        self: Expression[BindingType, Bare[Scalar], ContainerType, Unpack[Levels]],
         target: ValueTarget[ScalarTransitionValueType],
-    ) -> Operand[Bare[ScalarTransitionValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[ScalarTransitionValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def transition(
-        self: Operand[
-            Indexed[IndexType, IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[ValueIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
         target: ValueTarget[ValueIndexTransitionValueType],
-    ) -> Operand[
-        Indexed[IndexType, ValueIndexTransitionValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, ValueIndexTransitionValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def transition(
-        self: Operand[Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[IndexValue[ValueIndex]], ContainerType, Unpack[Levels]
+        ],
         target: ValueTarget[ValueIndexTransitionValueType],
-    ) -> Operand[
-        Bare[ValueIndexTransitionValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Bare[ValueIndexTransitionValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def transition(
-        self: Operand[Indexed[IndexType, AttributeName], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, AttributeName],
+            ContainerType,
+            Unpack[Levels],
+        ],
         target: ValueTarget[AttributeNameTransitionValueType],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, AttributeNameTransitionValueType],
         ContainerType,
         Unpack[Levels],
@@ -8433,37 +13475,54 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def transition(
-        self: Operand[Bare[AttributeName], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[AttributeName], ContainerType, Unpack[Levels]
+        ],
         target: ValueTarget[AttributeNameTransitionValueType],
-    ) -> Operand[
-        Bare[AttributeNameTransitionValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Bare[AttributeNameTransitionValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def transition(
-        self: Operand[
-            Indexed[IndexType, IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[NodeIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
         target: ValueTarget[NodeIndexTransitionValueType],
-    ) -> Operand[
-        Indexed[IndexType, NodeIndexTransitionValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, NodeIndexTransitionValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def transition(
-        self: Operand[Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[IndexValue[NodeIndex]], ContainerType, Unpack[Levels]
+        ],
         target: ValueTarget[NodeIndexTransitionValueType],
-    ) -> Operand[Bare[NodeIndexTransitionValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[NodeIndexTransitionValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def transition(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[AttributeNameIndex]],
             ContainerType,
             Unpack[Levels],
         ],
         target: ValueTarget[AttributeNameIndexTransitionValueType],
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[IndexType, AttributeNameIndexTransitionValueType],
         ContainerType,
         Unpack[Levels],
@@ -8471,122 +13530,178 @@ class Operand(Generic[S, C, Unpack[Levels]]):
 
     @overload
     def transition(
-        self: Operand[
-            Bare[IndexValue[AttributeNameIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[AttributeNameIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
         target: ValueTarget[AttributeNameIndexTransitionValueType],
-    ) -> Operand[
-        Bare[AttributeNameIndexTransitionValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Bare[AttributeNameIndexTransitionValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def transition(
-        self: Operand[
-            Indexed[IndexType, IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[GroupIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
-        target: ValueTarget[EdgeIndexTransitionValueType],
-    ) -> Operand[
-        Indexed[IndexType, EdgeIndexTransitionValueType], ContainerType, Unpack[Levels]
+        target: ValueTarget[GroupIndexTransitionValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, GroupIndexTransitionValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def transition(
-        self: Operand[Bare[IndexValue[EdgeIndex]], ContainerType, Unpack[Levels]],
-        target: ValueTarget[EdgeIndexTransitionValueType],
-    ) -> Operand[Bare[EdgeIndexTransitionValueType], ContainerType, Unpack[Levels]]: ...
+        self: Expression[
+            BindingType, Bare[IndexValue[GroupIndex]], ContainerType, Unpack[Levels]
+        ],
+        target: ValueTarget[GroupIndexTransitionValueType],
+    ) -> Expression[
+        BindingType, Bare[GroupIndexTransitionValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def transition(
-        self: Operand[
-            Indexed[IndexType, IndexValue[Positional]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[Positional]],
+            ContainerType,
+            Unpack[Levels],
         ],
         target: ValueTarget[PositionalTransitionValueType],
-    ) -> Operand[
-        Indexed[IndexType, PositionalTransitionValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, PositionalTransitionValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def transition(
-        self: Operand[Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[IndexValue[Positional]], ContainerType, Unpack[Levels]
+        ],
         target: ValueTarget[PositionalTransitionValueType],
-    ) -> Operand[
-        Bare[PositionalTransitionValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Bare[PositionalTransitionValueType], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def transition(
-        self: Operand[Indexed[IndexType, Mask], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Indexed[IndexType, Mask], ContainerType, Unpack[Levels]
+        ],
         target: ValueTarget[MaskTransitionValueType],
-    ) -> Operand[
-        Indexed[IndexType, MaskTransitionValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, MaskTransitionValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def transition(
-        self: Operand[Bare[Mask], ContainerType, Unpack[Levels]],
+        self: Expression[BindingType, Bare[Mask], ContainerType, Unpack[Levels]],
         target: ValueTarget[MaskTransitionValueType],
-    ) -> Operand[Bare[MaskTransitionValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[MaskTransitionValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def transition(
-        self: Operand[
-            Indexed[IndexType, IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, IndexValue[BoolIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
         target: ValueTarget[BoolIndexTransitionValueType],
-    ) -> Operand[
-        Indexed[IndexType, BoolIndexTransitionValueType], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, BoolIndexTransitionValueType],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def transition(
-        self: Operand[Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[IndexValue[BoolIndex]], ContainerType, Unpack[Levels]
+        ],
         target: ValueTarget[BoolIndexTransitionValueType],
-    ) -> Operand[Bare[BoolIndexTransitionValueType], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[BoolIndexTransitionValueType], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def transition(
-        self: Operand[
-            Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Indexed[IndexType, FailureKindValue],
+            ContainerType,
+            Unpack[Levels],
         ],
         target: ValueTarget[IndexValue[FailureKindIndex]],
-    ) -> Operand[
-        Indexed[IndexType, IndexValue[FailureKindIndex]], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType,
+        Indexed[IndexType, IndexValue[FailureKindIndex]],
+        ContainerType,
+        Unpack[Levels],
     ]: ...
 
     @overload
     def transition(
-        self: Operand[Bare[FailureKindValue], ContainerType, Unpack[Levels]],
+        self: Expression[
+            BindingType, Bare[FailureKindValue], ContainerType, Unpack[Levels]
+        ],
         target: ValueTarget[IndexValue[FailureKindIndex]],
-    ) -> Operand[Bare[IndexValue[FailureKindIndex]], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[IndexValue[FailureKindIndex]], ContainerType, Unpack[Levels]
+    ]: ...
 
     @overload
     def transition(
-        self: Operand[
+        self: Expression[
+            BindingType,
             Indexed[IndexType, IndexValue[FailureKindIndex]],
             ContainerType,
             Unpack[Levels],
         ],
         target: ValueTarget[FailureKindValue],
-    ) -> Operand[
-        Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
+    ) -> Expression[
+        BindingType, Indexed[IndexType, FailureKindValue], ContainerType, Unpack[Levels]
     ]: ...
 
     @overload
     def transition(
-        self: Operand[
-            Bare[IndexValue[FailureKindIndex]], ContainerType, Unpack[Levels]
+        self: Expression[
+            BindingType,
+            Bare[IndexValue[FailureKindIndex]],
+            ContainerType,
+            Unpack[Levels],
         ],
         target: ValueTarget[FailureKindValue],
-    ) -> Operand[Bare[FailureKindValue], ContainerType, Unpack[Levels]]: ...
+    ) -> Expression[
+        BindingType, Bare[FailureKindValue], ContainerType, Unpack[Levels]
+    ]: ...
 
-    def transition(
-        self, target: ValueTarget[Any]
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(self._operand.transition(target._target))
+    def transition(self, target: ValueTarget[Any]) -> Any:
+        return self._rebuild(self._py_carrier.transition(target._py_value_target))
 
     @overload
-    def expand_to(
-        self: Operand[
+    def inherit(
+        self: Expression[
+            BindingType,
             Indexed[
                 Expanded[IndexType, ChildType, ParentPayloadType], TemplateValueType
             ],
@@ -8594,69 +13709,78 @@ class Operand(Generic[S, C, Unpack[Levels]]):
             Unpack[Levels],
         ],
         values: ScalarValue,
-    ) -> Operand[
+    ) -> Expression[
+        BindingType,
         Indexed[Expanded[IndexType, ChildType, ParentPayloadType], Scalar],
         ContainerType,
         Unpack[Levels],
     ]: ...
 
     @overload
-    def expand_to(
-        self: Operand[
+    def inherit(
+        self: Expression[
+            BindingType,
             Indexed[
                 Expanded[IndexType, ChildType, ParentPayloadType], TemplateValueType
             ],
             ContainerType,
             Unpack[Levels],
         ],
-        values: IndexedOperandArgument[IndexType, ExpandedValueType, ArgumentOrderType],
-    ) -> Operand[
-        Indexed[Expanded[IndexType, ChildType, ParentPayloadType], ExpandedValueType],
+        values: IndexedExpressionArgument[
+            IndexType, InheritedValueType, ArgumentOrderType
+        ],
+    ) -> Expression[
+        BindingType,
+        Indexed[Expanded[IndexType, ChildType, ParentPayloadType], InheritedValueType],
         ContainerType,
         Unpack[Levels],
     ]: ...
 
     @overload
-    def expand_to(
-        self: Operand[
+    def inherit(
+        self: Expression[
+            BindingType,
             Indexed[
                 Expanded[IndexType, ChildType, ParentPayloadType], TemplateValueType
             ],
             Definite,
             Unpack[Levels],
         ],
-        values: IndexedDroppingArgument[IndexType, ExpandedValueType],
-    ) -> Operand[
-        Indexed[Expanded[IndexType, ChildType, ParentPayloadType], ExpandedValueType],
+        values: IndexedDroppingArgument[IndexType, InheritedValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[Expanded[IndexType, ChildType, ParentPayloadType], InheritedValueType],
         Single,
         Unpack[Levels],
     ]: ...
 
     @overload
-    def expand_to(
-        self: Operand[
+    def inherit(
+        self: Expression[
+            BindingType,
             Indexed[
                 Expanded[IndexType, ChildType, ParentPayloadType], TemplateValueType
             ],
             DroppedContainerType,
             Unpack[Levels],
         ],
-        values: IndexedDroppingArgument[IndexType, ExpandedValueType],
-    ) -> Operand[
-        Indexed[Expanded[IndexType, ChildType, ParentPayloadType], ExpandedValueType],
+        values: IndexedDroppingArgument[IndexType, InheritedValueType],
+    ) -> Expression[
+        BindingType,
+        Indexed[Expanded[IndexType, ChildType, ParentPayloadType], InheritedValueType],
         DroppedContainerType,
         Unpack[Levels],
     ]: ...
 
-    def expand_to(
+    def inherit(
         self,
         values: Union[
-            ScalarValue, Operand[Any, Any, Unpack[Tuple[Any, ...]]], Argument[Any, Any]
+            ScalarValue,
+            Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]],
+            Argument[Any, Any],
         ],
-    ) -> Operand[Any, Any, Unpack[Tuple[Any, ...]]]:
-        return Operand._from_py_operand(
-            self._operand.expand_to(Operand._to_py_argument(values))
-        )
+    ) -> Any:
+        return self._rebuild(self._py_carrier.inherit(Expression._to_argument(values)))
 
     __add__ = add
     __sub__ = subtract
@@ -8676,48 +13800,90 @@ class Operand(Generic[S, C, Unpack[Levels]]):
     __neg__ = neg
 
 
-IndexedOperandArgument: TypeAlias = Union[
-    Operand[Indexed[IndexType, V], Multiple[ArgumentOrderType]],
-    Operand[Bare[V], Single],
-    Operand[Bare[V], Definite],
+class Series(Expression[Bound, S, C, Unpack[Levels]]):
+    @classmethod
+    def _from_py_series(cls, py_series: PySeries) -> Series[S, C, Unpack[Levels]]:
+        series = cls.__new__(cls)
+        series._py_carrier = py_series
+
+        return series
+
+
+IndexedExpressionArgument: TypeAlias = Union[
+    Expression[Unbound, Indexed[IndexType, V], Multiple[ArgumentOrderType]],
+    Expression[Unbound, Bare[V], Single],
+    Expression[Unbound, Bare[V], Definite],
+    Expression[Bound, Indexed[IndexType, V], Multiple[ArgumentOrderType]],
+    Expression[Bound, Bare[V], Single],
+    Expression[Bound, Bare[V], Definite],
     Argument[Indexed[IndexType, V], Preserving],
-]
-BareOperandArgument: TypeAlias = Union[
-    Operand[Bare[V], Single],
-    Operand[Bare[V], Definite],
     Argument[Bare[V], Preserving],
+]
+BareExpressionArgument: TypeAlias = Union[
+    Expression[Unbound, Bare[V], Single],
+    Expression[Unbound, Bare[V], Definite],
+    Expression[Bound, Bare[V], Single],
+    Expression[Bound, Bare[V], Definite],
+    Argument[Bare[V], Preserving],
+]
+BareReplacement: TypeAlias = Union[
+    Replace[Expression[Unbound, Bare[V], Single]],
+    Replace[Expression[Unbound, Bare[V], Definite]],
+    Replace[Expression[Bound, Bare[V], Single]],
+    Replace[Expression[Bound, Bare[V], Definite]],
+    Replace[Argument[Bare[V], Preserving]],
+    Replace[Argument[Bare[V], Dropping]],
 ]
 MaskArgument: TypeAlias = Union[
     bool,
-    Operand[Indexed[IndexType, Mask], Multiple[ArgumentOrderType]],
-    Operand[Bare[Mask], Single],
-    Operand[Bare[Mask], Definite],
+    Expression[Unbound, Indexed[IndexType, Mask], Multiple[ArgumentOrderType]],
+    Expression[Unbound, Bare[Mask], Single],
+    Expression[Unbound, Bare[Mask], Definite],
+    Expression[Bound, Indexed[IndexType, Mask], Multiple[ArgumentOrderType]],
+    Expression[Bound, Bare[Mask], Single],
+    Expression[Bound, Bare[Mask], Definite],
     Argument[Indexed[IndexType, Mask], Preserving],
     Argument[Indexed[IndexType, Mask], Dropping],
-]
-BareMaskArgument: TypeAlias = Union[
-    bool,
-    Operand[Bare[Mask], Single],
-    Operand[Bare[Mask], Definite],
     Argument[Bare[Mask], Preserving],
     Argument[Bare[Mask], Dropping],
 ]
-IndexedDroppingArgument: TypeAlias = Argument[Indexed[IndexType, V], Dropping]
+BareMaskArgument: TypeAlias = Union[
+    bool,
+    Expression[Unbound, Bare[Mask], Single],
+    Expression[Unbound, Bare[Mask], Definite],
+    Expression[Bound, Bare[Mask], Single],
+    Expression[Bound, Bare[Mask], Definite],
+    Argument[Bare[Mask], Preserving],
+    Argument[Bare[Mask], Dropping],
+]
+IndexedDroppingArgument: TypeAlias = Union[
+    Argument[Indexed[IndexType, V], Dropping],
+    Argument[Bare[V], Dropping],
+]
 BareDroppingArgument: TypeAlias = Argument[Bare[V], Dropping]
 GroupingArgument: TypeAlias = Union[
-    Operand[Indexed[IndexType, V], Multiple[ArgumentOrderType]],
-    Operand[Bare[V], Single],
-    Operand[Bare[V], Definite],
+    Expression[Unbound, Indexed[IndexType, V], Multiple[ArgumentOrderType]],
+    Expression[Unbound, Bare[V], Single],
+    Expression[Unbound, Bare[V], Definite],
+    Expression[Bound, Indexed[IndexType, V], Multiple[ArgumentOrderType]],
+    Expression[Bound, Bare[V], Single],
+    Expression[Bound, Bare[V], Definite],
     Argument[Indexed[IndexType, V], Preserving],
     Argument[Indexed[IndexType, V], Dropping],
 ]
 MembershipArgument: TypeAlias = Union[
-    Operand[Indexed[Any, V], Any], Operand[Bare[V], Any]
+    Expression[Unbound, Indexed[Any, V], Any],
+    Expression[Unbound, Bare[V], Any],
+    Expression[Bound, Indexed[Any, V], Any],
+    Expression[Bound, Bare[V], Any],
 ]
 IndexedStringArgument: TypeAlias = Union[
-    str, IndexedOperandArgument[IndexType, StringArgumentValueType, ArgumentOrderType]
+    str,
+    IndexedExpressionArgument[IndexType, StringArgumentValueType, ArgumentOrderType],
 ]
-BareStringArgument: TypeAlias = Union[str, BareOperandArgument[StringArgumentValueType]]
+BareStringArgument: TypeAlias = Union[
+    str, BareExpressionArgument[StringArgumentValueType]
+]
 IndexedAnyStringArgument: TypeAlias = Union[
     IndexedStringArgument[IndexType, StringArgumentValueType, ArgumentOrderType],
     IndexedDroppingArgument[IndexType, StringArgumentValueType],
@@ -8727,9 +13893,9 @@ BareAnyStringArgument: TypeAlias = Union[
     BareDroppingArgument[StringArgumentValueType],
 ]
 IndexedIntegerArgument: TypeAlias = Union[
-    int, IndexedOperandArgument[IndexType, IntegerValueType, ArgumentOrderType]
+    int, IndexedExpressionArgument[IndexType, IntegerValueType, ArgumentOrderType]
 ]
-BareIntegerArgument: TypeAlias = Union[int, BareOperandArgument[IntegerValueType]]
+BareIntegerArgument: TypeAlias = Union[int, BareExpressionArgument[IntegerValueType]]
 IndexedAnyIntegerArgument: TypeAlias = Union[
     IndexedIntegerArgument[IndexType, IntegerValueType, ArgumentOrderType],
     IndexedDroppingArgument[IndexType, IntegerValueType],
@@ -8738,18 +13904,18 @@ BareAnyIntegerArgument: TypeAlias = Union[
     BareIntegerArgument[IntegerValueType], BareDroppingArgument[IntegerValueType]
 ]
 IndexedScalarArgument: TypeAlias = Union[
-    ScalarValue, IndexedOperandArgument[IndexType, V, ArgumentOrderType]
+    ScalarValue, IndexedExpressionArgument[IndexType, V, ArgumentOrderType]
 ]
-BareScalarArgument: TypeAlias = Union[ScalarValue, BareOperandArgument[V]]
+BareScalarArgument: TypeAlias = Union[ScalarValue, BareExpressionArgument[V]]
 BareAnyScalarArgument: TypeAlias = Union[BareScalarArgument[V], BareDroppingArgument[V]]
 IndexedAnyScalarArgument: TypeAlias = Union[
     IndexedScalarArgument[IndexType, V, ArgumentOrderType],
     IndexedDroppingArgument[IndexType, V],
 ]
 IndexedAttributeArgument: TypeAlias = Union[
-    Attribute, IndexedOperandArgument[IndexType, V, ArgumentOrderType]
+    Attribute, IndexedExpressionArgument[IndexType, V, ArgumentOrderType]
 ]
-BareAttributeArgument: TypeAlias = Union[Attribute, BareOperandArgument[V]]
+BareAttributeArgument: TypeAlias = Union[Attribute, BareExpressionArgument[V]]
 IndexedAnyAttributeArgument: TypeAlias = Union[
     IndexedAttributeArgument[IndexType, V, ArgumentOrderType],
     IndexedDroppingArgument[IndexType, V],
@@ -8757,104 +13923,146 @@ IndexedAnyAttributeArgument: TypeAlias = Union[
 BareAnyAttributeArgument: TypeAlias = Union[
     BareAttributeArgument[V], BareDroppingArgument[V]
 ]
-BareReplacement: TypeAlias = Union[
-    Replace[Operand[Bare[V], Single]],
-    Replace[Operand[Bare[V], Definite]],
+
+
+AttributesExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, AttributeName], Multiple[OrderType]
+]
+BareAttributesExpression: TypeAlias = Expression[
+    Unbound, Bare[AttributeName], Multiple[OrderType]
+]
+AttributeExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, AttributeName], Single
+]
+BareAttributeExpression: TypeAlias = Expression[Unbound, Bare[AttributeName], Single]
+DefiniteAttributeExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, AttributeName], Definite
+]
+DefiniteBareAttributeExpression: TypeAlias = Expression[
+    Unbound, Bare[AttributeName], Definite
 ]
 
-AttributesOperand: TypeAlias = Operand[
-    Indexed[IndexType, AttributeName], Multiple[OrderType]
+BoolMaskExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, Mask], Multiple[OrderType]
 ]
-BareAttributesOperand: TypeAlias = Operand[Bare[AttributeName], Multiple[OrderType]]
-AttributeOperand: TypeAlias = Operand[Indexed[IndexType, AttributeName], Single]
-BareAttributeOperand: TypeAlias = Operand[Bare[AttributeName], Single]
-DefiniteAttributeOperand: TypeAlias = Operand[
-    Indexed[IndexType, AttributeName], Definite
+BareBoolMaskExpression: TypeAlias = Expression[Unbound, Bare[Mask], Multiple[OrderType]]
+BoolExpression: TypeAlias = Expression[Unbound, Indexed[IndexType, Mask], Single]
+BareBoolExpression: TypeAlias = Expression[Unbound, Bare[Mask], Single]
+DefiniteBoolExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, Mask], Definite
 ]
-DefiniteBareAttributeOperand: TypeAlias = Operand[Bare[AttributeName], Definite]
+DefiniteBareBoolExpression: TypeAlias = Expression[Unbound, Bare[Mask], Definite]
 
-BoolMaskOperand: TypeAlias = Operand[Indexed[IndexType, Mask], Multiple[OrderType]]
-BareBoolMaskOperand: TypeAlias = Operand[Bare[Mask], Multiple[OrderType]]
-BoolOperand: TypeAlias = Operand[Indexed[IndexType, Mask], Single]
-BareBoolOperand: TypeAlias = Operand[Bare[Mask], Single]
-DefiniteBoolOperand: TypeAlias = Operand[Indexed[IndexType, Mask], Definite]
-DefiniteBareBoolOperand: TypeAlias = Operand[Bare[Mask], Definite]
-
-ElementsOperand: TypeAlias = Operand[Indexed[IndexType, Unit], Multiple[OrderType]]
-ElementOperand: TypeAlias = Operand[Indexed[IndexType, Unit], Single]
-DefiniteElementOperand: TypeAlias = Operand[Indexed[IndexType, Unit], Definite]
-
-FailuresOperand: TypeAlias = Operand[
-    Indexed[IndexType, FailureValue], Multiple[OrderType]
+ElementsExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, Unit], Multiple[OrderType]
 ]
-FailureKindsOperand: TypeAlias = Operand[
-    Indexed[IndexType, FailureKindValue], Multiple[OrderType]
-]
-BareFailuresOperand: TypeAlias = Operand[Bare[FailureValue], Multiple[OrderType]]
-BareFailureKindsOperand: TypeAlias = Operand[
-    Bare[FailureKindValue], Multiple[OrderType]
-]
-FailureOperand: TypeAlias = Operand[Indexed[IndexType, FailureValue], Single]
-FailureKindOperand: TypeAlias = Operand[Indexed[IndexType, FailureKindValue], Single]
-BareFailureOperand: TypeAlias = Operand[Bare[FailureValue], Single]
-BareFailureKindOperand: TypeAlias = Operand[Bare[FailureKindValue], Single]
-DefiniteFailureOperand: TypeAlias = Operand[Indexed[IndexType, FailureValue], Definite]
-DefiniteFailureKindOperand: TypeAlias = Operand[
-    Indexed[IndexType, FailureKindValue], Definite
-]
-DefiniteBareFailureOperand: TypeAlias = Operand[Bare[FailureValue], Definite]
-DefiniteBareFailureKindOperand: TypeAlias = Operand[Bare[FailureKindValue], Definite]
-
-IndicesOperand: TypeAlias = Operand[
-    Indexed[IndexType, IndexValue[IndexType]], Multiple[OrderType]
-]
-BareIndicesOperand: TypeAlias = Operand[
-    Bare[IndexValue[IndexType]], Multiple[OrderType]
-]
-IndexOperand: TypeAlias = Operand[Indexed[IndexType, IndexValue[IndexType]], Single]
-BareIndexOperand: TypeAlias = Operand[Bare[IndexValue[IndexType]], Single]
-DefiniteIndexOperand: TypeAlias = Operand[
-    Indexed[IndexType, IndexValue[IndexType]], Definite
-]
-DefiniteBareIndexOperand: TypeAlias = Operand[Bare[IndexValue[IndexType]], Definite]
-
-ReferencesOperand: TypeAlias = Operand[
-    Indexed[IndexType, ReferenceType], Multiple[OrderType]
-]
-BareReferencesOperand: TypeAlias = Operand[Bare[ReferenceType], Multiple[OrderType]]
-ReferenceOperand: TypeAlias = Operand[Indexed[IndexType, ReferenceType], Single]
-BareReferenceOperand: TypeAlias = Operand[Bare[ReferenceType], Single]
-DefiniteReferenceOperand: TypeAlias = Operand[
-    Indexed[IndexType, ReferenceType], Definite
-]
-DefiniteBareReferenceOperand: TypeAlias = Operand[Bare[ReferenceType], Definite]
-ReferenceIndicesOperand: TypeAlias = Operand[
-    Indexed[IndexType, IndexValue[EntityType]], Multiple[OrderType]
-]
-ReferenceIndexOperand: TypeAlias = Operand[
-    Indexed[IndexType, IndexValue[EntityType]], Single
-]
-DefiniteReferenceIndexOperand: TypeAlias = Operand[
-    Indexed[IndexType, IndexValue[EntityType]], Definite
+ElementExpression: TypeAlias = Expression[Unbound, Indexed[IndexType, Unit], Single]
+DefiniteElementExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, Unit], Definite
 ]
 
-ValuesOperand: TypeAlias = Operand[Indexed[IndexType, Scalar], Multiple[OrderType]]
-BareValuesOperand: TypeAlias = Operand[Bare[Scalar], Multiple[OrderType]]
-ValueOperand: TypeAlias = Operand[Indexed[IndexType, Scalar], Single]
-BareValueOperand: TypeAlias = Operand[Bare[Scalar], Single]
-DefiniteValueOperand: TypeAlias = Operand[Indexed[IndexType, Scalar], Definite]
-DefiniteBareValueOperand: TypeAlias = Operand[Bare[Scalar], Definite]
+FailuresExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, FailureValue], Multiple[OrderType]
+]
+FailureKindsExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, FailureKindValue], Multiple[OrderType]
+]
+BareFailuresExpression: TypeAlias = Expression[
+    Unbound, Bare[FailureValue], Multiple[OrderType]
+]
+BareFailureKindsExpression: TypeAlias = Expression[
+    Unbound, Bare[FailureKindValue], Multiple[OrderType]
+]
+FailureExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, FailureValue], Single
+]
+FailureKindExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, FailureKindValue], Single
+]
+BareFailureExpression: TypeAlias = Expression[Unbound, Bare[FailureValue], Single]
+BareFailureKindExpression: TypeAlias = Expression[
+    Unbound, Bare[FailureKindValue], Single
+]
+DefiniteFailureExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, FailureValue], Definite
+]
+DefiniteFailureKindExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, FailureKindValue], Definite
+]
+DefiniteBareFailureExpression: TypeAlias = Expression[
+    Unbound, Bare[FailureValue], Definite
+]
+DefiniteBareFailureKindExpression: TypeAlias = Expression[
+    Unbound, Bare[FailureKindValue], Definite
+]
 
-NodeAttributesOperand: TypeAlias = AttributesOperand[NodeIndex, Unordered]
-OrderedNodeAttributesOperand: TypeAlias = AttributesOperand[NodeIndex, Ordered]
-NodeAttributeOperand: TypeAlias = AttributeOperand[NodeIndex]
-DefiniteNodeAttributeOperand: TypeAlias = DefiniteAttributeOperand[NodeIndex]
-EdgeAttributesOperand: TypeAlias = AttributesOperand[EdgeIndex, Unordered]
-OrderedEdgeAttributesOperand: TypeAlias = AttributesOperand[EdgeIndex, Ordered]
-EdgeAttributeOperand: TypeAlias = AttributeOperand[EdgeIndex]
-DefiniteEdgeAttributeOperand: TypeAlias = DefiniteAttributeOperand[EdgeIndex]
+IndicesExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, IndexValue[IndexType]], Multiple[OrderType]
+]
+BareIndicesExpression: TypeAlias = Expression[
+    Unbound, Bare[IndexValue[IndexType]], Multiple[OrderType]
+]
+IndexExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, IndexValue[IndexType]], Single
+]
+BareIndexExpression: TypeAlias = Expression[
+    Unbound, Bare[IndexValue[IndexType]], Single
+]
+DefiniteIndexExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, IndexValue[IndexType]], Definite
+]
+DefiniteBareIndexExpression: TypeAlias = Expression[
+    Unbound, Bare[IndexValue[IndexType]], Definite
+]
 
-NodeAttributesTreeOperand: TypeAlias = Operand[
+ReferencesExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, ReferenceType], Multiple[OrderType]
+]
+BareReferencesExpression: TypeAlias = Expression[
+    Unbound, Bare[ReferenceType], Multiple[OrderType]
+]
+ReferenceExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, ReferenceType], Single
+]
+BareReferenceExpression: TypeAlias = Expression[Unbound, Bare[ReferenceType], Single]
+DefiniteReferenceExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, ReferenceType], Definite
+]
+DefiniteBareReferenceExpression: TypeAlias = Expression[
+    Unbound, Bare[ReferenceType], Definite
+]
+ReferenceIndicesExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, IndexValue[EntityType]], Multiple[OrderType]
+]
+ReferenceIndexExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, IndexValue[EntityType]], Single
+]
+DefiniteReferenceIndexExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, IndexValue[EntityType]], Definite
+]
+
+ValuesExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, Scalar], Multiple[OrderType]
+]
+BareValuesExpression: TypeAlias = Expression[Unbound, Bare[Scalar], Multiple[OrderType]]
+ValueExpression: TypeAlias = Expression[Unbound, Indexed[IndexType, Scalar], Single]
+BareValueExpression: TypeAlias = Expression[Unbound, Bare[Scalar], Single]
+DefiniteValueExpression: TypeAlias = Expression[
+    Unbound, Indexed[IndexType, Scalar], Definite
+]
+DefiniteBareValueExpression: TypeAlias = Expression[Unbound, Bare[Scalar], Definite]
+
+NodeAttributesExpression: TypeAlias = AttributesExpression[NodeIndex, Unordered]
+OrderedNodeAttributesExpression: TypeAlias = AttributesExpression[NodeIndex, Ordered]
+NodeAttributeExpression: TypeAlias = AttributeExpression[NodeIndex]
+DefiniteNodeAttributeExpression: TypeAlias = DefiniteAttributeExpression[NodeIndex]
+EdgeAttributesExpression: TypeAlias = AttributesExpression[EdgeIndex, Unordered]
+OrderedEdgeAttributesExpression: TypeAlias = AttributesExpression[EdgeIndex, Ordered]
+EdgeAttributeExpression: TypeAlias = AttributeExpression[EdgeIndex]
+DefiniteEdgeAttributeExpression: TypeAlias = DefiniteAttributeExpression[EdgeIndex]
+
+NodeAttributesTreeExpression: TypeAlias = Expression[
+    Unbound,
     Indexed[
         Expanded[
             NodeIndex, AttributeNameIndex, Tuple[NodeIndexPayload, Optional[Attribute]]
@@ -8863,7 +14071,8 @@ NodeAttributesTreeOperand: TypeAlias = Operand[
     ],
     Multiple[Unordered],
 ]
-EdgeAttributesTreeOperand: TypeAlias = Operand[
+EdgeAttributesTreeExpression: TypeAlias = Expression[
+    Unbound,
     Indexed[
         Expanded[
             EdgeIndex, AttributeNameIndex, Tuple[EdgeIndexPayload, Optional[Attribute]]
@@ -8873,205 +14082,443 @@ EdgeAttributesTreeOperand: TypeAlias = Operand[
     Multiple[Unordered],
 ]
 
-NodesOperand: TypeAlias = ElementsOperand[NodeIndex, Unordered]
-OrderedNodesOperand: TypeAlias = ElementsOperand[NodeIndex, Ordered]
-NodeOperand: TypeAlias = ElementOperand[NodeIndex]
-DefiniteNodeOperand: TypeAlias = DefiniteElementOperand[NodeIndex]
-EdgesOperand: TypeAlias = ElementsOperand[EdgeIndex, Unordered]
-OrderedEdgesOperand: TypeAlias = ElementsOperand[EdgeIndex, Ordered]
-EdgeOperand: TypeAlias = ElementOperand[EdgeIndex]
-DefiniteEdgeOperand: TypeAlias = DefiniteElementOperand[EdgeIndex]
+NodesExpression: TypeAlias = ElementsExpression[NodeIndex, Unordered]
+OrderedNodesExpression: TypeAlias = ElementsExpression[NodeIndex, Ordered]
+NodeExpression: TypeAlias = ElementExpression[NodeIndex]
+DefiniteNodeExpression: TypeAlias = DefiniteElementExpression[NodeIndex]
+EdgesExpression: TypeAlias = ElementsExpression[EdgeIndex, Unordered]
+OrderedEdgesExpression: TypeAlias = ElementsExpression[EdgeIndex, Ordered]
+EdgeExpression: TypeAlias = ElementExpression[EdgeIndex]
+DefiniteEdgeExpression: TypeAlias = DefiniteElementExpression[EdgeIndex]
 
-NodeIndicesOperand: TypeAlias = IndicesOperand[NodeIndex, Unordered]
-OrderedNodeIndicesOperand: TypeAlias = IndicesOperand[NodeIndex, Ordered]
-NodeIndexOperand: TypeAlias = IndexOperand[NodeIndex]
-DefiniteNodeIndexOperand: TypeAlias = DefiniteIndexOperand[NodeIndex]
-BareNodeIndicesOperand: TypeAlias = BareIndicesOperand[NodeIndex, Unordered]
-OrderedBareNodeIndicesOperand: TypeAlias = BareIndicesOperand[NodeIndex, Ordered]
-BareNodeIndexOperand: TypeAlias = BareIndexOperand[NodeIndex]
-DefiniteBareNodeIndexOperand: TypeAlias = DefiniteBareIndexOperand[NodeIndex]
-EdgeIndicesOperand: TypeAlias = IndicesOperand[EdgeIndex, Unordered]
-OrderedEdgeIndicesOperand: TypeAlias = IndicesOperand[EdgeIndex, Ordered]
-EdgeIndexOperand: TypeAlias = IndexOperand[EdgeIndex]
-DefiniteEdgeIndexOperand: TypeAlias = DefiniteIndexOperand[EdgeIndex]
-BareEdgeIndicesOperand: TypeAlias = BareIndicesOperand[EdgeIndex, Unordered]
-OrderedBareEdgeIndicesOperand: TypeAlias = BareIndicesOperand[EdgeIndex, Ordered]
-BareEdgeIndexOperand: TypeAlias = BareIndexOperand[EdgeIndex]
-DefiniteBareEdgeIndexOperand: TypeAlias = DefiniteBareIndexOperand[EdgeIndex]
+NodeIndicesExpression: TypeAlias = IndicesExpression[NodeIndex, Unordered]
+OrderedNodeIndicesExpression: TypeAlias = IndicesExpression[NodeIndex, Ordered]
+NodeIndexExpression: TypeAlias = IndexExpression[NodeIndex]
+DefiniteNodeIndexExpression: TypeAlias = DefiniteIndexExpression[NodeIndex]
+BareNodeIndicesExpression: TypeAlias = BareIndicesExpression[NodeIndex, Unordered]
+OrderedBareNodeIndicesExpression: TypeAlias = BareIndicesExpression[NodeIndex, Ordered]
+BareNodeIndexExpression: TypeAlias = BareIndexExpression[NodeIndex]
+DefiniteBareNodeIndexExpression: TypeAlias = DefiniteBareIndexExpression[NodeIndex]
+EdgeIndicesExpression: TypeAlias = IndicesExpression[EdgeIndex, Unordered]
+OrderedEdgeIndicesExpression: TypeAlias = IndicesExpression[EdgeIndex, Ordered]
+EdgeIndexExpression: TypeAlias = IndexExpression[EdgeIndex]
+DefiniteEdgeIndexExpression: TypeAlias = DefiniteIndexExpression[EdgeIndex]
+BareEdgeIndicesExpression: TypeAlias = BareIndicesExpression[EdgeIndex, Unordered]
+OrderedBareEdgeIndicesExpression: TypeAlias = BareIndicesExpression[EdgeIndex, Ordered]
+BareEdgeIndexExpression: TypeAlias = BareIndexExpression[EdgeIndex]
+DefiniteBareEdgeIndexExpression: TypeAlias = DefiniteBareIndexExpression[EdgeIndex]
 
-NodeValuesOperand: TypeAlias = ValuesOperand[NodeIndex, Unordered]
-OrderedNodeValuesOperand: TypeAlias = ValuesOperand[NodeIndex, Ordered]
-NodeValueOperand: TypeAlias = ValueOperand[NodeIndex]
-DefiniteNodeValueOperand: TypeAlias = DefiniteValueOperand[NodeIndex]
-EdgeValuesOperand: TypeAlias = ValuesOperand[EdgeIndex, Unordered]
-OrderedEdgeValuesOperand: TypeAlias = ValuesOperand[EdgeIndex, Ordered]
-EdgeValueOperand: TypeAlias = ValueOperand[EdgeIndex]
-DefiniteEdgeValueOperand: TypeAlias = DefiniteValueOperand[EdgeIndex]
+NodeValuesExpression: TypeAlias = ValuesExpression[NodeIndex, Unordered]
+OrderedNodeValuesExpression: TypeAlias = ValuesExpression[NodeIndex, Ordered]
+NodeValueExpression: TypeAlias = ValueExpression[NodeIndex]
+DefiniteNodeValueExpression: TypeAlias = DefiniteValueExpression[NodeIndex]
+EdgeValuesExpression: TypeAlias = ValuesExpression[EdgeIndex, Unordered]
+OrderedEdgeValuesExpression: TypeAlias = ValuesExpression[EdgeIndex, Ordered]
+EdgeValueExpression: TypeAlias = ValueExpression[EdgeIndex]
+DefiniteEdgeValueExpression: TypeAlias = DefiniteValueExpression[EdgeIndex]
 
-NodeQuery: TypeAlias = Callable[
-    [NodesOperand],
-    Union[
-        NodeOperand,
-        DefiniteNodeOperand,
-        BareNodeIndexOperand,
-        DefiniteBareNodeIndexOperand,
-    ],
+
+GroupsExpression: TypeAlias = ElementsExpression[GroupIndex, Unordered]
+OrderedGroupsExpression: TypeAlias = ElementsExpression[GroupIndex, Ordered]
+GroupExpression: TypeAlias = ElementExpression[GroupIndex]
+DefiniteGroupExpression: TypeAlias = DefiniteElementExpression[GroupIndex]
+
+GroupIndicesExpression: TypeAlias = IndicesExpression[GroupIndex, Unordered]
+OrderedGroupIndicesExpression: TypeAlias = IndicesExpression[GroupIndex, Ordered]
+GroupIndexExpression: TypeAlias = IndexExpression[GroupIndex]
+DefiniteGroupIndexExpression: TypeAlias = DefiniteIndexExpression[GroupIndex]
+BareGroupIndicesExpression: TypeAlias = BareIndicesExpression[GroupIndex, Unordered]
+OrderedBareGroupIndicesExpression: TypeAlias = BareIndicesExpression[
+    GroupIndex, Ordered
 ]
-NodesQuery: TypeAlias = Callable[
-    [NodesOperand],
-    Union[
-        OrderedNodesOperand,
-        NodesOperand,
-        OrderedBareNodeIndicesOperand,
-        BareNodeIndicesOperand,
-    ],
+BareGroupIndexExpression: TypeAlias = BareIndexExpression[GroupIndex]
+DefiniteBareGroupIndexExpression: TypeAlias = DefiniteBareIndexExpression[GroupIndex]
+
+GroupValuesExpression: TypeAlias = ValuesExpression[GroupIndex, Unordered]
+OrderedGroupValuesExpression: TypeAlias = ValuesExpression[GroupIndex, Ordered]
+GroupValueExpression: TypeAlias = ValueExpression[GroupIndex]
+DefiniteGroupValueExpression: TypeAlias = DefiniteValueExpression[GroupIndex]
+
+AttributesSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, AttributeName], Multiple[OrderType]
 ]
-EdgeQuery: TypeAlias = Callable[
-    [EdgesOperand],
-    Union[
-        EdgeOperand,
-        DefiniteEdgeOperand,
-        BareEdgeIndexOperand,
-        DefiniteBareEdgeIndexOperand,
-    ],
+BareAttributesSeries: TypeAlias = Expression[
+    Bound, Bare[AttributeName], Multiple[OrderType]
 ]
-EdgesQuery: TypeAlias = Callable[
-    [EdgesOperand],
-    Union[
-        OrderedEdgesOperand,
-        EdgesOperand,
-        OrderedBareEdgeIndicesOperand,
-        BareEdgeIndicesOperand,
-    ],
+AttributeSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, AttributeName], Single
+]
+BareAttributeSeries: TypeAlias = Expression[Bound, Bare[AttributeName], Single]
+DefiniteAttributeSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, AttributeName], Definite
+]
+DefiniteBareAttributeSeries: TypeAlias = Expression[
+    Bound, Bare[AttributeName], Definite
 ]
 
+BoolMaskSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, Mask], Multiple[OrderType]
+]
+BareBoolMaskSeries: TypeAlias = Expression[Bound, Bare[Mask], Multiple[OrderType]]
+BoolSeries: TypeAlias = Expression[Bound, Indexed[IndexType, Mask], Single]
+BareBoolSeries: TypeAlias = Expression[Bound, Bare[Mask], Single]
+DefiniteBoolSeries: TypeAlias = Expression[Bound, Indexed[IndexType, Mask], Definite]
+DefiniteBareBoolSeries: TypeAlias = Expression[Bound, Bare[Mask], Definite]
 
-@dataclass(frozen=True, slots=True, repr=False)
-class GroupKeyFailure(Generic[MemberIndexType]):
-    _member: Any
-    error: QueryError
+ElementsSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, Unit], Multiple[OrderType]
+]
+ElementSeries: TypeAlias = Expression[Bound, Indexed[IndexType, Unit], Single]
+DefiniteElementSeries: TypeAlias = Expression[Bound, Indexed[IndexType, Unit], Definite]
 
-    @property
-    def member(
-        self: GroupKeyFailure[Index[MemberPayloadType]],
-    ) -> MemberPayloadType:
-        return self._member
+FailuresSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, FailureValue], Multiple[OrderType]
+]
+FailureKindsSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, FailureKindValue], Multiple[OrderType]
+]
+BareFailuresSeries: TypeAlias = Expression[
+    Bound, Bare[FailureValue], Multiple[OrderType]
+]
+BareFailureKindsSeries: TypeAlias = Expression[
+    Bound, Bare[FailureKindValue], Multiple[OrderType]
+]
+FailureSeries: TypeAlias = Expression[Bound, Indexed[IndexType, FailureValue], Single]
+FailureKindSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, FailureKindValue], Single
+]
+BareFailureSeries: TypeAlias = Expression[Bound, Bare[FailureValue], Single]
+BareFailureKindSeries: TypeAlias = Expression[Bound, Bare[FailureKindValue], Single]
+DefiniteFailureSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, FailureValue], Definite
+]
+DefiniteFailureKindSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, FailureKindValue], Definite
+]
+DefiniteBareFailureSeries: TypeAlias = Expression[Bound, Bare[FailureValue], Definite]
+DefiniteBareFailureKindSeries: TypeAlias = Expression[
+    Bound, Bare[FailureKindValue], Definite
+]
+
+IndicesSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, IndexValue[IndexType]], Multiple[OrderType]
+]
+BareIndicesSeries: TypeAlias = Expression[
+    Bound, Bare[IndexValue[IndexType]], Multiple[OrderType]
+]
+IndexSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, IndexValue[IndexType]], Single
+]
+BareIndexSeries: TypeAlias = Expression[Bound, Bare[IndexValue[IndexType]], Single]
+DefiniteIndexSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, IndexValue[IndexType]], Definite
+]
+DefiniteBareIndexSeries: TypeAlias = Expression[
+    Bound, Bare[IndexValue[IndexType]], Definite
+]
+
+ReferencesSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, ReferenceType], Multiple[OrderType]
+]
+BareReferencesSeries: TypeAlias = Expression[
+    Bound, Bare[ReferenceType], Multiple[OrderType]
+]
+ReferenceSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, ReferenceType], Single
+]
+BareReferenceSeries: TypeAlias = Expression[Bound, Bare[ReferenceType], Single]
+DefiniteReferenceSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, ReferenceType], Definite
+]
+DefiniteBareReferenceSeries: TypeAlias = Expression[
+    Bound, Bare[ReferenceType], Definite
+]
+ReferenceIndicesSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, IndexValue[EntityType]], Multiple[OrderType]
+]
+ReferenceIndexSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, IndexValue[EntityType]], Single
+]
+DefiniteReferenceIndexSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, IndexValue[EntityType]], Definite
+]
+
+ValuesSeries: TypeAlias = Expression[
+    Bound, Indexed[IndexType, Scalar], Multiple[OrderType]
+]
+BareValuesSeries: TypeAlias = Expression[Bound, Bare[Scalar], Multiple[OrderType]]
+ValueSeries: TypeAlias = Expression[Bound, Indexed[IndexType, Scalar], Single]
+BareValueSeries: TypeAlias = Expression[Bound, Bare[Scalar], Single]
+DefiniteValueSeries: TypeAlias = Expression[Bound, Indexed[IndexType, Scalar], Definite]
+DefiniteBareValueSeries: TypeAlias = Expression[Bound, Bare[Scalar], Definite]
+
+NodeAttributesSeries: TypeAlias = AttributesSeries[NodeIndex, Unordered]
+OrderedNodeAttributesSeries: TypeAlias = AttributesSeries[NodeIndex, Ordered]
+NodeAttributeSeries: TypeAlias = AttributeSeries[NodeIndex]
+DefiniteNodeAttributeSeries: TypeAlias = DefiniteAttributeSeries[NodeIndex]
+EdgeAttributesSeries: TypeAlias = AttributesSeries[EdgeIndex, Unordered]
+OrderedEdgeAttributesSeries: TypeAlias = AttributesSeries[EdgeIndex, Ordered]
+EdgeAttributeSeries: TypeAlias = AttributeSeries[EdgeIndex]
+DefiniteEdgeAttributeSeries: TypeAlias = DefiniteAttributeSeries[EdgeIndex]
+
+NodeAttributesTreeSeries: TypeAlias = Expression[
+    Bound,
+    Indexed[
+        Expanded[
+            NodeIndex, AttributeNameIndex, Tuple[NodeIndexPayload, Optional[Attribute]]
+        ],
+        AttributeName,
+    ],
+    Multiple[Unordered],
+]
+EdgeAttributesTreeSeries: TypeAlias = Expression[
+    Bound,
+    Indexed[
+        Expanded[
+            EdgeIndex, AttributeNameIndex, Tuple[EdgeIndexPayload, Optional[Attribute]]
+        ],
+        AttributeName,
+    ],
+    Multiple[Unordered],
+]
+
+NodesSeries: TypeAlias = ElementsSeries[NodeIndex, Unordered]
+OrderedNodesSeries: TypeAlias = ElementsSeries[NodeIndex, Ordered]
+NodeSeries: TypeAlias = ElementSeries[NodeIndex]
+DefiniteNodeSeries: TypeAlias = DefiniteElementSeries[NodeIndex]
+EdgesSeries: TypeAlias = ElementsSeries[EdgeIndex, Unordered]
+OrderedEdgesSeries: TypeAlias = ElementsSeries[EdgeIndex, Ordered]
+EdgeSeries: TypeAlias = ElementSeries[EdgeIndex]
+DefiniteEdgeSeries: TypeAlias = DefiniteElementSeries[EdgeIndex]
+
+NodeIndicesSeries: TypeAlias = IndicesSeries[NodeIndex, Unordered]
+OrderedNodeIndicesSeries: TypeAlias = IndicesSeries[NodeIndex, Ordered]
+NodeIndexSeries: TypeAlias = IndexSeries[NodeIndex]
+DefiniteNodeIndexSeries: TypeAlias = DefiniteIndexSeries[NodeIndex]
+BareNodeIndicesSeries: TypeAlias = BareIndicesSeries[NodeIndex, Unordered]
+OrderedBareNodeIndicesSeries: TypeAlias = BareIndicesSeries[NodeIndex, Ordered]
+BareNodeIndexSeries: TypeAlias = BareIndexSeries[NodeIndex]
+DefiniteBareNodeIndexSeries: TypeAlias = DefiniteBareIndexSeries[NodeIndex]
+EdgeIndicesSeries: TypeAlias = IndicesSeries[EdgeIndex, Unordered]
+OrderedEdgeIndicesSeries: TypeAlias = IndicesSeries[EdgeIndex, Ordered]
+EdgeIndexSeries: TypeAlias = IndexSeries[EdgeIndex]
+DefiniteEdgeIndexSeries: TypeAlias = DefiniteIndexSeries[EdgeIndex]
+BareEdgeIndicesSeries: TypeAlias = BareIndicesSeries[EdgeIndex, Unordered]
+OrderedBareEdgeIndicesSeries: TypeAlias = BareIndicesSeries[EdgeIndex, Ordered]
+BareEdgeIndexSeries: TypeAlias = BareIndexSeries[EdgeIndex]
+DefiniteBareEdgeIndexSeries: TypeAlias = DefiniteBareIndexSeries[EdgeIndex]
+
+NodeValuesSeries: TypeAlias = ValuesSeries[NodeIndex, Unordered]
+OrderedNodeValuesSeries: TypeAlias = ValuesSeries[NodeIndex, Ordered]
+NodeValueSeries: TypeAlias = ValueSeries[NodeIndex]
+DefiniteNodeValueSeries: TypeAlias = DefiniteValueSeries[NodeIndex]
+EdgeValuesSeries: TypeAlias = ValuesSeries[EdgeIndex, Unordered]
+OrderedEdgeValuesSeries: TypeAlias = ValuesSeries[EdgeIndex, Ordered]
+EdgeValueSeries: TypeAlias = ValueSeries[EdgeIndex]
+DefiniteEdgeValueSeries: TypeAlias = DefiniteValueSeries[EdgeIndex]
+
+
+GroupsSeries: TypeAlias = ElementsSeries[GroupIndex, Unordered]
+OrderedGroupsSeries: TypeAlias = ElementsSeries[GroupIndex, Ordered]
+GroupSeries: TypeAlias = ElementSeries[GroupIndex]
+DefiniteGroupSeries: TypeAlias = DefiniteElementSeries[GroupIndex]
+
+GroupIndicesSeries: TypeAlias = IndicesSeries[GroupIndex, Unordered]
+OrderedGroupIndicesSeries: TypeAlias = IndicesSeries[GroupIndex, Ordered]
+GroupIndexSeries: TypeAlias = IndexSeries[GroupIndex]
+DefiniteGroupIndexSeries: TypeAlias = DefiniteIndexSeries[GroupIndex]
+BareGroupIndicesSeries: TypeAlias = BareIndicesSeries[GroupIndex, Unordered]
+OrderedBareGroupIndicesSeries: TypeAlias = BareIndicesSeries[GroupIndex, Ordered]
+BareGroupIndexSeries: TypeAlias = BareIndexSeries[GroupIndex]
+DefiniteBareGroupIndexSeries: TypeAlias = DefiniteBareIndexSeries[GroupIndex]
+
+GroupValuesSeries: TypeAlias = ValuesSeries[GroupIndex, Unordered]
+OrderedGroupValuesSeries: TypeAlias = ValuesSeries[GroupIndex, Ordered]
+GroupValueSeries: TypeAlias = ValueSeries[GroupIndex]
+DefiniteGroupValueSeries: TypeAlias = DefiniteValueSeries[GroupIndex]
+
+
+class _Result:
+    @staticmethod
+    def _from_py_payload(payload: object) -> object:
+        if isinstance(payload, PyEdgeIndex):
+            return EdgeIndexPayload._from_py_edge_index(payload)
+
+        if isinstance(payload, PyFailureKind):
+            return FailureKind._from_py_failure_kind(payload)
+
+        if isinstance(payload, PyEdgeEndpointRole):
+            return EdgeEndpointRole._from_py_edge_endpoint_role(payload)
+
+        if isinstance(payload, tuple):
+            return tuple(_Result._from_py_payload(item) for item in payload)
+
+        return payload
+
+    @staticmethod
+    def _to_py_payload(payload: object) -> object:
+        if isinstance(payload, EdgeIndexPayload):
+            return payload._py_edge_index
+
+        if isinstance(payload, FailureKind):
+            return payload._py_failure_kind
+
+        if isinstance(payload, EdgeEndpointRole):
+            return payload._into_py_edge_endpoint_role()
+
+        if isinstance(payload, tuple):
+            return tuple(_Result._to_py_payload(item) for item in payload)
+
+        return payload
+
+
+class ResultView(_Result, Generic[ElementType]):
+    _py_result_view: PyResultView
+    _consumed: bool
+
+    @classmethod
+    def _from_py_result_view(cls, py_view: PyResultView) -> ResultView[Any]:
+        view = cls.__new__(cls)
+        view._py_result_view = py_view
+        view._consumed = False
+
+        return view
+
+    def __iter__(self) -> Iterator[ElementType]:
+        if self._consumed:
+            msg = (
+                "the result view is consumed; call `evaluate()` again or collect it "
+                "into a list first"
+            )
+            raise ResultConsumedError(msg)
+        self._consumed = True
+
+        return _ResultCursor(iter(self._py_result_view))
 
     def __repr__(self) -> str:
-        return f"GroupKeyFailure(member={self._member!r}, error={self.error!r})"
+        return "ResultView()"
 
 
-@dataclass(frozen=True, slots=True, repr=False)
-class GroupBucket(Generic[MemberIndexType, KeyIndexType, BucketPayloadType]):
-    _key: Any
-    _members: Any
-    payload: Union[BucketPayloadType, QueryError]
+class _ResultCursor(Generic[ElementType]):
+    _py_result_view: PyResultView
 
-    @property
-    def key(
-        self: GroupBucket[MemberIndexType, Index[KeyPayloadType], BucketPayloadType],
-    ) -> KeyPayloadType:
-        return self._key
+    def __init__(self, py_view: PyResultView) -> None:
+        self._py_result_view = py_view
 
-    @property
-    def members(
-        self: GroupBucket[Index[MemberPayloadType], KeyIndexType, BucketPayloadType],
-    ) -> List[MemberPayloadType]:
-        return self._members
+    def __iter__(self) -> _ResultCursor[ElementType]:
+        return self
 
-    def __repr__(self) -> str:
-        return (
-            f"GroupBucket(key={self._key!r}, members={self._members!r}, "
-            f"payload={self.payload!r})"
-        )
+    def __next__(self) -> ElementType:
+        return cast("ElementType", _Result._from_py_payload(next(self._py_result_view)))
 
 
-@dataclass(frozen=True, slots=True, repr=False)
-class GroupResult(Generic[LeafType, Unpack[Levels]]):
-    _buckets: Any
-    _key_failures: Any
+class GroupedResult(
+    _Result, Generic[LeafType, MemberIndexType, KeyIndexType, Unpack[Levels]]
+):
+    _py_grouped_result: PyGroupedResult
+
+    @classmethod
+    def _from_py_grouped_result(
+        cls, py_result: PyGroupedResult
+    ) -> GroupedResult[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        result = cls.__new__(cls)
+        result._py_grouped_result = py_result
+
+        return result
 
     @overload
-    def buckets(
-        self: GroupResult[LeafType, Grouped[MemberIndexType, KeyIndexType]],
-    ) -> List[GroupBucket[MemberIndexType, KeyIndexType, LeafType]]: ...
+    def __getitem__(
+        self: GroupedResult[LeafType, MemberIndexType, Index[KeyPayloadType]],
+        key: KeyPayloadType,
+    ) -> Union[LeafType, QueryError]: ...
 
     @overload
-    def buckets(
-        self: GroupResult[
+    def __getitem__(
+        self: GroupedResult[
             LeafType,
-            Grouped[MemberIndexType, KeyIndexType],
+            MemberIndexType,
+            Index[KeyPayloadType],
             Grouped[InnerMemberIndexType, InnerKeyIndexType],
             Unpack[InnerLevels],
         ],
-    ) -> List[
-        GroupBucket[
-            MemberIndexType,
-            KeyIndexType,
-            GroupResult[
-                LeafType,
-                Grouped[InnerMemberIndexType, InnerKeyIndexType],
-                Unpack[InnerLevels],
-            ],
-        ]
+        key: KeyPayloadType,
+    ) -> Union[
+        GroupedResult[
+            LeafType,
+            InnerMemberIndexType,
+            InnerKeyIndexType,
+            Unpack[InnerLevels],
+        ],
+        QueryError,
     ]: ...
 
-    def buckets(self) -> List[Any]:
-        return self._buckets
+    def __getitem__(self, key: object) -> object:
+        payload = self._py_grouped_result[_Result._to_py_payload(key)]
+
+        if isinstance(payload, PyResultView):
+            return ResultView._from_py_result_view(payload)
+
+        if isinstance(payload, PyGroupedResult):
+            return GroupedResult._from_py_grouped_result(payload)
+
+        return _Result._from_py_payload(payload)
+
+    def __len__(self) -> int:
+        return len(self._py_grouped_result)
+
+    def __contains__(self, key: object) -> bool:
+        return _Result._to_py_payload(key) in self._py_grouped_result
+
+    def __iter__(
+        self: GroupedResult[
+            LeafType, MemberIndexType, Index[KeyPayloadType], Unpack[Levels]
+        ],
+    ) -> Iterator[KeyPayloadType]:
+        return iter(self.keys())
+
+    def keys(
+        self: GroupedResult[
+            LeafType, MemberIndexType, Index[KeyPayloadType], Unpack[Levels]
+        ],
+    ) -> Sequence[KeyPayloadType]:
+        return cast(
+            "Sequence[KeyPayloadType]",
+            [_Result._from_py_payload(key) for key in self._py_grouped_result],
+        )
+
+    @property
+    def key_failures(
+        self: GroupedResult[
+            LeafType, Index[MemberPayloadType], KeyIndexType, Unpack[Levels]
+        ],
+    ) -> List[Tuple[MemberPayloadType, QueryError]]:
+        return cast(
+            "List[Tuple[MemberPayloadType, QueryError]]",
+            [
+                (_Result._from_py_payload(member), failure)
+                for member, failure in self._py_grouped_result.key_failures
+            ],
+        )
 
     def __repr__(self) -> str:
-        return (
-            f"GroupResult(buckets={self._buckets!r}, "
-            f"key_failures={self._key_failures!r})"
-        )
+        keys = [_Result._from_py_payload(key) for key in self._py_grouped_result]
 
-    def key_failures(
-        self: GroupResult[
-            LeafType, Grouped[MemberIndexType, KeyIndexType], Unpack[InnerLevels]
-        ],
-    ) -> List[GroupKeyFailure[MemberIndexType]]:
-        return self._key_failures
-
-    @staticmethod
-    def _from_buckets(
-        buckets: List[Tuple[IndexPayload, List[IndexPayload], object]],
-        key_failures: List[Tuple[IndexPayload, QueryError]],
-        group_depth: int,
-    ) -> GroupResult[Any, Unpack[Tuple[Any, ...]]]:
-        return GroupResult(
-            [
-                GroupBucket(
-                    _key=key,
-                    _members=members,
-                    payload=GroupResult._from_terminal(payload, group_depth - 1),
-                )
-                for key, members, payload in buckets
-            ],
-            [
-                GroupKeyFailure(_member=member, error=error)
-                for member, error in key_failures
-            ],
-        )
-
-    @staticmethod
-    def _from_terminal(payload: object, group_depth: int) -> object:
-        if group_depth == 0 or not isinstance(payload, tuple):
-            return payload
-
-        return GroupResult._from_buckets(payload[0], payload[1], group_depth)
+        return f"GroupedResult(keys={keys!r})"
 
 
-MembershipResult: TypeAlias = List[Union[IndexPayloadType, QueryError]]
+MembershipResult: TypeAlias = ResultView[Union[IndexPayloadType, QueryError]]
 MembershipSingleResult: TypeAlias = Optional[Union[IndexPayloadType, QueryError]]
 MembershipDefiniteResult: TypeAlias = Union[IndexPayloadType, QueryError]
-IndexedResult: TypeAlias = List[Tuple[IndexPayloadType, Union[PayloadType, QueryError]]]
+IndexedResult: TypeAlias = ResultView[
+    Tuple[IndexPayloadType, Union[PayloadType, QueryError]]
+]
 IndexedSingleResult: TypeAlias = Optional[
     Tuple[IndexPayloadType, Union[PayloadType, QueryError]]
 ]
 IndexedDefiniteResult: TypeAlias = Tuple[
     IndexPayloadType, Union[PayloadType, QueryError]
 ]
-BareResult: TypeAlias = List[Union[PayloadType, QueryError]]
+BareResult: TypeAlias = ResultView[Union[PayloadType, QueryError]]
 BareSingleResult: TypeAlias = Optional[Union[PayloadType, QueryError]]
 BareDefiniteResult: TypeAlias = Union[PayloadType, QueryError]
 
@@ -9097,933 +14544,13 @@ BareScalarDefiniteResult: TypeAlias = BareDefiniteResult[ScalarValue]
 BareMaskDefiniteResult: TypeAlias = BareDefiniteResult[bool]
 
 
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[Indexed[Index[IndexPayloadType], Unit], Multiple[OrderType]],
-    ],
-) -> MembershipResult[IndexPayloadType]: ...
+def nodes() -> NodesExpression:
+    return Expression._from_py_expression(py_nodes())
 
 
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[IndexPayloadType], Unit],
-            Multiple[OrderType],
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    MembershipResult[IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
+def edges() -> EdgesExpression:
+    return Expression._from_py_expression(py_edges())
 
 
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[Indexed[Index[IndexPayloadType], Unit], Single],
-    ],
-) -> MembershipSingleResult[IndexPayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[IndexPayloadType], Unit],
-            Single,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    MembershipSingleResult[IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[Indexed[Index[IndexPayloadType], Unit], Definite],
-    ],
-) -> MembershipDefiniteResult[IndexPayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[IndexPayloadType], Unit],
-            Definite,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    MembershipDefiniteResult[IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Multiple[OrderType],
-        ],
-    ],
-) -> IndexedResult[LaneIndexPayloadType, IndexPayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Multiple[OrderType],
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedResult[LaneIndexPayloadType, IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Single,
-        ],
-    ],
-) -> IndexedSingleResult[LaneIndexPayloadType, IndexPayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Single,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedSingleResult[LaneIndexPayloadType, IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Definite,
-        ],
-    ],
-) -> IndexedDefiniteResult[LaneIndexPayloadType, IndexPayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Definite,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedDefiniteResult[LaneIndexPayloadType, IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
-            Multiple[OrderType],
-        ],
-    ],
-) -> IndexedResult[LaneIndexPayloadType, PayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
-            Multiple[OrderType],
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedResult[LaneIndexPayloadType, PayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]], Single],
-    ],
-) -> IndexedSingleResult[LaneIndexPayloadType, PayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
-            Single,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedSingleResult[LaneIndexPayloadType, PayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]], Definite
-        ],
-    ],
-) -> IndexedDefiniteResult[LaneIndexPayloadType, PayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
-            Definite,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedDefiniteResult[LaneIndexPayloadType, PayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[Bare[IndexValue[Index[IndexPayloadType]]], Multiple[OrderType]],
-    ],
-) -> BareResult[IndexPayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Bare[IndexValue[Index[IndexPayloadType]]],
-            Multiple[OrderType],
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareResult[IndexPayloadType], Grouped[MemberIndexType, KeyIndexType], Unpack[Levels]
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[Bare[IndexValue[Index[IndexPayloadType]]], Single],
-    ],
-) -> BareSingleResult[IndexPayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Bare[IndexValue[Index[IndexPayloadType]]],
-            Single,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareSingleResult[IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[Bare[IndexValue[Index[IndexPayloadType]]], Definite],
-    ],
-) -> BareDefiniteResult[IndexPayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Bare[IndexValue[Index[IndexPayloadType]]],
-            Definite,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareDefiniteResult[IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[Bare[ReturnValue[PayloadType]], Multiple[OrderType]],
-    ],
-) -> BareResult[PayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Bare[ReturnValue[PayloadType]],
-            Multiple[OrderType],
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareResult[PayloadType], Grouped[MemberIndexType, KeyIndexType], Unpack[Levels]
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[Bare[ReturnValue[PayloadType]], Single],
-    ],
-) -> BareSingleResult[PayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Bare[ReturnValue[PayloadType]],
-            Single,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareSingleResult[PayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[Bare[ReturnValue[PayloadType]], Definite],
-    ],
-) -> BareDefiniteResult[PayloadType]: ...
-
-
-@overload
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [NodesOperand],
-        Operand[
-            Bare[ReturnValue[PayloadType]],
-            Definite,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareDefiniteResult[PayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-def query_nodes(
-    graphrecord: GraphRecord,
-    query: Callable[[NodesOperand], Operand[Any, Any, Unpack[Tuple[Any, ...]]]],
-) -> object:
-    group_depth = 0
-
-    def adapter(operand: PyOperand) -> PyOperand:
-        nonlocal group_depth
-        returned = query(Operand._from_py_operand(operand))._operand
-        group_depth = returned.group_depth
-
-        return returned
-
-    terminal = graphrecord._graphrecord.query_nodes(adapter)
-
-    if group_depth == 0:
-        return terminal
-
-    return GroupResult._from_terminal(terminal, group_depth)
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[Indexed[Index[IndexPayloadType], Unit], Multiple[OrderType]],
-    ],
-) -> MembershipResult[IndexPayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[IndexPayloadType], Unit],
-            Multiple[OrderType],
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    MembershipResult[IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[Indexed[Index[IndexPayloadType], Unit], Single],
-    ],
-) -> MembershipSingleResult[IndexPayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[IndexPayloadType], Unit],
-            Single,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    MembershipSingleResult[IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[Indexed[Index[IndexPayloadType], Unit], Definite],
-    ],
-) -> MembershipDefiniteResult[IndexPayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[IndexPayloadType], Unit],
-            Definite,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    MembershipDefiniteResult[IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Multiple[OrderType],
-        ],
-    ],
-) -> IndexedResult[LaneIndexPayloadType, IndexPayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Multiple[OrderType],
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedResult[LaneIndexPayloadType, IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Single,
-        ],
-    ],
-) -> IndexedSingleResult[LaneIndexPayloadType, IndexPayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Single,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedSingleResult[LaneIndexPayloadType, IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Definite,
-        ],
-    ],
-) -> IndexedDefiniteResult[LaneIndexPayloadType, IndexPayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], IndexValue[Index[IndexPayloadType]]],
-            Definite,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedDefiniteResult[LaneIndexPayloadType, IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
-            Multiple[OrderType],
-        ],
-    ],
-) -> IndexedResult[LaneIndexPayloadType, PayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
-            Multiple[OrderType],
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedResult[LaneIndexPayloadType, PayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]], Single],
-    ],
-) -> IndexedSingleResult[LaneIndexPayloadType, PayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
-            Single,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedSingleResult[LaneIndexPayloadType, PayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]], Definite
-        ],
-    ],
-) -> IndexedDefiniteResult[LaneIndexPayloadType, PayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Indexed[Index[LaneIndexPayloadType], ReturnValue[PayloadType]],
-            Definite,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    IndexedDefiniteResult[LaneIndexPayloadType, PayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[Bare[IndexValue[Index[IndexPayloadType]]], Multiple[OrderType]],
-    ],
-) -> BareResult[IndexPayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Bare[IndexValue[Index[IndexPayloadType]]],
-            Multiple[OrderType],
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareResult[IndexPayloadType], Grouped[MemberIndexType, KeyIndexType], Unpack[Levels]
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[Bare[IndexValue[Index[IndexPayloadType]]], Single],
-    ],
-) -> BareSingleResult[IndexPayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Bare[IndexValue[Index[IndexPayloadType]]],
-            Single,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareSingleResult[IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[Bare[IndexValue[Index[IndexPayloadType]]], Definite],
-    ],
-) -> BareDefiniteResult[IndexPayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Bare[IndexValue[Index[IndexPayloadType]]],
-            Definite,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareDefiniteResult[IndexPayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[Bare[ReturnValue[PayloadType]], Multiple[OrderType]],
-    ],
-) -> BareResult[PayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Bare[ReturnValue[PayloadType]],
-            Multiple[OrderType],
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareResult[PayloadType], Grouped[MemberIndexType, KeyIndexType], Unpack[Levels]
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[Bare[ReturnValue[PayloadType]], Single],
-    ],
-) -> BareSingleResult[PayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Bare[ReturnValue[PayloadType]],
-            Single,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareSingleResult[PayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[Bare[ReturnValue[PayloadType]], Definite],
-    ],
-) -> BareDefiniteResult[PayloadType]: ...
-
-
-@overload
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[
-        [EdgesOperand],
-        Operand[
-            Bare[ReturnValue[PayloadType]],
-            Definite,
-            Grouped[MemberIndexType, KeyIndexType],
-            Unpack[Levels],
-        ],
-    ],
-) -> GroupResult[
-    BareDefiniteResult[PayloadType],
-    Grouped[MemberIndexType, KeyIndexType],
-    Unpack[Levels],
-]: ...
-
-
-def query_edges(
-    graphrecord: GraphRecord,
-    query: Callable[[EdgesOperand], Operand[Any, Any, Unpack[Tuple[Any, ...]]]],
-) -> object:
-    group_depth = 0
-
-    def adapter(operand: PyOperand) -> PyOperand:
-        nonlocal group_depth
-        returned = query(Operand._from_py_operand(operand))._operand
-        group_depth = returned.group_depth
-
-        return returned
-
-    terminal = graphrecord._graphrecord.query_edges(adapter)
-
-    if group_depth == 0:
-        return terminal
-
-    return GroupResult._from_terminal(terminal, group_depth)
+def groups() -> GroupsExpression:
+    return Expression._from_py_expression(py_groups())

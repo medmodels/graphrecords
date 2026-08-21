@@ -118,6 +118,7 @@ operation_manifest! {
             argument: K: ArgumentSource<Keyed<I>> where K::ValueDomain: EnsureSortable;
             input: (Indexed<I, V>, Multiple<O>);
             output: SortedBy<I, V>;
+            where K::ValueDomain::Owned: Debug + Display + Send + Sync;
         }
     }
 }

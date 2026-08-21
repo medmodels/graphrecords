@@ -1,2570 +1,1663 @@
 import unittest
-from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Dict, Optional, Set, Tuple, Union
+from datetime import datetime
+from typing import Any
 
-import polars as pl
 import pytest
 
-from graphrecords import GraphRecord
+from graphrecords import EdgeDirection, GraphRecord
 from graphrecords.querying import (
-    AttributeName,
-    AttributeNameIndex,
-    Bare,
+    ArgumentMissingError,
     CastTarget,
-    Definite,
+    DivisionByZeroError,
     Drop,
+    DuplicateExpandedChildIndexError,
     DuplicateIndexError,
-    EdgeDirection,
     EdgeEndpointRole,
-    EdgeIndex,
-    EdgesOperand,
-    EndpointRole,
-    Expanded,
-    FailureKindValue,
-    FailureValue,
-    Grouped,
-    Indexed,
-    IndexPayload,
-    IndexValue,
-    Mask,
+    EmptySplitDelimiterError,
+    EvaluationCacheGraphRecordMismatchError,
+    Expression,
+    ExternalError,
+    FailureKind,
+    GraphRecordError,
+    GroupedResult,
+    IncomparableIndicesError,
+    IncomparableValuesAtError,
+    IncomparableValuesError,
+    IntegerOverflowError,
+    InvalidCastError,
+    InvalidClipBoundsError,
+    InvalidMedianValueError,
+    InvalidPaddingCharacterError,
+    InvalidPartitionBucketArityError,
+    InvalidRegexPatternError,
+    InvalidStandardDeviationValueError,
+    InvalidStringSliceError,
+    InvalidTransitionError,
+    InvalidVarianceValueError,
     MissingAttributeError,
-    Multiple,
-    NodeIndex,
-    NodesOperand,
-    Operand,
-    Ordered,
-    Positional,
+    MissingGroupAggregateError,
+    MissingGroupBucketError,
+    MissingTraversedAttributeError,
+    ModuloByZeroError,
+    NegativeSquareRootError,
+    NoChildIndexError,
+    NonIntegerValueError,
+    NonNumericValueError,
+    NonPositiveLogarithmError,
+    NonStringValueError,
     QueryError,
     Raise,
+    RaisedFailuresError,
     Replace,
-    Scalar,
-    ScalarValue,
-    Single,
-    Unit,
-    Unordered,
-    ValueIndex,
+    ResultConsumedError,
+    ResultView,
+    Series,
+    StringLengthOverflowError,
+    StringPaddingOverflowError,
+    UncoveredIndicesError,
+    UnresolvedBucketFailuresError,
+    UnresolvedGroupKeyFailuresError,
+    UnresolvedIndexError,
+    UnsupportedValueRoleError,
     ValueTarget,
+    edges,
+    groups,
+    nodes,
 )
 
+ALWAYS = True
+NEVER = False
 
-def simple_example_dataset() -> GraphRecord:
-    diagnosis_nodes = pl.read_csv(
-        Path(__file__).parent / "simple_dataset/diagnosis.csv",
-        schema={"diagnosis_code": pl.String, "description": pl.String},
-    )
-    drug_nodes = pl.read_csv(
-        Path(__file__).parent / "simple_dataset/drug.csv",
-        schema={"drug_code": pl.String, "description": pl.String},
-    )
-    patient_nodes = pl.read_csv(
-        Path(__file__).parent / "simple_dataset/patient.csv",
-        schema={"patient_id": pl.String, "gender": pl.String, "age": pl.Int64},
-    )
-    procedure_nodes = pl.read_csv(
-        Path(__file__).parent / "simple_dataset/procedure.csv",
-        schema={"procedure_code": pl.String, "description": pl.String},
-    )
-    patient_diagnosis_edges = pl.read_csv(
-        Path(__file__).parent / "simple_dataset/patient_diagnosis.csv",
-        schema={
-            "patient_id": pl.String,
-            "diagnosis_code": pl.String,
-            "time": pl.Datetime,
-            "duration_days": pl.Float64,
-        },
-    )
-    patient_drug_edges = pl.read_csv(
-        Path(__file__).parent / "simple_dataset/patient_drug.csv",
-        schema={
-            "patient_id": pl.String,
-            "drug_code": pl.String,
-            "time": pl.Datetime,
-            "quantity": pl.Int64,
-            "cost": pl.Float64,
-        },
-    )
-    patient_procedure_edges = pl.read_csv(
-        Path(__file__).parent / "simple_dataset/patient_procedure.csv",
-        schema={
-            "patient_id": pl.String,
-            "procedure_code": pl.String,
-            "time": pl.Datetime,
-            "duration_minutes": pl.Float64,
-        },
-    )
-
-    graphrecord = GraphRecord()
-    graphrecord.add_nodes((diagnosis_nodes, "diagnosis_code"), "diagnosis")
-    graphrecord.add_nodes((drug_nodes, "drug_code"), "drug")
-    graphrecord.add_nodes((patient_nodes, "patient_id"), "patient")
-    graphrecord.add_nodes((procedure_nodes, "procedure_code"), "procedure")
-    graphrecord.add_edges(
-        (patient_diagnosis_edges, "patient_id", "diagnosis_code"),
-        "patient_diagnosis",
-    )
-    graphrecord.add_edges(
-        (patient_drug_edges, "patient_id", "drug_code"), "patient_drug"
-    )
-    graphrecord.add_edges(
-        (patient_procedure_edges, "patient_id", "procedure_code"),
-        "patient_procedure",
-    )
-
-    return graphrecord
+EXCEPTION_ROSTER = [
+    ArgumentMissingError,
+    DivisionByZeroError,
+    DuplicateExpandedChildIndexError,
+    DuplicateIndexError,
+    EmptySplitDelimiterError,
+    EvaluationCacheGraphRecordMismatchError,
+    ExternalError,
+    GraphRecordError,
+    IncomparableIndicesError,
+    IncomparableValuesAtError,
+    IncomparableValuesError,
+    IntegerOverflowError,
+    InvalidCastError,
+    InvalidClipBoundsError,
+    InvalidMedianValueError,
+    InvalidPaddingCharacterError,
+    InvalidPartitionBucketArityError,
+    InvalidRegexPatternError,
+    InvalidStandardDeviationValueError,
+    InvalidStringSliceError,
+    InvalidTransitionError,
+    InvalidVarianceValueError,
+    MissingAttributeError,
+    MissingGroupAggregateError,
+    MissingGroupBucketError,
+    MissingTraversedAttributeError,
+    ModuloByZeroError,
+    NegativeSquareRootError,
+    NoChildIndexError,
+    NonIntegerValueError,
+    NonNumericValueError,
+    NonPositiveLogarithmError,
+    NonStringValueError,
+    RaisedFailuresError,
+    StringLengthOverflowError,
+    StringPaddingOverflowError,
+    UncoveredIndicesError,
+    UnresolvedBucketFailuresError,
+    UnresolvedGroupKeyFailuresError,
+    UnresolvedIndexError,
+    UnsupportedValueRoleError,
+]
 
 
-class TestNodeOperand(unittest.TestCase):
+def create_record() -> GraphRecord:
+    record = GraphRecord()
+    record = record.add_nodes(
+        [
+            ("lorem", {"amet": -2, "consectetur": "  Sit Amet  ", "adipiscing": True}),
+            ("ipsum", {"amet": 5, "consectetur": "elit-elit", "adipiscing": None}),
+            (
+                "dolor",
+                {
+                    "amet": 8,
+                    "consectetur": "consectetur",
+                    "adipiscing": datetime(2024, 1, 2),
+                },
+            ),
+            ("sit", {"amet": 5}),
+        ]
+    )
+    record = record.add_edges(
+        [
+            ("lorem", "ipsum", {"tempor": 10}),
+            ("ipsum", "dolor", {"tempor": 20}),
+            ("lorem", "dolor", {"tempor": 30}),
+        ]
+    )
+    record = record.add_group("elit")
+    record = record.add_nodes_to_group(["lorem", "ipsum"], "elit")
+    record = record.add_edges_to_group(record.edge_indices()[:1], "elit")
+
+    return record.add_group("incididunt")
+
+
+def create_bucket_record() -> GraphRecord:
+    return GraphRecord().add_nodes(
+        [
+            ("lorem", {"amet": 1, "consectetur": "sit"}),
+            ("ipsum", {"amet": 4, "consectetur": "sit"}),
+            ("dolor", {"amet": 9, "consectetur": "elit"}),
+            ("sit", {"amet": 16, "consectetur": "elit"}),
+        ]
+    )
+
+
+def create_key_failure_record() -> GraphRecord:
+    return GraphRecord().add_nodes(
+        [
+            ("lorem", {"amet": 1, "consectetur": "sit"}),
+            ("ipsum", {"amet": 4}),
+        ]
+    )
+
+
+def create_aligned_record() -> GraphRecord:
+    return GraphRecord().add_nodes(
+        [
+            ("dolor", {"amet": -3}),
+            ("lorem", {"amet": 8}),
+            ("ipsum", {"amet": 5}),
+        ]
+    )
+
+
+def create_population_record() -> GraphRecord:
+    return GraphRecord().add_nodes(
+        [
+            ("lorem", {"consectetur": "sit"}),
+            ("dolor", {"consectetur": "elit"}),
+            ("amet", {"consectetur": "elit"}),
+        ]
+    )
+
+
+def create_failure_kind() -> FailureKind:
+    record = create_record()
+    kinds = record.nodes().attribute("consectetur").errors().kind().evaluate()
+    kind = next(iter(kinds))[1]
+    assert isinstance(kind, FailureKind)
+
+    return kind
+
+
+class TestExpressionSurface(unittest.TestCase):
     def setUp(self) -> None:
-        self.graphrecord = simple_example_dataset()
+        self.record = create_record()
 
-    def test_node_operand_attribute(self) -> None:
-        def query(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.filter(nodes.in_group("patient")).attribute("age")
+    def test_free_roots(self) -> None:
+        assert isinstance(nodes(), Expression)
+        assert isinstance(edges(), Expression)
+        assert isinstance(groups(), Expression)
 
-        assert sorted(self.graphrecord.query_nodes(query)) == [
-            ("pat_1", 42),
-            ("pat_2", 22),
-            ("pat_3", 96),
-            ("pat_4", 19),
-            ("pat_5", 37),
+    def test_bound_roots(self) -> None:
+        assert isinstance(self.record.nodes(), Series)
+        assert isinstance(self.record.edges(), Series)
+        assert isinstance(self.record.groups(), Series)
+        assert list(self.record.nodes().evaluate()) == [
+            "lorem",
+            "ipsum",
+            "dolor",
+            "sit",
+        ]
+        assert list(self.record.groups().evaluate()) == ["elit", "incididunt"]
+
+    def test_query(self) -> None:
+        bound = self.record.query(nodes().attribute("amet"))
+
+        assert isinstance(bound, Series)
+        assert list(bound.evaluate()) == [
+            ("lorem", -2),
+            ("ipsum", 5),
+            ("dolor", 8),
+            ("sit", 5),
         ]
 
-    def test_node_operand_has_attribute(self) -> None:
-        def query(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.has_attribute("age")
+    def test_repr(self) -> None:
+        assert repr(nodes()) == "Expression(Expression [AllNodes])"
+        assert repr(self.record.nodes()) == "Series(Series [AllNodes])"
 
-        result = dict(self.graphrecord.query_nodes(query))
+    def test_explain(self) -> None:
+        assert "AllNodes" in nodes().explain()
+        assert "Attribute" in self.record.nodes().attribute("amet").explain()
+        assert (
+            "Attribute" in self.record.nodes().attribute("amet").explain_unoptimized()
+        )
 
-        assert result["pat_1"] is True
-        assert result["drug_856987"] is False
+    def test_invalid_binding(self) -> None:
+        unbound: Expression[Any, Any, Any] = nodes()
+        bound: Any = self.record.nodes()
 
-    def test_node_operand_neighbors(self) -> None:
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().equal_to("pat_1")).neighbors(
-                EdgeDirection.Outgoing
-            )
+        with pytest.raises(TypeError, match="must be bound to a record"):
+            unbound.evaluate()
 
-        result = self.graphrecord.query_nodes(query)
+        with pytest.raises(TypeError, match="must be bound to a record"):
+            unbound.explain_unoptimized()
 
-        assert "diagnosis_314529007" in result
-        assert "drug_856987" in result
-        assert "procedure_171207006" in result
+        with pytest.raises(TypeError, match="must be free"):
+            self.record.query(bound)
 
-    def test_node_operand_cache(self) -> None:
-        def query(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            ages = nodes.filter(nodes.in_group("patient")).attribute("age").cache()
+    def test_invalid_argument(self) -> None:
+        modes: Any = self.record.nodes().attribute("amet").mode()
 
-            return ages.equal_to(ages)
+        with pytest.raises(TypeError, match="series argument must hold"):
+            self.record.nodes().attribute("amet").greater_than(modes)
 
-        assert sorted(self.graphrecord.query_nodes(query)) == [
-            ("pat_1", True),
-            ("pat_2", True),
-            ("pat_3", True),
-            ("pat_4", True),
-            ("pat_5", True),
+    def test_invalid_missing_policy(self) -> None:
+        aggregate: Any = nodes().attribute("amet").count()
+
+        with pytest.raises(TypeError, match="`on_missing` policy needs"):
+            aggregate.on_missing(Drop())
+
+        with pytest.raises(TypeError, match="`on_missing` policy needs"):
+            aggregate.on_missing(Replace(0))
+
+
+class TestSeriesArguments(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+        self.aligned = create_aligned_record()
+
+    def test_same_record_argument(self) -> None:
+        mask = self.record.nodes().attribute("amet").greater_than(0)
+
+        assert list(self.record.nodes().filter(mask).evaluate()) == [
+            "ipsum",
+            "dolor",
+            "sit",
         ]
 
-    def test_node_operand_attributes_index_sum(self) -> None:
-        def query(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[IndexValue[AttributeNameIndex]], Single]:
-            return (
-                nodes.filter(nodes.index().equal_to("pat_1"))
-                .attributes()
-                .discard_value()
-                .index()
-                .child_index()
-                .sum()
-            )
+    def test_cross_record_argument(self) -> None:
+        elements = list(
+            self.record.nodes()
+            .attribute("amet")
+            .greater_than(self.aligned.nodes().attribute("amet"))
+            .evaluate()
+        )
 
-        assert self.graphrecord.query_nodes(query) in {"agegender", "genderage"}
+        assert [index for index, _ in elements[:3]] == ["lorem", "ipsum", "dolor"]
+        assert [value for _, value in elements[:3]] == [False, False, True]
+        assert elements[3][0] == "sit"
+        assert isinstance(elements[3][1], ArgumentMissingError)
+
+    def test_set_argument(self) -> None:
+        assert [
+            value
+            for _, value in self.record.nodes()
+            .attribute("amet")
+            .is_in(self.aligned.nodes().attribute("amet"))
+            .evaluate()
+        ] == [False, True, True, True]
+
+    def test_single_series_set_argument(self) -> None:
+        assert [
+            value
+            for _, value in self.record.nodes()
+            .attribute("amet")
+            .is_in(self.record.nodes().attribute("amet").sort().first())
+            .evaluate()
+        ] == [True, False, False, False]
+
+    def test_bare_series_set_argument(self) -> None:
+        assert [
+            value
+            for _, value in self.record.nodes()
+            .attribute("amet")
+            .is_in(self.record.nodes().attribute("amet").discard_index())
+            .evaluate()
+        ] == [True, True, True, True]
+
+    def test_reference_series_argument(self) -> None:
+        sources = self.record.edges().via_source_node()
+        counts = sources.group_by(self.record.edges().via_source_node()).count()
+
+        result = counts.evaluate()
+
+        assert result["lorem"] == 2
+        assert result["ipsum"] == 1
+
+    def test_bare_set_argument(self) -> None:
+        assert [
+            value
+            for _, value in self.record.nodes()
+            .attribute("amet")
+            .is_in(self.aligned.nodes().attribute("amet").max())
+            .evaluate()
+        ] == [False, False, True, False]
+
+    def test_dropping_argument(self) -> None:
+        dropped = self.aligned.nodes().attribute("amet").on_missing(Drop())
+
+        assert list(
+            self.record.nodes().attribute("amet").greater_than(dropped).evaluate()
+        ) == [("lorem", False), ("ipsum", False), ("dolor", True)]
+
+    def test_bare_definite_argument(self) -> None:
+        record = create_bucket_record()
+
+        assert list(
+            record.nodes()
+            .attribute("amet")
+            .greater_than(record.nodes().count())
+            .evaluate()
+        ) == [("lorem", False), ("ipsum", False), ("dolor", True), ("sit", True)]
+
+    def test_cross_record_bare_definite_argument(self) -> None:
+        record = create_bucket_record()
+
+        assert list(
+            record.nodes()
+            .attribute("amet")
+            .greater_than(self.aligned.nodes().count())
+            .evaluate()
+        ) == [("lorem", False), ("ipsum", True), ("dolor", True), ("sit", True)]
+
+    def test_broadcast_population(self) -> None:
+        record = create_bucket_record()
+        grouped = record.nodes().group_by(nodes().attribute("consectetur"))
+
+        assert list(
+            grouped.attribute("amet")
+            .sum()
+            .broadcast_via(record.nodes().attribute("consectetur"))
+            .evaluate()
+        ) == [("lorem", 5), ("ipsum", 5), ("dolor", 25), ("sit", 25)]
+
+    def test_cross_record_broadcast_population(self) -> None:
+        record = create_bucket_record()
+        population = create_population_record()
+        grouped = record.nodes().group_by(nodes().attribute("consectetur"))
+
+        assert list(
+            grouped.attribute("amet")
+            .sum()
+            .broadcast_via(population.nodes().attribute("consectetur"))
+            .evaluate()
+        ) == [("lorem", 5), ("dolor", 25)]
+
+    def test_replacing_argument(self) -> None:
+        replaced = self.aligned.nodes().attribute("amet").on_missing(Replace(0))
+
+        assert list(
+            self.record.nodes().attribute("amet").greater_than(replaced).evaluate()
+        ) == [
+            ("lorem", False),
+            ("ipsum", False),
+            ("dolor", True),
+            ("sit", True),
+        ]
 
 
-class TestNodeGroupOperand(unittest.TestCase):
+class TestFilters(unittest.TestCase):
     def setUp(self) -> None:
-        self.graphrecord = GraphRecord.from_tuples(
-            [
-                ("pat_1", {"gender": "M", "age": 42}),
-                ("pat_2", {"gender": "F", "age": 22}),
-                ("pat_3", {"gender": "F", "age": 96}),
-                ("pat_4", {"gender": "M", "age": 19}),
-                ("pat_5", {"gender": "M", "age": 37}),
-            ]
-        )
+        self.record = create_record()
 
-    def test_group_operand_attribute(self) -> None:
-        def query(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Bare[Scalar],
-            Single,
-            Grouped[NodeIndex, ValueIndex],
-        ]:
-            return nodes.group_by(nodes.attribute("gender")).attribute("age").mean()
+    def test_filter(self) -> None:
+        assert list(
+            self.record.nodes()
+            .filter(nodes().attribute("amet").greater_than(0))
+            .evaluate()
+        ) == ["ipsum", "dolor", "sit"]
+        assert list(self.record.nodes().filter(NEVER).evaluate()) == []
 
-        group_result = self.graphrecord.query_nodes(query)
-        result = {
-            bucket.key: (set(bucket.members), bucket.payload)
-            for bucket in group_result.buckets()
-        }
+    def test_masks(self) -> None:
+        positive = self.record.nodes().attribute("amet").greater_than(0)
 
-        assert group_result.key_failures() == []
-        assert result["F"][0] == {"pat_2", "pat_3"}
-        assert result["F"][1] == 59
-        assert result["M"][0] == {"pat_1", "pat_4", "pat_5"}
-        assert result["M"][1] == pytest.approx(32.666666666666664)
+        assert list(
+            positive.and_(nodes().attribute("amet").less_than(8)).evaluate()
+        ) == [
+            ("lorem", False),
+            ("ipsum", True),
+            ("dolor", False),
+            ("sit", True),
+        ]
+        assert list(
+            self.record.nodes()
+            .attribute("amet")
+            .greater_than(7)
+            .or_(nodes().attribute("amet").less_than(0))
+            .evaluate()
+        ) == [
+            ("lorem", True),
+            ("ipsum", False),
+            ("dolor", True),
+            ("sit", False),
+        ]
+        assert list(
+            positive.xor(nodes().attribute("amet").less_than(8)).evaluate()
+        ) == [
+            ("lorem", True),
+            ("ipsum", False),
+            ("dolor", True),
+            ("sit", False),
+        ]
+        assert list(positive.not_().evaluate()) == [
+            ("lorem", True),
+            ("ipsum", False),
+            ("dolor", False),
+            ("sit", False),
+        ]
+        assert list(positive.and_(ALWAYS).evaluate()) == [
+            ("lorem", False),
+            ("ipsum", True),
+            ("dolor", True),
+            ("sit", True),
+        ]
 
-    def test_group_operand_cache(self) -> None:
-        def query(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Bare[Scalar],
-            Single,
-            Grouped[NodeIndex, ValueIndex],
-        ]:
-            return (
-                nodes.group_by(nodes.attribute("gender"))
-                .attribute("age")
-                .mean()
-                .cache()
-            )
+    def test_has_attribute(self) -> None:
+        assert list(self.record.nodes().has_attribute("consectetur").evaluate()) == [
+            ("lorem", True),
+            ("ipsum", True),
+            ("dolor", True),
+            ("sit", False),
+        ]
 
-        group_result = self.graphrecord.query_nodes(query)
-        result = {bucket.key: bucket.payload for bucket in group_result.buckets()}
+    def test_in_group(self) -> None:
+        assert list(self.record.nodes().in_group("elit").evaluate()) == [
+            ("lorem", True),
+            ("ipsum", True),
+            ("dolor", False),
+            ("sit", False),
+        ]
 
-        assert group_result.key_failures() == []
-        assert result["F"] == 59
-        assert result["M"] == pytest.approx(32.666666666666664)
-
-    def test_group_operand_nested_lifting(self) -> None:
-        def element_in_nested_group(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("gender"))
-                .group_by(nodes.attribute("age"))
-                .attribute("age")
-                .add(1)
-                .ungroup()
-                .ungroup()
-            )
-
-        def lane_in_nested_group(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Scalar], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("gender"))
-                .group_by(nodes.attribute("age"))
-                .attribute("age")
-                .sum()
-                .ungroup_keyed()
-                .ungroup()
-            )
-
-        def inner_keys(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("gender"))
-                .group_by(nodes.attribute("age"))
-                .keys()
-                .ungroup()
-            )
-
-        assert dict(self.graphrecord.query_nodes(element_in_nested_group)) == {
-            "pat_1": 43,
-            "pat_2": 23,
-            "pat_3": 97,
-            "pat_4": 20,
-            "pat_5": 38,
-        }
-        assert dict(self.graphrecord.query_nodes(lane_in_nested_group)) == {
-            19: 19,
-            22: 22,
-            37: 37,
-            42: 42,
-            96: 96,
-        }
-        assert set(self.graphrecord.query_nodes(inner_keys)) == {19, 22, 37, 42, 96}
-
-    def test_group_operand_argument(self) -> None:
-        graphrecord = GraphRecord.from_tuples(
-            [
-                ("n1", {"name": "Alpha", "width": 8, "kind": True}),
-                ("n2", {"name": "Beta", "width": 7, "kind": False}),
-            ]
-        )
-
-        def query(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[NodeIndex, Scalar],
-            Multiple[Unordered],
-            Grouped[NodeIndex, ValueIndex],
-        ]:
-            return (
-                nodes.group_by(nodes.attribute("kind"))
-                .attribute("name")
-                .pad_start(nodes.attribute("width"), ".")
-            )
-
-        group_result = graphrecord.query_nodes(query)
-        result = {bucket.key: bucket.payload for bucket in group_result.buckets()}
-
-        assert group_result.key_failures() == []
-        assert result == {False: [("n2", "...Beta")], True: [("n1", "...Alpha")]}
-
-    def test_group_operand_key_failure(self) -> None:
-        graphrecord = GraphRecord.from_tuples(
-            [
-                ("n1", {"name": "Alpha", "kind": "first"}),
-                ("n2", {"name": "Beta"}),
-            ]
-        )
-
-        def query(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[NodeIndex, Scalar],
-            Multiple[Unordered],
-            Grouped[NodeIndex, ValueIndex],
-        ]:
-            return nodes.group_by(nodes.attribute("kind")).attribute("name")
-
-        group_result = graphrecord.query_nodes(query)
-        members = [failure.member for failure in group_result.key_failures()]
-
-        assert members == ["n2"]
-        assert [bucket.key for bucket in group_result.buckets()] == ["first"]
-
-    def test_group_result_repr(self) -> None:
-        graphrecord = GraphRecord.from_tuples(
-            [
-                ("n1", {"name": "Alpha", "kind": "first"}),
-                ("n2", {"name": "Beta"}),
-            ]
-        )
-
-        def query(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[NodeIndex, Scalar],
-            Multiple[Unordered],
-            Grouped[NodeIndex, ValueIndex],
-        ]:
-            return nodes.group_by(nodes.attribute("kind")).attribute("name")
-
-        group_result = graphrecord.query_nodes(query)
-
-        assert repr(group_result.buckets()[0]) == (
-            "GroupBucket(key='first', members=['n1'], payload=[('n1', 'Alpha')])"
-        )
-        assert repr(group_result.key_failures()[0]).startswith(
-            "GroupKeyFailure(member='n2', error=MissingAttributeError("
-        )
-        assert repr(group_result).startswith("GroupResult(buckets=[GroupBucket(")
+    def test_invalid_in_group(self) -> None:
+        with pytest.raises(GraphRecordError, match="Cannot find group"):
+            self.record.nodes().in_group("tempor").evaluate()
 
 
-class TestStringOperand(unittest.TestCase):
+class TestOrdering(unittest.TestCase):
     def setUp(self) -> None:
-        self.graphrecord = GraphRecord.from_tuples(
-            [("n1", {"name": "Alpha"}), ("n2", {"name": "Beta"})]
+        self.record = create_record()
+
+    def test_sort(self) -> None:
+        assert list(self.record.nodes().attribute("amet").sort().evaluate()) == [
+            ("lorem", -2),
+            ("ipsum", 5),
+            ("sit", 5),
+            ("dolor", 8),
+        ]
+
+    def test_sort_by(self) -> None:
+        assert list(
+            self.record.nodes().sort_by(nodes().attribute("amet")).evaluate()
+        ) == ["lorem", "ipsum", "sit", "dolor"]
+
+    def test_reverse_order(self) -> None:
+        assert list(
+            self.record.nodes().attribute("amet").sort().reverse_order().evaluate()
+        ) == [("dolor", 8), ("sit", 5), ("ipsum", 5), ("lorem", -2)]
+
+    def test_shuffle(self) -> None:
+        shuffled = list(self.record.nodes().attribute("amet").shuffle().evaluate())
+
+        assert len(shuffled) == 4
+        assert {value for _, value in shuffled} == {-2, 5, 8}
+
+    def test_unorder(self) -> None:
+        unordered = self.record.nodes().attribute("amet").sort().unorder()
+
+        assert len(list(unordered.evaluate())) == 4
+
+    def test_take(self) -> None:
+        assert list(
+            self.record.nodes().attribute("amet").sort().take(2).evaluate()
+        ) == [("lorem", -2), ("ipsum", 5)]
+
+    def test_first(self) -> None:
+        assert self.record.nodes().attribute("amet").sort().first().evaluate() == (
+            "lorem",
+            -2,
         )
+
+    def test_last(self) -> None:
+        assert self.record.nodes().attribute("amet").sort().last().evaluate() == (
+            "dolor",
+            8,
+        )
+
+    def test_enumerate(self) -> None:
+        assert list(
+            self.record.nodes().attribute("amet").sort().enumerate().evaluate()
+        ) == [(0, -2), (1, 5), (2, 5), (3, 8)]
+
+
+class TestDeduplication(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+
+    def test_drop_duplicates(self) -> None:
+        assert list(
+            self.record.nodes().attribute("amet").sort().drop_duplicates().evaluate()
+        ) == [("lorem", -2), ("ipsum", 5), ("dolor", 8)]
+
+    def test_is_duplicated(self) -> None:
+        assert list(
+            self.record.nodes().attribute("amet").is_duplicated().evaluate()
+        ) == [
+            ("lorem", False),
+            ("ipsum", True),
+            ("dolor", False),
+            ("sit", True),
+        ]
+
+    def test_unique(self) -> None:
+        assert list(
+            self.record.nodes().attribute("amet").discard_index().unique().evaluate()
+        ) == [-2, 5, 8]
+
+
+class TestTypePredicates(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+
+    def test_type_predicates(self) -> None:
+        values = self.record.nodes().attribute("adipiscing").on_error(Drop())
+
+        assert list(values.is_bool().evaluate()) == [
+            ("lorem", True),
+            ("ipsum", False),
+            ("dolor", False),
+        ]
+        assert list(values.is_datetime().evaluate()) == [
+            ("lorem", False),
+            ("ipsum", False),
+            ("dolor", True),
+        ]
+        assert list(values.is_duration().evaluate()) == [
+            ("lorem", False),
+            ("ipsum", False),
+            ("dolor", False),
+        ]
+        assert list(values.is_float().evaluate()) == [
+            ("lorem", False),
+            ("ipsum", False),
+            ("dolor", False),
+        ]
+        assert list(values.is_null().evaluate()) == [
+            ("lorem", False),
+            ("ipsum", True),
+            ("dolor", False),
+        ]
+        assert list(values.is_int().evaluate()) == [
+            ("lorem", False),
+            ("ipsum", False),
+            ("dolor", False),
+        ]
+        assert list(values.is_string().evaluate()) == [
+            ("lorem", False),
+            ("ipsum", False),
+            ("dolor", False),
+        ]
+
+
+class TestNumerics(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+        self.values = self.record.nodes().attribute("amet")
+
+    def test_unary_operations(self) -> None:
+        assert [value for _, value in self.values.abs().evaluate()] == [2, 5, 8, 5]
+        assert [value for _, value in self.values.neg().evaluate()] == [2, -5, -8, -5]
+        assert [value for _, value in self.values.sign().evaluate()] == [
+            -1.0,
+            1.0,
+            1,
+            1,
+        ]
+        assert [value for _, value in self.values.ceil().evaluate()] == [-2.0, 5, 8, 5]
+        assert [value for _, value in self.values.floor().evaluate()] == [-2.0, 5, 8, 5]
+        assert [value for _, value in self.values.round().evaluate()] == [-2.0, 5, 8, 5]
+        assert [value for _, value in self.values.cbrt().evaluate()][2] == 2.0
+        assert len(list(self.values.exp().evaluate())) == 4
+
+    def test_invalid_unary_operations(self) -> None:
+        logarithms = [value for _, value in self.values.log().evaluate()]
+        roots = [value for _, value in self.values.sqrt().evaluate()]
+
+        assert isinstance(logarithms[0], NonPositiveLogarithmError)
+        assert isinstance(roots[0], NegativeSquareRootError)
+
+    def test_arithmetic(self) -> None:
+        assert [value for _, value in self.values.add(2).evaluate()] == [0, 7, 10, 7]
+        assert [value for _, value in self.values.subtract(2).evaluate()] == [
+            -4,
+            3,
+            6,
+            3,
+        ]
+        assert [value for _, value in self.values.multiply(2).evaluate()] == [
+            -4,
+            10,
+            16,
+            10,
+        ]
+        assert [value for _, value in self.values.power(2).evaluate()] == [
+            4,
+            25,
+            64,
+            25,
+        ]
+        assert [value for _, value in self.values.modulo(2).evaluate()] == [0, 1, 0, 1]
+        assert [value for _, value in self.values.divide(2).evaluate()] == [
+            -1.0,
+            2.5,
+            4.0,
+            2.5,
+        ]
+
+    def test_clip(self) -> None:
+        assert [value for _, value in self.values.clip(0, 6).evaluate()] == [0, 5, 6, 5]
+
+    def test_comparisons(self) -> None:
+        assert [value for _, value in self.values.greater_than(0).evaluate()] == [
+            False,
+            True,
+            True,
+            True,
+        ]
+        assert [
+            value for _, value in self.values.greater_than_or_equal_to(5).evaluate()
+        ] == [False, True, True, True]
+        assert [value for _, value in self.values.less_than(5).evaluate()] == [
+            True,
+            False,
+            False,
+            False,
+        ]
+        assert [
+            value for _, value in self.values.less_than_or_equal_to(5).evaluate()
+        ] == [True, True, False, True]
+        assert [value for _, value in (self.values == 5).evaluate()] == [
+            False,
+            True,
+            False,
+            True,
+        ]
+        assert [value for _, value in (self.values != 5).evaluate()] == [
+            True,
+            False,
+            True,
+            False,
+        ]
+
+    def test_is_in(self) -> None:
+        assert [value for _, value in self.values.is_in([5, 8]).evaluate()] == [
+            False,
+            True,
+            True,
+            True,
+        ]
+        assert [
+            value
+            for _, value in self.values.is_in(nodes().attribute("amet")).evaluate()
+        ] == [True, True, True, True]
+
+    def test_cast(self) -> None:
+        assert [
+            value for _, value in self.values.cast(CastTarget.String).evaluate()
+        ] == ["-2", "5", "8", "5"]
+        assert [
+            value for _, value in self.values.cast(CastTarget.Float).evaluate()
+        ] == [-2.0, 5.0, 8.0, 5.0]
+        assert [value for _, value in self.values.cast(CastTarget.Int).evaluate()] == [
+            -2,
+            5,
+            8,
+            5,
+        ]
+        assert [value for _, value in self.values.cast(CastTarget.Bool).evaluate()] == [
+            True,
+            True,
+            True,
+            True,
+        ]
+        assert len(list(self.values.cast(CastTarget.DateTime).evaluate())) == 4
+        assert len(list(self.values.cast(CastTarget.Duration).evaluate())) == 4
+
+    def test_invalid_cast(self) -> None:
+        casts = [
+            value
+            for _, value in self.record.nodes()
+            .attribute("consectetur")
+            .on_error(Drop())
+            .cast(CastTarget.Int)
+            .evaluate()
+        ]
+
+        assert isinstance(casts[0], InvalidCastError)
+
+
+class TestStrings(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+        self.strings = self.record.nodes().attribute("consectetur").on_error(Drop())
+
+    def test_trimming(self) -> None:
+        assert [value for _, value in self.strings.trim().evaluate()] == [
+            "Sit Amet",
+            "elit-elit",
+            "consectetur",
+        ]
+        assert [value for _, value in self.strings.trim_start().evaluate()] == [
+            "Sit Amet  ",
+            "elit-elit",
+            "consectetur",
+        ]
+        assert [value for _, value in self.strings.trim_end().evaluate()] == [
+            "  Sit Amet",
+            "elit-elit",
+            "consectetur",
+        ]
+
+    def test_case_conversions(self) -> None:
+        assert [value for _, value in self.strings.lowercase().evaluate()] == [
+            "  sit amet  ",
+            "elit-elit",
+            "consectetur",
+        ]
+        assert [value for _, value in self.strings.uppercase().evaluate()] == [
+            "  SIT AMET  ",
+            "ELIT-ELIT",
+            "CONSECTETUR",
+        ]
+
+    def test_reverse(self) -> None:
+        assert [value for _, value in self.strings.reverse().evaluate()] == [
+            "  temA tiS  ",
+            "tile-tile",
+            "rutetcesnoc",
+        ]
+
+    def test_length(self) -> None:
+        assert [value for _, value in self.strings.length().evaluate()] == [12, 9, 11]
+
+    def test_slice(self) -> None:
+        assert [value for _, value in self.strings.slice(0, 3).evaluate()] == [
+            "  S",
+            "eli",
+            "con",
+        ]
+
+    def test_invalid_slice(self) -> None:
+        slices = [value for _, value in self.strings.slice(0, 200).evaluate()]
+
+        assert isinstance(slices[0], InvalidStringSliceError)
+
+    def test_predicates(self) -> None:
+        assert [value for _, value in self.strings.starts_with("elit").evaluate()] == [
+            False,
+            True,
+            False,
+        ]
+        assert [value for _, value in self.strings.ends_with("elit").evaluate()] == [
+            False,
+            True,
+            False,
+        ]
+        assert [value for _, value in self.strings.contains("t-e").evaluate()] == [
+            False,
+            True,
+            False,
+        ]
+        assert [value for _, value in self.strings.matches("^con.*ur$").evaluate()] == [
+            False,
+            False,
+            True,
+        ]
+
+    def test_stripping(self) -> None:
+        assert [value for _, value in self.strings.strip_prefix("elit").evaluate()] == [
+            "  Sit Amet  ",
+            "-elit",
+            "consectetur",
+        ]
+        assert [value for _, value in self.strings.strip_suffix("elit").evaluate()] == [
+            "  Sit Amet  ",
+            "elit-",
+            "consectetur",
+        ]
+
+    def test_replacing(self) -> None:
+        assert [
+            value for _, value in self.strings.replace("elit", "amet").evaluate()
+        ] == ["  Sit Amet  ", "amet-elit", "consectetur"]
+        assert [
+            value for _, value in self.strings.replace_all("elit", "amet").evaluate()
+        ] == ["  Sit Amet  ", "amet-amet", "consectetur"]
+
+    def test_padding(self) -> None:
+        assert [value for _, value in self.strings.pad_start(15, "*").evaluate()] == [
+            "***  Sit Amet  ",
+            "******elit-elit",
+            "****consectetur",
+        ]
+        assert [value for _, value in self.strings.pad_end(15, "*").evaluate()] == [
+            "  Sit Amet  ***",
+            "elit-elit******",
+            "consectetur****",
+        ]
+
+    def test_invalid_padding(self) -> None:
+        padded = [value for _, value in self.strings.pad_start(15, "**").evaluate()]
+
+        assert isinstance(padded[0], InvalidPaddingCharacterError)
 
     def test_split(self) -> None:
-        def query(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
-                Scalar,
-            ],
-            Multiple[Unordered],
-        ]:
-            return nodes.attribute("name").split("a")
+        assert list(self.strings.split("-").evaluate()) == [
+            (("lorem", 0), "  Sit Amet  "),
+            (("ipsum", 0), "elit"),
+            (("ipsum", 1), "elit"),
+            (("dolor", 0), "consectetur"),
+        ]
 
-        assert sorted(self.graphrecord.query_nodes(query)) == [
-            (("n1", 0), "Alph"),
-            (("n1", 1), ""),
-            (("n2", 0), "Bet"),
-            (("n2", 1), ""),
+    def test_invalid_split(self) -> None:
+        parts = [value for _, value in self.strings.split("").evaluate()]
+
+        assert isinstance(parts[0], EmptySplitDelimiterError)
+
+
+class TestAttributes(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+
+    def test_attribute(self) -> None:
+        assert list(self.record.nodes().attribute("amet").evaluate()) == [
+            ("lorem", -2),
+            ("ipsum", 5),
+            ("dolor", 8),
+            ("sit", 5),
+        ]
+
+    def test_attributes(self) -> None:
+        assert list(self.record.nodes().attributes().evaluate())[:3] == [
+            (("lorem", "adipiscing"), "adipiscing"),
+            (("lorem", "amet"), "amet"),
+            (("lorem", "consectetur"), "consectetur"),
+        ]
+
+    def test_index(self) -> None:
+        assert list(self.record.nodes().index().evaluate()) == [
+            ("lorem", "lorem"),
+            ("ipsum", "ipsum"),
+            ("dolor", "dolor"),
+            ("sit", "sit"),
+        ]
+
+    def test_discard_index(self) -> None:
+        assert list(
+            self.record.nodes().attribute("amet").discard_index().evaluate()
+        ) == [-2, 5, 8, 5]
+
+    def test_discard_value(self) -> None:
+        assert list(
+            self.record.nodes().attribute("amet").discard_value().evaluate()
+        ) == ["lorem", "ipsum", "dolor", "sit"]
+
+    def test_parent_index(self) -> None:
+        assert list(
+            self.record.nodes()
+            .attributes()
+            .discard_value()
+            .index()
+            .parent_index()
+            .evaluate()
+        )[:3] == [
+            (("lorem", "adipiscing"), "lorem"),
+            (("lorem", "amet"), "lorem"),
+            (("lorem", "consectetur"), "lorem"),
+        ]
+
+    def test_child_index(self) -> None:
+        assert list(
+            self.record.nodes()
+            .attributes()
+            .discard_value()
+            .index()
+            .child_index()
+            .evaluate()
+        )[:3] == [
+            (("lorem", "adipiscing"), "adipiscing"),
+            (("lorem", "amet"), "amet"),
+            (("lorem", "consectetur"), "consectetur"),
+        ]
+
+    def test_inherit(self) -> None:
+        assert list(
+            self.record.nodes()
+            .attributes()
+            .inherit(nodes().attribute("amet"))
+            .evaluate()
+        )[:3] == [
+            (("lorem", "adipiscing"), -2),
+            (("lorem", "amet"), -2),
+            (("lorem", "consectetur"), -2),
+        ]
+
+    def test_transition(self) -> None:
+        assert list(
+            self.record.nodes()
+            .attribute("amet")
+            .transition(ValueTarget.ValueIndex)
+            .evaluate()
+        ) == [("lorem", -2), ("ipsum", 5), ("dolor", 8), ("sit", 5)]
+        assert list(
+            self.record.nodes().index().transition(ValueTarget.Value).evaluate()
+        ) == [
+            ("lorem", "lorem"),
+            ("ipsum", "ipsum"),
+            ("dolor", "dolor"),
+            ("sit", "sit"),
+        ]
+
+    def test_invalid_transition(self) -> None:
+        transitions = [
+            value
+            for _, value in self.record.nodes()
+            .attribute("amet")
+            .transition(ValueTarget.Mask)
+            .evaluate()
+        ]
+
+        assert isinstance(transitions[0], InvalidTransitionError)
+
+    def test_cache(self) -> None:
+        assert list(self.record.nodes().attribute("amet").cache().evaluate()) == [
+            ("lorem", -2),
+            ("ipsum", 5),
+            ("dolor", 8),
+            ("sit", 5),
+        ]
+        assert isinstance(nodes().attribute("amet").cache(), Expression)
+
+
+class TestErrorPolicies(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+        self.failing = self.record.nodes().attribute("consectetur")
+
+    def test_failure_in_value_position(self) -> None:
+        result = list(self.failing.evaluate())
+
+        assert len(result) == 4
+        assert result[3][0] == "sit"
+        assert isinstance(result[3][1], MissingAttributeError)
+        assert isinstance(result[3][1], QueryError)
+
+    def test_on_error(self) -> None:
+        assert [index for index, _ in self.failing.on_error(Drop()).evaluate()] == [
+            "lorem",
+            "ipsum",
+            "dolor",
+        ]
+        assert list(self.failing.on_error(Replace("amet")).evaluate())[3][1] == "amet"
+
+        replaced = self.failing.on_error(Replace(nodes().attribute("amet")))
+
+        assert list(replaced.evaluate())[3][1] == 5
+
+        quiet = self.failing.on_error(Raise.when(nodes().count().greater_than(100)))
+
+        assert len(list(quiet.evaluate())) == 4
+
+        with pytest.raises(RaisedFailuresError, match="failing element"):
+            self.failing.on_error(Raise()).evaluate()
+
+        with pytest.raises(RaisedFailuresError, match="failing element"):
+            self.failing.on_error(Raise.when(ALWAYS)).evaluate()
+
+    def test_errors(self) -> None:
+        failures = list(self.failing.errors().evaluate())
+
+        assert len(failures) == 1
+        assert failures[0][0] == "sit"
+        assert isinstance(failures[0][1], MissingAttributeError)
+
+    def test_kind(self) -> None:
+        kinds = list(self.failing.errors().kind().evaluate())
+
+        assert len(kinds) == 1
+        assert kinds[0][0] == "sit"
+        assert isinstance(kinds[0][1], FailureKind)
+        assert kinds[0][1].name == "MissingAttribute"
+
+    def test_name(self) -> None:
+        assert list(self.failing.errors().kind().name().evaluate()) == [
+            ("sit", "MissingAttribute")
         ]
 
 
-class TestScalarOperand(unittest.TestCase):
+class TestFailureKind(unittest.TestCase):
     def setUp(self) -> None:
-        self.graphrecord = GraphRecord.from_tuples(
-            [
-                (
-                    "n1",
-                    {
-                        "number": -1.5,
-                        "integer": 1,
-                        "text": " Alpha ",
-                        "flag": True,
-                        "moment": datetime(2024, 1, 1),
-                        "duration": timedelta(hours=1),
-                        "nothing": None,
-                    },
-                ),
-                (
-                    "n2",
-                    {
-                        "number": 2.25,
-                        "integer": 2,
-                        "text": "Beta",
-                        "flag": False,
-                        "moment": datetime(2024, 1, 2),
-                        "duration": timedelta(hours=2),
-                        "nothing": None,
-                    },
-                ),
-                (
-                    "n3",
-                    {
-                        "number": 2.25,
-                        "integer": 3,
-                        "text": "Gamma",
-                        "flag": True,
-                        "moment": datetime(2024, 1, 3),
-                        "duration": timedelta(hours=3),
-                        "nothing": None,
-                    },
-                ),
-            ]
-        )
+        self.record = create_record()
+        self.kind = create_failure_kind()
 
-    def test_string_operations(self) -> None:
-        def trim(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").trim()
+    def test_name(self) -> None:
+        assert self.kind.name == "MissingAttribute"
 
-        def trim_start(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").trim_start()
+    def test_repr(self) -> None:
+        assert repr(self.kind) == "FailureKind.MissingAttribute"
 
-        def trim_end(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").trim_end()
+    def test_equality(self) -> None:
+        assert self.kind == create_failure_kind()
+        assert self.kind != "MissingAttribute"
 
-        def lowercase(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").lowercase()
+    def test_hash(self) -> None:
+        assert len({self.kind, self.kind}) == 1
 
-        def uppercase(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").uppercase()
+    def test_as_argument(self) -> None:
+        kinds = self.record.nodes().attribute("consectetur").errors().kind()
 
-        def reverse(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").reverse()
+        assert list((kinds == self.kind).evaluate()) == [("sit", True)]
+        assert list(kinds.is_in([self.kind]).evaluate()) == [("sit", True)]
 
-        def length(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").length()
 
-        def slice_(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").slice(1, 4)
-
-        def replace(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").replace("a", "_")
-
-        def replace_all(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").replace_all("a", "_")
-
-        def pad_start(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").trim().pad_start(7, ".")
-
-        def pad_end(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").trim().pad_end(7, ".")
-
-        assert dict(self.graphrecord.query_nodes(trim))["n1"] == "Alpha"
-        assert dict(self.graphrecord.query_nodes(trim_start))["n1"] == "Alpha "
-        assert dict(self.graphrecord.query_nodes(trim_end))["n1"] == " Alpha"
-        assert dict(self.graphrecord.query_nodes(lowercase))["n1"] == " alpha "
-        assert dict(self.graphrecord.query_nodes(uppercase))["n1"] == " ALPHA "
-        assert dict(self.graphrecord.query_nodes(reverse))["n2"] == "ateB"
-        assert dict(self.graphrecord.query_nodes(length))["n2"] == 4
-        assert dict(self.graphrecord.query_nodes(slice_))["n2"] == "eta"
-        assert dict(self.graphrecord.query_nodes(replace))["n3"] == "G_mma"
-        assert dict(self.graphrecord.query_nodes(replace_all))["n3"] == "G_mm_"
-        assert dict(self.graphrecord.query_nodes(pad_start))["n2"] == "...Beta"
-        assert dict(self.graphrecord.query_nodes(pad_end))["n2"] == "Beta..."
-
-    def test_string_predicates(self) -> None:
-        def starts_with(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("text").starts_with("B")
-
-        def ends_with(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("text").ends_with("a")
-
-        def contains(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("text").contains("mm")
-
-        def matches(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("text").matches("^B.*")
-
-        def strip_prefix(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").strip_prefix("B")
-
-        def strip_suffix(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").strip_suffix("a")
-
-        assert dict(self.graphrecord.query_nodes(starts_with)) == {
-            "n1": False,
-            "n2": True,
-            "n3": False,
-        }
-        assert dict(self.graphrecord.query_nodes(ends_with)) == {
-            "n1": False,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(contains))["n3"] is True
-        assert dict(self.graphrecord.query_nodes(matches))["n2"] is True
-        assert dict(self.graphrecord.query_nodes(strip_prefix))["n2"] == "eta"
-        assert dict(self.graphrecord.query_nodes(strip_suffix))["n3"] == "Gamm"
-
-    def test_arithmetic_operations(self) -> None:
-        def add(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").add(2)
-
-        def subtract(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").subtract(1)
-
-        def multiply(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").multiply(2)
-
-        def divide(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").divide(2)
-
-        def power(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").power(2)
-
-        def modulo(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").modulo(2)
-
-        assert dict(self.graphrecord.query_nodes(add))["n1"] == 0.5
-        assert dict(self.graphrecord.query_nodes(subtract))["n2"] == 1.25
-        assert dict(self.graphrecord.query_nodes(multiply))["n2"] == 4.5
-        assert dict(self.graphrecord.query_nodes(divide))["n2"] == 1.125
-        assert dict(self.graphrecord.query_nodes(power))["n1"] == 2.25
-        assert dict(self.graphrecord.query_nodes(modulo))["n2"] == 0.25
-
-    def test_comparison_operations(self) -> None:
-        def equal_to(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number").equal_to(2.25)
-
-        def not_equal_to(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number").not_equal_to(2.25)
-
-        def greater_than(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number").greater_than(0)
-
-        def greater_than_or_equal_to(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number").greater_than_or_equal_to(2.25)
-
-        def less_than(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number").less_than(0)
-
-        def less_than_or_equal_to(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number").less_than_or_equal_to(-1.5)
-
-        assert dict(self.graphrecord.query_nodes(equal_to)) == {
-            "n1": False,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(not_equal_to))["n1"] is True
-        assert dict(self.graphrecord.query_nodes(greater_than))["n2"] is True
-        assert (
-            dict(self.graphrecord.query_nodes(greater_than_or_equal_to))["n3"] is True
-        )
-        assert dict(self.graphrecord.query_nodes(less_than))["n1"] is True
-        assert dict(self.graphrecord.query_nodes(less_than_or_equal_to))["n1"] is True
-
-    def test_numeric_operations(self) -> None:
-        def absolute(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").abs()
-
-        def negate(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").neg()
-
-        def sign(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").sign()
-
-        def ceil(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").ceil()
-
-        def cube_root(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").cbrt()
-
-        def exponential(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").exp()
-
-        def floor(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").floor()
-
-        def logarithm(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").abs().log()
-
-        def round_(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").round()
-
-        def square_root(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").abs().sqrt()
-
-        assert dict(self.graphrecord.query_nodes(absolute))["n1"] == 1.5
-        assert dict(self.graphrecord.query_nodes(negate))["n2"] == -2.25
-        assert dict(self.graphrecord.query_nodes(sign))["n1"] == -1
-        assert dict(self.graphrecord.query_nodes(ceil))["n2"] == 3
-        assert dict(self.graphrecord.query_nodes(cube_root))["n2"] == pytest.approx(
-            1.3103706971
-        )
-        assert dict(self.graphrecord.query_nodes(exponential))["n1"] == pytest.approx(
-            0.2231301601
-        )
-        assert dict(self.graphrecord.query_nodes(floor))["n2"] == 2
-        assert dict(self.graphrecord.query_nodes(logarithm))["n1"] == pytest.approx(
-            0.4054651081
-        )
-        assert dict(self.graphrecord.query_nodes(round_))["n2"] == 2
-        assert dict(self.graphrecord.query_nodes(square_root))["n1"] == pytest.approx(
-            1.2247448714
-        )
-
-    def test_type_inspection(self) -> None:
-        def is_bool(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("flag").is_bool()
-
-        def is_datetime(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("moment").is_datetime()
-
-        def is_duration(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("duration").is_duration()
-
-        def is_float(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number").is_float()
-
-        def is_null(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("nothing").is_null()
-
-        def is_int(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("integer").is_int()
-
-        def is_string(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("text").is_string()
-
-        assert dict(self.graphrecord.query_nodes(is_bool)) == {
-            "n1": True,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(is_datetime)) == {
-            "n1": True,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(is_duration)) == {
-            "n1": True,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(is_float)) == {
-            "n1": True,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(is_null)) == {
-            "n1": True,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(is_int)) == {
-            "n1": True,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(is_string)) == {
-            "n1": True,
-            "n2": True,
-            "n3": True,
-        }
+class TestAggregations(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+        self.values = self.record.nodes().attribute("amet")
 
     def test_aggregations(self) -> None:
-        def maximum(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single]:
-            return nodes.attribute("number").max()
+        assert self.record.nodes().count().evaluate() == 4
+        assert self.values.sum().evaluate() == 16
+        assert self.values.mean().evaluate() == 4.0
+        assert self.values.max().evaluate() == 8
+        assert self.values.min().evaluate() == -2
+        assert self.values.median().evaluate() == 5.0
+        assert self.values.product().evaluate() == -400
+        assert self.values.n_unique().evaluate() == 3
+        assert list(self.values.mode().evaluate()) == [5]
 
-        def minimum(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single]:
-            return nodes.attribute("number").min()
+        deviation = self.values.std().evaluate()
+        variance = self.values.var().evaluate()
+        sample = self.values.random().evaluate()
 
-        def median(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single]:
-            return nodes.attribute("number").median()
+        assert isinstance(deviation, float)
+        assert deviation > 0
+        assert isinstance(variance, float)
+        assert variance > 0
+        assert sample is not None
+        assert sample[1] in {-2, 5, 8}
 
-        def product(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single]:
-            return nodes.attribute("integer").product()
+    def test_boolean_aggregations(self) -> None:
+        assert self.values.greater_than(-10).all().evaluate()
+        assert self.values.greater_than(7).any().evaluate()
 
-        def mode(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").mode()
+    def test_empty_aggregations(self) -> None:
+        empty = self.record.nodes().filter(NEVER).attribute("amet")
 
-        def unique_count(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite]:
-            return nodes.attribute("number").n_unique()
-
-        def random(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Single]:
-            return nodes.attribute("number").random()
-
-        def count(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite]:
-            return nodes.attribute("number").count()
-
-        def sum_(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single]:
-            return nodes.attribute("number").sum()
-
-        def mean(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single]:
-            return nodes.attribute("number").mean()
-
-        def standard_deviation(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single]:
-            return nodes.attribute("number").std()
-
-        def variance(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Single]:
-            return nodes.attribute("number").var()
-
-        assert self.graphrecord.query_nodes(maximum) == 2.25
-        assert self.graphrecord.query_nodes(minimum) == -1.5
-        assert self.graphrecord.query_nodes(median) == 2.25
-        assert self.graphrecord.query_nodes(product) == 6
-        assert self.graphrecord.query_nodes(mode) == [2.25]
-        assert self.graphrecord.query_nodes(unique_count) == 2
-        assert self.graphrecord.query_nodes(random) in {
-            ("n1", -1.5),
-            ("n2", 2.25),
-            ("n3", 2.25),
-        }
-        assert self.graphrecord.query_nodes(count) == 3
-        assert self.graphrecord.query_nodes(sum_) == 3
-        assert self.graphrecord.query_nodes(mean) == 1
-        assert self.graphrecord.query_nodes(standard_deviation) == pytest.approx(
-            2.1650635095
-        )
-        assert self.graphrecord.query_nodes(variance) == 4.6875
-
-    def test_ordering_and_uniqueness(self) -> None:
-        def first(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Single]:
-            return nodes.attribute("integer").sort().first()
-
-        def last(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Single]:
-            return nodes.attribute("integer").sort().last()
-
-        def reverse_order(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
-            return nodes.attribute("integer").sort().reverse_order()
-
-        def take(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
-            return nodes.attribute("integer").sort().take(2)
-
-        def shuffle(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
-            return nodes.attribute("integer").shuffle()
-
-        def unorder(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("integer").sort().unorder()
-
-        def sort(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
-            return nodes.attribute("number").sort()
-
-        def sort_by(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
-            return nodes.attribute("text").sort_by(nodes.attribute("integer").neg())
-
-        def drop_duplicates(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Ordered]]:
-            return nodes.attribute("number").sort().drop_duplicates()
-
-        def is_duplicated(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number").is_duplicated()
-
-        def unique(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").discard_index().unique()
-
-        assert self.graphrecord.query_nodes(first) == ("n1", 1)
-        assert self.graphrecord.query_nodes(last) == ("n3", 3)
-        assert self.graphrecord.query_nodes(reverse_order) == [
-            ("n3", 3),
-            ("n2", 2),
-            ("n1", 1),
-        ]
-        assert self.graphrecord.query_nodes(take) == [("n1", 1), ("n2", 2)]
-        assert sorted(self.graphrecord.query_nodes(shuffle)) == [
-            ("n1", 1),
-            ("n2", 2),
-            ("n3", 3),
-        ]
-        assert sorted(self.graphrecord.query_nodes(unorder)) == [
-            ("n1", 1),
-            ("n2", 2),
-            ("n3", 3),
-        ]
-        assert self.graphrecord.query_nodes(sort) == [
-            ("n1", -1.5),
-            ("n2", 2.25),
-            ("n3", 2.25),
-        ]
-        assert self.graphrecord.query_nodes(sort_by) == [
-            ("n3", "Gamma"),
-            ("n2", "Beta"),
-            ("n1", " Alpha "),
-        ]
-        assert self.graphrecord.query_nodes(drop_duplicates) == [
-            ("n1", -1.5),
-            ("n2", 2.25),
-        ]
-        assert dict(self.graphrecord.query_nodes(is_duplicated)) == {
-            "n1": False,
-            "n2": True,
-            "n3": True,
-        }
-        assert set(self.graphrecord.query_nodes(unique)) == {-1.5, 2.25}
-
-    def test_membership_cast_and_clip(self) -> None:
-        def is_in(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("integer").is_in([1, 3])
-
-        def clip(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").clip(0, 2)
-
-        def is_in_operand(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("integer").is_in(nodes.attribute("integer"))
-
-        def cast(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("integer").cast(CastTarget.String)
-
-        assert dict(self.graphrecord.query_nodes(is_in)) == {
-            "n1": True,
-            "n2": False,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(is_in_operand)) == {
-            "n1": True,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(clip)) == {
-            "n1": 0.0,
-            "n2": 2.0,
-            "n3": 2.0,
-        }
-        assert dict(self.graphrecord.query_nodes(cast)) == {
-            "n1": "1",
-            "n2": "2",
-            "n3": "3",
-        }
-
-    def test_logic_and_filter(self) -> None:
-        def and_(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return (
-                nodes.attribute("number")
-                .greater_than(0)
-                .and_(nodes.attribute("integer").less_than(3))
-            )
-
-        def or_(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return (
-                nodes.attribute("number")
-                .less_than(0)
-                .or_(nodes.attribute("integer").equal_to(3))
-            )
-
-        def xor(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return (
-                nodes.attribute("flag")
-                .transition(ValueTarget.Mask)
-                .xor(nodes.attribute("integer").equal_to(3))
-            )
-
-        def not_(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("flag").transition(ValueTarget.Mask).not_()
-
-        def filter_(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.attribute("number").greater_than(0))
-
-        def all_(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Mask], Definite]:
-            return nodes.attribute("integer").greater_than(0).all()
-
-        def any_(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Mask], Definite]:
-            return nodes.attribute("number").less_than(0).any()
-
-        assert dict(self.graphrecord.query_nodes(and_)) == {
-            "n1": False,
-            "n2": True,
-            "n3": False,
-        }
-        assert dict(self.graphrecord.query_nodes(or_)) == {
-            "n1": True,
-            "n2": False,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(xor)) == {
-            "n1": True,
-            "n2": False,
-            "n3": False,
-        }
-        assert dict(self.graphrecord.query_nodes(not_)) == {
-            "n1": False,
-            "n2": True,
-            "n3": False,
-        }
-        assert set(self.graphrecord.query_nodes(filter_)) == {"n2", "n3"}
-        assert self.graphrecord.query_nodes(all_) is True
-        assert self.graphrecord.query_nodes(any_) is True
-
-    def test_operator_forms(self) -> None:
-        def add(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number") + 2
-
-        def negate(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return -nodes.attribute("number")
-
-        def greater_than(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number") > 0
-
-        def equal_to(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number") == 2.25
-
-        def not_equal_to(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("number") != 2.25
-
-        def conjunction(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return (nodes.attribute("number") > 0) & (nodes.attribute("integer") < 3)
-
-        assert dict(self.graphrecord.query_nodes(add))["n1"] == 0.5
-        assert dict(self.graphrecord.query_nodes(negate))["n2"] == -2.25
-        assert dict(self.graphrecord.query_nodes(greater_than))["n2"] is True
-        assert dict(self.graphrecord.query_nodes(equal_to)) == {
-            "n1": False,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(not_equal_to))["n1"] is True
-        assert dict(self.graphrecord.query_nodes(conjunction)) == {
-            "n1": False,
-            "n2": True,
-            "n3": False,
-        }
-
-    def test_missing_argument_policies(self) -> None:
-        def dropping(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            width = nodes.filter(nodes.index().equal_to("n1")).attribute("integer")
-            return (
-                nodes.attribute("text").trim().pad_start(width.on_missing(Drop()), ".")
-            )
-
-        def replacing(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            width = nodes.filter(nodes.index().equal_to("n1")).attribute("integer")
-            return (
-                nodes.attribute("text")
-                .trim()
-                .pad_start(width.on_missing(Replace(6)), ".")
-            )
-
-        assert self.graphrecord.query_nodes(dropping) == [("n1", "Alpha")]
-        assert dict(self.graphrecord.query_nodes(replacing)) == {
-            "n1": "Alpha",
-            "n2": "..Beta",
-            "n3": ".Gamma",
-        }
-
-    def test_index_and_conversion_operations(self) -> None:
-        def index(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[NodeIndex, IndexValue[NodeIndex]],
-            Multiple[Unordered],
-        ]:
-            return nodes.index()
-
-        def discard_value(nodes: NodesOperand) -> NodesOperand:
-            return nodes.attribute("number").discard_value()
-
-        def resolve_and_select(nodes: NodesOperand) -> NodesOperand:
-            return nodes.index().resolve().select()
-
-        def enumerate_(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[Positional, Scalar], Multiple[Ordered]]:
-            return nodes.attribute("integer").sort().discard_index().enumerate()
-
-        def transition(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.index().transition(ValueTarget.Value)
-
-        def parent_index(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
-                IndexValue[NodeIndex],
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.attribute("text")
-                .split("a")
-                .discard_value()
-                .index()
-                .parent_index()
-            )
-
-        def child_index(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
-                IndexValue[Positional],
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.attribute("text").split("a").discard_value().index().child_index()
-            )
-
-        def expand_to(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
-                Scalar,
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.attribute("text").split("a").expand_to(nodes.attribute("integer"))
-            )
-
-        assert dict(self.graphrecord.query_nodes(index)) == {
-            "n1": "n1",
-            "n2": "n2",
-            "n3": "n3",
-        }
-        assert set(self.graphrecord.query_nodes(discard_value)) == {"n1", "n2", "n3"}
-        assert set(self.graphrecord.query_nodes(resolve_and_select)) == {
-            "n1",
-            "n2",
-            "n3",
-        }
-        assert self.graphrecord.query_nodes(enumerate_) == [(0, 1), (1, 2), (2, 3)]
-        assert dict(self.graphrecord.query_nodes(transition)) == {
-            "n1": "n1",
-            "n2": "n2",
-            "n3": "n3",
-        }
-        assert sorted(self.graphrecord.query_nodes(parent_index)) == [
-            (("n1", 0), "n1"),
-            (("n1", 1), "n1"),
-            (("n2", 0), "n2"),
-            (("n2", 1), "n2"),
-            (("n3", 0), "n3"),
-            (("n3", 1), "n3"),
-            (("n3", 2), "n3"),
-        ]
-        assert sorted(self.graphrecord.query_nodes(child_index)) == [
-            (("n1", 0), 0),
-            (("n1", 1), 1),
-            (("n2", 0), 0),
-            (("n2", 1), 1),
-            (("n3", 0), 0),
-            (("n3", 1), 1),
-            (("n3", 2), 2),
-        ]
-        assert sorted(self.graphrecord.query_nodes(expand_to)) == [
-            (("n1", 0), 1),
-            (("n1", 1), 1),
-            (("n2", 0), 2),
-            (("n2", 1), 2),
-            (("n3", 0), 3),
-            (("n3", 1), 3),
-            (("n3", 2), 3),
-        ]
+        assert empty.max().evaluate() is None
+        assert self.record.nodes().filter(NEVER).count().evaluate() == 0
 
 
-class TestConversionOperand(unittest.TestCase):
+class TestTraversals(unittest.TestCase):
     def setUp(self) -> None:
-        self.graphrecord = GraphRecord.from_tuples(
-            [
-                (
-                    "n1",
-                    {
-                        "number": -1.5,
-                        "integer": 1,
-                        "text": "Alpha",
-                        "flag": True,
-                        "moment": datetime(2024, 1, 1),
-                        "duration": timedelta(hours=1),
-                        "nothing": None,
-                    },
-                ),
-                (
-                    "n2",
-                    {
-                        "number": 2.25,
-                        "integer": 2,
-                        "text": "Beta",
-                        "flag": False,
-                        "moment": datetime(2024, 1, 2),
-                        "duration": timedelta(hours=2),
-                        "nothing": None,
-                    },
-                ),
-                (
-                    "n3",
-                    {
-                        "number": 2.25,
-                        "integer": 3,
-                        "text": "Gamma",
-                        "flag": True,
-                        "moment": datetime(2024, 1, 3),
-                        "duration": timedelta(hours=3),
-                        "nothing": None,
-                    },
-                ),
-            ]
+        self.record = create_record()
+
+    def test_edges(self) -> None:
+        assert len(list(self.record.nodes().edges().evaluate())) == 3
+        assert (
+            len(list(self.record.nodes().edges(EdgeDirection.Outgoing).evaluate())) == 3
+        )
+        assert (
+            len(list(self.record.nodes().edges(EdgeDirection.Incoming).evaluate())) == 3
+        )
+        assert len(list(self.record.nodes().edges(EdgeDirection.Both).evaluate())) == 3
+
+    def test_via_edges(self) -> None:
+        assert len(list(self.record.nodes().via_edges().evaluate())) == 6
+        assert (
+            len(list(self.record.nodes().via_edges(EdgeDirection.Outgoing).evaluate()))
+            == 3
         )
 
-    def test_cast_scalar_targets(self) -> None:
-        def to_bool(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("integer").cast(CastTarget.Bool)
-
-        def to_bool_from_bool(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("flag").cast(CastTarget.Bool)
-
-        def to_int(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("number").cast(CastTarget.Int)
-
-        def to_int_from_bool(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("flag").cast(CastTarget.Int)
-
-        def to_float(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("integer").cast(CastTarget.Float)
-
-        def to_string(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("flag").cast(CastTarget.String)
-
-        def to_duration(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("integer").cast(CastTarget.Duration)
-
-        def to_datetime(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("integer").cast(CastTarget.DateTime)
-
-        assert dict(self.graphrecord.query_nodes(to_bool)) == {
-            "n1": True,
-            "n2": True,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(to_bool_from_bool)) == {
-            "n1": True,
-            "n2": False,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(to_int)) == {
-            "n1": -1,
-            "n2": 2,
-            "n3": 2,
-        }
-        assert dict(self.graphrecord.query_nodes(to_int_from_bool)) == {
-            "n1": 1,
-            "n2": 0,
-            "n3": 1,
-        }
-        assert dict(self.graphrecord.query_nodes(to_float)) == {
-            "n1": 1.0,
-            "n2": 2.0,
-            "n3": 3.0,
-        }
-        assert dict(self.graphrecord.query_nodes(to_string)) == {
-            "n1": "true",
-            "n2": "false",
-            "n3": "true",
-        }
-        assert dict(self.graphrecord.query_nodes(to_duration)) == {
-            "n1": timedelta(milliseconds=1),
-            "n2": timedelta(milliseconds=2),
-            "n3": timedelta(milliseconds=3),
-        }
-        assert dict(self.graphrecord.query_nodes(to_datetime)) == {
-            "n1": datetime(1970, 1, 1) + timedelta(milliseconds=1),
-            "n2": datetime(1970, 1, 1) + timedelta(milliseconds=2),
-            "n3": datetime(1970, 1, 1) + timedelta(milliseconds=3),
-        }
-
-    def test_cast_bare_receiver(self) -> None:
-        def bare_cast(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Multiple[Unordered]]:
-            return nodes.attribute("integer").discard_index().cast(CastTarget.String)
-
-        assert set(self.graphrecord.query_nodes(bare_cast)) == {"1", "2", "3"}
-
-    def test_cast_failures(self) -> None:
-        def unparsable_text(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite]:
-            return nodes.attribute("text").cast(CastTarget.Int).errors().count()
-
-        def datetime_to_bool(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite]:
-            return nodes.attribute("moment").cast(CastTarget.Bool).errors().count()
-
-        def null_to_int(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite]:
-            return nodes.attribute("nothing").cast(CastTarget.Int).errors().count()
-
-        def dropped(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").cast(CastTarget.Int).on_error(Drop())
-
-        def raised(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("text").cast(CastTarget.Int).on_error(Raise())
-
-        assert self.graphrecord.query_nodes(unparsable_text) == 3
-        assert self.graphrecord.query_nodes(datetime_to_bool) == 3
-        assert self.graphrecord.query_nodes(null_to_int) == 3
-        assert self.graphrecord.query_nodes(dropped) == []
-        with pytest.raises(QueryError, match="cast"):
-            self.graphrecord.query_nodes(raised)
-
-    def test_cast_attribute_name_targets(self) -> None:
-        def to_string(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[
-                    NodeIndex,
-                    AttributeNameIndex,
-                    Tuple[Union[str, int], Optional[Union[str, int]]],
-                ],
-                AttributeName,
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.filter(nodes.index().equal_to("n1"))
-                .attributes()
-                .cast(CastTarget.String)
-            )
-
-        def to_int_failures(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite]:
-            return (
-                nodes.filter(nodes.index().equal_to("n1"))
-                .attributes()
-                .cast(CastTarget.Int)
-                .errors()
-                .count()
-            )
-
-        assert {value for _, value in self.graphrecord.query_nodes(to_string)} == {
-            "duration",
-            "flag",
-            "integer",
-            "moment",
-            "nothing",
-            "number",
-            "text",
-        }
-        assert self.graphrecord.query_nodes(to_int_failures) == 7
-
-    def test_discard_index_and_discard_value(self) -> None:
-        def discard_index(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Multiple[Unordered]]:
-            return nodes.attribute("integer").discard_index()
-
-        def discard_value(nodes: NodesOperand) -> NodesOperand:
-            return nodes.attribute("integer").discard_value()
-
-        assert set(self.graphrecord.query_nodes(discard_index)) == {1, 2, 3}
-        assert set(self.graphrecord.query_nodes(discard_value)) == {"n1", "n2", "n3"}
-
-    def test_enumerate_receivers(self) -> None:
-        def indexed_receiver(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[Positional, Scalar], Multiple[Ordered]]:
-            return nodes.attribute("integer").sort().enumerate()
-
-        def bare_receiver(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[Positional, Scalar], Multiple[Ordered]]:
-            return nodes.attribute("integer").sort().discard_index().enumerate()
-
-        assert self.graphrecord.query_nodes(indexed_receiver) == [
-            (0, 1),
-            (1, 2),
-            (2, 3),
-        ]
-        assert self.graphrecord.query_nodes(bare_receiver) == [(0, 1), (1, 2), (2, 3)]
-
-    def test_expand_to_argument_derived_value(self) -> None:
-        def scalar_template(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
-                Scalar,
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.attribute("text").split("a").expand_to(nodes.attribute("integer"))
-            )
-
-        def mask_template(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
-                Mask,
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.attribute("text")
-                .split("a")
-                .expand_to(nodes.has_attribute("integer"))
-            )
-
-        def literal_template(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
-                Scalar,
-            ],
-            Multiple[Unordered],
-        ]:
-            return nodes.attribute("text").split("a").expand_to(0)
-
-        assert sorted(self.graphrecord.query_nodes(scalar_template)) == [
-            (("n1", 0), 1),
-            (("n1", 1), 1),
-            (("n2", 0), 2),
-            (("n2", 1), 2),
-            (("n3", 0), 3),
-            (("n3", 1), 3),
-            (("n3", 2), 3),
-        ]
-        assert sorted(self.graphrecord.query_nodes(mask_template)) == [
-            (("n1", 0), True),
-            (("n1", 1), True),
-            (("n2", 0), True),
-            (("n2", 1), True),
-            (("n3", 0), True),
-            (("n3", 1), True),
-            (("n3", 2), True),
-        ]
-        assert sorted(self.graphrecord.query_nodes(literal_template)) == [
-            (("n1", 0), 0),
-            (("n1", 1), 0),
-            (("n2", 0), 0),
-            (("n2", 1), 0),
-            (("n3", 0), 0),
-            (("n3", 1), 0),
-            (("n3", 2), 0),
+    def test_neighbors(self) -> None:
+        assert list(
+            self.record.nodes().neighbors(EdgeDirection.Outgoing).evaluate()
+        ) == ["ipsum", "dolor"]
+        assert list(self.record.nodes().neighbors().evaluate()) == [
+            "ipsum",
+            "dolor",
+            "lorem",
         ]
 
-    def test_expand_to_grouped_template(self) -> None:
-        def grouped(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
-                Scalar,
-            ],
-            Multiple[Unordered],
-            Grouped[NodeIndex, ValueIndex],
-        ]:
-            return (
-                nodes.group_by(nodes.attribute("flag"))
-                .attribute("text")
-                .split("a")
-                .expand_to(nodes.attribute("integer"))
-            )
-
-        group_result = self.graphrecord.query_nodes(grouped)
-        result = {bucket.key: bucket.payload for bucket in group_result.buckets()}
-        flagged = result[True]
-        unflagged = result[False]
-
-        assert group_result.key_failures() == []
-        assert not isinstance(flagged, QueryError)
-        assert not isinstance(unflagged, QueryError)
-        assert sorted(flagged) == [
-            (("n1", 0), 1),
-            (("n1", 1), 1),
-            (("n3", 0), 3),
-            (("n3", 1), 3),
-            (("n3", 2), 3),
+    def test_via_neighbors(self) -> None:
+        assert list(
+            self.record.nodes().via_neighbors(EdgeDirection.Outgoing).evaluate()
+        ) == [
+            (("lorem", "ipsum"), "ipsum"),
+            (("lorem", "dolor"), "dolor"),
+            (("ipsum", "dolor"), "dolor"),
         ]
-        assert sorted(unflagged) == [(("n2", 0), 2), (("n2", 1), 2)]
 
-    def test_transition_targets(self) -> None:
-        def scalar_to_mask(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return nodes.attribute("flag").transition(ValueTarget.Mask)
+    def test_nodes(self) -> None:
+        assert list(self.record.edges().nodes().evaluate()) == [
+            "lorem",
+            "ipsum",
+            "dolor",
+        ]
 
-        def scalar_to_attribute_name(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, AttributeName], Multiple[Unordered]]:
-            return nodes.attribute("text").transition(ValueTarget.AttributeName)
+    def test_via_nodes(self) -> None:
+        endpoints = list(self.record.edges().via_nodes().evaluate())
 
-        def scalar_to_value_index(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return (
-                nodes.attribute("integer")
-                .transition(ValueTarget.ValueIndex)
-                .transition(ValueTarget.Value)
-            )
+        assert len(endpoints) == 6
+        assert endpoints[0][0][1] == EdgeEndpointRole.Source
+        assert endpoints[1][0][1] == EdgeEndpointRole.Target
 
-        def node_index_to_scalar(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.index().transition(ValueTarget.Value)
+    def test_source_node(self) -> None:
+        assert list(self.record.edges().source_node().evaluate()) == ["lorem", "ipsum"]
 
-        def mask_to_bool_index(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Mask], Multiple[Unordered]]:
-            return (
-                nodes.has_attribute("integer")
-                .transition(ValueTarget.BoolIndex)
-                .transition(ValueTarget.Mask)
-            )
+    def test_target_node(self) -> None:
+        assert list(self.record.edges().target_node().evaluate()) == ["ipsum", "dolor"]
 
-        assert dict(self.graphrecord.query_nodes(scalar_to_mask)) == {
-            "n1": True,
-            "n2": False,
-            "n3": True,
-        }
-        assert dict(self.graphrecord.query_nodes(scalar_to_attribute_name)) == {
-            "n1": "Alpha",
-            "n2": "Beta",
-            "n3": "Gamma",
-        }
-        assert dict(self.graphrecord.query_nodes(scalar_to_value_index)) == {
-            "n1": 1,
-            "n2": 2,
-            "n3": 3,
-        }
-        assert dict(self.graphrecord.query_nodes(node_index_to_scalar)) == {
-            "n1": "n1",
-            "n2": "n2",
-            "n3": "n3",
-        }
-        assert dict(self.graphrecord.query_nodes(mask_to_bool_index)) == {
-            "n1": True,
-            "n2": True,
-            "n3": True,
-        }
+    def test_via_source_node(self) -> None:
+        assert [
+            value for _, value in self.record.edges().via_source_node().evaluate()
+        ] == ["lorem", "ipsum", "lorem"]
+
+    def test_via_target_node(self) -> None:
+        assert [
+            value for _, value in self.record.edges().via_target_node().evaluate()
+        ] == ["ipsum", "dolor", "dolor"]
+
+    def test_resolve(self) -> None:
+        assert list(self.record.nodes().index().resolve().evaluate()) == [
+            ("lorem", "lorem"),
+            ("ipsum", "ipsum"),
+            ("dolor", "dolor"),
+            ("sit", "sit"),
+        ]
+
+    def test_select(self) -> None:
+        assert len(list(self.record.nodes().via_edges().select().evaluate())) == 3
 
 
-class TestComplexQuery(unittest.TestCase):
+class TestGroupLanes(unittest.TestCase):
     def setUp(self) -> None:
-        self.graphrecord = GraphRecord.from_tuples(
-            [
-                ("n1", {"tier": "a", "flag": True, "size": 1, "text": "x-y"}),
-                ("n2", {"tier": "a", "flag": False, "size": 2, "text": "p-q"}),
-                ("n3", {"tier": "b", "flag": True, "size": 3, "text": "m-n"}),
-                ("n4", {"tier": "b", "flag": True, "size": 4, "text": "u-v"}),
-            ],
-            [("n1", "n2", {}), ("n2", "n3", {}), ("n3", "n4", {})],
-        )
+        self.record = create_record()
 
-    def test_three_hop_expanded_carrier(self) -> None:
-        def three_hops(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[
-                    Expanded[
-                        Expanded[
-                            NodeIndex,
-                            NodeIndex,
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                        ],
-                        NodeIndex,
-                        Tuple[
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                            Optional[Union[str, int]],
-                        ],
-                    ],
-                    NodeIndex,
-                    Tuple[
-                        Tuple[
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                            Optional[Union[str, int]],
-                        ],
-                        Optional[Union[str, int]],
-                    ],
-                ],
-                IndexValue[NodeIndex],
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.filter(nodes.index().equal_to("n1"))
-                .via_neighbors(EdgeDirection.Outgoing)
-                .via_neighbors(EdgeDirection.Outgoing)
-                .via_neighbors(EdgeDirection.Outgoing)
-                .index()
-            )
+    def test_groups(self) -> None:
+        assert list(self.record.nodes().groups().evaluate()) == ["elit"]
 
-        def third_child(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[
-                    Expanded[
-                        Expanded[
-                            NodeIndex,
-                            NodeIndex,
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                        ],
-                        NodeIndex,
-                        Tuple[
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                            Optional[Union[str, int]],
-                        ],
-                    ],
-                    NodeIndex,
-                    Tuple[
-                        Tuple[
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                            Optional[Union[str, int]],
-                        ],
-                        Optional[Union[str, int]],
-                    ],
-                ],
-                IndexValue[NodeIndex],
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.filter(nodes.index().equal_to("n1"))
-                .via_neighbors(EdgeDirection.Outgoing)
-                .via_neighbors(EdgeDirection.Outgoing)
-                .via_neighbors(EdgeDirection.Outgoing)
-                .discard_value()
-                .index()
-                .child_index()
-            )
-
-        def second_child(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[
-                    Expanded[
-                        Expanded[
-                            NodeIndex,
-                            NodeIndex,
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                        ],
-                        NodeIndex,
-                        Tuple[
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                            Optional[Union[str, int]],
-                        ],
-                    ],
-                    NodeIndex,
-                    Tuple[
-                        Tuple[
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                            Optional[Union[str, int]],
-                        ],
-                        Optional[Union[str, int]],
-                    ],
-                ],
-                IndexValue[NodeIndex],
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.filter(nodes.index().equal_to("n1"))
-                .via_neighbors(EdgeDirection.Outgoing)
-                .via_neighbors(EdgeDirection.Outgoing)
-                .via_neighbors(EdgeDirection.Outgoing)
-                .discard_value()
-                .index()
-                .parent_index()
-                .child_index()
-            )
-
-        def first_child(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[
-                    Expanded[
-                        Expanded[
-                            NodeIndex,
-                            NodeIndex,
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                        ],
-                        NodeIndex,
-                        Tuple[
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                            Optional[Union[str, int]],
-                        ],
-                    ],
-                    NodeIndex,
-                    Tuple[
-                        Tuple[
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                            Optional[Union[str, int]],
-                        ],
-                        Optional[Union[str, int]],
-                    ],
-                ],
-                IndexValue[NodeIndex],
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.filter(nodes.index().equal_to("n1"))
-                .via_neighbors(EdgeDirection.Outgoing)
-                .via_neighbors(EdgeDirection.Outgoing)
-                .via_neighbors(EdgeDirection.Outgoing)
-                .discard_value()
-                .index()
-                .parent_index()
-                .parent_index()
-                .child_index()
-            )
-
-        def root(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[
-                    Expanded[
-                        Expanded[
-                            NodeIndex,
-                            NodeIndex,
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                        ],
-                        NodeIndex,
-                        Tuple[
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                            Optional[Union[str, int]],
-                        ],
-                    ],
-                    NodeIndex,
-                    Tuple[
-                        Tuple[
-                            Tuple[Union[str, int], Optional[Union[str, int]]],
-                            Optional[Union[str, int]],
-                        ],
-                        Optional[Union[str, int]],
-                    ],
-                ],
-                IndexValue[NodeIndex],
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.filter(nodes.index().equal_to("n1"))
-                .via_neighbors(EdgeDirection.Outgoing)
-                .via_neighbors(EdgeDirection.Outgoing)
-                .via_neighbors(EdgeDirection.Outgoing)
-                .discard_value()
-                .index()
-                .parent_index()
-                .parent_index()
-                .parent_index()
-            )
-
-        deepest = ((("n1", "n2"), "n3"), "n4")
-
-        assert self.graphrecord.query_nodes(three_hops) == [(deepest, "n4")]
-        assert self.graphrecord.query_nodes(third_child) == [(deepest, "n4")]
-        assert self.graphrecord.query_nodes(second_child) == [(deepest, "n3")]
-        assert self.graphrecord.query_nodes(first_child) == [(deepest, "n2")]
-        assert self.graphrecord.query_nodes(root) == [(deepest, "n1")]
-
-    def test_via_edges_then_via_nodes(self) -> None:
-        def endpoints(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[
-                    Expanded[
-                        NodeIndex, EdgeIndex, Tuple[Union[str, int], Optional[int]]
-                    ],
-                    EndpointRole,
-                    Tuple[
-                        Tuple[Union[str, int], Optional[int]],
-                        Optional[EdgeEndpointRole],
-                    ],
-                ],
-                IndexValue[NodeIndex],
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.filter(nodes.index().equal_to("n1"))
-                .via_edges(EdgeDirection.Outgoing)
-                .via_nodes()
-                .index()
-            )
-
-        assert set(self.graphrecord.query_nodes(endpoints)) == {
-            ((("n1", 0), EdgeEndpointRole.Source), "n1"),
-            ((("n1", 0), EdgeEndpointRole.Target), "n2"),
-        }
-
-    def test_depth_three_grouping(self) -> None:
-        def innermost_work_fully_unwound(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Scalar], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("tier"))
-                .group_by(nodes.attribute("flag"))
-                .group_by(nodes.attribute("size"))
-                .attribute("size")
-                .sum()
-                .ungroup_keyed()
-                .ungroup()
-                .ungroup()
-            )
-
-        def innermost_keys(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("tier"))
-                .group_by(nodes.attribute("flag"))
-                .group_by(nodes.attribute("size"))
-                .keys()
-                .ungroup()
-                .ungroup()
-            )
-
-        def middle_keys(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("tier"))
-                .group_by(nodes.attribute("flag"))
-                .group_by(nodes.attribute("size"))
-                .ungroup()
-                .keys()
-                .ungroup()
-            )
-
-        def outer_keys(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("tier"))
-                .group_by(nodes.attribute("flag"))
-                .group_by(nodes.attribute("size"))
-                .ungroup()
-                .ungroup()
-                .keys()
-            )
-
-        def members_after_two_unwinds(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("tier"))
-                .group_by(nodes.attribute("flag"))
-                .group_by(nodes.attribute("size"))
-                .attribute("size")
-                .ungroup()
-                .ungroup()
-                .ungroup()
-            )
-
-        assert sorted(self.graphrecord.query_nodes(innermost_work_fully_unwound)) == [
-            (1, 1),
-            (2, 2),
-            (3, 3),
-            (4, 4),
-        ]
-        assert set(self.graphrecord.query_nodes(innermost_keys)) == {1, 2, 3, 4}
-        with pytest.raises(DuplicateIndexError, match="occurs more than once"):
-            self.graphrecord.query_nodes(middle_keys)
-        assert set(self.graphrecord.query_nodes(outer_keys)) == {"a", "b"}
-        assert sorted(self.graphrecord.query_nodes(members_after_two_unwinds)) == [
-            ("n1", 1),
-            ("n2", 2),
-            ("n3", 3),
-            ("n4", 4),
+    def test_via_groups(self) -> None:
+        assert list(self.record.nodes().via_groups().evaluate()) == [
+            (("lorem", "elit"), "elit"),
+            (("ipsum", "elit"), "elit"),
         ]
 
-    def test_depth_three_grouped_result(self) -> None:
-        def per_level_totals(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Bare[Scalar],
-            Single,
-            Grouped[NodeIndex, ValueIndex],
-            Grouped[NodeIndex, ValueIndex],
-            Grouped[NodeIndex, ValueIndex],
-        ]:
-            return (
-                nodes.group_by(nodes.attribute("tier"))
-                .group_by(nodes.attribute("flag"))
-                .group_by(nodes.attribute("size"))
-                .attribute("size")
-                .sum()
-            )
-
-        group_result = self.graphrecord.query_nodes(per_level_totals)
-        totals: Dict[Tuple[IndexPayload, IndexPayload, IndexPayload], ScalarValue] = {}
-        flag_keys: Dict[IndexPayload, Set[IndexPayload]] = {}
-
-        assert group_result.key_failures() == []
-
-        for tier_bucket in group_result.buckets():
-            tier_payload = tier_bucket.payload
-            assert not isinstance(tier_payload, QueryError)
-            assert tier_payload.key_failures() == []
-            flag_keys[tier_bucket.key] = {
-                flag_bucket.key for flag_bucket in tier_payload.buckets()
-            }
-
-            for flag_bucket in tier_payload.buckets():
-                flag_payload = flag_bucket.payload
-                assert not isinstance(flag_payload, QueryError)
-                assert flag_payload.key_failures() == []
-
-                for size_bucket in flag_payload.buckets():
-                    size_payload = size_bucket.payload
-                    assert not isinstance(size_payload, QueryError)
-                    totals[tier_bucket.key, flag_bucket.key, size_bucket.key] = (
-                        size_payload
-                    )
-
-        assert {bucket.key for bucket in group_result.buckets()} == {"a", "b"}
-        assert flag_keys == {"a": {False, True}, "b": {True}}
-        assert totals == {
-            ("a", True, 1): 1,
-            ("a", False, 2): 2,
-            ("b", True, 3): 3,
-            ("b", True, 4): 4,
-        }
-
-    def test_mixed_axis_expansion_inside_group(self) -> None:
-        def split_at_depth(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, Positional, Tuple[Union[str, int], Optional[int]]],
-                Scalar,
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.group_by(nodes.attribute("tier"))
-                .attribute("text")
-                .split("-")
-                .length()
-                .ungroup()
-            )
-
-        assert sorted(self.graphrecord.query_nodes(split_at_depth)) == [
-            (("n1", 0), 1),
-            (("n1", 1), 1),
-            (("n2", 0), 1),
-            (("n2", 1), 1),
-            (("n3", 0), 1),
-            (("n3", 1), 1),
-            (("n4", 0), 1),
-            (("n4", 1), 1),
-        ]
-
-    def test_mixed_axis_group_over_expanded_lane(self) -> None:
-        def group_expanded(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[ValueIndex, Scalar],
-            Multiple[Unordered],
-        ]:
-            fragments = nodes.attribute("text").split("-")
-            return fragments.group_by(fragments.length()).length().sum().ungroup_keyed()
-
-        assert self.graphrecord.query_nodes(group_expanded) == [(1, 8)]
-
-    def test_multi_branch_filter(self) -> None:
-        def branches(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            small = nodes.attribute("size").less_than(3)
-            tier_b = nodes.attribute("tier").equal_to("b")
-            unflagged = nodes.attribute("flag").transition(ValueTarget.Mask)
-            return nodes.filter((small & tier_b) | ~unflagged).attribute("size")
-
-        assert sorted(self.graphrecord.query_nodes(branches)) == [("n2", 2)]
-
-    def test_cross_lane_aggregate_argument(self) -> None:
-        def above_mean(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            sizes = nodes.attribute("size")
-            return nodes.filter(sizes.greater_than(sizes.mean())).attribute("size")
-
-        assert sorted(self.graphrecord.query_nodes(above_mean)) == [
-            ("n3", 3),
-            ("n4", 4),
-        ]
-
-    def test_worst_case_combination(self) -> None:
-        def combined(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Bare[Scalar],
-            Single,
-            Grouped[NodeIndex, ValueIndex],
-            Grouped[NodeIndex, ValueIndex],
-        ]:
-            sizes = nodes.attribute("size")
-            reached = nodes.filter(sizes.greater_than(sizes.mean())).via_neighbors(
-                EdgeDirection.Outgoing
-            )
-            return (
-                reached.select()
-                .group_by(nodes.attribute("tier"))
-                .group_by(nodes.attribute("flag"))
-                .attribute("size")
-                .sum()
-            )
-
-        def failure_path(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, FailureValue], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("tier"))
-                .group_by(nodes.attribute("flag"))
-                .attribute("missing")
-                .sum()
-                .bucket_errors()
-                .ungroup()
-            )
-
-        group_result = self.graphrecord.query_nodes(combined)
-        tier_bucket = group_result.buckets()[0]
-        tier_payload = tier_bucket.payload
-
-        assert group_result.key_failures() == []
-        assert len(group_result.buckets()) == 1
-        assert tier_bucket.key == "b"
-        assert not isinstance(tier_payload, QueryError)
-        assert tier_payload.key_failures() == []
-        assert [(bucket.key, bucket.payload) for bucket in tier_payload.buckets()] == [
-            (True, 4)
-        ]
-        with pytest.raises(DuplicateIndexError, match="occurs more than once"):
-            self.graphrecord.query_nodes(failure_path)
-
-
-class TestTraversalOperand(unittest.TestCase):
-    def setUp(self) -> None:
-        self.graphrecord = GraphRecord.from_tuples(
-            [("n1", {}), ("n2", {}), ("n3", {})],
-            [("n1", "n2", {}), ("n1", "n3", {}), ("n2", "n3", {})],
-        )
-
-    def test_direct_traversal(self) -> None:
-        def edges(nodes: NodesOperand) -> EdgesOperand:
-            return nodes.filter(nodes.index().equal_to("n1")).edges(
-                EdgeDirection.Outgoing
-            )
-
-        def neighbors(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().equal_to("n1")).neighbors(
-                EdgeDirection.Outgoing
-            )
-
-        def source_node(
-            edges: EdgesOperand,
-        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered]]:
-            return edges.source_node()
-
-        def target_node(
-            edges: EdgesOperand,
-        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered]]:
-            return edges.target_node()
-
-        def nodes(
-            edges: EdgesOperand,
-        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered]]:
-            return edges.nodes()
-
-        assert set(self.graphrecord.query_nodes(edges)) == {0, 1}
-        assert set(self.graphrecord.query_nodes(neighbors)) == {"n2", "n3"}
-        assert set(self.graphrecord.query_edges(source_node)) == {"n1", "n2"}
-        assert set(self.graphrecord.query_edges(target_node)) == {"n2", "n3"}
-        assert set(self.graphrecord.query_edges(nodes)) == {"n1", "n2", "n3"}
-
-    def test_reference_preserving_traversal(self) -> None:
-        def via_edges(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, EdgeIndex, Tuple[Union[str, int], Optional[int]]],
-                IndexValue[EdgeIndex],
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.filter(nodes.index().equal_to("n1"))
-                .via_edges(EdgeDirection.Outgoing)
-                .index()
-            )
-
-        def via_neighbors(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[
-                    NodeIndex,
-                    NodeIndex,
-                    Tuple[Union[str, int], Optional[Union[str, int]]],
-                ],
-                IndexValue[NodeIndex],
-            ],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.filter(nodes.index().equal_to("n1"))
-                .via_neighbors(EdgeDirection.Outgoing)
-                .index()
-            )
-
-        def via_nodes(
-            edges: EdgesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[
-                    EdgeIndex, EndpointRole, Tuple[int, Optional[EdgeEndpointRole]]
-                ],
-                IndexValue[NodeIndex],
-            ],
-            Multiple[Unordered],
-        ]:
-            return edges.via_nodes().index()
-
-        def via_source_node(
-            edges: EdgesOperand,
-        ) -> Operand[
-            Indexed[EdgeIndex, IndexValue[NodeIndex]],
-            Multiple[Unordered],
-        ]:
-            return edges.via_source_node().index()
-
-        def via_target_node(
-            edges: EdgesOperand,
-        ) -> Operand[
-            Indexed[EdgeIndex, IndexValue[NodeIndex]],
-            Multiple[Unordered],
-        ]:
-            return edges.via_target_node().index()
-
-        def expanded_index_equality(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[
-                Expanded[NodeIndex, EdgeIndex, Tuple[Union[str, int], Optional[int]]],
-                Mask,
-            ],
-            Multiple[Unordered],
-        ]:
-            indices = nodes.via_edges(EdgeDirection.Outgoing).discard_value().index()
-            return indices.equal_to(indices)
-
-        assert set(self.graphrecord.query_nodes(via_edges)) == {
-            (("n1", 0), 0),
-            (("n1", 1), 1),
-        }
-        assert set(self.graphrecord.query_nodes(via_neighbors)) == {
-            (("n1", "n2"), "n2"),
-            (("n1", "n3"), "n3"),
-        }
-        assert len(self.graphrecord.query_edges(via_nodes)) == 6
-        assert dict(self.graphrecord.query_edges(via_source_node)) == {
-            0: "n1",
-            1: "n1",
-            2: "n2",
-        }
-        assert dict(self.graphrecord.query_edges(via_target_node)) == {
-            0: "n2",
-            1: "n3",
-            2: "n3",
-        }
-        assert set(self.graphrecord.query_nodes(expanded_index_equality)) == {
-            (("n1", 0), True),
-            (("n1", 1), True),
-            (("n2", 2), True),
-        }
-
-
-class TestErrorOperand(unittest.TestCase):
-    def setUp(self) -> None:
-        self.graphrecord = GraphRecord.from_tuples(
-            [("n1", {"value": 1}), ("n2", {"value": 2})]
-        )
-
-    def test_error_inspection(self) -> None:
-        def errors(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[NodeIndex, FailureValue],
-            Multiple[Unordered],
-        ]:
-            return nodes.attribute("missing").errors()
-
-        def kinds(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[NodeIndex, FailureKindValue],
-            Multiple[Unordered],
-        ]:
-            return nodes.attribute("missing").errors().kind()
-
-        def names(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("missing").errors().kind().name()
-
-        error_values = dict(self.graphrecord.query_nodes(errors))
-        kind_values = dict(self.graphrecord.query_nodes(kinds))
-
-        assert set(error_values) == {"n1", "n2"}
-        assert all(
-            isinstance(error, MissingAttributeError) for error in error_values.values()
-        )
-        assert set(kind_values) == {"n1", "n2"}
-        assert all(
-            not isinstance(kind, QueryError) and kind.name == "MissingAttribute"
-            for kind in kind_values.values()
-        )
-        assert dict(self.graphrecord.query_nodes(names)) == {
-            "n1": "MissingAttribute",
-            "n2": "MissingAttribute",
-        }
-
-    def test_error_policies(self) -> None:
-        def drop(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("missing").on_error(Drop())
-
-        def replace(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("missing").on_error(Replace(5))
-
-        def raise_(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.attribute("missing").on_error(Raise())
-
-        def raise_when(
-            nodes: NodesOperand,
-        ) -> Operand[Bare[Scalar], Definite]:
-            return (
-                nodes.attribute("missing")
-                .on_error(Raise.when(condition=False))
-                .errors()
-                .count()
-            )
-
-        assert self.graphrecord.query_nodes(drop) == []
-        assert dict(self.graphrecord.query_nodes(replace)) == {"n1": 5, "n2": 5}
-        with pytest.raises(MissingAttributeError, match="no attribute"):
-            self.graphrecord.query_nodes(raise_)
-        assert self.graphrecord.query_nodes(raise_when) == 2
-
-
-class TestGroupOperand(unittest.TestCase):
-    def setUp(self) -> None:
-        self.graphrecord = GraphRecord.from_tuples(
-            [
-                ("n1", {"kind": True, "value": 2}),
-                ("n2", {"kind": False, "value": 4}),
-                ("n3", {"kind": True, "value": 6}),
-            ]
-        )
-
-    def test_group_structure(self) -> None:
-        def keys(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
-            return nodes.group_by(nodes.attribute("kind")).keys()
-
-        def having(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Unit], Multiple[Unordered]]:
-            grouped = nodes.group_by(nodes.attribute("kind"))
-            retained_key = True
-            return grouped.having(
-                grouped.keys().index().equal_to(retained_key)
-            ).ungroup()
-
-        def ungroup(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return nodes.group_by(nodes.attribute("kind")).attribute("value").ungroup()
-
-        def ungroup_keyed(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Scalar], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("kind"))
-                .attribute("value")
-                .mean()
-                .ungroup_keyed()
-            )
-
-        assert set(self.graphrecord.query_nodes(keys)) == {False, True}
-        assert set(self.graphrecord.query_nodes(having)) == {"n1", "n3"}
-        assert dict(self.graphrecord.query_nodes(ungroup)) == {
-            "n1": 2,
-            "n2": 4,
-            "n3": 6,
-        }
-        assert dict(self.graphrecord.query_nodes(ungroup_keyed)) == {
-            False: 4,
-            True: 4,
-        }
-
-    def test_group_broadcast(self) -> None:
-        def broadcast(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("kind"))
-                .attribute("value")
-                .mean()
-                .broadcast()
-            )
-
-        def broadcast_via(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[NodeIndex, Scalar], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("kind"))
-                .attribute("value")
-                .mean()
-                .broadcast_via(nodes.attribute("kind"))
-            )
-
-        expected = {"n1": 4, "n2": 4, "n3": 4}
-        assert dict(self.graphrecord.query_nodes(broadcast)) == expected
-        assert dict(self.graphrecord.query_nodes(broadcast_via)) == expected
-
-    def test_group_failures(self) -> None:
-        def bucket_errors(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[ValueIndex, FailureValue],
-            Multiple[Unordered],
-        ]:
-            return (
-                nodes.group_by(nodes.attribute("kind"))
-                .attribute("missing")
-                .sum()
-                .bucket_errors()
-            )
-
-        def drop_bucket_errors(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("kind"))
-                .attribute("missing")
-                .sum()
-                .on_bucket_error(Drop())
-                .keys()
-            )
-
-        def raise_bucket_errors(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("kind"))
-                .attribute("missing")
-                .sum()
-                .on_bucket_error(Raise())
-                .keys()
-            )
-
-        def key_errors(
-            nodes: NodesOperand,
-        ) -> Operand[
-            Indexed[NodeIndex, FailureValue],
-            Multiple[Unordered],
-        ]:
-            return nodes.group_by(nodes.attribute("missing")).key_errors()
-
-        def drop_key_errors(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("missing")).on_key_error(Drop()).keys()
-            )
-
-        def raise_key_errors(
-            nodes: NodesOperand,
-        ) -> Operand[Indexed[ValueIndex, Unit], Multiple[Unordered]]:
-            return (
-                nodes.group_by(nodes.attribute("missing")).on_key_error(Raise()).keys()
-            )
-
-        assert len(self.graphrecord.query_nodes(bucket_errors)) == 2
-        assert self.graphrecord.query_nodes(drop_bucket_errors) == []
-        with pytest.raises(MissingAttributeError, match="no attribute"):
-            self.graphrecord.query_nodes(raise_bucket_errors)
-        assert len(self.graphrecord.query_nodes(key_errors)) == 3
-        assert self.graphrecord.query_nodes(drop_key_errors) == []
-        with pytest.raises(MissingAttributeError, match="no attribute"):
-            self.graphrecord.query_nodes(raise_key_errors)
+    def test_group_nodes(self) -> None:
+        assert list(self.record.groups().nodes().evaluate()) == ["lorem", "ipsum"]
 
     def test_group_edges(self) -> None:
-        graphrecord = GraphRecord.from_tuples(
-            [("n1", {}), ("n2", {}), ("n3", {})],
-            [
-                ("n1", "n2", {"kind": "a", "value": 1}),
-                ("n1", "n3", {"kind": "a", "value": 2}),
-                ("n2", "n3", {"kind": "b", "value": 5}),
-            ],
-        )
+        assert len(list(self.record.groups().edges().evaluate())) == 1
 
-        def query(
-            edges: EdgesOperand,
-        ) -> Operand[Bare[Scalar], Single, Grouped[EdgeIndex, ValueIndex]]:
-            return edges.group_by(edges.attribute("kind")).attribute("value").sum()
+    def test_group_via_edges(self) -> None:
+        assert len(list(self.record.groups().via_edges().evaluate())) == 1
 
-        group_result = graphrecord.query_edges(query)
-        result = {
-            bucket.key: (sorted(bucket.members), bucket.payload)
-            for bucket in group_result.buckets()
-        }
+    def test_invalid_group_edges(self) -> None:
+        group_lane: Expression[Any, Any, Any] = self.record.groups()
 
-        assert group_result.key_failures() == []
-        assert result == {"a": ([0, 1], 3), "b": ([2], 5)}
+        with pytest.raises(TypeError, match="carry no direction"):
+            group_lane.edges(EdgeDirection.Both)
+
+        with pytest.raises(TypeError, match="carry no direction"):
+            group_lane.via_edges(EdgeDirection.Both)
+
+    def test_node_count(self) -> None:
+        assert list(self.record.groups().node_count().evaluate()) == [
+            ("elit", 2),
+            ("incididunt", 0),
+        ]
+
+    def test_edge_count(self) -> None:
+        assert list(self.record.groups().edge_count().evaluate()) == [
+            ("elit", 1),
+            ("incididunt", 0),
+        ]
 
 
-class TestGraphRecordQuery(unittest.TestCase):
+class TestGrouping(unittest.TestCase):
     def setUp(self) -> None:
-        self.graphrecord = GraphRecord.from_tuples(
-            [("n1", {}), ("n2", {})], [("n1", "n2", {})]
+        self.record = create_bucket_record()
+        self.grouped = self.record.nodes().group_by(nodes().attribute("consectetur"))
+
+    def test_group_by(self) -> None:
+        result = self.grouped.evaluate()
+
+        assert isinstance(result, GroupedResult)
+        assert result.keys() == ["sit", "elit"]
+
+    def test_keys(self) -> None:
+        assert list(self.grouped.keys().evaluate()) == ["sit", "elit"]
+
+    def test_having(self) -> None:
+        grouped_edges = (
+            create_record().edges().group_by(edges().via_source_node().index())
+        )
+        kept = grouped_edges.having(nodes().attribute("amet").greater_than(0))
+
+        assert kept.evaluate().keys() == ["ipsum"]
+        assert self.grouped.having(ALWAYS).evaluate().keys() == ["sit", "elit"]
+
+    def test_ungroup(self) -> None:
+        assert list(self.grouped.ungroup().evaluate()) == [
+            "lorem",
+            "ipsum",
+            "dolor",
+            "sit",
+        ]
+
+    def test_ungroup_keyed(self) -> None:
+        assert list(
+            self.grouped.attribute("amet").sum().ungroup_keyed().evaluate()
+        ) == [("sit", 5), ("elit", 25)]
+
+    def test_broadcast(self) -> None:
+        assert list(self.grouped.attribute("amet").sum().broadcast().evaluate()) == [
+            ("lorem", 5),
+            ("ipsum", 5),
+            ("dolor", 25),
+            ("sit", 25),
+        ]
+
+    def test_broadcast_via(self) -> None:
+        assert list(
+            self.grouped.attribute("amet")
+            .sum()
+            .broadcast_via(nodes().attribute("consectetur"))
+            .evaluate()
+        ) == [("lorem", 5), ("ipsum", 5), ("dolor", 25), ("sit", 25)]
+
+    def test_key_errors(self) -> None:
+        record = create_key_failure_record()
+        grouped = record.nodes().group_by(nodes().attribute("consectetur"))
+        failures = list(grouped.key_errors().evaluate())
+
+        assert list(self.grouped.key_errors().evaluate()) == []
+        assert len(failures) == 1
+        assert failures[0][0] == "ipsum"
+
+    def test_bucket_errors(self) -> None:
+        assert (
+            list(self.grouped.attribute("amet").sum().bucket_errors().evaluate()) == []
         )
 
-    def test_query_as_node_argument(self) -> None:
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.filter(nodes.index().equal_to("n1"))
+    def test_on_key_error(self) -> None:
+        record = create_key_failure_record()
+        grouped = record.nodes().group_by(nodes().attribute("consectetur"))
 
-        assert self.graphrecord.outgoing_edges(query) == {"n1": [0]}
+        assert grouped.on_key_error(Drop()).evaluate().keys() == ["sit"]
+        assert self.grouped.on_key_error(Raise()).evaluate().keys() == ["sit", "elit"]
 
-    def test_query_failure_as_node_argument(self) -> None:
-        def query(nodes: NodesOperand) -> NodesOperand:
-            return nodes.attribute("missing").discard_value()
+        with pytest.raises(MissingAttributeError):
+            grouped.on_key_error(Raise()).evaluate()
 
-        with pytest.raises(MissingAttributeError, match="no attribute"):
-            self.graphrecord.outgoing_edges(query)
+    def test_on_bucket_error(self) -> None:
+        sums = self.grouped.attribute("amet").sum()
+
+        assert sums.on_bucket_error(Drop()).evaluate().keys() == ["sit", "elit"]
+        assert sums.on_bucket_error(Raise()).evaluate().keys() == ["sit", "elit"]
+
+    def test_nested_grouping(self) -> None:
+        nested = self.grouped.group_by(nodes().attribute("amet"))
+        result = nested.evaluate()
+        bucket = result["sit"]
+
+        assert result.keys() == ["sit", "elit"]
+        assert isinstance(bucket, GroupedResult)
+        assert bucket.keys() == [1, 4]
+
+        members = bucket[1]
+
+        assert isinstance(members, ResultView)
+        assert list(members) == ["lorem"]
+
+
+class TestResults(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+
+    def test_result_view(self) -> None:
+        view = self.record.nodes().attribute("amet").evaluate()
+
+        assert isinstance(view, ResultView)
+        assert repr(view) == "ResultView()"
+        assert list(view) == [("lorem", -2), ("ipsum", 5), ("dolor", 8), ("sit", 5)]
+
+        cursor = iter(self.record.nodes().attribute("amet").evaluate())
+
+        assert iter(cursor) is cursor
+        assert next(cursor) == ("lorem", -2)
+        assert list(cursor) == [("ipsum", 5), ("dolor", 8), ("sit", 5)]
+
+    def test_invalid_result_view(self) -> None:
+        view = self.record.nodes().attribute("amet").evaluate()
+        list(view)
+
+        with pytest.raises(ResultConsumedError, match="is consumed"):
+            list(view)
+
+        partial = self.record.nodes().attribute("amet").evaluate()
+        next(iter(partial))
+
+        with pytest.raises(ResultConsumedError, match="is consumed"):
+            iter(partial)
+
+    def test_single_result(self) -> None:
+        assert self.record.nodes().attribute("amet").max().evaluate() == 8
+        assert self.record.nodes().attribute("amet").sort().last().evaluate() == (
+            "dolor",
+            8,
+        )
+        assert (
+            self.record.nodes().filter(NEVER).attribute("amet").max().evaluate() is None
+        )
+
+    def test_definite_result(self) -> None:
+        assert self.record.nodes().count().evaluate() == 4
+
+    def test_grouped_result(self) -> None:
+        record = create_bucket_record()
+        result = record.nodes().group_by(nodes().attribute("consectetur")).evaluate()
+
+        members = result["sit"]
+
+        assert len(result) == 2
+        assert result.keys() == ["sit", "elit"]
+        assert list(result) == ["sit", "elit"]
+        assert "sit" in result
+        assert "amet" not in result
+        assert repr(result) == "GroupedResult(keys=['sit', 'elit'])"
+        assert isinstance(members, ResultView)
+        assert list(members) == ["lorem", "ipsum"]
+
+    def test_grouped_result_scalar_payloads(self) -> None:
+        record = create_bucket_record()
+        result = (
+            record.nodes()
+            .group_by(nodes().attribute("consectetur"))
+            .attribute("amet")
+            .sum()
+            .evaluate()
+        )
+
+        assert result["sit"] == 5
+        assert result["elit"] == 25
+
+    def test_grouped_result_key_failures(self) -> None:
+        record = create_key_failure_record()
+        result = record.nodes().group_by(nodes().attribute("consectetur")).evaluate()
+        failures = result.key_failures
+
+        assert len(failures) == 1
+        assert failures[0][0] == "ipsum"
+        assert isinstance(failures[0][1], MissingAttributeError)
+
+    def test_grouped_result_edge_index_keys(self) -> None:
+        result = self.record.edges().group_by(edges().index()).evaluate()
+        edge_index = self.record.edge_indices()[0]
+        members = result[edge_index]
+
+        assert edge_index in result
+        assert isinstance(members, ResultView)
+        assert list(members) == [edge_index]
+
+    def test_grouped_result_failure_kind_keys(self) -> None:
+        result = (
+            self.record.nodes()
+            .group_by(
+                nodes().attribute("consectetur").errors().kind().on_missing(Drop())
+            )
+            .evaluate()
+        )
+        kind = result.keys()[0]
+        members = result[kind]
+
+        assert kind.name == "MissingAttribute"
+        assert kind in result
+        assert isinstance(members, ResultView)
+        assert list(members) == ["sit"]
+
+    def test_grouped_result_foreign_keys(self) -> None:
+        result = (
+            self.record.edges().group_by(edges().via_source_node().index()).evaluate()
+        )
+        edge_index = self.record.edge_indices()[0]
+
+        assert (edge_index, EdgeEndpointRole.Source) not in result
+        assert (edge_index, EdgeEndpointRole.Target) not in result
+
+
+class TestArguments(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+
+    def test_expression_as_mask_argument(self) -> None:
+        assert list(
+            self.record.nodes()
+            .filter(nodes().attribute("amet").greater_than(0))
+            .evaluate()
+        ) == ["ipsum", "dolor", "sit"]
+
+    def test_expression_as_value_argument(self) -> None:
+        assert [
+            value
+            for _, value in self.record.nodes()
+            .attribute("amet")
+            .add(nodes().attribute("amet"))
+            .evaluate()
+        ] == [-4, 10, 16, 10]
+
+    def test_expression_as_set_argument(self) -> None:
+        assert [
+            value
+            for _, value in self.record.nodes()
+            .attribute("amet")
+            .is_in(nodes().attribute("amet"))
+            .evaluate()
+        ] == [True, True, True, True]
+
+    def test_on_missing(self) -> None:
+        positive = nodes().filter(nodes().attribute("amet").greater_than(0))
+
+        assert list(
+            self.record.nodes()
+            .attribute("amet")
+            .add(positive.attribute("amet").on_missing(Drop()))
+            .evaluate()
+        ) == [("ipsum", 10), ("dolor", 16), ("sit", 10)]
+        assert list(
+            self.record.nodes()
+            .attribute("amet")
+            .add(positive.attribute("amet").on_missing(Replace(100)))
+            .evaluate()
+        ) == [("lorem", 98), ("ipsum", 10), ("dolor", 16), ("sit", 10)]
+        assert list(
+            self.record.nodes()
+            .attribute("amet")
+            .add(positive.attribute("amet").on_missing(Replace(nodes().count())))
+            .evaluate()
+        ) == [("lorem", 2), ("ipsum", 10), ("dolor", 16), ("sit", 10)]
+        assert [
+            value
+            for _, value in self.record.nodes()
+            .attribute("amet")
+            .greater_than(positive.attribute("amet").max().on_missing(Replace(0)))
+            .evaluate()
+        ] == [False, False, False, False]
+        assert (
+            list(
+                self.record.nodes()
+                .attribute("amet")
+                .greater_than(
+                    positive.filter(NEVER).attribute("amet").max().on_missing(Drop())
+                )
+                .evaluate()
+            )
+            == []
+        )
+        assert list(
+            self.record.nodes()
+            .attribute("amet")
+            .add(
+                positive.attribute("amet").on_missing(
+                    Replace(nodes().attribute("amet").max().on_missing(Drop()))
+                )
+            )
+            .evaluate()
+        ) == [("lorem", 6), ("ipsum", 10), ("dolor", 16), ("sit", 10)]
+
+    def test_invalid_is_in(self) -> None:
+        values = self.record.nodes().attribute("consectetur")
+
+        with pytest.raises(TypeError, match="single values"):
+            values.is_in("lorem")
+
+    def test_edge_index_as_argument(self) -> None:
+        edge_index = self.record.edge_indices()[0]
+
+        assert [
+            value for _, value in (self.record.edges().index() == edge_index).evaluate()
+        ] == [True, False, False]
+        assert [
+            value
+            for _, value in self.record.edges().index().is_in([edge_index]).evaluate()
+        ] == [True, False, False]
+
+    def test_endpoint_role_as_argument(self) -> None:
+        roles = self.record.edges().via_nodes().discard_value().index().child_index()
+
+        assert [
+            value for _, value in (roles == EdgeEndpointRole.Source).evaluate()
+        ] == [True, False, True, False, True, False]
+        assert [
+            value for _, value in (roles != EdgeEndpointRole.Target).evaluate()
+        ] == [True, False, True, False, True, False]
+        assert [
+            value for _, value in roles.is_in([EdgeEndpointRole.Target]).evaluate()
+        ] == [False, True, False, True, False, True]
+
+
+class TestSelections(unittest.TestCase):
+    def setUp(self) -> None:
+        self.record = create_record()
+
+    def test_expression_selection(self) -> None:
+        positive = nodes().filter(nodes().attribute("amet").greater_than(0))
+
+        assert self.record.remove_nodes(positive).node_count() == 1
+        assert self.record.keep_nodes(positive).node_count() == 3
+
+    def test_series_selection(self) -> None:
+        positive = self.record.nodes().filter(nodes().attribute("amet").greater_than(0))
+
+        assert self.record.keep_nodes(positive).node_count() == 3
+
+    def test_dropping_expression_selection(self) -> None:
+        positive = nodes().filter(nodes().attribute("amet").greater_than(0))
+
+        assert self.record.keep_nodes(positive.on_missing(Drop())).node_count() == 3
+        assert (
+            self.record.keep_nodes(positive.index().on_missing(Drop())).node_count()
+            == 3
+        )
+
+    def test_dropping_series_selection(self) -> None:
+        positive = self.record.nodes().filter(nodes().attribute("amet").greater_than(0))
+        reduced = self.record.remove_nodes("sit")
+
+        with pytest.raises(IndexError, match="Cannot find nodes with indices"):
+            reduced.keep_nodes(positive)
+
+        assert reduced.keep_nodes(positive.on_missing(Drop())).node_count() == 2
+
+    def test_dropping_mask_selection(self) -> None:
+        positive = nodes().filter(nodes().attribute("amet").greater_than(0))
+        covered = positive.has_attribute("consectetur")
+
+        with pytest.raises(UncoveredIndicesError, match="uncovered element"):
+            self.record.keep_nodes(covered)
+
+        assert self.record.keep_nodes(covered.on_missing(Drop())).node_count() == 2
+
+    def test_dropping_group_selection(self) -> None:
+        populated = groups().filter(groups().node_count().greater_than(0))
+
+        assert list(
+            self.record.keep_groups(populated.on_missing(Drop())).groups().evaluate()
+        ) == ["elit"]
+
+    def test_single_selection(self) -> None:
+        assert self.record.add_node_in_group("tempor", {}, "elit").node_count() == 5
+
+    def test_edge_selection(self) -> None:
+        heavy = edges().filter(edges().attribute("tempor").greater_than(15))
+
+        assert self.record.remove_edges(heavy).edge_count() == 1
+        assert self.record.remove_edges(self.record.edges()).edge_count() == 0
+        assert self.record.remove_edges(self.record.edge_indices()).edge_count() == 0
+
+    def test_invalid_selection_policy(self) -> None:
+        positive = nodes().filter(nodes().attribute("amet").greater_than(0))
+        replaced: Any = positive.has_attribute("consectetur").on_missing(
+            Replace(ALWAYS)
+        )
+
+        with pytest.raises(TypeError, match="`on_missing\\(Drop\\(\\)\\)` argument"):
+            self.record.keep_nodes(replaced)
+
+
+class TestWrappers(unittest.TestCase):
+    def test_edge_direction(self) -> None:
+        assert repr(EdgeDirection.Both) == "EdgeDirection.Both"
+        assert str(EdgeDirection.Incoming) == "Incoming"
+
+    def test_edge_endpoint_role(self) -> None:
+        assert EdgeEndpointRole.Source != EdgeEndpointRole.Target
+
+    def test_value_targets(self) -> None:
+        targets = [
+            ValueTarget.Value,
+            ValueTarget.ValueIndex,
+            ValueTarget.AttributeName,
+            ValueTarget.AttributeNameIndex,
+            ValueTarget.NodeIndex,
+            ValueTarget.GroupIndex,
+            ValueTarget.PositionalIndex,
+            ValueTarget.BoolIndex,
+            ValueTarget.Mask,
+            ValueTarget.FailureKind,
+            ValueTarget.FailureKindIndex,
+        ]
+
+        assert len(targets) == 11
+        assert all(isinstance(target, ValueTarget) for target in targets)
+
+    def test_cast_targets(self) -> None:
+        targets = [
+            CastTarget.Bool,
+            CastTarget.DateTime,
+            CastTarget.Duration,
+            CastTarget.Float,
+            CastTarget.Int,
+            CastTarget.String,
+        ]
+
+        assert len(targets) == 6
+        assert all(isinstance(target, CastTarget) for target in targets)
+
+    def test_exception_roster(self) -> None:
+        assert issubclass(QueryError, Exception)
+        assert issubclass(ResultConsumedError, RuntimeError)
+        assert all(issubclass(error, QueryError) for error in EXCEPTION_ROSTER)

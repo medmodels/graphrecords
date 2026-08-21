@@ -267,6 +267,14 @@ impl<E: Error + Send + Sync + 'static> Diagnostic for External<E> {
     }
 }
 
+impl From<Box<Failure>> for GraphRecordError {
+    fn from(failure: Box<Failure>) -> Self {
+        Self::QueryFailure {
+            cause: Arc::new(*failure),
+        }
+    }
+}
+
 impl Diagnostic for GraphRecordError {
     fn name() -> &'static str {
         "GraphRecordError"

@@ -68,3 +68,62 @@ where
         }
     })
 }
+
+fn combine_masks_kleene_indexed<'a, I, M>(
+    graphrecord: &'a GraphRecord,
+    prepared: M::Prepared<'a>,
+    determining: bool,
+    label: &'static str,
+) -> IndexedValuePipeline<'a, I, Mask, Mask, M::Retention>
+where
+    I: IndexDomain,
+    M: ArgumentSource<Keyed<I>, Mask>,
+    M::Prepared<'a>: 'a,
+{
+    Pipeline::keyed(move |address, left| {
+        let step = M::resolve(graphrecord, &prepared, &address, label);
+
+        match left {
+            Err(failure) => match M::Retention::collapse(step) {
+                Some(Ok(right)) if right == determining => M::Retention::keep(Ok(determining)),
+                _ => M::Retention::keep(Err(failure)),
+            },
+            Ok(left) => M::Retention::map_step(step, |resolved| {
+                if left == determining {
+                    Ok(determining)
+                } else {
+                    resolved
+                }
+            }),
+        }
+    })
+}
+
+fn combine_masks_kleene_bare<'a, M>(
+    graphrecord: &'a GraphRecord,
+    prepared: M::Prepared<'a>,
+    determining: bool,
+    label: &'static str,
+) -> BarePipeline<'a, Mask, Mask, M::Retention>
+where
+    M: ArgumentSource<Unaligned, Mask>,
+    M::Prepared<'a>: 'a,
+{
+    Pipeline::new(move |left| {
+        let step = M::resolve(graphrecord, &prepared, &(), label);
+
+        match left {
+            Err(failure) => match M::Retention::collapse(step) {
+                Some(Ok(right)) if right == determining => M::Retention::keep(Ok(determining)),
+                _ => M::Retention::keep(Err(failure)),
+            },
+            Ok(left) => M::Retention::map_step(step, |resolved| {
+                if left == determining {
+                    Ok(determining)
+                } else {
+                    resolved
+                }
+            }),
+        }
+    })
+}

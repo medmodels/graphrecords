@@ -198,8 +198,14 @@ fn argument_alias(query: &Path, argument: &ValueArgument) -> Result<TokenStream>
 fn verify_kernel(manifest: &Manifest, kernel: &Kernel, query: &Path) -> Result<TokenStream> {
     let operation = &manifest.operation;
     let owned = kernel.where_owned.as_ref().map(|constraint| {
-        let owner = &constraint.owner;
         let bounds = &constraint.bounds;
+        let owner = match constraint.owner.as_slice() {
+            [source] => quote!(#source),
+            [source, projection] => {
+                quote!(<#source as #query::operations::SourceDomain>::#projection)
+            }
+            segments => quote!(#(#segments)::*),
+        };
         quote!(<#owner as #query::ValueDomain>::Owned: #(#bounds)+*,)
     });
 

@@ -1,169 +1,102 @@
+import pickle
 import unittest
-from datetime import datetime, timedelta
 
-import pandas as pd
-import polars as pl
-
-from graphrecords.types import (
-    is_attributes,
-    is_edge_index,
-    is_edge_index_list,
-    is_edge_tuple,
-    is_edge_tuple_list,
-    is_group,
-    is_identifier,
-    is_node_index,
-    is_node_index_list,
-    is_node_tuple,
-    is_node_tuple_list,
-    is_pandas_edge_dataframe_input,
-    is_pandas_edge_dataframe_input_list,
-    is_pandas_node_dataframe_input,
-    is_pandas_node_dataframe_input_list,
-    is_polars_edge_dataframe_input,
-    is_polars_edge_dataframe_input_list,
-    is_polars_node_dataframe_input,
-    is_polars_node_dataframe_input_list,
-    is_value,
-)
+from graphrecords import EdgeDirection, GraphRecord
+from graphrecords.types import EdgeIndex
 
 
-class TestTypeAssertions(unittest.TestCase):
-    def test_is_identifier(self) -> None:
-        assert is_identifier("test")
-        assert is_identifier(123)
-        assert not is_identifier(12.34)
-        assert not is_identifier(None)
+def create_graphrecord() -> GraphRecord:
+    record = GraphRecord()
+    record = record.add_node("0", {"lorem": "ipsum"})
+    record = record.add_node("1", {"dolor": "sit"})
+    record = record.add_edge("0", "1", {"amet": "consectetur"})
+    return record.add_edge("1", "0", {"adipiscing": "elit"})
 
-    def test_is_value(self) -> None:
-        assert is_value("test")
-        assert is_value(123)
-        assert is_value(12.34)
-        assert is_value(value=True)
-        assert is_value(datetime.now())
-        assert is_value(timedelta(days=1))
-        assert is_value(None)
-        assert not is_value([])
-        assert not is_value({})
 
-    def test_is_node_index(self) -> None:
-        assert is_node_index("node")
-        assert is_node_index(123)
-        assert not is_node_index(12.34)
+def create_directed_graphrecord() -> GraphRecord:
+    record = GraphRecord()
+    record = record.add_node("0", {"lorem": "ipsum"})
+    record = record.add_node("1", {"dolor": "sit"})
+    return record.add_edge("0", "1", {"amet": "consectetur"})
 
-    def test_is_node_index_list(self) -> None:
-        assert is_node_index_list(["node1", "node2"])
-        assert is_node_index_list([123, 456])
-        assert is_node_index_list(["node1", 123])
-        assert not is_node_index_list("invalid")
-        assert not is_node_index_list([123, 12.34])
 
-    def test_is_edge_index(self) -> None:
-        assert is_edge_index(123)
-        assert not is_edge_index("edge")
-        assert not is_edge_index(12.34)
+class TestEdgeIndex(unittest.TestCase):
+    def test_eq(self) -> None:
+        record = create_graphrecord()
+        first_edge_index, second_edge_index = record.edge_indices()
 
-    def test_is_edge_index_list(self) -> None:
-        assert is_edge_index_list([123, 456])
-        assert not is_edge_index_list("invalid")
-        assert not is_edge_index_list([123, "edge"])
-        assert not is_edge_index_list([123, 12.34])
+        assert isinstance(first_edge_index, EdgeIndex)
+        assert first_edge_index == record.edge_indices()[0]
+        assert first_edge_index != second_edge_index
+        assert first_edge_index != "lorem"
 
-    def test_is_group(self) -> None:
-        assert is_group("group")
-        assert is_group(123)
-        assert not is_group(12.34)
+    def test_hash(self) -> None:
+        record = create_graphrecord()
+        first_edge_index, second_edge_index = record.edge_indices()
 
-    def test_is_attributes(self) -> None:
-        assert is_attributes({"key": "value"})
-        assert is_attributes({"key": 123})
-        assert not is_attributes(["key", "value"])
-        assert not is_attributes("string")
+        assert hash(first_edge_index) == hash(record.edge_indices()[0])
+        assert {first_edge_index: "lorem", second_edge_index: "ipsum"} == {
+            first_edge_index: "lorem",
+            second_edge_index: "ipsum",
+        }
+        assert {first_edge_index, second_edge_index, record.edge_indices()[0]} == {
+            first_edge_index,
+            second_edge_index,
+        }
 
-    def test_is_node_tuple(self) -> None:
-        assert is_node_tuple(("node", {"key": "value"}))
-        assert not is_node_tuple(("node", "value"))
-        assert not is_node_tuple(("node",))
-        assert not is_node_tuple("node")
+    def test_repr(self) -> None:
+        record = create_graphrecord()
+        first_edge_index, second_edge_index = record.edge_indices()
 
-    def test_is_node_tuple_list(self) -> None:
-        assert is_node_tuple_list(
-            [("node1", {"key": "value"}), ("node2", {"key": 123})]
-        )
-        assert not is_node_tuple_list([("node1", {"key": "value"}), "invalid"])
+        assert repr(first_edge_index) == f"EdgeIndex({first_edge_index})"
+        assert repr(first_edge_index) == repr(record.edge_indices()[0])
+        assert repr(first_edge_index) != repr(second_edge_index)
 
-    def test_is_edge_tuple(self) -> None:
-        assert is_edge_tuple(("node1", "node2", {"key": "value"}))
-        assert not is_edge_tuple(("node1", "node2"))
-        assert not is_edge_tuple(("node1", "node2", "value"))
+    def test_str(self) -> None:
+        record = create_graphrecord()
+        first_edge_index, second_edge_index = record.edge_indices()
 
-    def test_is_edge_tuple_list(self) -> None:
-        assert is_edge_tuple_list(
-            [
-                ("node1", "node2", {"key": "value"}),
-                ("node3", "node4", {"key": 123}),
-            ]
-        )
-        assert not is_edge_tuple_list(
-            [
-                ("node1", "node2", {"key": "value"}),
-                "invalid",
-            ]
-        )
+        assert str(first_edge_index) == str(record.edge_indices()[0])
+        assert str(first_edge_index) != str(second_edge_index)
 
-    def test_is_polars_node_dataframe_input(self) -> None:
-        df = pl.DataFrame({"col1": [1, 2, 3]})
-        assert is_polars_node_dataframe_input((df, "col1"))
-        assert not is_polars_node_dataframe_input((df, 123))
-        assert not is_polars_node_dataframe_input(("invalid", "col1"))
+    def test_reduce(self) -> None:
+        record = create_graphrecord()
+        first_edge_index = record.edge_indices()[0]
 
-    def test_is_polars_node_dataframe_input_list(self) -> None:
-        df = pl.DataFrame({"col1": [1, 2, 3]})
-        assert is_polars_node_dataframe_input_list([(df, "col1"), (df, "col2")])
-        assert not is_polars_node_dataframe_input_list([(df, "col1"), "invalid"])
+        restored_edge_index = pickle.loads(pickle.dumps(first_edge_index))
 
-    def test_is_polars_edge_dataframe_input(self) -> None:
-        df = pl.DataFrame({"col1": [1, 2, 3]})
-        assert is_polars_edge_dataframe_input((df, "col1", "col2"))
-        assert not is_polars_edge_dataframe_input((df, "col1", 123))
-        assert not is_polars_edge_dataframe_input(("invalid", "col1", "col2"))
+        assert restored_edge_index == first_edge_index
+        assert record.contains_edge(restored_edge_index)
 
-    def test_is_polars_edge_dataframe_input_list(self) -> None:
-        df = pl.DataFrame({"col1": [1, 2, 3]})
-        assert is_polars_edge_dataframe_input_list(
-            [(df, "col1", "col2"), (df, "col3", "col4")]
-        )
-        assert not is_polars_edge_dataframe_input_list(
-            [(df, "col1", "col2"), "invalid"]
-        )
 
-    def test_is_pandas_node_dataframe_input(self) -> None:
-        df = pd.DataFrame({"col1": [1, 2, 3]})
-        assert is_pandas_node_dataframe_input((df, "col1"))
-        assert not is_pandas_node_dataframe_input((df, 123))
-        assert not is_pandas_node_dataframe_input(("invalid", "col1"))
+class TestEdgeDirection(unittest.TestCase):
+    def test_into_py_edge_direction(self) -> None:
+        record = create_directed_graphrecord()
+        edge_index = record.edge_indices()[0]
+        source_node = record.node("0")
+        target_node = record.node("1")
 
-    def test_is_pandas_node_dataframe_input_list(self) -> None:
-        df = pd.DataFrame({"col1": [1, 2, 3]})
-        assert is_pandas_node_dataframe_input_list([(df, "col1"), (df, "col2")])
-        assert not is_pandas_node_dataframe_input_list([(df, "col1"), "invalid"])
+        assert source_node.edges(EdgeDirection.Outgoing) == [edge_index]
+        assert source_node.edges(EdgeDirection.Incoming) == []
+        assert source_node.edges(EdgeDirection.Both) == [edge_index]
+        assert target_node.edges(EdgeDirection.Incoming) == [edge_index]
+        assert target_node.edges(EdgeDirection.Outgoing) == []
 
-    def test_is_pandas_edge_dataframe_input(self) -> None:
-        df = pd.DataFrame({"col1": [1, 2, 3]})
-        assert is_pandas_edge_dataframe_input((df, "col1", "col2"))
-        assert not is_pandas_edge_dataframe_input((df, "col1", 123))
-        assert not is_pandas_edge_dataframe_input(("invalid", "col1", "col2"))
+    def test_repr(self) -> None:
+        assert repr(EdgeDirection.Incoming) == "EdgeDirection.Incoming"
+        assert repr(EdgeDirection.Outgoing) == "EdgeDirection.Outgoing"
+        assert repr(EdgeDirection.Both) == "EdgeDirection.Both"
 
-    def test_is_pandas_edge_dataframe_input_list(self) -> None:
-        df = pd.DataFrame({"col1": [1, 2, 3]})
-        assert is_pandas_edge_dataframe_input_list(
-            [(df, "col1", "col2"), (df, "col3", "col4")]
-        )
-        assert not is_pandas_edge_dataframe_input_list(
-            [(df, "col1", "col2"), "invalid"]
-        )
+    def test_str(self) -> None:
+        assert str(EdgeDirection.Incoming) == "Incoming"
+        assert str(EdgeDirection.Outgoing) == "Outgoing"
+        assert str(EdgeDirection.Both) == "Both"
 
 
 if __name__ == "__main__":
-    run_test = unittest.TestLoader().loadTestsFromTestCase(TestTypeAssertions)
-    unittest.TextTestRunner(verbosity=2).run(run_test)
+    suite = unittest.TestSuite()
+
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestEdgeIndex))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestEdgeDirection))
+
+    unittest.TextTestRunner(verbosity=2).run(suite)

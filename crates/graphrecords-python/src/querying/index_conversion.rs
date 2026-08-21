@@ -1,8 +1,8 @@
 use crate::{
-    graphrecord::{PyAttributeName, PyNodeIndex, value::PyValue},
+    graphrecord::{PyAttributeName, PyEdgeIndex, PyGroupIndex, PyNodeIndex, value::PyValue},
     querying::{endpoint::PyEdgeEndpointRole, failure_kind::PyFailureKind},
 };
-use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, NodeIndex, Value};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value};
 use graphrecords_query::{
     FailureKind,
     dynamic::DynIndexOwned,
@@ -32,7 +32,10 @@ impl IndexConversion for DynIndexOwned {
             return Ok(Self::Node(object.extract::<PyNodeIndex>()?.into()));
         }
         if domain.is::<EdgeIndex>() {
-            return object.extract().map(Self::Edge);
+            return Ok(Self::Edge(object.extract::<PyEdgeIndex>()?.into()));
+        }
+        if domain.is::<GroupIndex>() {
+            return Ok(Self::Group(object.extract::<PyGroupIndex>()?.into()));
         }
         if domain.is::<AttributeName>() {
             return Ok(Self::Attribute(object.extract::<PyAttributeName>()?.into()));
@@ -44,8 +47,8 @@ impl IndexConversion for DynIndexOwned {
             return object.extract().map(Self::Bool);
         }
         if domain.is::<EdgeEndpointRole>() {
-            return Err(PyTypeError::new_err(
-                "an edge-endpoint role has no literal form",
+            return Ok(Self::EndpointRole(
+                object.extract::<PyEdgeEndpointRole>()?.into(),
             ));
         }
         if domain.is::<FailureKind>() {
@@ -62,10 +65,16 @@ impl IndexConversion for DynIndexOwned {
         match self {
             Self::Positional(position) => Ok(position.into_pyobject(py)?.into_any().unbind()),
             Self::Node(index) => Ok(PyNodeIndex::from(index.clone()).into_pyobject(py)?.unbind()),
+            Self::Edge(index) => Ok(PyEdgeIndex::from(*index)
+                .into_pyobject(py)?
+                .into_any()
+                .unbind()),
+            Self::Group(index) => Ok(PyGroupIndex::from(index.clone())
+                .into_pyobject(py)?
+                .unbind()),
             Self::Attribute(index) => Ok(PyAttributeName::from(index.clone())
                 .into_pyobject(py)?
                 .unbind()),
-            Self::Edge(index) => Ok(index.into_pyobject(py)?.into_any().unbind()),
             Self::Value(value) => Ok(PyValue::from(value.clone()).into_pyobject(py)?.unbind()),
             Self::Bool(value) => Ok(value.into_pyobject(py)?.to_owned().into_any().unbind()),
             Self::EndpointRole(role) => Ok(PyEdgeEndpointRole::from(*role)

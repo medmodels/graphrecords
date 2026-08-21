@@ -5,7 +5,21 @@ pub mod _graphrecords {
     #[pymodule]
     pub mod graphrecord {
         #[pymodule_export]
+        use crate::prelude::PyEdgeDirection;
+        #[pymodule_export]
+        use crate::prelude::PyEdgeIndex;
+        #[pymodule_export]
+        use crate::prelude::PyEdgeView;
+        #[pymodule_export]
         use crate::prelude::PyGraphRecord;
+        #[pymodule_export]
+        use crate::prelude::PyGroupView;
+        #[pymodule_export]
+        use crate::prelude::PyNodeView;
+        #[pymodule_export]
+        use crate::prelude::PyOnConflict;
+        #[pymodule_export]
+        use crate::prelude::PyRecordBatch;
     }
 
     #[pymodule]
@@ -49,7 +63,7 @@ pub mod _graphrecords {
     #[pymodule]
     pub mod querying {
         #[pymodule_export]
-        use crate::prelude::ArgumentAbsentError;
+        use crate::prelude::ArgumentMissingError;
         #[pymodule_export]
         use crate::prelude::DivisionByZeroError;
         #[pymodule_export]
@@ -97,11 +111,11 @@ pub mod _graphrecords {
         #[pymodule_export]
         use crate::prelude::MissingGroupAggregateError;
         #[pymodule_export]
+        use crate::prelude::MissingGroupBucketError;
+        #[pymodule_export]
         use crate::prelude::MissingTraversedAttributeError;
         #[pymodule_export]
         use crate::prelude::ModuloByZeroError;
-        #[pymodule_export]
-        use crate::prelude::NegativeLengthError;
         #[pymodule_export]
         use crate::prelude::NegativeSquareRootError;
         #[pymodule_export]
@@ -119,27 +133,45 @@ pub mod _graphrecords {
         #[pymodule_export]
         use crate::prelude::PyCastTarget;
         #[pymodule_export]
-        use crate::prelude::PyEdgeDirection;
-        #[pymodule_export]
         use crate::prelude::PyEdgeEndpointRole;
+        #[pymodule_export]
+        use crate::prelude::PyExpression;
         #[pymodule_export]
         use crate::prelude::PyFailureKind;
         #[pymodule_export]
-        use crate::prelude::PyOperand;
+        use crate::prelude::PyGroupedResult;
+        #[pymodule_export]
+        use crate::prelude::PyResultView;
+        #[pymodule_export]
+        use crate::prelude::PySeries;
         #[pymodule_export]
         use crate::prelude::PyValueTarget;
         #[pymodule_export]
         use crate::prelude::QueryError;
         #[pymodule_export]
+        use crate::prelude::RaisedFailuresError;
+        #[pymodule_export]
+        use crate::prelude::ResultConsumedError;
+        #[pymodule_export]
         use crate::prelude::StringLengthOverflowError;
         #[pymodule_export]
         use crate::prelude::StringPaddingOverflowError;
+        #[pymodule_export]
+        use crate::prelude::UncoveredIndicesError;
         #[pymodule_export]
         use crate::prelude::UnresolvedBucketFailuresError;
         #[pymodule_export]
         use crate::prelude::UnresolvedGroupKeyFailuresError;
         #[pymodule_export]
+        use crate::prelude::UnresolvedIndexError;
+        #[pymodule_export]
         use crate::prelude::UnsupportedValueRoleError;
+        #[pymodule_export]
+        use crate::prelude::edges;
+        #[pymodule_export]
+        use crate::prelude::groups;
+        #[pymodule_export]
+        use crate::prelude::nodes;
     }
 
     #[pymodule]
@@ -168,143 +200,57 @@ pub mod _graphrecords {
     #[pymodule]
     pub mod plugins {
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgeContext;
+        use crate::prelude::PyAddEdges;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgeToGroupContext;
+        use crate::prelude::PyAddEdgesInGroup;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgeToGroupsContext;
+        use crate::prelude::PyAddEdgesToGroup;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgeWithGroupContext;
+        use crate::prelude::PyAddGroup;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgeWithGroupsContext;
+        use crate::prelude::PyAddNodes;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgesContext;
+        use crate::prelude::PyAddNodesInGroup;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgesDataframesContext;
+        use crate::prelude::PyAddNodesToGroup;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgesDataframesWithGroupContext;
+        use crate::prelude::PyClear;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgesDataframesWithGroupsContext;
+        use crate::prelude::PyEdgeBatch;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgesToGroupsContext;
+        use crate::prelude::PyEdgeBatchIterator;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgesWithGroupContext;
+        use crate::prelude::PyFreezeSchema;
         #[pymodule_export]
-        use crate::prelude::PyPostAddEdgesWithGroupsContext;
+        use crate::prelude::PyNodeBatch;
         #[pymodule_export]
-        use crate::prelude::PyPostAddGroupContext;
+        use crate::prelude::PyNodeBatchIterator;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodeContext;
+        use crate::prelude::PyRemoveEdgeAttributes;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodeToGroupContext;
+        use crate::prelude::PyRemoveEdges;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodeToGroupsContext;
+        use crate::prelude::PyRemoveEdgesFromGroup;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodeWithGroupContext;
+        use crate::prelude::PyRemoveGroups;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodeWithGroupsContext;
+        use crate::prelude::PyRemoveNodeAttributes;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodesContext;
+        use crate::prelude::PyRemoveNodes;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodesDataframesContext;
+        use crate::prelude::PyRemoveNodesFromGroup;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodesDataframesWithGroupContext;
+        use crate::prelude::PyReplaceEdgeAttributes;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodesDataframesWithGroupsContext;
+        use crate::prelude::PyReplaceNodeAttributes;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodesToGroupsContext;
+        use crate::prelude::PySetEdgeAttributes;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodesWithGroupContext;
+        use crate::prelude::PySetNodeAttributes;
         #[pymodule_export]
-        use crate::prelude::PyPostAddNodesWithGroupsContext;
+        use crate::prelude::PySetSchema;
         #[pymodule_export]
-        use crate::prelude::PyPostRemoveEdgeContext;
-        #[pymodule_export]
-        use crate::prelude::PyPostRemoveEdgeFromGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPostRemoveEdgeFromGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPostRemoveEdgesFromGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPostRemoveGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPostRemoveNodeContext;
-        #[pymodule_export]
-        use crate::prelude::PyPostRemoveNodeFromGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPostRemoveNodeFromGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPostRemoveNodesFromGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgeContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgeToGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgeToGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgeWithGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgeWithGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgesContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgesDataframesContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgesDataframesWithGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgesDataframesWithGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgesToGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgesWithGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddEdgesWithGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodeContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodeToGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodeToGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodeWithGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodeWithGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodesContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodesDataframesContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodesDataframesWithGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodesDataframesWithGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodesToGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodesWithGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreAddNodesWithGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreRemoveEdgeContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreRemoveEdgeFromGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreRemoveEdgeFromGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreRemoveEdgesFromGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreRemoveGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreRemoveNodeContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreRemoveNodeFromGroupContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreRemoveNodeFromGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreRemoveNodesFromGroupsContext;
-        #[pymodule_export]
-        use crate::prelude::PyPreSetSchemaContext;
+        use crate::prelude::PyUnfreezeSchema;
     }
 
     #[pymodule_init]

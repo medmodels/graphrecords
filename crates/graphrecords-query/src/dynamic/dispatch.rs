@@ -1,7 +1,7 @@
 use super::{
-    DynArgumentSource, DynArity, DynArityHandle, DynExpression, DynGroupHandle, DynHandle,
-    DynIndex, DynInvokeArgument, DynPayload, DynPayloadOutput, DynStream, DynStreamShape, DynYield,
-    IntoDynArityHandle, IntoDynExpression, IntoDynLaneHandle,
+    DynArgumentLane, DynArgumentSource, DynArity, DynArityHandle, DynExpression, DynGroupHandle,
+    DynHandle, DynIndex, DynInvokeArgument, DynPayload, DynPayloadOutput, DynStream,
+    DynStreamShape, DynYield, IntoDynArityHandle, IntoDynExpression, IntoDynLaneHandle,
 };
 use crate::{
     EdgeDirection, EvaluateContext, EvaluateExpression, Explain, Expression, Mask, QueryResult,
@@ -34,6 +34,7 @@ pub type DynApplier =
 pub enum DynEntityDomain {
     Node,
     Edge,
+    Group,
 }
 
 #[derive(Clone, Copy)]
@@ -758,12 +759,12 @@ pub fn invoke_argument_source(
     source
 }
 
-pub fn invoke_expression(arguments: &[DynInvokeArgument], position: usize) -> &DynExpression {
-    let Some(DynInvokeArgument::Expression(expression)) = arguments.get(position) else {
-        panic!("registry routed an operation without its declared dynamic expression argument")
+pub fn invoke_lane(arguments: &[DynInvokeArgument], position: usize) -> &DynArgumentLane {
+    let Some(DynInvokeArgument::Lane(lane)) = arguments.get(position) else {
+        panic!("registry routed an operation without its declared dynamic lane argument")
     };
 
-    expression
+    lane
 }
 
 pub fn invoke_attribute(arguments: &[DynInvokeArgument], position: usize) -> AttributeName {
@@ -801,7 +802,7 @@ pub fn invoke_position(arguments: &[DynInvokeArgument], position: usize) -> usiz
 pub fn entity_domain(input: &DynExpression) -> DynEntityDomain {
     let lane = input.descriptor().lane_shape();
 
-    if let ValueRole::EntityReference(index) = lane.value().role() {
+    if let ValueRole::EntityReference(index) | ValueRole::Index(index) = lane.value().role() {
         return index_entity_domain(index);
     }
 
@@ -830,6 +831,7 @@ fn index_entity_domain(index: &IndexDescriptor) -> DynEntityDomain {
     match index {
         IndexDescriptor::Domain(domain) if domain.is::<NodeIndex>() => DynEntityDomain::Node,
         IndexDescriptor::Domain(domain) if domain.is::<EdgeIndex>() => DynEntityDomain::Edge,
+        IndexDescriptor::Domain(domain) if domain.is::<GroupIndex>() => DynEntityDomain::Group,
         IndexDescriptor::Expanded { child, .. } => index_entity_domain(child),
         IndexDescriptor::Domain(_) | IndexDescriptor::ExpandedParent { .. } => {
             panic!("registry selected an entity operation for a non-entity dynamic index domain")

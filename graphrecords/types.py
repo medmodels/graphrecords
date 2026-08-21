@@ -1,560 +1,425 @@
-"""Type aliases and type checking functions for the graphrecords library."""
+"""Type aliases and value types for the graphrecords library."""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
+from enum import Enum, auto
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
-    List,
-    Literal,
-    Mapping,
-    Sequence,
+    Iterable,
     Tuple,
     TypeAlias,
-    TypedDict,
     Union,
 )
 
-import pandas as pd
-import polars as pl
+from graphrecords._graphrecords.graphrecord import PyEdgeDirection
 
 if TYPE_CHECKING:
-    from typing_extensions import TypeIs
+    import polars as pl
 
-    from graphrecords._graphrecords.graphrecord import PyGraphRecord
-    from graphrecords._graphrecords.plugins import PyPreSetSchemaContext
-    from graphrecords._graphrecords.schema import PyAttributeType
-    from graphrecords.schema import AttributeType
-
+    from graphrecords._graphrecords.graphrecord import PyEdgeIndex
+    from graphrecords.graphrecord import ArrowStream, EdgeCollector, NodeCollector
+    from graphrecords.querying import (
+        BareEdgeIndexExpression,
+        BareEdgeIndexSeries,
+        BareEdgeIndicesExpression,
+        BareEdgeIndicesSeries,
+        BareGroupIndexExpression,
+        BareGroupIndexSeries,
+        BareGroupIndicesExpression,
+        BareGroupIndicesSeries,
+        BareNodeIndexExpression,
+        BareNodeIndexSeries,
+        BareNodeIndicesExpression,
+        BareNodeIndicesSeries,
+        BoolExpression,
+        BoolMaskExpression,
+        BoolMaskSeries,
+        BoolSeries,
+        DefiniteBareEdgeIndexExpression,
+        DefiniteBareEdgeIndexSeries,
+        DefiniteBareGroupIndexExpression,
+        DefiniteBareGroupIndexSeries,
+        DefiniteBareNodeIndexExpression,
+        DefiniteBareNodeIndexSeries,
+        DefiniteBoolExpression,
+        DefiniteBoolSeries,
+        DefiniteEdgeExpression,
+        DefiniteEdgeIndexExpression,
+        DefiniteEdgeIndexSeries,
+        DefiniteEdgeSeries,
+        DefiniteGroupExpression,
+        DefiniteGroupIndexExpression,
+        DefiniteGroupIndexSeries,
+        DefiniteGroupSeries,
+        DefiniteNodeExpression,
+        DefiniteNodeIndexExpression,
+        DefiniteNodeIndexSeries,
+        DefiniteNodeSeries,
+        EdgeExpression,
+        EdgeIndexExpression,
+        EdgeIndexSeries,
+        EdgeIndicesExpression,
+        EdgeIndicesSeries,
+        EdgeSeries,
+        EdgesExpression,
+        EdgesSeries,
+        Expression,
+        GroupExpression,
+        GroupIndexExpression,
+        GroupIndexSeries,
+        GroupIndicesExpression,
+        GroupIndicesSeries,
+        GroupSeries,
+        GroupsExpression,
+        GroupsSeries,
+        Index,
+        Indexed,
+        IndexedDroppingArgument,
+        IndexPayload,
+        IndexValue,
+        Mask,
+        Multiple,
+        NodeExpression,
+        NodeIndexExpression,
+        NodeIndexSeries,
+        NodeIndicesExpression,
+        NodeIndicesSeries,
+        NodeSeries,
+        NodesExpression,
+        NodesSeries,
+        Ordered,
+        OrderedBareEdgeIndicesExpression,
+        OrderedBareEdgeIndicesSeries,
+        OrderedBareGroupIndicesExpression,
+        OrderedBareGroupIndicesSeries,
+        OrderedBareNodeIndicesExpression,
+        OrderedBareNodeIndicesSeries,
+        OrderedEdgeIndicesExpression,
+        OrderedEdgeIndicesSeries,
+        OrderedEdgesExpression,
+        OrderedEdgesSeries,
+        OrderedGroupIndicesExpression,
+        OrderedGroupIndicesSeries,
+        OrderedGroupsExpression,
+        OrderedGroupsSeries,
+        OrderedNodeIndicesExpression,
+        OrderedNodeIndicesSeries,
+        OrderedNodesExpression,
+        OrderedNodesSeries,
+        Unit,
+        Unordered,
+    )
+    from graphrecords.querying import EdgeIndex as EdgeIndexDomain
+    from graphrecords.querying import GroupIndex as GroupIndexDomain
+    from graphrecords.querying import NodeIndex as NodeIndexDomain
 
 #: A type alias for an identifier.
 Identifier: TypeAlias = Union[str, int]
 
-#: A type alias for a list of identifiers.
-IdentifierInputList: TypeAlias = Union[List[str], List[int], List[Identifier]]
-
-#: A type alias for an attribute value.
-Value: TypeAlias = Union[str, int, float, bool, datetime, timedelta, None]
-
 #: A type alias for a node index.
 NodeIndex: TypeAlias = Identifier
 
-#: A type alias for a list of node indices.
-NodeIndexInputList: TypeAlias = IdentifierInputList
-
-#: A type alias for an edge index.
-EdgeIndex: TypeAlias = int
-
-#: A type alias for a list of edge indices.
-EdgeIndexInputList: TypeAlias = List[EdgeIndex]
-
-#: A type alias for a group.
-Group: TypeAlias = Identifier
-
-#: A type alias for a plugin name.
-PluginName: TypeAlias = Identifier
-
-#: A type alias for a list of groups.
-GroupInputList: TypeAlias = IdentifierInputList
+#: A type alias for a group index.
+GroupIndex: TypeAlias = Identifier
 
 #: A type alias for an attribute name.
 AttributeName: TypeAlias = Identifier
 
-#: A type alias for a list of attribute names.
-AttributeNameInputList: TypeAlias = IdentifierInputList
+#: A type alias for a plugin name.
+PluginName: TypeAlias = Identifier
 
-#: A type alias for attributes.
+#: A type alias for an attribute value.
+Value: TypeAlias = Union[
+    str,
+    int,
+    float,
+    bool,
+    datetime,
+    timedelta,
+    None,
+]
+
+#: A type alias for the attributes of a node or an edge.
 Attributes: TypeAlias = Dict[AttributeName, Value]
 
-#: A type alias for input attributes.
-AttributesInput: TypeAlias = Union[
-    Mapping[AttributeName, Value],
-    Mapping[str, Value],
-    Mapping[int, Value],
+
+class EdgeDirection(Enum):
+    """Enumeration of the directions along which edges of a node are followed."""
+
+    Incoming = auto()
+    Outgoing = auto()
+    Both = auto()
+
+    def _into_py_edge_direction(self) -> PyEdgeDirection:
+        """Converts an EdgeDirection to a PyEdgeDirection.
+
+        Returns:
+            PyEdgeDirection: The converted PyEdgeDirection.
+        """
+        if self == EdgeDirection.Incoming:
+            return PyEdgeDirection.Incoming
+        if self == EdgeDirection.Outgoing:
+            return PyEdgeDirection.Outgoing
+        if self == EdgeDirection.Both:
+            return PyEdgeDirection.Both
+        msg = "Should never be reached"
+        raise NotImplementedError(msg)
+
+    def __repr__(self) -> str:
+        """Returns the string representation of the edge direction.
+
+        Returns:
+            str: The string representation of the edge direction.
+        """
+        return f"EdgeDirection.{self.name}"
+
+    def __str__(self) -> str:
+        """Returns a user-friendly string representation of the edge direction.
+
+        Returns:
+            str: The user-friendly string representation of the edge direction.
+        """
+        return self.name
+
+
+class EdgeIndex:
+    """The index of an edge, handed out by the GraphRecord that created it."""
+
+    _py_edge_index: PyEdgeIndex
+
+    @classmethod
+    def _from_py_edge_index(cls, py_edge_index: PyEdgeIndex) -> EdgeIndex:
+        """Creates an EdgeIndex from a PyEdgeIndex.
+
+        Args:
+            py_edge_index (PyEdgeIndex): The PyEdgeIndex to convert.
+
+        Returns:
+            EdgeIndex: The converted EdgeIndex.
+        """
+        edge_index = cls.__new__(cls)
+        edge_index._py_edge_index = py_edge_index
+        return edge_index
+
+    def __eq__(self, value: object) -> bool:
+        """Checks whether the EdgeIndex is equal to another one.
+
+        Args:
+            value (object): The value to compare.
+
+        Returns:
+            bool: True if both address the same edge, otherwise False.
+        """
+        if not isinstance(value, EdgeIndex):
+            return NotImplemented
+
+        return self._py_edge_index == value._py_edge_index
+
+    def __hash__(self) -> int:
+        """Returns the hash of the EdgeIndex.
+
+        Returns:
+            int: The hash of the EdgeIndex.
+        """
+        return hash(self._py_edge_index)
+
+    def __reduce__(
+        self,
+    ) -> Tuple[Callable[[PyEdgeIndex], EdgeIndex], Tuple[PyEdgeIndex]]:
+        """Reduces the EdgeIndex to what pickle needs to restore it.
+
+        Returns:
+            Tuple[Callable[[PyEdgeIndex], EdgeIndex], Tuple[PyEdgeIndex]]: The
+                callable that restores the EdgeIndex and its arguments.
+        """
+        return self._from_py_edge_index, (self._py_edge_index,)
+
+    def __repr__(self) -> str:
+        """Returns the string representation of the EdgeIndex.
+
+        Returns:
+            str: The string representation of the EdgeIndex.
+        """
+        return repr(self._py_edge_index)
+
+    def __str__(self) -> str:
+        """Returns a user-friendly string representation of the EdgeIndex.
+
+        Returns:
+            str: The user-friendly string representation of the EdgeIndex.
+        """
+        return str(self._py_edge_index)
+
+
+#: A type alias for everything a GraphRecord accepts as a source of nodes.
+NodeSource: TypeAlias = Union[
+    Iterable[Tuple[NodeIndex, Attributes]],
+    "Tuple[pl.DataFrame, str]",
+    "Tuple[ArrowStream, str]",
+    "NodeCollector",
 ]
 
-#: A type alias for a node tuple.
-NodeTuple: TypeAlias = Union[
-    Tuple[str, AttributesInput],
-    Tuple[int, AttributesInput],
-    Tuple[NodeIndex, AttributesInput],
+#: A type alias for everything a GraphRecord accepts as a source of edges.
+EdgeSource: TypeAlias = Union[
+    Iterable[Tuple[NodeIndex, NodeIndex, Attributes]],
+    "Tuple[pl.DataFrame, str, str]",
+    "Tuple[ArrowStream, str, str]",
+    "EdgeCollector",
 ]
 
-#: A type alias for an edge tuple.
-EdgeTuple: TypeAlias = Union[
-    Tuple[str, str, AttributesInput],
-    Tuple[str, int, AttributesInput],
-    Tuple[str, NodeIndex, AttributesInput],
-    Tuple[int, str, AttributesInput],
-    Tuple[int, int, AttributesInput],
-    Tuple[int, NodeIndex, AttributesInput],
-    Tuple[NodeIndex, str, AttributesInput],
-    Tuple[NodeIndex, int, AttributesInput],
-    Tuple[NodeIndex, NodeIndex, AttributesInput],
+#: A type alias for a query selecting exactly one node.
+SingleNodeQuery: TypeAlias = Union[
+    "NodeExpression",
+    "DefiniteNodeExpression",
+    "NodeSeries",
+    "DefiniteNodeSeries",
+    "BoolExpression[NodeIndexDomain]",
+    "DefiniteBoolExpression[NodeIndexDomain]",
+    "BoolSeries[NodeIndexDomain]",
+    "DefiniteBoolSeries[NodeIndexDomain]",
+    "NodeIndexExpression",
+    "DefiniteNodeIndexExpression",
+    "BareNodeIndexExpression",
+    "DefiniteBareNodeIndexExpression",
+    "NodeIndexSeries",
+    "DefiniteNodeIndexSeries",
+    "BareNodeIndexSeries",
+    "DefiniteBareNodeIndexSeries",
 ]
 
-#: A type alias for input to a Polars DataFrame for nodes.
-PolarsNodeDataFrameInput: TypeAlias = Tuple[pl.DataFrame, str]
-
-#: A type alias for input to a Polars DataFrame for edges.
-PolarsEdgeDataFrameInput: TypeAlias = Tuple[pl.DataFrame, str, str]
-
-#: A type alias for input to a Pandas DataFrame for nodes.
-PandasNodeDataFrameInput: TypeAlias = Tuple[pd.DataFrame, str]
-
-#: A type alias for input to a Pandas DataFrame for edges.
-PandasEdgeDataFrameInput: TypeAlias = Tuple[pd.DataFrame, str, str]
-
-#: A type alias for input to a node.
-NodeInput: TypeAlias = Union[
-    NodeTuple,
-    Sequence[NodeTuple],
-    PandasNodeDataFrameInput,
-    List[PandasNodeDataFrameInput],
-    PolarsNodeDataFrameInput,
-    List[PolarsNodeDataFrameInput],
+#: A type alias for a query selecting exactly one edge.
+SingleEdgeQuery: TypeAlias = Union[
+    "EdgeExpression",
+    "DefiniteEdgeExpression",
+    "EdgeSeries",
+    "DefiniteEdgeSeries",
+    "BoolExpression[EdgeIndexDomain]",
+    "DefiniteBoolExpression[EdgeIndexDomain]",
+    "BoolSeries[EdgeIndexDomain]",
+    "DefiniteBoolSeries[EdgeIndexDomain]",
+    "EdgeIndexExpression",
+    "DefiniteEdgeIndexExpression",
+    "BareEdgeIndexExpression",
+    "DefiniteBareEdgeIndexExpression",
+    "EdgeIndexSeries",
+    "DefiniteEdgeIndexSeries",
+    "BareEdgeIndexSeries",
+    "DefiniteBareEdgeIndexSeries",
 ]
 
-#: A type alias for input to an edge.
-EdgeInput: TypeAlias = Union[
-    EdgeTuple,
-    Sequence[EdgeTuple],
-    PandasEdgeDataFrameInput,
-    List[PandasEdgeDataFrameInput],
-    PolarsEdgeDataFrameInput,
-    List[PolarsEdgeDataFrameInput],
+#: A type alias for a query selecting exactly one group.
+SingleGroupQuery: TypeAlias = Union[
+    "GroupExpression",
+    "DefiniteGroupExpression",
+    "GroupSeries",
+    "DefiniteGroupSeries",
+    "BoolExpression[GroupIndexDomain]",
+    "DefiniteBoolExpression[GroupIndexDomain]",
+    "BoolSeries[GroupIndexDomain]",
+    "DefiniteBoolSeries[GroupIndexDomain]",
+    "GroupIndexExpression",
+    "DefiniteGroupIndexExpression",
+    "BareGroupIndexExpression",
+    "DefiniteBareGroupIndexExpression",
+    "GroupIndexSeries",
+    "DefiniteGroupIndexSeries",
+    "BareGroupIndexSeries",
+    "DefiniteBareGroupIndexSeries",
 ]
 
-
-class GroupInfo(TypedDict):
-    """A dictionary containing lists of node and edge indices for a group."""
-
-    nodes: List[NodeIndex]
-    edges: List[EdgeIndex]
-
-
-class PyCategoricalAttributeOverview(TypedDict):
-    """Dictionary for a categorical attribute overview."""
-
-    attribute_type: Literal[PyAttributeType.Categorical]
-    distinct_values: List[Value]
-
-
-class PyContinuousAttributeOverview(TypedDict):
-    """Dictionary for a continuous attribute overview."""
-
-    attribute_type: Literal[PyAttributeType.Continuous]
-    min: Value
-    mean: Value
-    max: Value
-
-
-class PyTemporalAttributeOverview(TypedDict):
-    """Dictionary for a temporal attribute overview."""
-
-    attribute_type: Literal[PyAttributeType.Temporal]
-    min: Value
-    max: Value
-
-
-class PyUnstructuredAttributeOverview(TypedDict):
-    """Dictionary for an unstructured attribute overview."""
-
-    attribute_type: Literal[PyAttributeType.Unstructured]
-    distinct_count: int
-
-
-class CategoricalAttributeOverview(TypedDict):
-    """Dictionary for a categorical attribute overview."""
-
-    attribute_type: Literal[AttributeType.Categorical]
-    distinct_values: List[Value]
-
-
-class ContinuousAttributeOverview(TypedDict):
-    """Dictionary for a continuous attribute overview."""
-
-    attribute_type: Literal[AttributeType.Continuous]
-    min: Value
-    mean: Value
-    max: Value
-
-
-class TemporalAttributeOverview(TypedDict):
-    """Dictionary for a temporal attribute overview."""
-
-    attribute_type: Literal[AttributeType.Temporal]
-    min: Value
-    max: Value
-
-
-class UnstructuredAttributeOverview(TypedDict):
-    """Dictionary for an unstructured attribute overview."""
-
-    attribute_type: Literal[AttributeType.Unstructured]
-    distinct_count: int
-
-
-class PolarsDataFramesGroupExport(TypedDict):
-    """Dictionary for Polars DataFrames export for a group."""
-
-    nodes: pl.DataFrame
-    edges: pl.DataFrame
-
-
-class PolarsDataFramesExport(TypedDict):
-    """Dictionary for Polars DataFrame export."""
-
-    ungrouped: PolarsDataFramesGroupExport
-    groups: Dict[Group, PolarsDataFramesGroupExport]
-
-
-class PandasDataFramesGroupExport(TypedDict):
-    """Dictionary for Pandas DataFrames export for a group."""
-
-    nodes: pd.DataFrame
-    edges: pd.DataFrame
-
-
-class PandasDataFramesExport(TypedDict):
-    """Dictionary for Pandas DataFrame export."""
-
-    ungrouped: PandasDataFramesGroupExport
-    groups: Dict[Group, PandasDataFramesGroupExport]
-
-
-class _PyPlugin(ABC):  # pyright: ignore[reportUnusedClass]
-    @abstractmethod
-    def initialize(self, graphrecord: PyGraphRecord) -> None: ...
-    @abstractmethod
-    def pre_set_schema(
-        self, graphrecord: PyGraphRecord, context: PyPreSetSchemaContext
-    ) -> PyPreSetSchemaContext: ...
-    @abstractmethod
-    def post_set_schema(self, graphrecord: PyGraphRecord) -> None: ...
-
-
-class _PyConnector(ABC):  # pyright: ignore[reportUnusedClass]
-    @abstractmethod
-    def initialize(self, graphrecord: PyGraphRecord) -> None: ...
-    @abstractmethod
-    def disconnect(self, graphrecord: PyGraphRecord) -> None: ...
-    @abstractmethod
-    def ingest(self, graphrecord: PyGraphRecord, data: Any) -> None: ...  # noqa: ANN401
-    @abstractmethod
-    def export(self, graphrecord: PyGraphRecord) -> Any: ...  # noqa: ANN401
-
-
-def is_identifier(value: object) -> TypeIs[Identifier]:
-    """Check if a value is a valid identifier.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[Identifier]: True if the value is a valid identifier, otherwise False.
-    """
-    return isinstance(value, (str, int)) and not isinstance(value, bool)
-
-
-def is_value(value: object) -> TypeIs[Value]:
-    """Check if a value is a valid value.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[Value]: True if the value is a valid value, otherwise False.
-    """
-    return (
-        isinstance(value, (str, int, float, bool, datetime, timedelta)) or value is None
-    )
-
-
-def is_node_index(value: object) -> TypeIs[NodeIndex]:
-    """Check if a value is a valid node index.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[NodeIndex]: True if the value is a valid node index, otherwise False.
-    """
-    return is_identifier(value)
-
-
-def is_node_index_list(value: object) -> TypeIs[NodeIndexInputList]:
-    """Check if a value is a valid list of node indices.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[NodeIndexInputList]: True if the value is a valid list of node indices,
-            otherwise False.
-    """
-    return isinstance(value, list) and all(is_node_index(input) for input in value)
-
-
-def is_edge_index(value: object) -> TypeIs[EdgeIndex]:
-    """Check if a value is a valid edge index.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[EdgeIndex]: True if the value is a valid edge index, otherwise False.
-    """
-    return isinstance(value, int)
-
-
-def is_edge_index_list(value: object) -> TypeIs[EdgeIndexInputList]:
-    """Check if a value is a valid list of edge indices.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[EdgeIndexInputList]: True if the value is a valid list of edge indices,
-            otherwise False.
-    """
-    return isinstance(value, list) and all(is_edge_index(input) for input in value)
-
-
-def is_group(value: object) -> TypeIs[Group]:
-    """Check if a value is a valid group.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[Group]: True if the value is a valid group, otherwise False.
-    """
-    return is_identifier(value)
-
-
-def is_attributes(value: object) -> TypeIs[Attributes]:
-    """Check if a value is a valid attributes dictionary.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[Attributes]: True if the value is a valid attributes dictionary,
-            otherwise False.
-    """
-    return isinstance(value, dict)
-
-
-def is_node_tuple(value: object) -> TypeIs[NodeTuple]:
-    """Check if a value is a valid node tuple.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[NodeTuple]: True if the value is a valid node tuple, otherwise False.
-    """
-    return (
-        isinstance(value, tuple)
-        and len(value) == 2
-        and is_identifier(value[0])
-        and is_attributes(value[1])
-    )
-
-
-def is_node_tuple_list(value: object) -> TypeIs[List[NodeTuple]]:
-    """Check if a value is a list of valid node tuples.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[List[NodeTuple]]: True if the value is a list of valid node tuples,
-            otherwise False.
-    """
-    return isinstance(value, list) and all(is_node_tuple(input) for input in value)
-
-
-def is_edge_tuple(value: object) -> TypeIs[EdgeTuple]:
-    """Check if a value is a valid edge tuple.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[EdgeTuple]: True if the value is a valid edge tuple, otherwise False.
-    """
-    return (
-        isinstance(value, tuple)
-        and len(value) == 3
-        and is_identifier(value[0])
-        and is_identifier(value[1])
-        and is_attributes(value[2])
-    )
-
-
-def is_edge_tuple_list(value: object) -> TypeIs[List[EdgeTuple]]:
-    """Check if a value is a list of valid edge tuples.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[List[EdgeTuple]]: True if the value is a list of valid edge tuples,
-            otherwise False.
-    """
-    return isinstance(value, list) and all(is_edge_tuple(input) for input in value)
-
-
-def is_polars_node_dataframe_input(
-    value: object,
-) -> TypeIs[PolarsNodeDataFrameInput]:
-    """Check if a value is a valid Polars DataFrame input for nodes.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[PolarsNodeDataFrameInput]: True if the value is a valid Polars DataFrame
-            input for nodes, otherwise False.
-    """
-    return (
-        isinstance(value, tuple)
-        and len(value) == 2
-        and isinstance(value[0], pl.DataFrame)
-        and isinstance(value[1], str)
-    )
-
-
-def is_polars_node_dataframe_input_list(
-    value: object,
-) -> TypeIs[List[PolarsNodeDataFrameInput]]:
-    """Check if a value is a list of valid Polars DataFrame inputs for nodes.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[List[PolarsNodeDataFrameInput]]: True if the value is a list of valid
-            Polars DataFrame inputs for nodes, otherwise False.
-    """
-    return isinstance(value, list) and all(
-        is_polars_node_dataframe_input(input) for input in value
-    )
-
-
-def is_polars_edge_dataframe_input(
-    value: object,
-) -> TypeIs[PolarsEdgeDataFrameInput]:
-    """Check if a value is a valid Polars DataFrame input for edges.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[PolarsEdgeDataFrameInput]: True if the value is a valid Polars DataFrame
-            input for edges, otherwise False.
-    """
-    return (
-        isinstance(value, tuple)
-        and len(value) == 3
-        and isinstance(value[0], pl.DataFrame)
-        and isinstance(value[1], str)
-        and isinstance(value[2], str)
-    )
-
-
-def is_polars_edge_dataframe_input_list(
-    value: object,
-) -> TypeIs[List[PolarsEdgeDataFrameInput]]:
-    """Check if a value is a list of valid Polars DataFrame inputs for edges.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[List[PolarsEdgeDataFrameInput]]: True if the value is a list of valid
-            Polars DataFrame inputs for edges, otherwise False.
-    """
-    return isinstance(value, list) and all(
-        is_polars_edge_dataframe_input(input) for input in value
-    )
-
-
-def is_pandas_node_dataframe_input(
-    value: object,
-) -> TypeIs[PandasNodeDataFrameInput]:
-    """Check if a value is a valid Pandas DataFrame input for nodes.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[PandasNodeDataFrameInput]: True if the value is a valid Pandas DataFrame
-            input for nodes, otherwise False.
-    """
-    return (
-        isinstance(value, tuple)
-        and len(value) == 2
-        and isinstance(value[0], pd.DataFrame)
-        and isinstance(value[1], str)
-    )
-
-
-def is_pandas_node_dataframe_input_list(
-    value: object,
-) -> TypeIs[List[PandasNodeDataFrameInput]]:
-    """Check if a value is a list of valid Pandas DataFrame inputs for nodes.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[List[PandasNodeDataFrameInput]]: True if the value is a list of valid
-            Pandas DataFrame inputs for nodes, otherwise False.
-    """
-    return isinstance(value, list) and all(
-        is_pandas_node_dataframe_input(input) for input in value
-    )
-
-
-def is_pandas_edge_dataframe_input(
-    value: object,
-) -> TypeIs[PandasEdgeDataFrameInput]:
-    """Check if a value is a valid Pandas DataFrame input for edges.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[PandasEdgeDataFrameInput]: True if the value is a valid Pandas DataFrame
-            input for edges, otherwise False.
-    """
-    return (
-        isinstance(value, tuple)
-        and len(value) == 3
-        and isinstance(value[0], pd.DataFrame)
-        and isinstance(value[1], str)
-        and isinstance(value[2], str)
-    )
-
-
-def is_pandas_edge_dataframe_input_list(
-    value: object,
-) -> TypeIs[List[PandasEdgeDataFrameInput]]:
-    """Check if a value is a list of valid Pandas DataFrame inputs for edges.
-
-    Args:
-        value (object): The value to check.
-
-    Returns:
-        TypeIs[List[PandasEdgeDataFrameInput]]: True if the value is a list of valid
-            Pandas DataFrame inputs for edges, otherwise False.
-    """
-    return isinstance(value, list) and all(
-        is_pandas_edge_dataframe_input(input) for input in value
-    )
+#: A type alias for a selection of nodes.
+MultipleNodeSelection: TypeAlias = Union[
+    NodeIndex,
+    Iterable[NodeIndex],
+    "NodesExpression",
+    "OrderedNodesExpression",
+    "NodesSeries",
+    "OrderedNodesSeries",
+    "BoolMaskExpression[NodeIndexDomain, Unordered]",
+    "BoolMaskExpression[NodeIndexDomain, Ordered]",
+    "BoolMaskSeries[NodeIndexDomain, Unordered]",
+    "BoolMaskSeries[NodeIndexDomain, Ordered]",
+    "NodeIndicesExpression",
+    "OrderedNodeIndicesExpression",
+    "BareNodeIndicesExpression",
+    "OrderedBareNodeIndicesExpression",
+    "NodeIndicesSeries",
+    "OrderedNodeIndicesSeries",
+    "BareNodeIndicesSeries",
+    "OrderedBareNodeIndicesSeries",
+    "Expression[Any, Indexed[Index[IndexPayload], IndexValue[NodeIndexDomain]], Multiple[Any]]",
+    "IndexedDroppingArgument[NodeIndexDomain, Unit]",
+    "IndexedDroppingArgument[NodeIndexDomain, Mask]",
+    "IndexedDroppingArgument[NodeIndexDomain, IndexValue[NodeIndexDomain]]",
+    SingleNodeQuery,
+]
+
+#: A type alias for a selection of edges.
+MultipleEdgeSelection: TypeAlias = Union[
+    EdgeIndex,
+    Iterable[EdgeIndex],
+    "EdgesExpression",
+    "OrderedEdgesExpression",
+    "EdgesSeries",
+    "OrderedEdgesSeries",
+    "BoolMaskExpression[EdgeIndexDomain, Unordered]",
+    "BoolMaskExpression[EdgeIndexDomain, Ordered]",
+    "BoolMaskSeries[EdgeIndexDomain, Unordered]",
+    "BoolMaskSeries[EdgeIndexDomain, Ordered]",
+    "EdgeIndicesExpression",
+    "OrderedEdgeIndicesExpression",
+    "BareEdgeIndicesExpression",
+    "OrderedBareEdgeIndicesExpression",
+    "EdgeIndicesSeries",
+    "OrderedEdgeIndicesSeries",
+    "BareEdgeIndicesSeries",
+    "OrderedBareEdgeIndicesSeries",
+    "Expression[Any, Indexed[Index[IndexPayload], IndexValue[EdgeIndexDomain]], Multiple[Any]]",
+    "IndexedDroppingArgument[EdgeIndexDomain, Unit]",
+    "IndexedDroppingArgument[EdgeIndexDomain, Mask]",
+    "IndexedDroppingArgument[EdgeIndexDomain, IndexValue[EdgeIndexDomain]]",
+    SingleEdgeQuery,
+]
+
+#: A type alias for a selection of groups.
+MultipleGroupSelection: TypeAlias = Union[
+    GroupIndex,
+    Iterable[GroupIndex],
+    "GroupsExpression",
+    "OrderedGroupsExpression",
+    "GroupsSeries",
+    "OrderedGroupsSeries",
+    "BoolMaskExpression[GroupIndexDomain, Unordered]",
+    "BoolMaskExpression[GroupIndexDomain, Ordered]",
+    "BoolMaskSeries[GroupIndexDomain, Unordered]",
+    "BoolMaskSeries[GroupIndexDomain, Ordered]",
+    "GroupIndicesExpression",
+    "OrderedGroupIndicesExpression",
+    "BareGroupIndicesExpression",
+    "OrderedBareGroupIndicesExpression",
+    "GroupIndicesSeries",
+    "OrderedGroupIndicesSeries",
+    "BareGroupIndicesSeries",
+    "OrderedBareGroupIndicesSeries",
+    "Expression[Any, Indexed[Index[IndexPayload], IndexValue[GroupIndexDomain]], Multiple[Any]]",
+    "IndexedDroppingArgument[GroupIndexDomain, Unit]",
+    "IndexedDroppingArgument[GroupIndexDomain, Mask]",
+    "IndexedDroppingArgument[GroupIndexDomain, IndexValue[GroupIndexDomain]]",
+    SingleGroupQuery,
+]
+
+#: A type alias for a selection of exactly one node.
+SingleNodeSelection: TypeAlias = Union[
+    NodeIndex,
+    SingleNodeQuery,
+]
+
+#: A type alias for a selection of exactly one group.
+SingleGroupSelection: TypeAlias = Union[
+    GroupIndex,
+    SingleGroupQuery,
+]

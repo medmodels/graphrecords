@@ -1,8 +1,14 @@
 use graphrecords_query::dynamic::DynCastTarget;
 use pyo3::prelude::*;
 
-#[pyclass(frozen, eq, eq_int)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[pyclass(
+    frozen,
+    eq,
+    eq_int,
+    hash,
+    module = "graphrecords._graphrecords.querying"
+)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PyCastTarget {
     Bool,
     DateTime,

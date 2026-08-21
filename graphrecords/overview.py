@@ -1,50 +1,95 @@
-"""Overview functions and classes for the graphrecords library."""
+"""Overview classes summarizing the contents of a GraphRecord."""
 
-from typing import TYPE_CHECKING, Dict, Final, Union
+from __future__ import annotations
 
-from graphrecords._graphrecords.overview import (
-    PY_DEFAULT_TRUNCATE_DETAILS,
-    PyEdgeGroupOverview,
-    PyGroupOverview,
-    PyNodeGroupOverview,
-    PyOverview,
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    Final,
+    List,
+    Literal,
+    TypeAlias,
+    TypedDict,
+    Union,
 )
-from graphrecords._graphrecords.schema import PyAttributeType
+
+from graphrecords._graphrecords.overview import PY_DEFAULT_TRUNCATE_DETAILS
 from graphrecords.datatype import DataType
 from graphrecords.schema import AttributeType
-from graphrecords.types import AttributeName, Group
 
 if TYPE_CHECKING:
-    from graphrecords._graphrecords.overview import PyAttributeOverview
-    from graphrecords.types import (
-        CategoricalAttributeOverview,
-        ContinuousAttributeOverview,
-        TemporalAttributeOverview,
-        UnstructuredAttributeOverview,
+    from graphrecords._graphrecords.overview import (
+        PyAttributeOverview,
+        PyEdgeGroupOverview,
+        PyGroupOverview,
+        PyNodeGroupOverview,
+        PyOverview,
     )
+    from graphrecords.types import AttributeName, GroupIndex, Value
 
+#: The number of details an overview shows before it truncates them.
 DEFAULT_TRUNCATE_DETAILS: Final[int] = PY_DEFAULT_TRUNCATE_DETAILS
+
+
+class CategoricalAttributeOverview(TypedDict):
+    """The overview data of a categorical attribute."""
+
+    attribute_type: Literal[AttributeType.Categorical]
+    distinct_values: List[Value]
+
+
+class ContinuousAttributeOverview(TypedDict):
+    """The overview data of a continuous attribute."""
+
+    attribute_type: Literal[AttributeType.Continuous]
+    min: Value
+    mean: Value
+    max: Value
+
+
+class TemporalAttributeOverview(TypedDict):
+    """The overview data of a temporal attribute."""
+
+    attribute_type: Literal[AttributeType.Temporal]
+    min: Value
+    max: Value
+
+
+class UnstructuredAttributeOverview(TypedDict):
+    """The overview data of an unstructured attribute."""
+
+    attribute_type: Literal[AttributeType.Unstructured]
+    distinct_count: int
+
+
+#: A type alias for the overview data of an attribute of any type.
+AttributeOverviewData: TypeAlias = Union[
+    CategoricalAttributeOverview,
+    ContinuousAttributeOverview,
+    TemporalAttributeOverview,
+    UnstructuredAttributeOverview,
+]
 
 
 class AttributeOverview:
     """Overview data of an attribute."""
 
-    _py_attribute_overview: "PyAttributeOverview"
+    _py_attribute_overview: PyAttributeOverview
 
     @classmethod
     def _from_py_attribute_overview(
-        cls, py_attribute_overview: "PyAttributeOverview"
-    ) -> "AttributeOverview":
-        """Create an AttributeOverview from a PyAttributeOverview.
+        cls, py_attribute_overview: PyAttributeOverview
+    ) -> AttributeOverview:
+        """Creates an AttributeOverview from a PyAttributeOverview.
 
         Args:
-            py_attribute_overview (PyAttributeOverview): The PyAttributeOverview
-                to convert.
+            py_attribute_overview (PyAttributeOverview): The PyAttributeOverview to
+                convert.
 
         Returns:
             AttributeOverview: The converted AttributeOverview.
         """
-        attribute_overview = cls()
+        attribute_overview = cls.__new__(cls)
         attribute_overview._py_attribute_overview = py_attribute_overview
         return attribute_overview
 
@@ -58,79 +103,69 @@ class AttributeOverview:
         return DataType._from_py_data_type(self._py_attribute_overview.data_type)
 
     @property
-    def data(
-        self,
-    ) -> Union[
-        "CategoricalAttributeOverview",
-        "ContinuousAttributeOverview",
-        "TemporalAttributeOverview",
-        "UnstructuredAttributeOverview",
-    ]:
+    def data(self) -> AttributeOverviewData:
         """The overview data of the attribute.
 
         Returns:
-            Union[
-                CategoricalAttributeOverview,
-                ContinuousAttributeOverview,
-                TemporalAttributeOverview,
-                UnstructuredAttributeOverview,
-            ]: The overview data of the attribute.
+            AttributeOverviewData: The overview data, shaped by the statistical type
+                of the attribute.
         """
-        if (
-            self._py_attribute_overview.data["attribute_type"]
-            == PyAttributeType.Categorical
-        ):
+        data = self._py_attribute_overview.data
+
+        if "distinct_values" in data:
             return {
                 "attribute_type": AttributeType.Categorical,
-                "distinct_values": self._py_attribute_overview.data["distinct_values"],
+                "distinct_values": data["distinct_values"],
             }
 
-        if (
-            self._py_attribute_overview.data["attribute_type"]
-            == PyAttributeType.Continuous
-        ):
+        if "mean" in data:
             return {
                 "attribute_type": AttributeType.Continuous,
-                "min": self._py_attribute_overview.data["min"],
-                "mean": self._py_attribute_overview.data["mean"],
-                "max": self._py_attribute_overview.data["max"],
+                "min": data["min"],
+                "mean": data["mean"],
+                "max": data["max"],
             }
 
-        if (
-            self._py_attribute_overview.data["attribute_type"]
-            == PyAttributeType.Temporal
-        ):
+        if "min" in data:
             return {
                 "attribute_type": AttributeType.Temporal,
-                "min": self._py_attribute_overview.data["min"],
-                "max": self._py_attribute_overview.data["max"],
+                "min": data["min"],
+                "max": data["max"],
             }
 
         return {
             "attribute_type": AttributeType.Unstructured,
-            "distinct_count": self._py_attribute_overview.data["distinct_count"],
+            "distinct_count": data["distinct_count"],
         }
+
+    def __repr__(self) -> str:
+        """Returns the string representation of the AttributeOverview.
+
+        Returns:
+            str: The string representation of the AttributeOverview.
+        """
+        return repr(self._py_attribute_overview)
 
 
 class NodeGroupOverview:
-    """Overview data of a node group."""
+    """Overview data of the nodes of a group."""
 
-    _py_node_group_overview: "PyNodeGroupOverview"
+    _py_node_group_overview: PyNodeGroupOverview
 
     @classmethod
     def _from_py_node_group_overview(
-        cls, py_node_group_overview: "PyNodeGroupOverview"
-    ) -> "NodeGroupOverview":
-        """Create a NodeGroupOverview from a PyNodeGroupOverview.
+        cls, py_node_group_overview: PyNodeGroupOverview
+    ) -> NodeGroupOverview:
+        """Creates a NodeGroupOverview from a PyNodeGroupOverview.
 
         Args:
-            py_node_group_overview (PyNodeGroupOverview): The PyNodeGroupOverview
-                to convert.
+            py_node_group_overview (PyNodeGroupOverview): The PyNodeGroupOverview to
+                convert.
 
         Returns:
             NodeGroupOverview: The converted NodeGroupOverview.
         """
-        node_group_overview = cls()
+        node_group_overview = cls.__new__(cls)
         node_group_overview._py_node_group_overview = py_node_group_overview
         return node_group_overview
 
@@ -145,45 +180,49 @@ class NodeGroupOverview:
 
     @property
     def attributes(self) -> Dict[AttributeName, AttributeOverview]:
-        """The attribute overviews of the node group.
+        """The attribute overviews of the nodes.
 
         Returns:
-            Dict[AttributeName, AttributeOverview]: The attribute overviews
-                of the node group.
+            Dict[AttributeName, AttributeOverview]: The overview of every node
+                attribute.
         """
         return {
-            attribute: AttributeOverview._from_py_attribute_overview(py_overview)
-            for attribute, py_overview in self._py_node_group_overview.attributes.items()
+            attribute_name: AttributeOverview._from_py_attribute_overview(
+                attribute_overview
+            )
+            for attribute_name, attribute_overview in (
+                self._py_node_group_overview.attributes.items()
+            )
         }
 
     def __repr__(self) -> str:
-        """Return the string representation of the NodeGroupOverview.
+        """Returns the string representation of the NodeGroupOverview.
 
         Returns:
             str: The string representation of the NodeGroupOverview.
         """
-        return self._py_node_group_overview.__repr__()
+        return repr(self._py_node_group_overview)
 
 
 class EdgeGroupOverview:
-    """Overview data of an edge group."""
+    """Overview data of the edges of a group."""
 
-    _py_edge_group_overview: "PyEdgeGroupOverview"
+    _py_edge_group_overview: PyEdgeGroupOverview
 
     @classmethod
     def _from_py_edge_group_overview(
-        cls, py_edge_group_overview: "PyEdgeGroupOverview"
-    ) -> "EdgeGroupOverview":
-        """Create an EdgeGroupOverview from a PyEdgeGroupOverview.
+        cls, py_edge_group_overview: PyEdgeGroupOverview
+    ) -> EdgeGroupOverview:
+        """Creates an EdgeGroupOverview from a PyEdgeGroupOverview.
 
         Args:
-            py_edge_group_overview (PyEdgeGroupOverview): The PyEdgeGroupOverview
-                to convert.
+            py_edge_group_overview (PyEdgeGroupOverview): The PyEdgeGroupOverview to
+                convert.
 
         Returns:
             EdgeGroupOverview: The converted EdgeGroupOverview.
         """
-        edge_group_overview = cls()
+        edge_group_overview = cls.__new__(cls)
         edge_group_overview._py_edge_group_overview = py_edge_group_overview
         return edge_group_overview
 
@@ -198,54 +237,57 @@ class EdgeGroupOverview:
 
     @property
     def attributes(self) -> Dict[AttributeName, AttributeOverview]:
-        """The attribute overviews of the edge group.
+        """The attribute overviews of the edges.
 
         Returns:
-            Dict[AttributeName, AttributeOverview]: The attribute overviews
-                of the edge group.
+            Dict[AttributeName, AttributeOverview]: The overview of every edge
+                attribute.
         """
         return {
-            attribute: AttributeOverview._from_py_attribute_overview(py_overview)
-            for attribute, py_overview in self._py_edge_group_overview.attributes.items()
+            attribute_name: AttributeOverview._from_py_attribute_overview(
+                attribute_overview
+            )
+            for attribute_name, attribute_overview in (
+                self._py_edge_group_overview.attributes.items()
+            )
         }
 
     def __repr__(self) -> str:
-        """Return the string representation of the EdgeGroupOverview.
+        """Returns the string representation of the EdgeGroupOverview.
 
         Returns:
             str: The string representation of the EdgeGroupOverview.
         """
-        return self._py_edge_group_overview.__repr__()
+        return repr(self._py_edge_group_overview)
 
 
 class GroupOverview:
-    """Overview data of a group (node and/or edge)."""
+    """Overview data of the nodes and edges of a group."""
 
     _py_group_overview: PyGroupOverview
 
     @classmethod
     def _from_py_group_overview(
         cls, py_group_overview: PyGroupOverview
-    ) -> "GroupOverview":
-        """Create a GroupOverview from a PyGroupOverview.
+    ) -> GroupOverview:
+        """Creates a GroupOverview from a PyGroupOverview.
 
         Args:
-            py_group_overview (PyGroupOverview): The PyGroupOverview
-                to convert.
+            py_group_overview (PyGroupOverview): The PyGroupOverview to convert.
 
         Returns:
             GroupOverview: The converted GroupOverview.
         """
-        group_overview = cls()
+        group_overview = cls.__new__(cls)
         group_overview._py_group_overview = py_group_overview
         return group_overview
 
     @property
     def node_overview(self) -> NodeGroupOverview:
-        """The node group overview.
+        """The overview of the nodes of the group.
 
         Returns:
-            NodeGroupOverview: The node group overview.
+            NodeGroupOverview: The overview of the nodes.
         """
         return NodeGroupOverview._from_py_node_group_overview(
             self._py_group_overview.node_overview
@@ -253,32 +295,32 @@ class GroupOverview:
 
     @property
     def edge_overview(self) -> EdgeGroupOverview:
-        """The edge group overview.
+        """The overview of the edges of the group.
 
         Returns:
-            EdgeGroupOverview: The edge group overview.
+            EdgeGroupOverview: The overview of the edges.
         """
         return EdgeGroupOverview._from_py_edge_group_overview(
             self._py_group_overview.edge_overview
         )
 
     def __repr__(self) -> str:
-        """Return the string representation of the GroupOverview.
+        """Returns the string representation of the GroupOverview.
 
         Returns:
             str: The string representation of the GroupOverview.
         """
-        return self._py_group_overview.__repr__()
+        return repr(self._py_group_overview)
 
 
 class Overview:
-    """Overview functions for the graphrecords library."""
+    """Overview data of every group of a GraphRecord, and of its ungrouped part."""
 
     _py_overview: PyOverview
 
     @classmethod
-    def _from_py_overview(cls, py_overview: PyOverview) -> "Overview":
-        """Create an Overview from a PyOverview.
+    def _from_py_overview(cls, py_overview: PyOverview) -> Overview:
+        """Creates an Overview from a PyOverview.
 
         Args:
             py_overview (PyOverview): The PyOverview to convert.
@@ -286,38 +328,39 @@ class Overview:
         Returns:
             Overview: The converted Overview.
         """
-        overview = cls()
+        overview = cls.__new__(cls)
         overview._py_overview = py_overview
         return overview
 
     @property
     def ungrouped_overview(self) -> GroupOverview:
-        """The overview of ungrouped nodes/edges.
+        """The overview of everything outside a group.
 
         Returns:
-            GroupOverview: The overview of ungrouped nodes/edges.
+            GroupOverview: The overview of the ungrouped part.
         """
         return GroupOverview._from_py_group_overview(
             self._py_overview.ungrouped_overview
         )
 
     @property
-    def grouped_overviews(self) -> Dict[Group, GroupOverview]:
-        """The overviews of grouped nodes/edges.
+    def grouped_overviews(self) -> Dict[GroupIndex, GroupOverview]:
+        """The overview of every group.
 
         Returns:
-            Dict[Group, GroupOverview]: The overviews of grouped
-                nodes/edges.
+            Dict[GroupIndex, GroupOverview]: The overview of every group.
         """
         return {
-            attribute: GroupOverview._from_py_group_overview(py_overview)
-            for attribute, py_overview in self._py_overview.grouped_overviews.items()
+            group_index: GroupOverview._from_py_group_overview(group_overview)
+            for group_index, group_overview in (
+                self._py_overview.grouped_overviews.items()
+            )
         }
 
     def __repr__(self) -> str:
-        """Return the string representation of the Overview.
+        """Returns the string representation of the Overview.
 
         Returns:
             str: The string representation of the Overview.
         """
-        return self._py_overview.__repr__()
+        return repr(self._py_overview)

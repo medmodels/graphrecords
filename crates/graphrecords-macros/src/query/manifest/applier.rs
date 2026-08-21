@@ -1,6 +1,6 @@
 use super::model::{
-    Field, Kernel, KernelInput, Manifest, Policy, PolicyCall, Scope, ValueArgument, ViaArgument,
-    type_application, type_ident,
+    Field, Kernel, KernelInput, Manifest, Parameter, Policy, PolicyCall, Scope, ValueArgument,
+    ViaArgument, type_application, type_ident,
 };
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -39,6 +39,11 @@ struct Expansion<'a> {
     child: &'a Type,
     out_value: &'a Type,
     order: &'a Type,
+}
+
+struct SourceLane<'a> {
+    arities: &'a [(TokenStream, TokenStream)],
+    series: bool,
 }
 
 impl Applier<'_> {
@@ -384,19 +389,65 @@ impl Applier<'_> {
         );
         let capture = self.capture(&road, &[quote!(set)])?;
         let apply = self.element_apply(shape, out_shape);
-        let bare_arity = self.set_arity(
+        let bare_shape = quote!(#query::Bare<#dynamic_value>);
+        let indexed_shape = quote!(#query::Indexed<#query::dynamic::DynIndex, #dynamic_value>);
+        let multiple_arities = [
+            (
+                quote!(MultipleOrdered),
+                quote!(#query::Multiple<#query::Ordered>),
+            ),
+            (
+                quote!(MultipleUnordered),
+                quote!(#query::Multiple<#query::Unordered>),
+            ),
+        ];
+        let bare_arities = [
+            (quote!(Single), quote!(#query::Single)),
+            (quote!(Definite), quote!(#query::Definite)),
+        ];
+        let every_arity = [
+            multiple_arities[0].clone(),
+            multiple_arities[1].clone(),
+            bare_arities[0].clone(),
+            bare_arities[1].clone(),
+        ];
+        let expression_lane = SourceLane {
+            arities: &every_arity,
+            series: false,
+        };
+        let bare_series_lane = SourceLane {
+            arities: &every_arity,
+            series: true,
+        };
+        let indexed_series_lane = SourceLane {
+            arities: &every_arity,
+            series: true,
+        };
+        let bare_expression =
+            self.set_arity(&road, name, &bare_shape, shape, out_shape, &expression_lane)?;
+        let indexed_expression = self.set_arity(
             &road,
             name,
-            &quote!(#query::Bare<#dynamic_value>),
+            &indexed_shape,
             shape,
             out_shape,
+            &expression_lane,
         )?;
-        let indexed_arity = self.set_arity(
+        let bare_series = self.set_arity(
             &road,
             name,
-            &quote!(#query::Indexed<#query::dynamic::DynIndex, #dynamic_value>),
+            &bare_shape,
             shape,
             out_shape,
+            &bare_series_lane,
+        )?;
+        let indexed_series = self.set_arity(
+            &road,
+            name,
+            &indexed_shape,
+            shape,
+            out_shape,
+            &indexed_series_lane,
         )?;
 
         Ok(quote! {
@@ -414,18 +465,36 @@ impl Applier<'_> {
                     return #apply;
                 }
 
-                let set = source.as_expression();
-                let #query::dynamic::DynHandle::Lane(lane) = &set.handle else {
-                    panic!("registry admitted a grouped expression where a dynamic set source is required")
-                };
+                match source.as_lane() {
+                    #query::dynamic::DynArgumentLane::Expression(expression) => {
+                        let #query::dynamic::DynHandle::Lane(lane) = &expression.handle else {
+                            panic!("registry admitted a grouped expression where a dynamic set source is required")
+                        };
 
-                match lane {
-                    #query::dynamic::DynLaneHandle::BareValue(_)
-                    | #query::dynamic::DynLaneHandle::BareMask(_) => {
-                        #bare_arity
+                        match lane {
+                            #query::dynamic::DynLaneHandle::BareValue(_)
+                            | #query::dynamic::DynLaneHandle::BareMask(_) => {
+                                #bare_expression
+                            }
+                            _ => {
+                                #indexed_expression
+                            }
+                        }
                     }
-                    _ => {
-                        #indexed_arity
+                    #query::dynamic::DynArgumentLane::Series(series) => {
+                        let #query::dynamic::DynHandle::Lane(lane) = &series.expression().handle else {
+                            panic!("registry admitted a grouped series where a dynamic set source is required")
+                        };
+
+                        match lane {
+                            #query::dynamic::DynLaneHandle::BareValue(_)
+                            | #query::dynamic::DynLaneHandle::BareMask(_) => {
+                                #bare_series
+                            }
+                            _ => {
+                                #indexed_series
+                            }
+                        }
                     }
                 }
             }
@@ -439,30 +508,34 @@ impl Applier<'_> {
         set_shape: &TokenStream,
         shape: &Type,
         out_shape: &Type,
+        lane: &SourceLane<'_>,
     ) -> Result<TokenStream> {
         let query = self.query;
-        let handles = [
-            (
-                quote!(MultipleOrdered),
-                quote!(#query::Multiple<#query::Ordered>),
-            ),
-            (
-                quote!(MultipleUnordered),
-                quote!(#query::Multiple<#query::Unordered>),
-            ),
-            (quote!(Single), quote!(#query::Single)),
-            (quote!(Definite), quote!(#query::Definite)),
-        ];
-
         let mut branches = TokenStream::new();
-        for (handle, arity) in handles {
+
+        for (handle, arity) in lane.arities {
             let capture = self.capture(road, &[quote!(set)])?;
             let apply = self.element_apply(shape, out_shape);
-            branches.extend(quote! {
-                #query::dynamic::DynArityHandle::#handle(handle) => {
+            let source = if lane.series {
+                quote! {
+                    type #name = #query::Series<
+                        #query::expressions::ExpressionHandle<#set_shape, #arity>,
+                    >;
+
+                    let set = series.bind(handle.clone());
+                }
+            } else {
+                quote! {
                     type #name = #query::expressions::ExpressionHandle<#set_shape, #arity>;
 
                     let set = handle.clone();
+                }
+            };
+
+            branches.extend(quote! {
+                #query::dynamic::DynArityHandle::#handle(handle) => {
+                    #source
+
                     let operation = #capture;
 
                     #apply
@@ -673,7 +746,7 @@ impl Applier<'_> {
                 &quote!(#query::Indexed<#payload_index, #payload_value>),
                 payload_arity,
             );
-            let roads = self.via_body(payload_value, via_value, &dispatch);
+            let roads = self.via_body(payload_value, via_value, &dispatch)?;
             let body = quote! {
                 type #member = #query::dynamic::DynIndex;
                 type #key = #query::dynamic::DynIndex;
@@ -698,7 +771,7 @@ impl Applier<'_> {
 
             let dispatch =
                 self.via_dispatch(via, &quote!(#query::Bare<#payload_value>), payload_arity);
-            let roads = self.via_body(payload_value, via_value, &dispatch);
+            let roads = self.via_body(payload_value, via_value, &dispatch)?;
             let body = quote! {
                 type #member = #query::dynamic::DynIndex;
                 type #key = #query::dynamic::DynIndex;
@@ -720,21 +793,20 @@ impl Applier<'_> {
         payload_value: &Ident,
         via_value: &Ident,
         dispatch: &TokenStream,
-    ) -> TokenStream {
+    ) -> Result<TokenStream> {
         let query = self.query;
+        let roads = self.receiver_dispatch(|dynamic_value| {
+            Ok(quote! {
+                {
+                    type #payload_value = #dynamic_value;
 
-        let arms = |payload_alias: &TokenStream| {
-            quote! {
-                type #payload_value = #payload_alias;
-                type #via_value = #query::dynamic::DynValue;
-                #dispatch
-            }
-        };
-        let mask = arms(&quote!(#query::Mask));
-        let general = arms(&quote!(#query::dynamic::DynValue));
+                    #dispatch
+                }
+            })
+        })?;
 
-        quote! {
-            let via = #query::dynamic::invoke_expression(arguments, 0);
+        Ok(quote! {
+            let via = #query::dynamic::invoke_lane(arguments, 0);
             let transitioned;
             let via = if matches!(
                 #query::dynamic::innermost_lane_kind(via.descriptor()),
@@ -746,18 +818,10 @@ impl Applier<'_> {
                 via
             };
 
-            match (
-                #query::dynamic::innermost_lane_kind(input.descriptor()),
-                #query::dynamic::innermost_lane_kind(via.descriptor()),
-            ) {
-                (#query::dynamic::DynLaneKind::IndexedMask | #query::dynamic::DynLaneKind::BareMask, _) => {
-                    #mask
-                }
-                (_, _) => {
-                    #general
-                }
-            }
-        }
+            type #via_value = #query::dynamic::DynValue;
+
+            #roads
+        })
     }
 
     fn via_dispatch(
@@ -768,7 +832,7 @@ impl Applier<'_> {
     ) -> TokenStream {
         let query = self.query;
         let via_value = &via.value;
-        let arities = [
+        let multiple_arities = [
             (
                 quote!(MultipleOrdered),
                 quote!(#query::Multiple<#query::Ordered>),
@@ -777,29 +841,74 @@ impl Applier<'_> {
                 quote!(MultipleUnordered),
                 quote!(#query::Multiple<#query::Unordered>),
             ),
+        ];
+        let every_arity = [
+            multiple_arities[0].clone(),
+            multiple_arities[1].clone(),
             (quote!(Single), quote!(#query::Single)),
             (quote!(Definite), quote!(#query::Definite)),
         ];
-
-        let mut branches = TokenStream::new();
-        for (handle, arity) in arities {
-            let arm = self.via_arm(via, &arity, payload_shape, payload_arity);
-            branches.extend(quote! {
-                #query::dynamic::DynArityHandle::#handle(handle) => #arm,
-            });
-        }
+        let expression_lane = SourceLane {
+            arities: &every_arity,
+            series: false,
+        };
+        let series_lane = SourceLane {
+            arities: &multiple_arities,
+            series: true,
+        };
+        let expression = self.via_arities(via, payload_shape, payload_arity, &expression_lane);
+        let series = self.via_arities(via, payload_shape, payload_arity, &series_lane);
 
         quote! {
             {
                 type ViaShape = #query::Indexed<#query::dynamic::DynIndex, #via_value>;
 
-                let #query::dynamic::DynHandle::Lane(lane) = &via.handle else {
-                    panic!("registry admitted a grouped expression where a dynamic via lane is required")
-                };
+                match via {
+                    #query::dynamic::DynArgumentLane::Expression(expression) => {
+                        let #query::dynamic::DynHandle::Lane(lane) = &expression.handle else {
+                            panic!("registry admitted a grouped expression where a dynamic via lane is required")
+                        };
 
-                match <ViaShape as #query::dynamic::DynLaneState>::handles(lane) {
-                    #branches
+                        #expression
+                    }
+                    #query::dynamic::DynArgumentLane::Series(series) => {
+                        let #query::dynamic::DynHandle::Lane(lane) = &series.expression().handle else {
+                            panic!("registry admitted a grouped series where a dynamic via lane is required")
+                        };
+
+                        #series
+                    }
                 }
+            }
+        }
+    }
+
+    fn via_arities(
+        &self,
+        via: &ViaArgument,
+        payload_shape: &TokenStream,
+        payload_arity: &Ident,
+        lane: &SourceLane<'_>,
+    ) -> TokenStream {
+        let query = self.query;
+        let mut branches = TokenStream::new();
+
+        for (handle, arity) in lane.arities {
+            let arm = self.via_arm(via, arity, payload_shape, payload_arity, lane.series);
+            branches.extend(quote! {
+                #query::dynamic::DynArityHandle::#handle(handle) => #arm,
+            });
+        }
+
+        if lane.series {
+            branches.extend(quote! {
+                _ => panic!("registry admitted a series via source outside the series arity roster"),
+            });
+        }
+
+        quote! {
+            match <ViaShape as #query::dynamic::DynLaneState>::handles(lane) {
+                #branches
             }
         }
     }
@@ -810,19 +919,34 @@ impl Applier<'_> {
         arity: &TokenStream,
         payload_shape: &TokenStream,
         payload_arity: &Ident,
+        series: bool,
     ) -> TokenStream {
         let query = self.query;
         let operation = &self.manifest.operation;
         let method = &self.manifest.method;
         let via_arity = &via.arity;
         let argument = &via.name;
+        let source = if series {
+            quote! {
+                type #argument = #query::Series<
+                    #query::expressions::ExpressionHandle<ViaShape, #via_arity>,
+                >;
+
+                let via_source = series.bind(handle.clone());
+            }
+        } else {
+            quote! {
+                type #argument = #query::expressions::ExpressionHandle<ViaShape, #via_arity>;
+
+                let via_source = handle.clone();
+            }
+        };
 
         quote! {
             {
                 type #via_arity = #arity;
-                type #argument = #query::expressions::ExpressionHandle<ViaShape, #via_arity>;
+                #source
 
-                let via_source = handle.clone();
                 let capture = #query::dynamic::OperationCapture::<#operation>::capture();
                 let operation = capture.#method(via_source).operation();
                 let operation = #query::dynamic::DynGroupOperation::<
@@ -1275,12 +1399,19 @@ impl Applier<'_> {
         F: Fn(&TokenStream) -> Result<TokenStream>,
     {
         let query = self.query;
-        let dispatched = self.kernel.parameters.iter().any(|parameter| {
-            matches!(
-                parameter.bound.to_string().as_str(),
-                "EntityIndexDomain" | "EntityAttributes" | "GroupMembership"
-            )
-        });
+        let mut dispatched = false;
+        let mut group_capable = true;
+
+        for parameter in &self.kernel.parameters {
+            match parameter.bound.to_string().as_str() {
+                "EntityIndexDomain" => dispatched = true,
+                "EntityAttributes" | "GroupMembership" => {
+                    dispatched = true;
+                    group_capable = false;
+                }
+                _ => {}
+            }
+        }
 
         if !dispatched {
             return build(&quote!(#query::dynamic::DynIndex));
@@ -1288,6 +1419,15 @@ impl Applier<'_> {
 
         let node = build(&quote!(#query::dynamic::NodeIndex))?;
         let edge = build(&quote!(#query::dynamic::EdgeIndex))?;
+        let group = if group_capable {
+            build(&quote!(#query::dynamic::GroupIndex))?
+        } else {
+            quote! {
+                panic!(
+                    "registry selected an entity operation the group index domain does not support"
+                )
+            }
+        };
 
         Ok(quote! {
             match #query::dynamic::entity_domain(input) {
@@ -1296,6 +1436,9 @@ impl Applier<'_> {
                 }
                 #query::dynamic::DynEntityDomain::Edge => {
                     #edge
+                }
+                #query::dynamic::DynEntityDomain::Group => {
+                    #group
                 }
             }
         })
@@ -1306,14 +1449,11 @@ impl Applier<'_> {
         F: Fn(&TokenStream) -> Result<TokenStream>,
     {
         let query = self.query;
-        let with_unit = self.kernel.parameters.iter().find_map(|parameter| {
-            match parameter.bound.to_string().as_str() {
-                "ValueDomain" => Some(true),
-                "BareValueDomain" | "ValueGrouping" | "ValueEquality" | "ValueEquivalence"
-                | "ValueMode" => Some(false),
-                _ => None,
-            }
-        });
+        let with_unit = self
+            .kernel
+            .parameters
+            .iter()
+            .find_map(Self::receiver_value_domains);
 
         let Some(with_unit) = with_unit else {
             return build(&quote!(#query::dynamic::DynValue));
@@ -1348,6 +1488,26 @@ impl Applier<'_> {
                 _ => #general,
             }
         })
+    }
+
+    fn receiver_value_domains(parameter: &Parameter) -> Option<bool> {
+        let target = parameter
+            .target
+            .as_ref()
+            .map(|target| quote!(#target).to_string().replace(' ', ""));
+
+        match (parameter.bound.to_string().as_str(), target.as_deref()) {
+            ("ValueDomain", _) => Some(true),
+            (
+                "BareValueDomain" | "ValueEquality" | "ValueEquivalence" | "ValueGrouping"
+                | "ValueMode",
+                _,
+            )
+            | ("ValueTransition", Some("Scalar" | "(IndexValue<Value>)" | "(IndexValue<bool>)")) => {
+                Some(false)
+            }
+            _ => None,
+        }
     }
 
     fn aliases(

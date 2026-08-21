@@ -1,6 +1,6 @@
 use crate::{
-    Explain, FailureKind, FailureKindValue, IndexValue, Mask, Position, QueryResult, Scalar,
-    ValueDomain,
+    EdgeEndpointRole, Explain, FailureKind, FailureKindValue, IndexValue, Mask, Position,
+    QueryResult, Scalar, ValueDomain,
     element::Preserving,
     execution::EvaluationCache,
     explain::ExplainFormatter,
@@ -713,6 +713,66 @@ impl SourceDomain for FailureKind {
 }
 
 impl<A, V> ArgumentSource<A, V> for FailureKind
+where
+    A: Alignment,
+    V: ValueDomain<Owned = Self>,
+{
+    type Retention = Preserving;
+
+    fn lookup<'a>(
+        graphrecord: &'a GraphRecord,
+        prepared: &Self::Prepared<'a>,
+        _address: &A::Address,
+        label: &'static str,
+    ) -> Lookup<QueryResult<V::Value<'a>>>
+    where
+        Self: 'a,
+    {
+        Lookup::Present(V::from_owned(graphrecord, *prepared, label))
+    }
+}
+
+impl Explain for EdgeEndpointRole {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        write!(formatter, "{self}")
+    }
+}
+
+impl PlanIdentity for EdgeEndpointRole {
+    fn identity_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn identity_hash<H: Hasher>(&self, state: &mut H) {
+        self.hash(state);
+    }
+}
+
+impl PlanInputs for EdgeEndpointRole {}
+
+impl Prepare for EdgeEndpointRole {
+    type Prepared<'a> = &'a Self;
+
+    fn prepare<'a>(
+        &'a self,
+        _graphrecord: &'a GraphRecord,
+        _cache: &'a EvaluationCache,
+    ) -> QueryResult<Self::Prepared<'a>> {
+        Ok(self)
+    }
+}
+
+impl Estimated for EdgeEndpointRole {
+    fn estimate(&self, _stats: &Stats) -> Estimate {
+        Estimate::singleton()
+    }
+}
+
+impl SourceDomain for EdgeEndpointRole {
+    type ValueDomain = IndexValue<Self>;
+}
+
+impl<A, V> ArgumentSource<A, V> for EdgeEndpointRole
 where
     A: Alignment,
     V: ValueDomain<Owned = Self>,

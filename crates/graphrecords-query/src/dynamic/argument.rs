@@ -3,7 +3,7 @@ use super::{
 };
 use crate::{
     Arity, EdgeDirection, Explain, FailureKind, FailureKindValue, IndexValue, Mask, Positional,
-    QueryResult, Scalar, Unit, ValueDomain,
+    QueryResult, Scalar, Series, Unit, ValueDomain,
     cast::{
         Bool as BoolTarget, DateTime as DateTimeTarget, Duration as DurationTarget,
         Float as FloatTarget, Int as IntTarget, String as StringTarget,
@@ -13,20 +13,20 @@ use crate::{
     explain::ExplainFormatter,
     operations::{
         Alignment, Argument, ArgumentSource, IndexedElementContainer, IndexedElementSource,
-        IntoArgument, Keyed, Lookup, Prepare, SourceDomain, Unaligned, WithMissing,
+        IntoArgument, Keyed, Lookup, MissingPolicy, Prepare, SourceDomain, Unaligned, WithMissing,
         policy::{Drop, Replace},
     },
     optimizer::{
         Estimate, Estimated, PlanIdentity, PlanInputs, PlanNode, Session, Stats, Transformed,
     },
     registry::{
-        ArgumentDescriptor, ArgumentMissingPolicy, ArgumentValueSource, ValueArgumentDescriptor,
+        ArgumentDescriptor, ArgumentMissingPolicy, ExpressionDescriptor, ValueArgumentDescriptor,
         ValueDescriptor,
     },
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value},
+    graphrecord::{AttributeName, GroupIndex, NodeIndex, Value},
 };
 use std::{
     fmt::{self, Display, Write},
@@ -50,7 +50,6 @@ pub enum DynValueTarget {
     AttributeName,
     AttributeNameIndex,
     NodeIndex,
-    EdgeIndex,
     GroupIndex,
     PositionalIndex,
     BoolIndex,
@@ -60,10 +59,17 @@ pub enum DynValueTarget {
 }
 
 #[derive(Clone)]
+pub enum DynArgumentLane {
+    Expression(DynExpression),
+    Series(Box<Series<DynExpression>>),
+}
+
+#[derive(Clone)]
 enum DynArgumentReplacement {
     Value(DynValue),
     Mask(bool),
-    Expression(DynExpression),
+    Lane(DynArgumentLane),
+    Source(DynArgumentSource),
 }
 
 #[derive(Clone)]
@@ -72,10 +78,10 @@ enum DynArgumentSourceKind {
     Values(Vec<DynValue>),
     MaskValues(Vec<bool>),
     Mask(bool),
-    Expression(DynExpression),
-    DropMissing(DynExpression),
+    Lane(DynArgumentLane),
+    DropMissing(DynArgumentLane),
     ReplaceMissing {
-        source: DynExpression,
+        source: DynArgumentLane,
         replacement: DynArgumentReplacement,
     },
 }
@@ -105,7 +111,7 @@ pub trait DynArgumentBuilder<A: Alignment, R: Retention>: ValueDomain {
 #[derive(Clone)]
 pub enum DynInvokeArgument {
     Source(DynArgumentSource),
-    Expression(DynExpression),
+    Lane(DynArgumentLane),
     CastTarget(DynCastTarget),
     ValueTarget(DynValueTarget),
     Attribute(AttributeName),
@@ -114,20 +120,26 @@ pub enum DynInvokeArgument {
     Position(usize),
 }
 
-impl DynArgumentReplacement {
-    fn source(&self) -> ArgumentValueSource {
+impl DynArgumentLane {
+    #[must_use]
+    pub const fn descriptor(&self) -> &ExpressionDescriptor {
         match self {
-            Self::Value(value) => ArgumentValueSource::Literal(value.descriptor()),
-            Self::Mask(_) => ArgumentValueSource::Literal(ValueDescriptor::value::<Mask>()),
-            Self::Expression(expression) => {
-                ArgumentValueSource::Expression(expression.descriptor().clone())
+            Self::Expression(expression) => expression.descriptor(),
+            Self::Series(series) => series.expression().descriptor(),
+        }
+    }
+
+    pub(crate) fn erase_mask_lane(&self) -> Self {
+        match self {
+            Self::Expression(expression) => Self::Expression(expression.erase_mask_lane()),
+            Self::Series(series) => {
+                Self::Series(Box::new(series.bind(series.expression().erase_mask_lane())))
             }
         }
     }
 
     fn keyed_value(&self) -> Argument<Keyed<DynIndex>, DynValue, Preserving> {
         match self {
-            Self::Value(value) => value.clone().into_argument(),
             Self::Expression(expression) => match &expression.handle {
                 DynHandle::Lane(DynLaneHandle::IndexedValue(DynArityHandle::MultipleOrdered(
                     handle,
@@ -143,15 +155,62 @@ impl DynArgumentReplacement {
                 }
                 _ => panic!("argument conversion violated the keyed dynamic-value source roster"),
             },
-            Self::Mask(_) => {
-                panic!("argument conversion paired a mask replacement with a dynamic-value source")
-            }
+            Self::Series(series) => match &series.expression().handle {
+                DynHandle::Lane(DynLaneHandle::IndexedValue(DynArityHandle::MultipleOrdered(
+                    handle,
+                ))) => series.bind(handle.clone()).into_argument(),
+                DynHandle::Lane(DynLaneHandle::IndexedValue(
+                    DynArityHandle::MultipleUnordered(handle),
+                )) => series.bind(handle.clone()).into_argument(),
+                DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) => {
+                    series.bind(handle.clone()).into_argument()
+                }
+                DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Definite(handle))) => {
+                    series.bind(handle.clone()).into_argument()
+                }
+                _ => panic!("argument conversion violated the keyed dynamic-value series roster"),
+            },
+        }
+    }
+
+    fn keyed_value_on_missing<P: MissingPolicy<Keyed<DynIndex>, DynValue>>(
+        &self,
+        policy: P,
+    ) -> Argument<Keyed<DynIndex>, DynValue, P::Retention> {
+        match self {
+            Self::Expression(expression) => match &expression.handle {
+                DynHandle::Lane(DynLaneHandle::IndexedValue(DynArityHandle::MultipleOrdered(
+                    handle,
+                ))) => WithMissing::new(handle.clone(), policy).into_argument(),
+                DynHandle::Lane(DynLaneHandle::IndexedValue(
+                    DynArityHandle::MultipleUnordered(handle),
+                )) => WithMissing::new(handle.clone(), policy).into_argument(),
+                DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) => {
+                    WithMissing::new(handle.clone(), policy).into_argument()
+                }
+                _ => panic!(
+                    "argument conversion violated the keyed dynamic-value on-missing source roster"
+                ),
+            },
+            Self::Series(series) => match &series.expression().handle {
+                DynHandle::Lane(DynLaneHandle::IndexedValue(DynArityHandle::MultipleOrdered(
+                    handle,
+                ))) => WithMissing::new(series.bind(handle.clone()), policy).into_argument(),
+                DynHandle::Lane(DynLaneHandle::IndexedValue(
+                    DynArityHandle::MultipleUnordered(handle),
+                )) => WithMissing::new(series.bind(handle.clone()), policy).into_argument(),
+                DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) => {
+                    WithMissing::new(series.bind(handle.clone()), policy).into_argument()
+                }
+                _ => panic!(
+                    "argument conversion violated the keyed dynamic-value on-missing series roster"
+                ),
+            },
         }
     }
 
     fn unaligned_value(&self) -> Argument<Unaligned, DynValue, Preserving> {
         match self {
-            Self::Value(value) => value.clone().into_argument(),
             Self::Expression(expression) => match &expression.handle {
                 DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) => {
                     handle.clone().into_argument()
@@ -163,15 +222,52 @@ impl DynArgumentReplacement {
                     panic!("argument conversion violated the unaligned dynamic-value source roster")
                 }
             },
-            Self::Mask(_) => {
-                panic!("argument conversion paired a mask replacement with a dynamic-value source")
+            Self::Series(series) => match &series.expression().handle {
+                DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) => {
+                    series.bind(handle.clone()).into_argument()
+                }
+                DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Definite(handle))) => {
+                    series.bind(handle.clone()).into_argument()
+                }
+                _ => {
+                    panic!("argument conversion violated the unaligned dynamic-value series roster")
+                }
+            },
+        }
+    }
+
+    fn unaligned_value_on_missing<P: MissingPolicy<Unaligned, DynValue>>(
+        &self,
+        policy: P,
+    ) -> Argument<Unaligned, DynValue, P::Retention> {
+        match self {
+            Self::Expression(expression) => {
+                let DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) =
+                    &expression.handle
+                else {
+                    panic!(
+                        "argument conversion violated the unaligned dynamic-value on-missing source roster"
+                    )
+                };
+
+                WithMissing::new(handle.clone(), policy).into_argument()
+            }
+            Self::Series(series) => {
+                let DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) =
+                    &series.expression().handle
+                else {
+                    panic!(
+                        "argument conversion violated the unaligned dynamic-value on-missing series roster"
+                    )
+                };
+
+                WithMissing::new(series.bind(handle.clone()), policy).into_argument()
             }
         }
     }
 
     fn keyed_mask(&self) -> Argument<Keyed<DynIndex>, Mask, Preserving> {
         match self {
-            Self::Mask(value) => (*value).into_argument(),
             Self::Expression(expression) => match &expression.handle {
                 DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleOrdered(
                     handle,
@@ -187,15 +283,58 @@ impl DynArgumentReplacement {
                 }
                 _ => panic!("argument conversion violated the keyed mask source roster"),
             },
-            Self::Value(_) => {
-                panic!("argument conversion paired a dynamic-value replacement with a mask source")
-            }
+            Self::Series(series) => match &series.expression().handle {
+                DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleOrdered(
+                    handle,
+                ))) => series.bind(handle.clone()).into_argument(),
+                DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleUnordered(
+                    handle,
+                ))) => series.bind(handle.clone()).into_argument(),
+                DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) => {
+                    series.bind(handle.clone()).into_argument()
+                }
+                DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Definite(handle))) => {
+                    series.bind(handle.clone()).into_argument()
+                }
+                _ => panic!("argument conversion violated the keyed mask series roster"),
+            },
+        }
+    }
+
+    fn keyed_mask_on_missing<P: MissingPolicy<Keyed<DynIndex>, Mask>>(
+        &self,
+        policy: P,
+    ) -> Argument<Keyed<DynIndex>, Mask, P::Retention> {
+        match self {
+            Self::Expression(expression) => match &expression.handle {
+                DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleOrdered(
+                    handle,
+                ))) => WithMissing::new(handle.clone(), policy).into_argument(),
+                DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleUnordered(
+                    handle,
+                ))) => WithMissing::new(handle.clone(), policy).into_argument(),
+                DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) => {
+                    WithMissing::new(handle.clone(), policy).into_argument()
+                }
+                _ => panic!("argument conversion violated the keyed mask on-missing source roster"),
+            },
+            Self::Series(series) => match &series.expression().handle {
+                DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleOrdered(
+                    handle,
+                ))) => WithMissing::new(series.bind(handle.clone()), policy).into_argument(),
+                DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleUnordered(
+                    handle,
+                ))) => WithMissing::new(series.bind(handle.clone()), policy).into_argument(),
+                DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) => {
+                    WithMissing::new(series.bind(handle.clone()), policy).into_argument()
+                }
+                _ => panic!("argument conversion violated the keyed mask on-missing series roster"),
+            },
         }
     }
 
     fn unaligned_mask(&self) -> Argument<Unaligned, Mask, Preserving> {
         match self {
-            Self::Mask(value) => (*value).into_argument(),
             Self::Expression(expression) => match &expression.handle {
                 DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) => {
                     handle.clone().into_argument()
@@ -205,10 +344,140 @@ impl DynArgumentReplacement {
                 }
                 _ => panic!("argument conversion violated the unaligned mask source roster"),
             },
+            Self::Series(series) => match &series.expression().handle {
+                DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) => {
+                    series.bind(handle.clone()).into_argument()
+                }
+                DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Definite(handle))) => {
+                    series.bind(handle.clone()).into_argument()
+                }
+                _ => panic!("argument conversion violated the unaligned mask series roster"),
+            },
+        }
+    }
+
+    fn unaligned_mask_on_missing<P: MissingPolicy<Unaligned, Mask>>(
+        &self,
+        policy: P,
+    ) -> Argument<Unaligned, Mask, P::Retention> {
+        match self {
+            Self::Expression(expression) => {
+                let DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) =
+                    &expression.handle
+                else {
+                    panic!(
+                        "argument conversion violated the unaligned mask on-missing source roster"
+                    )
+                };
+
+                WithMissing::new(handle.clone(), policy).into_argument()
+            }
+            Self::Series(series) => {
+                let DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) =
+                    &series.expression().handle
+                else {
+                    panic!(
+                        "argument conversion violated the unaligned mask on-missing series roster"
+                    )
+                };
+
+                WithMissing::new(series.bind(handle.clone()), policy).into_argument()
+            }
+        }
+    }
+}
+
+impl DynArgumentReplacement {
+    fn descriptor(&self) -> ValueArgumentDescriptor {
+        match self {
+            Self::Value(value) => ValueArgumentDescriptor::literal(value.descriptor()),
+            Self::Mask(_) => ValueArgumentDescriptor::literal(ValueDescriptor::value::<Mask>()),
+            Self::Lane(lane) => ValueArgumentDescriptor::expression(lane.descriptor().clone()),
+            Self::Source(source) => source.descriptor(),
+        }
+    }
+
+    fn is_dropping(&self) -> bool {
+        match self {
+            Self::Source(source) => source.is_dropping(),
+            Self::Value(_) | Self::Mask(_) | Self::Lane(_) => false,
+        }
+    }
+
+    fn keyed_value(&self) -> Argument<Keyed<DynIndex>, DynValue, Preserving> {
+        match self {
+            Self::Value(value) => value.clone().into_argument(),
+            Self::Lane(lane) => lane.keyed_value(),
+            Self::Source(source) => DynValue::build(source),
+            Self::Mask(_) => {
+                panic!("argument conversion paired a mask replacement with a dynamic-value source")
+            }
+        }
+    }
+
+    fn keyed_value_dropping(&self) -> Argument<Keyed<DynIndex>, DynValue, Dropping> {
+        let Self::Source(source) = self else {
+            panic!("argument conversion routed a preserving replacement through the dropping road")
+        };
+
+        DynValue::build(source)
+    }
+
+    fn unaligned_value(&self) -> Argument<Unaligned, DynValue, Preserving> {
+        match self {
+            Self::Value(value) => value.clone().into_argument(),
+            Self::Lane(lane) => lane.unaligned_value(),
+            Self::Source(source) => DynValue::build(source),
+            Self::Mask(_) => {
+                panic!("argument conversion paired a mask replacement with a dynamic-value source")
+            }
+        }
+    }
+
+    fn unaligned_value_dropping(&self) -> Argument<Unaligned, DynValue, Dropping> {
+        let Self::Source(source) = self else {
+            panic!("argument conversion routed a preserving replacement through the dropping road")
+        };
+
+        DynValue::build(source)
+    }
+
+    fn keyed_mask(&self) -> Argument<Keyed<DynIndex>, Mask, Preserving> {
+        match self {
+            Self::Mask(value) => (*value).into_argument(),
+            Self::Lane(lane) => lane.keyed_mask(),
+            Self::Source(source) => Mask::build(source),
             Self::Value(_) => {
                 panic!("argument conversion paired a dynamic-value replacement with a mask source")
             }
         }
+    }
+
+    fn keyed_mask_dropping(&self) -> Argument<Keyed<DynIndex>, Mask, Dropping> {
+        let Self::Source(source) = self else {
+            panic!("argument conversion routed a preserving replacement through the dropping road")
+        };
+
+        Mask::build(source)
+    }
+
+    fn unaligned_mask(&self) -> Argument<Unaligned, Mask, Preserving> {
+        match self {
+            Self::Mask(value) => (*value).into_argument(),
+            Self::Lane(lane) => lane.unaligned_mask(),
+            Self::Source(source) => Mask::build(source),
+            Self::Value(_) => {
+                panic!("argument conversion paired a dynamic-value replacement with a mask source")
+            }
+        }
+    }
+
+    fn unaligned_mask_dropping(&self) -> Argument<Unaligned, Mask, Dropping> {
+        let Self::Source(source) = self else {
+            panic!("argument conversion routed a preserving replacement through the dropping road")
+        };
+
+        Mask::build(source)
     }
 }
 
@@ -242,21 +511,21 @@ impl DynArgumentSource {
     }
 
     #[must_use]
-    pub fn expression(expression: DynExpression) -> Self {
+    pub fn lane(lane: DynArgumentLane) -> Self {
         Self {
-            kind: Box::new(DynArgumentSourceKind::Expression(expression)),
+            kind: Box::new(DynArgumentSourceKind::Lane(lane)),
         }
     }
 
     #[must_use]
-    pub fn drop_missing(source: DynExpression) -> Self {
+    pub fn drop_missing(source: DynArgumentLane) -> Self {
         Self {
             kind: Box::new(DynArgumentSourceKind::DropMissing(source)),
         }
     }
 
     #[must_use]
-    pub fn replace_missing_with_value(source: DynExpression, replacement: DynValue) -> Self {
+    pub fn replace_missing_with_value(source: DynArgumentLane, replacement: DynValue) -> Self {
         Self {
             kind: Box::new(DynArgumentSourceKind::ReplaceMissing {
                 source,
@@ -266,7 +535,7 @@ impl DynArgumentSource {
     }
 
     #[must_use]
-    pub fn replace_missing_with_mask(source: DynExpression, replacement: bool) -> Self {
+    pub fn replace_missing_with_mask(source: DynArgumentLane, replacement: bool) -> Self {
         Self {
             kind: Box::new(DynArgumentSourceKind::ReplaceMissing {
                 source,
@@ -276,14 +545,24 @@ impl DynArgumentSource {
     }
 
     #[must_use]
-    pub fn replace_missing_with_expression(
-        source: DynExpression,
-        replacement: DynExpression,
+    pub fn replace_missing_with_lane(
+        source: DynArgumentLane,
+        replacement: DynArgumentLane,
     ) -> Self {
         Self {
             kind: Box::new(DynArgumentSourceKind::ReplaceMissing {
                 source,
-                replacement: DynArgumentReplacement::Expression(replacement),
+                replacement: DynArgumentReplacement::Lane(replacement),
+            }),
+        }
+    }
+
+    #[must_use]
+    pub fn replace_missing_with_source(source: DynArgumentLane, replacement: Self) -> Self {
+        Self {
+            kind: Box::new(DynArgumentSourceKind::ReplaceMissing {
+                source,
+                replacement: DynArgumentReplacement::Source(replacement),
             }),
         }
     }
@@ -302,18 +581,19 @@ impl DynArgumentSource {
                     .first()
                     .map_or_else(ValueDescriptor::unit, DynValue::descriptor),
             ),
-            DynArgumentSourceKind::Expression(expression) => {
-                ValueArgumentDescriptor::expression(expression.descriptor().clone())
+            DynArgumentSourceKind::Lane(lane) => {
+                ValueArgumentDescriptor::expression(lane.descriptor().clone())
             }
-            DynArgumentSourceKind::DropMissing(expression) => {
-                ValueArgumentDescriptor::expression(expression.descriptor().clone())
+            DynArgumentSourceKind::DropMissing(lane) => {
+                ValueArgumentDescriptor::expression(lane.descriptor().clone())
                     .with_missing(ArgumentMissingPolicy::Drop)
             }
             DynArgumentSourceKind::ReplaceMissing {
                 source,
                 replacement,
-            } => ValueArgumentDescriptor::expression(source.descriptor().clone())
-                .with_missing(ArgumentMissingPolicy::Replace(replacement.source())),
+            } => ValueArgumentDescriptor::expression(source.descriptor().clone()).with_missing(
+                ArgumentMissingPolicy::Replace(Box::new(replacement.descriptor())),
+            ),
         }
     }
 
@@ -324,17 +604,38 @@ impl DynArgumentSource {
         )
     }
 
-    pub(crate) fn as_expression(&self) -> &DynExpression {
-        let DynArgumentSourceKind::Expression(expression) = self.kind.as_ref() else {
-            panic!("argument conversion violated the expression-backed dynamic set-source corner")
+    pub(crate) fn as_lane(&self) -> &DynArgumentLane {
+        let DynArgumentSourceKind::Lane(lane) = self.kind.as_ref() else {
+            panic!("argument conversion violated the lane-backed dynamic set-source corner")
         };
 
-        expression
+        lane
     }
 
     #[must_use]
     pub fn is_dropping(&self) -> bool {
-        matches!(self.kind.as_ref(), DynArgumentSourceKind::DropMissing(_))
+        match self.kind.as_ref() {
+            DynArgumentSourceKind::DropMissing(_) => true,
+            DynArgumentSourceKind::ReplaceMissing { replacement, .. } => replacement.is_dropping(),
+            DynArgumentSourceKind::Value(_)
+            | DynArgumentSourceKind::Values(_)
+            | DynArgumentSourceKind::MaskValues(_)
+            | DynArgumentSourceKind::Mask(_)
+            | DynArgumentSourceKind::Lane(_) => false,
+        }
+    }
+
+    #[must_use]
+    pub fn dropping_lane(&self) -> Option<&DynArgumentLane> {
+        match self.kind.as_ref() {
+            DynArgumentSourceKind::DropMissing(lane) => Some(lane),
+            DynArgumentSourceKind::Value(_)
+            | DynArgumentSourceKind::Values(_)
+            | DynArgumentSourceKind::MaskValues(_)
+            | DynArgumentSourceKind::Mask(_)
+            | DynArgumentSourceKind::Lane(_)
+            | DynArgumentSourceKind::ReplaceMissing { .. } => None,
+        }
     }
 
     #[must_use]
@@ -348,9 +649,7 @@ impl DynInvokeArgument {
     pub fn descriptor(&self) -> ArgumentDescriptor {
         match self {
             Self::Source(source) => ArgumentDescriptor::Value(source.descriptor()),
-            Self::Expression(expression) => {
-                ArgumentDescriptor::Expression(expression.descriptor().clone())
-            }
+            Self::Lane(lane) => ArgumentDescriptor::Expression(lane.descriptor().clone()),
             Self::CastTarget(target) => match target {
                 DynCastTarget::Bool => ArgumentDescriptor::selector::<BoolTarget>(),
                 DynCastTarget::DateTime => ArgumentDescriptor::selector::<DateTimeTarget>(),
@@ -368,9 +667,6 @@ impl DynInvokeArgument {
                 }
                 DynValueTarget::NodeIndex => {
                     ArgumentDescriptor::selector::<IndexValue<NodeIndex>>()
-                }
-                DynValueTarget::EdgeIndex => {
-                    ArgumentDescriptor::selector::<IndexValue<EdgeIndex>>()
                 }
                 DynValueTarget::GroupIndex => {
                     ArgumentDescriptor::selector::<IndexValue<GroupIndex>>()
@@ -399,26 +695,11 @@ impl DynArgumentBuilder<Keyed<DynIndex>, Preserving> for DynValue {
     fn build(source: &DynArgumentSource) -> Argument<Keyed<DynIndex>, Self::Dynamic, Preserving> {
         match source.kind.as_ref() {
             DynArgumentSourceKind::Value(value) => value.clone().into_argument(),
-            DynArgumentSourceKind::Expression(expression) => {
-                DynArgumentReplacement::Expression(expression.clone()).keyed_value()
-            }
+            DynArgumentSourceKind::Lane(lane) => lane.keyed_value(),
             DynArgumentSourceKind::ReplaceMissing {
                 source,
                 replacement,
-            } => {
-                let replacement = replacement.keyed_value();
-                match &source.handle {
-                    DynHandle::Lane(DynLaneHandle::IndexedValue(
-                        DynArityHandle::MultipleOrdered(handle),
-                    )) => WithMissing::new(handle.clone(), Replace(replacement)).into_argument(),
-                    DynHandle::Lane(DynLaneHandle::IndexedValue(
-                        DynArityHandle::MultipleUnordered(handle),
-                    )) => WithMissing::new(handle.clone(), Replace(replacement)).into_argument(),
-                    _ => panic!(
-                        "argument conversion violated the replaceable keyed dynamic-value source roster"
-                    ),
-                }
-            }
+            } => source.keyed_value_on_missing(Replace(replacement.keyed_value())),
             DynArgumentSourceKind::Mask(_)
             | DynArgumentSourceKind::Values(_)
             | DynArgumentSourceKind::MaskValues(_)
@@ -433,17 +714,19 @@ impl DynArgumentBuilder<Keyed<DynIndex>, Dropping> for DynValue {
     type Dynamic = Self;
 
     fn build(source: &DynArgumentSource) -> Argument<Keyed<DynIndex>, Self::Dynamic, Dropping> {
-        let DynArgumentSourceKind::DropMissing(expression) = source.kind.as_ref() else {
-            panic!("argument conversion violated the dropping keyed dynamic-value corner")
-        };
-        match &expression.handle {
-            DynHandle::Lane(DynLaneHandle::IndexedValue(DynArityHandle::MultipleOrdered(
-                handle,
-            ))) => WithMissing::new(handle.clone(), Drop).into_argument(),
-            DynHandle::Lane(DynLaneHandle::IndexedValue(DynArityHandle::MultipleUnordered(
-                handle,
-            ))) => WithMissing::new(handle.clone(), Drop).into_argument(),
-            _ => panic!("argument conversion violated the droppable keyed dynamic-value roster"),
+        match source.kind.as_ref() {
+            DynArgumentSourceKind::DropMissing(lane) => lane.keyed_value_on_missing(Drop),
+            DynArgumentSourceKind::ReplaceMissing {
+                source,
+                replacement,
+            } => source.keyed_value_on_missing(Replace(replacement.keyed_value_dropping())),
+            DynArgumentSourceKind::Value(_)
+            | DynArgumentSourceKind::Values(_)
+            | DynArgumentSourceKind::MaskValues(_)
+            | DynArgumentSourceKind::Mask(_)
+            | DynArgumentSourceKind::Lane(_) => {
+                panic!("argument conversion violated the dropping keyed dynamic-value corner")
+            }
         }
     }
 }
@@ -454,23 +737,11 @@ impl DynArgumentBuilder<Unaligned, Preserving> for DynValue {
     fn build(source: &DynArgumentSource) -> Argument<Unaligned, Self::Dynamic, Preserving> {
         match source.kind.as_ref() {
             DynArgumentSourceKind::Value(value) => value.clone().into_argument(),
-            DynArgumentSourceKind::Expression(expression) => {
-                DynArgumentReplacement::Expression(expression.clone()).unaligned_value()
-            }
+            DynArgumentSourceKind::Lane(lane) => lane.unaligned_value(),
             DynArgumentSourceKind::ReplaceMissing {
                 source,
                 replacement,
-            } => {
-                let replacement = replacement.unaligned_value();
-                let DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) =
-                    &source.handle
-                else {
-                    panic!(
-                        "argument conversion violated the replaceable unaligned dynamic-value source roster"
-                    )
-                };
-                WithMissing::new(handle.clone(), Replace(replacement)).into_argument()
-            }
+            } => source.unaligned_value_on_missing(Replace(replacement.unaligned_value())),
             DynArgumentSourceKind::Mask(_)
             | DynArgumentSourceKind::Values(_)
             | DynArgumentSourceKind::MaskValues(_)
@@ -485,15 +756,20 @@ impl DynArgumentBuilder<Unaligned, Dropping> for DynValue {
     type Dynamic = Self;
 
     fn build(source: &DynArgumentSource) -> Argument<Unaligned, Self::Dynamic, Dropping> {
-        let DynArgumentSourceKind::DropMissing(expression) = source.kind.as_ref() else {
-            panic!("argument conversion violated the dropping unaligned dynamic-value corner")
-        };
-        let DynHandle::Lane(DynLaneHandle::BareValue(DynArityHandle::Single(handle))) =
-            &expression.handle
-        else {
-            panic!("argument conversion violated the droppable unaligned dynamic-value roster")
-        };
-        WithMissing::new(handle.clone(), Drop).into_argument()
+        match source.kind.as_ref() {
+            DynArgumentSourceKind::DropMissing(lane) => lane.unaligned_value_on_missing(Drop),
+            DynArgumentSourceKind::ReplaceMissing {
+                source,
+                replacement,
+            } => source.unaligned_value_on_missing(Replace(replacement.unaligned_value_dropping())),
+            DynArgumentSourceKind::Value(_)
+            | DynArgumentSourceKind::Values(_)
+            | DynArgumentSourceKind::MaskValues(_)
+            | DynArgumentSourceKind::Mask(_)
+            | DynArgumentSourceKind::Lane(_) => {
+                panic!("argument conversion violated the dropping unaligned dynamic-value corner")
+            }
+        }
     }
 }
 
@@ -503,26 +779,11 @@ impl DynArgumentBuilder<Keyed<DynIndex>, Preserving> for Mask {
     fn build(source: &DynArgumentSource) -> Argument<Keyed<DynIndex>, Self::Dynamic, Preserving> {
         match source.kind.as_ref() {
             DynArgumentSourceKind::Mask(value) => (*value).into_argument(),
-            DynArgumentSourceKind::Expression(expression) => {
-                DynArgumentReplacement::Expression(expression.clone()).keyed_mask()
-            }
+            DynArgumentSourceKind::Lane(lane) => lane.keyed_mask(),
             DynArgumentSourceKind::ReplaceMissing {
                 source,
                 replacement,
-            } => {
-                let replacement = replacement.keyed_mask();
-                match &source.handle {
-                    DynHandle::Lane(DynLaneHandle::IndexedMask(
-                        DynArityHandle::MultipleOrdered(handle),
-                    )) => WithMissing::new(handle.clone(), Replace(replacement)).into_argument(),
-                    DynHandle::Lane(DynLaneHandle::IndexedMask(
-                        DynArityHandle::MultipleUnordered(handle),
-                    )) => WithMissing::new(handle.clone(), Replace(replacement)).into_argument(),
-                    _ => panic!(
-                        "argument conversion violated the replaceable keyed mask source roster"
-                    ),
-                }
-            }
+            } => source.keyed_mask_on_missing(Replace(replacement.keyed_mask())),
             DynArgumentSourceKind::Value(_)
             | DynArgumentSourceKind::Values(_)
             | DynArgumentSourceKind::MaskValues(_)
@@ -537,17 +798,19 @@ impl DynArgumentBuilder<Keyed<DynIndex>, Dropping> for Mask {
     type Dynamic = Self;
 
     fn build(source: &DynArgumentSource) -> Argument<Keyed<DynIndex>, Self::Dynamic, Dropping> {
-        let DynArgumentSourceKind::DropMissing(expression) = source.kind.as_ref() else {
-            panic!("argument conversion violated the dropping keyed mask corner")
-        };
-        match &expression.handle {
-            DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleOrdered(
-                handle,
-            ))) => WithMissing::new(handle.clone(), Drop).into_argument(),
-            DynHandle::Lane(DynLaneHandle::IndexedMask(DynArityHandle::MultipleUnordered(
-                handle,
-            ))) => WithMissing::new(handle.clone(), Drop).into_argument(),
-            _ => panic!("argument conversion violated the droppable keyed mask roster"),
+        match source.kind.as_ref() {
+            DynArgumentSourceKind::DropMissing(lane) => lane.keyed_mask_on_missing(Drop),
+            DynArgumentSourceKind::ReplaceMissing {
+                source,
+                replacement,
+            } => source.keyed_mask_on_missing(Replace(replacement.keyed_mask_dropping())),
+            DynArgumentSourceKind::Value(_)
+            | DynArgumentSourceKind::Values(_)
+            | DynArgumentSourceKind::MaskValues(_)
+            | DynArgumentSourceKind::Mask(_)
+            | DynArgumentSourceKind::Lane(_) => {
+                panic!("argument conversion violated the dropping keyed mask corner")
+            }
         }
     }
 }
@@ -558,23 +821,11 @@ impl DynArgumentBuilder<Unaligned, Preserving> for Mask {
     fn build(source: &DynArgumentSource) -> Argument<Unaligned, Self::Dynamic, Preserving> {
         match source.kind.as_ref() {
             DynArgumentSourceKind::Mask(value) => (*value).into_argument(),
-            DynArgumentSourceKind::Expression(expression) => {
-                DynArgumentReplacement::Expression(expression.clone()).unaligned_mask()
-            }
+            DynArgumentSourceKind::Lane(lane) => lane.unaligned_mask(),
             DynArgumentSourceKind::ReplaceMissing {
                 source,
                 replacement,
-            } => {
-                let replacement = replacement.unaligned_mask();
-                let DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) =
-                    &source.handle
-                else {
-                    panic!(
-                        "argument conversion violated the replaceable unaligned mask source roster"
-                    )
-                };
-                WithMissing::new(handle.clone(), Replace(replacement)).into_argument()
-            }
+            } => source.unaligned_mask_on_missing(Replace(replacement.unaligned_mask())),
             DynArgumentSourceKind::Value(_)
             | DynArgumentSourceKind::Values(_)
             | DynArgumentSourceKind::MaskValues(_)
@@ -589,15 +840,20 @@ impl DynArgumentBuilder<Unaligned, Dropping> for Mask {
     type Dynamic = Self;
 
     fn build(source: &DynArgumentSource) -> Argument<Unaligned, Self::Dynamic, Dropping> {
-        let DynArgumentSourceKind::DropMissing(expression) = source.kind.as_ref() else {
-            panic!("argument conversion violated the dropping unaligned mask corner")
-        };
-        let DynHandle::Lane(DynLaneHandle::BareMask(DynArityHandle::Single(handle))) =
-            &expression.handle
-        else {
-            panic!("argument conversion violated the droppable unaligned mask roster")
-        };
-        WithMissing::new(handle.clone(), Drop).into_argument()
+        match source.kind.as_ref() {
+            DynArgumentSourceKind::DropMissing(lane) => lane.unaligned_mask_on_missing(Drop),
+            DynArgumentSourceKind::ReplaceMissing {
+                source,
+                replacement,
+            } => source.unaligned_mask_on_missing(Replace(replacement.unaligned_mask_dropping())),
+            DynArgumentSourceKind::Value(_)
+            | DynArgumentSourceKind::Values(_)
+            | DynArgumentSourceKind::MaskValues(_)
+            | DynArgumentSourceKind::Mask(_)
+            | DynArgumentSourceKind::Lane(_) => {
+                panic!("argument conversion violated the dropping unaligned mask corner")
+            }
+        }
     }
 }
 

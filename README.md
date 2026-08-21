@@ -25,6 +25,8 @@
 
 GraphRecords stores entities and their relationships as a graph. Nodes hold attributes. Edges connect nodes and can also hold attributes. Groups organize subsets of nodes and edges.
 
+A GraphRecord is immutable. Every method that changes data returns a new GraphRecord and leaves the old one untouched. This makes records safe to share, cheap to snapshot, and free of locks.
+
 ## When to Use GraphRecords
 
 GraphRecords fits problems where:
@@ -41,114 +43,110 @@ pip install graphrecords
 
 ## Building a Graph
 
+Since every call returns a new record, building is a chain:
+
 ```python
 import graphrecords as gr
 
-# Add nodes as tuples: (id, {attributes})
-record = gr.GraphRecord()
-record.add_nodes(
-    [
-        ("alice", {"age": 30}),
-        ("bob", {"age": 25}),
-        ("carol", {"age": 35}),
-    ],
-    group="users",
-)
-
-record.add_nodes(
-    [
-        ("widget", {"price": 10.0}),
-        ("gadget", {"price": 25.0}),
-    ],
-    group="products",
-)
-
-# Add edges as tuples: (source, target, {attributes})
-record.add_edges(
-    [
-        ("alice", "widget", {"quantity": 1}),
-        ("bob", "gadget", {"quantity": 2}),
-        ("alice", "gadget", {"quantity": 1}),
-    ],
-    group="purchases",
+# Nodes are tuples: (index, {attributes})
+record = (
+    gr.GraphRecord()
+    .add_nodes_in_group(
+        [
+            ("alice", {"age": 30}),
+            ("bob", {"age": 25}),
+            ("carol", {"age": 35}),
+        ],
+        "users",
+    )
+    .add_nodes_in_group(
+        [
+            ("widget", {"price": 10.0}),
+            ("gadget", {"price": 25.0}),
+        ],
+        "products",
+    )
+    # Edges are tuples: (source, target, {attributes})
+    .add_edges_in_group(
+        [
+            ("alice", "widget", {"quantity": 1}),
+            ("bob", "gadget", {"quantity": 2}),
+            ("alice", "gadget", {"quantity": 1}),
+        ],
+        "purchases",
+    )
 )
 ```
 
-You can also use Pandas or Polars DataFrames:
+`add_nodes` and `add_edges` do the same without a group.
+
+You can also load Polars DataFrames, naming the index columns:
 
 ```python
-import pandas as pd
+import polars as pl
 
-users_df = pd.DataFrame({"id": ["alice", "bob"], "age": [30, 25]})
-record.add_nodes((users_df, "id"), group="users")
+users = pl.DataFrame({"id": ["alice", "bob"], "age": [30, 25]})
+record = record.add_nodes((users, "id"))
 
-purchases_df = pd.DataFrame(
-    {"user": ["alice"], "product": ["widget"], "qty": [1]}
-)
-record.add_edges((purchases_df, "user", "product"), group="purchases")
+purchases = pl.DataFrame({"user": ["alice"], "product": ["widget"], "qty": [1]})
+record = record.add_edges((purchases, "user", "product"))
 ```
+
+Anything that exports an Arrow stream works the same way.
 
 ## Accessing Data
 
 ```python
-# Get all nodes
-record.nodes  # ['alice', 'bob', 'carol', 'widget', 'gadget']
+record.node_indices()  # ['alice', 'bob', 'carol', 'widget', 'gadget']
 
-# Get attributes of a node
-record.node["alice"]  # {'age': 30}
+# node() returns a view of one node
+alice = record.node("alice")
+alice.attribute("age")  # 30
+alice.attributes()  # {'age': 30}
+alice.neighbors()  # ['widget', 'gadget']
+alice.degree()  # 2
 
-# Get nodes in a group
-record.nodes_in_group("users")  # ['alice', 'bob', 'carol']
+# group() returns a view of one group
+record.group("users").nodes()  # ['alice', 'bob', 'carol']
 
-# Get edges connected to a node
-record.outgoing_edges("alice")  # [0, 2]
-
-# Get edge attributes
-record.edge[0]  # {'quantity': 1}
+# Edge indices are opaque values, not integers
+edge_index = record.edge_indices()[0]
+record.edge(edge_index).attributes()  # {'quantity': 1}
 ```
 
-## Query Engine
+## Querying
 
-The query engine finds nodes and edges based on their attributes and relationships.
-
-Queries are functions that receive an operand, apply conditions, and return results:
+Queries are expressions. `gr.nodes()` and `gr.edges()` start free expressions that are not tied to any record; `record.nodes()` binds one to a record, which makes it a series. A series only runs when you call `evaluate()`.
 
 ```python
-from graphrecords.querying import NodeOperand, NodeIndicesOperand
-
-def users_over_25(node: NodeOperand) -> NodeIndicesOperand:
-    node.in_group("users")
-    node.attribute("age").greater_than(25)
-    return node.index()
-
-record.query_nodes(users_over_25)  # ['alice', 'carol']
+adult_users = record.nodes().filter(
+    gr.nodes().in_group("users") & (gr.nodes().attribute("age") > 25)
+)
+list(adult_users.evaluate())  # ['alice', 'carol']
 ```
 
-Queries can follow relationships:
+Expressions traverse the graph themselves — the chain reads as the question
+it asks:
 
 ```python
-def users_who_bought_expensive_items(node: NodeOperand) -> NodeIndicesOperand:
-    node.in_group("users")
-    # Follow edges to products, check price
-    node.neighbors().attribute("price").greater_than(20)
-    return node.index()
-
-record.query_nodes(users_who_bought_expensive_items)  # ['alice', 'bob']
+bulk_buyers = (
+    record.edges()
+    .filter(gr.edges().in_group("purchases") & (gr.edges().attribute("quantity") >= 2))
+    .source_node()
+)
+list(bulk_buyers.evaluate())  # ['bob']
 ```
 
-Queries can aggregate:
+And they aggregate:
 
 ```python
-from graphrecords.querying import NodeSingleValueWithoutIndexOperand
-
-def average_user_age(node: NodeOperand) -> NodeSingleValueWithoutIndexOperand:
-    node.in_group("users")
-    return node.attribute("age").mean()
-
-record.query_nodes(average_user_age)  # 30.0
+record.nodes().filter(gr.nodes().in_group("users")).attribute("age").mean().evaluate()
+# 30.0
 ```
 
-See the [Query Engine Guide](https://www.medmodels.de/docs/graphrecords/latest/user_guide/05_query_engine/index.html) for the full API.
+Every operation is checked twice: the type checker rejects operations that do not fit the current shape of the expression while you write, and the engine optimizes the query before running it. `explain()` shows the optimized plan, `explain_unoptimized()` the raw one.
+
+The result of `evaluate()` is consumed by iterating it once. Evaluate again for a fresh result, or collect into a list first.
 
 ## Schema
 
@@ -159,20 +157,42 @@ Schemas define what attributes are allowed and their types.
 **Provided mode**: The schema is fixed. Data that doesn't match is rejected.
 
 ```python
-from graphrecords.schema import Schema, GroupSchema
+from graphrecords.schema import AttributeDataType, AttributeType, GroupSchema, Schema
 from graphrecords.datatype import Int, String
 
 schema = Schema(
-    groups={"users": GroupSchema(nodes={"age": Int(), "name": String()})}
+    groups={
+        "users": GroupSchema(
+            nodes={
+                "age": AttributeDataType(Int(), AttributeType.Continuous),
+                "name": AttributeDataType(String(), AttributeType.Unstructured),
+            }
+        )
+    }
 )
 
-record = gr.GraphRecord.builder().with_schema(schema).build()
-record.freeze_schema()  # Switch to provided mode
+record = gr.GraphRecord.with_schema(schema)
+record = record.freeze_schema()  # Switch to provided mode
 
 # Now adding a user without 'age' or 'name' raises an error
 ```
 
-See the [Schema Guide](https://www.medmodels.de/docs/graphrecords/latest/user_guide/06_schema.html) for details.
+Schemas are immutable like records: `set_node_attribute`, `add_group`, `freeze`, and the other schema methods all return a new schema.
+
+## Plugins
+
+A plugin hooks into every change made to a record. A hook sees the pending change and can let it through, or return a modified one:
+
+```python
+class Audit:
+    def on_add_nodes(self, record, payload):
+        print(f"adding {len(payload.batch)} nodes")
+
+
+record = record.add_plugin("audit", Audit())
+```
+
+Hooks exist for every change (`on_add_nodes`, `post_remove_edges`, ...). A plugin only pays for the hooks it defines. Returning `None` from a hook applies the change unchanged; returning a payload replaces it, and returning a list of payloads replaces it with several (an empty list drops it). The `post_*` hooks observe the applied result and can veto by raising.
 
 ## Serialization
 
@@ -183,10 +203,14 @@ record.to_ron("graph.ron")
 loaded = gr.GraphRecord.from_ron("graph.ron")
 ```
 
-Export to DataFrames:
+Export to DataFrames, one pair of tables per group plus the ungrouped rest:
 
 ```python
-dataframes = record.to_pandas()  # or record.to_polars()
+export = record.to_polars()
+export["ungrouped"]["nodes"]  # a Polars DataFrame
+export["groups"]["users"]["nodes"]
+
+record.to_arrow()  # the same shape, as Arrow tables
 ```
 
 ## Documentation

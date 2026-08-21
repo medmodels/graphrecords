@@ -99,6 +99,19 @@ where
     }
 }
 
+impl<V, VF> DeepFrom<&[V]> for Vec<VF>
+where
+    V: Clone,
+    VF: DeepFrom<V>,
+{
+    fn deep_from(value: &[V]) -> Self {
+        value
+            .iter()
+            .map(|value| value.clone().deep_into())
+            .collect()
+    }
+}
+
 impl<V, VF> DeepFrom<Option<V>> for Option<VF>
 where
     VF: DeepFrom<V>,

@@ -10,7 +10,7 @@ readme = "../../README.md"
 [dependencies]
 graphrecords-utils = { workspace = true }
 
-arrow = { version = "59.2.0", default-features = false, optional = true }
+arrow = { workspace = true, optional = true }
 ron = { version = "0.8.1", optional = true }
 
 chrono = { workspace = true }

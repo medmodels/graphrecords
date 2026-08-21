@@ -13,17 +13,9 @@ use graphrecords_core::{
     },
 };
 use graphrecords_utils::{aliases::GrHashMap, distinct::Distinct};
-use std::{hash::Hash, sync::Arc};
+use std::hash::Hash;
 
-const LABEL: &str = "Selection";
-
-impl From<Box<Failure>> for GraphRecordError {
-    fn from(failure: Box<Failure>) -> Self {
-        Self::QueryFailure {
-            cause: Arc::new(*failure),
-        }
-    }
-}
+pub const LABEL: &str = "Selection";
 
 impl<E, O> MultipleSelection<E> for ExpressionHandle<Indexed<E, Unit>, Multiple<O>>
 where
@@ -162,33 +154,27 @@ impl<E> SingleSelection<E> for Series<ExpressionHandle<Indexed<E, Unit>, Definit
 {
 }
 
-impl<E, O> MultipleSelection<E> for ExpressionHandle<Indexed<E, Mask>, Multiple<O>>
-where
-    E: EntityDomain + IndexDomain<Owned = E>,
-    O: OrderState,
+impl<O: OrderState> MultipleSelection<NodeIndex>
+    for ExpressionHandle<Indexed<NodeIndex, Mask>, Multiple<O>>
 {
-    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
-        let series = graphrecord.query(self);
-        let selected = series.evaluate().and_then(|elements| {
-            let mut collected = Vec::new();
-            let mut raised = Vec::new();
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<NodeIndex>> {
+        graphrecord.query(self).resolve(graphrecord)
+    }
+}
 
-            for (index, outcome) in elements {
-                match outcome {
-                    Ok(true) => collected.push(E::own_index(&index)),
-                    Ok(false) => {}
-                    Err(failure) => raised.push(*failure),
-                }
-            }
+impl<O: OrderState> MultipleSelection<EdgeIndex>
+    for ExpressionHandle<Indexed<EdgeIndex, Mask>, Multiple<O>>
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<EdgeIndex>> {
+        graphrecord.query(self).resolve(graphrecord)
+    }
+}
 
-            if !raised.is_empty() {
-                return Err(Failure::new(RaisedFailures::new(raised), LABEL));
-            }
-
-            Ok(collected)
-        });
-
-        selected.map_err(GraphRecordError::from)
+impl<O: OrderState> MultipleSelection<GroupIndex>
+    for ExpressionHandle<Indexed<GroupIndex, Mask>, Multiple<O>>
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<GroupIndex>> {
+        graphrecord.query(self).resolve(graphrecord)
     }
 }
 
@@ -483,29 +469,6 @@ where
 {
 }
 
-impl<E, I> MultipleSelection<E> for ExpressionHandle<Indexed<I, IndexValue<E>>, Definite>
-where
-    E: EntityDomain + IndexDomain<Owned = E>,
-    I: IndexDomain,
-{
-    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
-        let series = graphrecord.query(self);
-        let selected = series.evaluate().and_then(|element| match element.1 {
-            Ok(index) => Ok(vec![E::own_index(&index)]),
-            Err(failure) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
-        });
-
-        selected.map_err(GraphRecordError::from)
-    }
-}
-
-impl<E, I> SingleSelection<E> for ExpressionHandle<Indexed<I, IndexValue<E>>, Definite>
-where
-    E: EntityDomain + IndexDomain<Owned = E>,
-    I: IndexDomain,
-{
-}
-
 impl<E, I, O> MultipleSelection<E>
     for Series<ExpressionHandle<Indexed<I, IndexValue<E>>, Multiple<O>>>
 where
@@ -563,6 +526,29 @@ where
 {
 }
 
+impl<E, I> MultipleSelection<E> for ExpressionHandle<Indexed<I, IndexValue<E>>, Definite>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    I: IndexDomain,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|element| match element.1 {
+            Ok(index) => Ok(vec![E::own_index(&index)]),
+            Err(failure) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E, I> SingleSelection<E> for ExpressionHandle<Indexed<I, IndexValue<E>>, Definite>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    I: IndexDomain,
+{
+}
+
 impl<E, I> MultipleSelection<E> for Series<ExpressionHandle<Indexed<I, IndexValue<E>>, Definite>>
 where
     E: EntityDomain + IndexDomain<Owned = E>,
@@ -582,47 +568,6 @@ impl<E, I> SingleSelection<E> for Series<ExpressionHandle<Indexed<I, IndexValue<
 where
     E: EntityDomain + IndexDomain<Owned = E>,
     I: IndexDomain,
-{
-}
-
-impl<E> MultipleSelection<E> for ExpressionHandle<Bare<IndexValue<E>>, Single>
-where
-    E: EntityDomain + IndexDomain<Owned = E>,
-{
-    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
-        let series = graphrecord.query(self);
-        let selected = series.evaluate().and_then(|element| match element {
-            Some(Ok(index)) => Ok(vec![E::own_index(&index)]),
-            Some(Err(failure)) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
-            None => Ok(Vec::new()),
-        });
-
-        selected.map_err(GraphRecordError::from)
-    }
-}
-
-impl<E> SingleSelection<E> for ExpressionHandle<Bare<IndexValue<E>>, Single> where
-    E: EntityDomain + IndexDomain<Owned = E>
-{
-}
-
-impl<E> MultipleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Single>>
-where
-    E: EntityDomain + IndexDomain<Owned = E>,
-{
-    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
-        let selected = self.evaluate().and_then(|element| match element {
-            Some(Ok(index)) => Ok(vec![E::own_index(&index)]),
-            Some(Err(failure)) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
-            None => Ok(Vec::new()),
-        });
-
-        selected.map_err(GraphRecordError::from)
-    }
-}
-
-impl<E> SingleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Single>> where
-    E: EntityDomain + IndexDomain<Owned = E>
 {
 }
 
@@ -657,6 +602,27 @@ where
     }
 }
 
+impl<E> MultipleSelection<E> for ExpressionHandle<Bare<IndexValue<E>>, Single>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let series = graphrecord.query(self);
+        let selected = series.evaluate().and_then(|element| match element {
+            Some(Ok(index)) => Ok(vec![E::own_index(&index)]),
+            Some(Err(failure)) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+            None => Ok(Vec::new()),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for ExpressionHandle<Bare<IndexValue<E>>, Single> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
+}
+
 impl<E, O> MultipleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Multiple<O>>>
 where
     E: EntityDomain + IndexDomain<Owned = E> + Eq + Hash,
@@ -685,6 +651,26 @@ where
 
         selected.map_err(GraphRecordError::from)
     }
+}
+
+impl<E> MultipleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Single>>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+{
+    fn resolve(self, _graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        let selected = self.evaluate().and_then(|element| match element {
+            Some(Ok(index)) => Ok(vec![E::own_index(&index)]),
+            Some(Err(failure)) => Err(Failure::new(RaisedFailures::new(vec![*failure]), LABEL)),
+            None => Ok(Vec::new()),
+        });
+
+        selected.map_err(GraphRecordError::from)
+    }
+}
+
+impl<E> SingleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Single>> where
+    E: EntityDomain + IndexDomain<Owned = E>
+{
 }
 
 impl<E> MultipleSelection<E> for ExpressionHandle<Bare<IndexValue<E>>, Definite>
@@ -724,6 +710,40 @@ where
 impl<E> SingleSelection<E> for Series<ExpressionHandle<Bare<IndexValue<E>>, Definite>> where
     E: EntityDomain + IndexDomain<Owned = E>
 {
+}
+
+impl<E, O> MultipleSelection<E>
+    for WithMissing<Keyed<E>, ExpressionHandle<Indexed<E, Unit>, Multiple<O>>, Drop>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        WithMissing::new(graphrecord.query(self.into_inner()), Drop).resolve(graphrecord)
+    }
+}
+
+impl<E, O> MultipleSelection<E>
+    for WithMissing<Keyed<E>, ExpressionHandle<Indexed<E, Mask>, Multiple<O>>, Drop>
+where
+    E: EntityDomain + IndexDomain<Owned = E>,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        WithMissing::new(graphrecord.query(self.into_inner()), Drop).resolve(graphrecord)
+    }
+}
+
+impl<E, I, O> MultipleSelection<E>
+    for WithMissing<Keyed<I>, ExpressionHandle<Indexed<I, IndexValue<E>>, Multiple<O>>, Drop>
+where
+    E: EntityDomain + IndexDomain<Owned = E> + Eq + Hash,
+    I: IndexDomain,
+    O: OrderState,
+{
+    fn resolve(self, graphrecord: &GraphRecord) -> GraphRecordResult<Vec<E>> {
+        WithMissing::new(graphrecord.query(self.into_inner()), Drop).resolve(graphrecord)
+    }
 }
 
 impl<E, O> MultipleSelection<E>

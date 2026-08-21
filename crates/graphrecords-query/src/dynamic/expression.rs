@@ -4,10 +4,12 @@ use super::{
     OperationCapture, apply_grouped_operation, apply_lane_operation,
 };
 use crate::{
-    Bare, Cache, Definite, ElementShape, EvaluateExpression, Explanation, Expression, Failure,
-    Indexed, Mask, Multiple, Ordered, QueryResult, Single, Unit, Unordered,
+    Bare, Cache, Definite, ElementShape, EvaluateExpression, Explain, ExplainFormatter,
+    Explanation, Expression, Failure, Indexed, Mask, Multiple, Ordered, QueryResult,
+    ReturnExpression, Single, Unit, Unordered,
     error::dispatch::OperationNotApplicable,
     execution::{CacheableShape, EvaluationCache},
+    explain::{CompactPlan, write_truncated_plan},
     expressions::{
         AllEdges, AllGroups, AllNodes, EdgesExpression, ExpressionHandle, GroupedExpression,
         GroupsExpression, NodesExpression,
@@ -367,6 +369,17 @@ impl<S: DynStreamShape> DynArityHandle<S> {
     }
 }
 
+impl<S: ElementShape> Explain for DynArityHandle<S> {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        match self {
+            Self::MultipleOrdered(handle) => handle.describe(formatter),
+            Self::MultipleUnordered(handle) => handle.describe(formatter),
+            Self::Single(handle) => handle.describe(formatter),
+            Self::Definite(handle) => handle.describe(formatter),
+        }
+    }
+}
+
 impl DynLaneHandle {
     fn evaluate<'a>(
         &'a self,
@@ -424,6 +437,18 @@ impl DynLaneHandle {
             Self::IndexedUnit(handles) => handles.explanation(),
             Self::BareValue(handles) => handles.explanation(),
             Self::BareMask(handles) => handles.explanation(),
+        }
+    }
+}
+
+impl Explain for DynLaneHandle {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        match self {
+            Self::IndexedValue(handles) => handles.describe(formatter),
+            Self::IndexedMask(handles) => handles.describe(formatter),
+            Self::IndexedUnit(handles) => handles.describe(formatter),
+            Self::BareValue(handles) => handles.describe(formatter),
+            Self::BareMask(handles) => handles.describe(formatter),
         }
     }
 }
@@ -556,24 +581,15 @@ impl DynExpression {
     }
 
     pub fn evaluate(&self, graphrecord: &GraphRecord) -> QueryResult<DynTerminal> {
-        let optimized = self.optimize(graphrecord).0;
+        let optimized = self.optimize_for(graphrecord).0;
         let cache = EvaluationCache::new(graphrecord);
 
-        match &optimized.handle {
-            DynHandle::Lane(handle) => handle
-                .evaluate(graphrecord, &cache)
-                .map(DynYield::Lane)
-                .map(|yielded| DynTerminal::from_yield(graphrecord, yielded)),
-            DynHandle::Group(handle) => handle
-                .evaluate(graphrecord, &cache)
-                .map(DynYield::Group)
-                .map(|yielded| DynTerminal::from_yield(graphrecord, yielded)),
-        }
+        ReturnExpression::evaluate(&optimized, graphrecord, &cache)
     }
 
     #[must_use]
     pub fn explain(&self, graphrecord: &GraphRecord) -> DynExplanation {
-        let (expression, report) = self.optimize(graphrecord);
+        let (expression, report) = self.optimize_for(graphrecord);
 
         DynExplanation { expression, report }
     }
@@ -586,7 +602,7 @@ impl DynExpression {
         }
     }
 
-    fn optimize(&self, graphrecord: &GraphRecord) -> (Self, OptimizationReport) {
+    fn optimize_for(&self, graphrecord: &GraphRecord) -> (Self, OptimizationReport) {
         let optimizer = Optimizer::builtin();
 
         if optimizer.is_empty() {
@@ -594,13 +610,18 @@ impl DynExpression {
         }
 
         let stats = Stats::new(graphrecord);
+
+        self.optimize_with(optimizer, &stats)
+    }
+
+    fn optimize_with(&self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
         let (handle, report) = match &self.handle {
             DynHandle::Lane(handle) => {
-                let (handle, report) = handle.optimize(optimizer, &stats);
+                let (handle, report) = handle.optimize(optimizer, stats);
                 (DynHandle::Lane(handle), report)
             }
             DynHandle::Group(handle) => {
-                let (handle, report) = optimizer.run_reported(&stats, handle);
+                let (handle, report) = optimizer.run_reported(stats, handle);
                 (DynHandle::Group(handle), report)
             }
         };
@@ -660,6 +681,59 @@ impl DynExpression {
         }
 
         panic!("registry paired a dynamic lane handle with a different arity descriptor")
+    }
+}
+
+impl Explain for DynExpression {
+    fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
+        match &self.handle {
+            DynHandle::Lane(handle) => handle.describe(formatter),
+            DynHandle::Group(handle) => handle.describe(formatter),
+        }
+    }
+}
+
+impl fmt::Debug for DynExpression {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str("Expression [")?;
+        write_truncated_plan(formatter, self)?;
+        formatter.write_str("]")
+    }
+}
+
+impl ReturnExpression for DynExpression {
+    type ReturnValue<'a>
+        = DynTerminal
+    where
+        Self: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        graphrecord: &'a GraphRecord,
+        cache: &'a EvaluationCache,
+    ) -> QueryResult<Self::ReturnValue<'a>> {
+        match &self.handle {
+            DynHandle::Lane(handle) => handle
+                .evaluate(graphrecord, cache)
+                .map(DynYield::Lane)
+                .map(|yielded| DynTerminal::from_yield(graphrecord, yielded)),
+            DynHandle::Group(handle) => handle
+                .evaluate(graphrecord, cache)
+                .map(DynYield::Group)
+                .map(|yielded| DynTerminal::from_yield(graphrecord, yielded)),
+        }
+    }
+
+    fn optimize(self, optimizer: &Optimizer, stats: &Stats) -> (Self, OptimizationReport) {
+        self.optimize_with(optimizer, stats)
+    }
+
+    fn fmt_plan(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", Explanation::new(self))
+    }
+
+    fn compact_plan(&self) -> String {
+        CompactPlan::new(self).to_string()
     }
 }
 

@@ -88,7 +88,7 @@ impl GroupDirectory {
         Some(group_address)
     }
 
-    #[cfg(feature = "io")]
+    #[cfg(feature = "serde")]
     pub(crate) fn rebuild_indices(&mut self) {
         let hashed_addresses: Vec<_> = self
             .iter()
@@ -429,7 +429,7 @@ mod test {
     }
 
     #[test]
-    fn test_invalid_group_directory_name() {
+    fn test_invalid_group_directory_group_index() {
         let directory = create_directory_with_lorem().0;
 
         assert_eq!(None, directory.group_index(GroupAddress::new(999)));
@@ -464,9 +464,9 @@ mod test {
         assert_eq!(1, directory.group_count());
     }
 
-    #[cfg(feature = "io")]
+    #[cfg(feature = "serde")]
     #[test]
-    fn test_group_directory_rebuild_names() {
+    fn test_group_directory_rebuild_indices() {
         let (mut directory, address) = create_directory_with_lorem();
 
         directory.indices = super::KeyDictionary::new();

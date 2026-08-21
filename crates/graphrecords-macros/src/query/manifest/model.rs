@@ -118,7 +118,7 @@ pub struct ViaArgument {
 }
 
 pub struct WhereOwned {
-    pub owner: Ident,
+    pub owner: Vec<Ident>,
     pub bounds: Vec<Ident>,
 }
 
@@ -593,8 +593,12 @@ impl Argument {
 impl WhereOwned {
     fn parse_declaration(block: ParseStream) -> Result<Self> {
         block.parse::<Token![where]>()?;
-        let owner = block.parse()?;
+        let mut owner = vec![block.parse()?];
         block.parse::<Token![::]>()?;
+        while !block.peek(keyword::Owned) {
+            owner.push(block.parse()?);
+            block.parse::<Token![::]>()?;
+        }
         block.parse::<keyword::Owned>()?;
         block.parse::<Token![:]>()?;
         let mut bounds = vec![block.parse()?];

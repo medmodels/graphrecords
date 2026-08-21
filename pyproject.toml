@@ -170,11 +170,9 @@ enableTypeIgnoreComments = false
 [tool.pytest.ini_options]
 testpaths = "tests"
 
-[tool.coverage.run]
-omit = ["graphrecords/overview.py"]
-
 [tool.coverage.report]
 exclude_also = [
+    "^\\s*\\.\\.\\.$",
     "if TYPE_CHECKING:",
     "if __name__ == .__main__.:",
     "if 0:",
@@ -190,4 +188,6 @@ cache-keys = [
     { file = "Cargo.lock" },
     { file = "crates/**/Cargo.toml" },
     { file = "crates/**/*.rs" },
+    { file = "graphrecords/**/*.py" },
+    { file = "graphrecords/**/*.pyi" },
 ]

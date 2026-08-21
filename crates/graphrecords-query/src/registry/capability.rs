@@ -308,6 +308,7 @@ impl CapabilityRegistry {
         registry.register_value_equivalence_domain::<Mask>();
         registry.register_value_equivalence_domain::<AttributeName>();
         registry.register_value_equivalence_indices();
+        registry.register_value_equivalence_entity_references();
         registry.register_value_equivalence_domain::<FailureKindValue>();
 
         registry.register_value_median_domain::<Scalar>();
@@ -325,6 +326,7 @@ impl CapabilityRegistry {
         registry.register_index_ordering::<AttributeName>();
         registry.register_index_ordering::<Value>();
         registry.register_index_ordering::<bool>();
+        registry.register_index_ordering::<GroupIndex>();
         registry.register_value_ordering_indices();
 
         registry.register_bare_value_domain::<Scalar>();
@@ -574,6 +576,13 @@ impl CapabilityRegistry {
     fn register_bare_entity_references(&mut self) {
         self.value_members
             .entry(CapabilityIdentifier::BareValue)
+            .or_default()
+            .push(ValueCapabilityMember::EntityReference);
+    }
+
+    fn register_value_equivalence_entity_references(&mut self) {
+        self.value_members
+            .entry(CapabilityIdentifier::Equivalence)
             .or_default()
             .push(ValueCapabilityMember::EntityReference);
     }

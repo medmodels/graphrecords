@@ -249,7 +249,7 @@ impl ArgumentValueSource {
 pub enum ArgumentMissingPolicy {
     None,
     Drop,
-    Replace(ArgumentValueSource),
+    Replace(Box<ValueArgumentDescriptor>),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -299,12 +299,11 @@ impl ValueArgumentDescriptor {
     }
 
     #[must_use]
-    pub const fn retention(&self) -> RetentionDescriptor {
-        match self.missing {
+    pub fn retention(&self) -> RetentionDescriptor {
+        match &self.missing {
             ArgumentMissingPolicy::Drop => RetentionDescriptor::Dropping,
-            ArgumentMissingPolicy::None | ArgumentMissingPolicy::Replace(_) => {
-                RetentionDescriptor::Preserving
-            }
+            ArgumentMissingPolicy::None => RetentionDescriptor::Preserving,
+            ArgumentMissingPolicy::Replace(replacement) => replacement.retention(),
         }
     }
 }

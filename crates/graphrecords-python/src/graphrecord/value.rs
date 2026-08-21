@@ -1,7 +1,9 @@
-use super::{Lut, traits::DeepFrom};
-use crate::{conversion_lut::ConversionLut, graphrecord::errors::PyGraphRecordError};
-use chrono::{NaiveDateTime, TimeDelta};
-use graphrecords_core::graphrecord::Value;
+use super::{Converter, Lut, traits::DeepFrom};
+use crate::{
+    conversion_lut::{ConversionLut, TypeObjectKey},
+    graphrecord::errors::PyGraphRecordError,
+};
+use graphrecords_core::graphrecord::{Value, ValueView};
 use pyo3::{
     Borrowed, Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
     types::{PyAnyMethods, PyBool, PyDateTime, PyDelta, PyFloat, PyInt, PyString},
@@ -30,6 +32,12 @@ impl DeepFrom<PyValue> for Value {
     }
 }
 
+impl DeepFrom<ValueView<'_>> for PyValue {
+    fn deep_from(value: ValueView<'_>) -> Self {
+        Value::from(value).into()
+    }
+}
+
 impl DeepFrom<Value> for PyValue {
     fn deep_from(value: Value) -> Self {
         value.into()
@@ -46,76 +54,76 @@ impl Deref for PyValue {
 
 static VALUE_CONVERSION_LUT: Lut<Value> = ConversionLut::new();
 
-#[allow(clippy::unnecessary_wraps)]
-pub(crate) fn convert_pyobject_to_value(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+pub(crate) fn value_converter(ob: &Bound<'_, PyAny>) -> Option<Converter<Value>> {
     fn convert_string(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
-        Ok(Value::String(
-            ob.extract::<String>().expect("Extraction must succeed"),
-        ))
+        Ok(Value::String(ob.extract()?))
     }
 
     fn convert_int(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
-        Ok(Value::Int(
-            ob.extract::<i64>().expect("Extraction must succeed"),
-        ))
+        Ok(Value::Int(ob.extract()?))
     }
 
     fn convert_float(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
-        Ok(Value::Float(
-            ob.extract::<f64>().expect("Extraction must succeed"),
-        ))
+        Ok(Value::Float(ob.extract()?))
     }
 
     fn convert_bool(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
-        Ok(Value::Bool(
-            ob.extract::<bool>().expect("Extraction must succeed"),
-        ))
+        Ok(Value::Bool(ob.extract()?))
     }
 
     fn convert_datetime(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
-        Ok(Value::DateTime(
-            ob.extract::<NaiveDateTime>()
-                .expect("Extraction must succeed"),
-        ))
+        Ok(Value::DateTime(ob.extract()?))
     }
 
     fn convert_duration(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
-        Ok(Value::Duration(
-            ob.extract::<TimeDelta>().expect("Extraction must succeed"),
-        ))
+        Ok(Value::Duration(ob.extract()?))
     }
 
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "the conversion table requires uniform fallible signatures"
+    )]
     const fn convert_null(_ob: &Bound<'_, PyAny>) -> PyResult<Value> {
         Ok(Value::Null)
     }
 
-    fn throw_error(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
-        Err(PyGraphRecordError::Conversion(format!("Failed to convert {ob} into Value")).into())
-    }
+    let type_object = TypeObjectKey::from(ob.get_type().unbind());
 
-    let type_pointer = ob.get_type_ptr() as usize;
-
-    let conversion_function = VALUE_CONVERSION_LUT.get_or_insert(type_pointer, || {
+    VALUE_CONVERSION_LUT.get_or_insert(type_object, || {
         if ob.is_instance_of::<PyString>() {
-            convert_string
+            Some(convert_string)
         } else if ob.is_instance_of::<PyBool>() {
-            convert_bool
+            Some(convert_bool)
         } else if ob.is_instance_of::<PyInt>() {
-            convert_int
+            Some(convert_int)
         } else if ob.is_instance_of::<PyFloat>() {
-            convert_float
+            Some(convert_float)
         } else if ob.is_instance_of::<PyDateTime>() {
-            convert_datetime
+            Some(convert_datetime)
         } else if ob.is_instance_of::<PyDelta>() {
-            convert_duration
+            Some(convert_duration)
         } else if ob.is_none() {
-            convert_null
+            Some(convert_null)
+        } else if ob.extract::<bool>().is_ok() {
+            Some(convert_bool)
+        } else if ob.extract::<i64>().is_ok() {
+            Some(convert_int)
+        } else if ob.extract::<f64>().is_ok() {
+            Some(convert_float)
         } else {
-            throw_error
+            None
         }
-    });
+    })
+}
 
-    conversion_function(ob)
+pub(crate) fn convert_pyobject_to_value(ob: &Bound<'_, PyAny>) -> PyResult<Value> {
+    let Some(convert) = value_converter(ob) else {
+        return Err(
+            PyGraphRecordError::Conversion(format!("Failed to convert {ob} into Value")).into(),
+        );
+    };
+
+    convert(ob)
 }
 
 impl FromPyObject<'_, '_> for PyValue {

@@ -1,5 +1,5 @@
 use crate::{
-    graphrecord::{PyAttributeName, PyNodeIndex, value::PyValue},
+    graphrecord::{PyAttributeName, PyEdgeIndex, PyGroupIndex, PyNodeIndex, value::PyValue},
     querying::{
         exception::FailureConversion, failure_kind::PyFailureKind,
         index_conversion::IndexConversion,
@@ -8,7 +8,7 @@ use crate::{
 use graphrecords_core::graphrecord::AttributeName;
 use graphrecords_query::{
     FailureKindValue, Scalar,
-    dynamic::{DynIndexOwned, DynValue},
+    dynamic::{DynEntityReferenceKind, DynIndexOwned, DynValue},
     registry::{ValueDescriptor, ValueRole},
 };
 use pyo3::{exceptions::PyTypeError, prelude::*};
@@ -40,7 +40,7 @@ impl ValueConversion for DynValue {
             }
             ValueRole::Index(index) => DynIndexOwned::from_python(object, index).map(Self::Index),
             ValueRole::EntityReference(_) => Err(PyTypeError::new_err(
-                "a verified reference has no literal form; pass an operand instead",
+                "a verified reference has no literal form; compare indices via `index()` instead",
             )),
             ValueRole::Unit => Err(PyTypeError::new_err(
                 "a membership lane carries no value, so it has no literal form",
@@ -55,19 +55,18 @@ impl ValueConversion for DynValue {
                 .into_pyobject(py)?
                 .unbind()),
             Self::Index(index) => index.to_python(py),
-            Self::EntityReference(reference) => {
-                match (reference.node_index(), reference.edge_index()) {
-                    (Some(index), None) => {
-                        Ok(PyNodeIndex::from(index.clone()).into_pyobject(py)?.unbind())
-                    }
-                    (None, Some(index)) => Ok(index.into_pyobject(py)?.into_any().unbind()),
-                    _ => {
-                        panic!(
-                            "dynamic entity-reference data violated its closed node-or-edge domain"
-                        )
-                    }
+            Self::EntityReference(reference) => match reference.kind() {
+                DynEntityReferenceKind::Node(index) => {
+                    Ok(PyNodeIndex::from(index.clone()).into_pyobject(py)?.unbind())
                 }
-            }
+                DynEntityReferenceKind::Edge(index) => Ok(PyEdgeIndex::from(*index)
+                    .into_pyobject(py)?
+                    .into_any()
+                    .unbind()),
+                DynEntityReferenceKind::Group(index) => Ok(PyGroupIndex::from(index.clone())
+                    .into_pyobject(py)?
+                    .unbind()),
+            },
             Self::Failure(failure) => Ok(failure.to_python(py)),
             Self::FailureKind(kind) => Ok(PyFailureKind::from(*kind)
                 .into_pyobject(py)?

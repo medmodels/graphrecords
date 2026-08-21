@@ -48,9 +48,10 @@ impl Change for AddEdgesToGroup {
             edge_indices,
         } = *self;
 
-        let group_address = state
-            .resolve_group_address(&group_index)
-            .ok_or(GraphRecordError::GroupNotFound { group_index })?;
+        let group_address = match state.resolve_group_address(&group_index) {
+            Some(group_address) => group_address,
+            None => state.insert_group(group_index)?,
+        };
 
         for edge_index in edge_indices {
             let edge_address = state

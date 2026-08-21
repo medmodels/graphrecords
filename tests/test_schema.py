@@ -1,467 +1,686 @@
+import pickle
+import re
 import unittest
 
 import pytest
 
-import graphrecords as gr
-from graphrecords._graphrecords.schema import (
-    PyAttributeDataType,
-    PyAttributeType,
-    PyGroupSchema,
-    PySchema,
+from graphrecords import GraphRecord
+from graphrecords.datatype import (
+    Any,
+    Bool,
+    DateTime,
+    Duration,
+    Float,
+    Int,
+    Null,
+    Option,
+    String,
+    Union,
+)
+from graphrecords.schema import (
+    AttributeDataType,
+    AttributeType,
+    GroupSchema,
+    Schema,
+    SchemaType,
 )
 
 
 class TestAttributeType(unittest.TestCase):
-    def test_from_py_attribute_type(self) -> None:
-        assert (
-            gr.AttributeType._from_py_attribute_type(PyAttributeType.Categorical)
-            == gr.AttributeType.Categorical
-        )
-        assert (
-            gr.AttributeType._from_py_attribute_type(PyAttributeType.Continuous)
-            == gr.AttributeType.Continuous
-        )
-        assert (
-            gr.AttributeType._from_py_attribute_type(PyAttributeType.Temporal)
-            == gr.AttributeType.Temporal
-        )
-        assert (
-            gr.AttributeType._from_py_attribute_type(PyAttributeType.Unstructured)
-            == gr.AttributeType.Unstructured
-        )
-
     def test_infer(self) -> None:
-        assert gr.AttributeType.infer(gr.String()) == gr.AttributeType.Unstructured
-        assert gr.AttributeType.infer(gr.Int()) == gr.AttributeType.Continuous
-        assert gr.AttributeType.infer(gr.Float()) == gr.AttributeType.Continuous
-        assert gr.AttributeType.infer(gr.Bool()) == gr.AttributeType.Categorical
-        assert gr.AttributeType.infer(gr.DateTime()) == gr.AttributeType.Temporal
-        assert gr.AttributeType.infer(gr.Duration()) == gr.AttributeType.Temporal
-        assert gr.AttributeType.infer(gr.Null()) == gr.AttributeType.Unstructured
-        assert gr.AttributeType.infer(gr.Any()) == gr.AttributeType.Unstructured
-        assert (
-            gr.AttributeType.infer(gr.Union(gr.Int(), gr.Float()))
-            == gr.AttributeType.Continuous
-        )
-        assert (
-            gr.AttributeType.infer(gr.Option(gr.Int())) == gr.AttributeType.Continuous
-        )
-
-    def test_into_py_attribute_type(self) -> None:
-        assert (
-            gr.AttributeType.Categorical._into_py_attribute_type()
-            == PyAttributeType.Categorical
-        )
-        assert (
-            gr.AttributeType.Continuous._into_py_attribute_type()
-            == PyAttributeType.Continuous
-        )
-        assert (
-            gr.AttributeType.Temporal._into_py_attribute_type()
-            == PyAttributeType.Temporal
-        )
-        assert (
-            gr.AttributeType.Unstructured._into_py_attribute_type()
-            == PyAttributeType.Unstructured
-        )
+        assert AttributeType.infer(String()) == AttributeType.Unstructured
+        assert AttributeType.infer(Int()) == AttributeType.Continuous
+        assert AttributeType.infer(Float()) == AttributeType.Continuous
+        assert AttributeType.infer(Bool()) == AttributeType.Categorical
+        assert AttributeType.infer(DateTime()) == AttributeType.Temporal
+        assert AttributeType.infer(Duration()) == AttributeType.Temporal
+        assert AttributeType.infer(Null()) == AttributeType.Unstructured
+        assert AttributeType.infer(Any()) == AttributeType.Unstructured
+        assert AttributeType.infer(Union(Int(), Float())) == AttributeType.Continuous
+        assert AttributeType.infer(Option(Int())) == AttributeType.Continuous
 
     def test_repr(self) -> None:
-        assert repr(gr.AttributeType.Categorical) == "AttributeType.Categorical"
-        assert repr(gr.AttributeType.Continuous) == "AttributeType.Continuous"
-        assert repr(gr.AttributeType.Temporal) == "AttributeType.Temporal"
-        assert repr(gr.AttributeType.Unstructured) == "AttributeType.Unstructured"
+        assert repr(AttributeType.Categorical) == "AttributeType.Categorical"
+        assert repr(AttributeType.Continuous) == "AttributeType.Continuous"
+        assert repr(AttributeType.Temporal) == "AttributeType.Temporal"
+        assert repr(AttributeType.Unstructured) == "AttributeType.Unstructured"
 
     def test_str(self) -> None:
-        assert str(gr.AttributeType.Categorical) == "Categorical"
-        assert str(gr.AttributeType.Continuous) == "Continuous"
-        assert str(gr.AttributeType.Temporal) == "Temporal"
-        assert str(gr.AttributeType.Unstructured) == "Unstructured"
+        assert str(AttributeType.Categorical) == "Categorical"
+        assert str(AttributeType.Continuous) == "Continuous"
+        assert str(AttributeType.Temporal) == "Temporal"
+        assert str(AttributeType.Unstructured) == "Unstructured"
 
-    def test_hash(self) -> None:
-        assert hash(gr.AttributeType.Categorical) == hash("Categorical")
-        assert hash(gr.AttributeType.Continuous) == hash("Continuous")
-        assert hash(gr.AttributeType.Temporal) == hash("Temporal")
-        assert hash(gr.AttributeType.Unstructured) == hash("Unstructured")
+
+class TestSchemaType(unittest.TestCase):
+    def test_repr(self) -> None:
+        assert repr(SchemaType.Provided) == "SchemaType.Provided"
+        assert repr(SchemaType.Inferred) == "SchemaType.Inferred"
+
+    def test_str(self) -> None:
+        assert str(SchemaType.Provided) == "Provided"
+        assert str(SchemaType.Inferred) == "Inferred"
+
+
+class TestAttributeDataType(unittest.TestCase):
+    def test_construction_and_getters(self) -> None:
+        categorical = AttributeDataType(Bool(), AttributeType.Categorical)
+        continuous = AttributeDataType(Int(), AttributeType.Continuous)
+        temporal = AttributeDataType(DateTime(), AttributeType.Temporal)
+        unstructured = AttributeDataType(String(), AttributeType.Unstructured)
+        inferred = AttributeDataType(Int())
+
+        assert categorical.data_type == Bool()
+        assert categorical.attribute_type == AttributeType.Categorical
+        assert continuous.data_type == Int()
+        assert continuous.attribute_type == AttributeType.Continuous
+        assert temporal.data_type == DateTime()
+        assert temporal.attribute_type == AttributeType.Temporal
+        assert unstructured.data_type == String()
+        assert unstructured.attribute_type == AttributeType.Unstructured
+        assert inferred.data_type == Int()
+        assert inferred.attribute_type == AttributeType.Continuous
 
     def test_eq(self) -> None:
-        assert gr.AttributeType.Categorical == gr.AttributeType.Categorical
-        assert gr.AttributeType.Categorical == PyAttributeType.Categorical
-        assert gr.AttributeType.Categorical != gr.AttributeType.Continuous
-        assert gr.AttributeType.Categorical != gr.AttributeType.Temporal
-        assert gr.AttributeType.Categorical != gr.AttributeType.Unstructured
-        assert gr.AttributeType.Categorical != PyAttributeType.Continuous
-        assert gr.AttributeType.Categorical != PyAttributeType.Temporal
-        assert gr.AttributeType.Categorical != PyAttributeType.Unstructured
+        attribute_data_type = AttributeDataType(Int(), AttributeType.Continuous)
 
-        assert gr.AttributeType.Continuous == gr.AttributeType.Continuous
-        assert gr.AttributeType.Continuous == PyAttributeType.Continuous
-        assert gr.AttributeType.Continuous != gr.AttributeType.Categorical
-        assert gr.AttributeType.Continuous != gr.AttributeType.Temporal
-        assert gr.AttributeType.Continuous != gr.AttributeType.Unstructured
-        assert gr.AttributeType.Continuous != PyAttributeType.Categorical
-        assert gr.AttributeType.Continuous != PyAttributeType.Temporal
-        assert gr.AttributeType.Continuous != PyAttributeType.Unstructured
-        assert gr.AttributeType.Continuous != "Continuous"
+        assert attribute_data_type == AttributeDataType(Int(), AttributeType.Continuous)
+        assert attribute_data_type != AttributeDataType(
+            Float(), AttributeType.Continuous
+        )
+        assert attribute_data_type != AttributeDataType(
+            Int(), AttributeType.Categorical
+        )
+        assert attribute_data_type != "not an attribute data type"
 
-        assert gr.AttributeType.Temporal == gr.AttributeType.Temporal
-        assert gr.AttributeType.Temporal == PyAttributeType.Temporal
-        assert gr.AttributeType.Temporal != gr.AttributeType.Categorical
-        assert gr.AttributeType.Temporal != gr.AttributeType.Continuous
-        assert gr.AttributeType.Temporal != gr.AttributeType.Unstructured
-        assert gr.AttributeType.Temporal != PyAttributeType.Categorical
-        assert gr.AttributeType.Temporal != PyAttributeType.Continuous
-        assert gr.AttributeType.Temporal != PyAttributeType.Unstructured
-        assert gr.AttributeType.Temporal != "Temporal"
+    def test_repr(self) -> None:
+        attribute_data_type = AttributeDataType(Int(), AttributeType.Continuous)
 
-        assert gr.AttributeType.Unstructured == gr.AttributeType.Unstructured
-        assert gr.AttributeType.Unstructured == PyAttributeType.Unstructured
-        assert gr.AttributeType.Unstructured != gr.AttributeType.Categorical
-        assert gr.AttributeType.Unstructured != gr.AttributeType.Continuous
-        assert gr.AttributeType.Unstructured != gr.AttributeType.Temporal
-        assert gr.AttributeType.Unstructured != PyAttributeType.Categorical
-        assert gr.AttributeType.Unstructured != PyAttributeType.Continuous
-        assert gr.AttributeType.Unstructured != PyAttributeType.Temporal
-        assert gr.AttributeType.Unstructured != "Unstructured"
+        assert (
+            repr(attribute_data_type)
+            == "AttributeDataType(DataType.Int, AttributeType.Continuous)"
+        )
+
+    def test_invalid_construction(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match=r"Continuous attribute must be of \(sub-\)type `Int` or `Float`\.",
+        ):
+            AttributeDataType(String(), AttributeType.Continuous)
+
+        with pytest.raises(
+            ValueError,
+            match=r"Temporal attribute must be of \(sub-\)type `DateTime` or `Duration`\.",
+        ):
+            AttributeDataType(Bool(), AttributeType.Temporal)
+
+    def test_reduce(self) -> None:
+        attribute_data_type = AttributeDataType(Int(), AttributeType.Continuous)
+
+        restored = pickle.loads(pickle.dumps(attribute_data_type))
+
+        assert restored == attribute_data_type
 
 
 class TestGroupSchema(unittest.TestCase):
-    def test_from_py_group_schema(self) -> None:
-        assert gr.GroupSchema._from_py_group_schema(
-            PyGroupSchema(
-                nodes={
-                    "test": PyAttributeDataType(
-                        gr.String()._inner(), PyAttributeType.Unstructured
-                    )
-                },
-                edges={},
-            )
-        ).nodes == {"test": (gr.String(), gr.AttributeType.Unstructured)}
+    def test_init_defaults(self) -> None:
+        group_schema = GroupSchema()
+
+        assert group_schema.nodes == {}
+        assert group_schema.edges == {}
 
     def test_nodes(self) -> None:
-        group_schema = gr.GroupSchema(nodes={"test": gr.String()}, edges={})
+        group_schema = GroupSchema(
+            nodes={"key1": AttributeDataType(Int(), AttributeType.Continuous)}
+        )
 
         assert group_schema.nodes == {
-            "test": (gr.String(), gr.AttributeType.Unstructured)
+            "key1": AttributeDataType(Int(), AttributeType.Continuous)
         }
+        assert group_schema.edges == {}
 
     def test_edges(self) -> None:
-        group_schema = gr.GroupSchema(nodes={}, edges={"test": gr.String()})
+        group_schema = GroupSchema(
+            edges={"key1": AttributeDataType(Bool(), AttributeType.Categorical)}
+        )
 
         assert group_schema.edges == {
-            "test": (gr.String(), gr.AttributeType.Unstructured)
+            "key1": AttributeDataType(Bool(), AttributeType.Categorical)
         }
+        assert group_schema.nodes == {}
 
     def test_validate_node(self) -> None:
-        group_schema = gr.GroupSchema(
+        group_schema = GroupSchema(
             nodes={
-                "key1": (gr.Int(), gr.AttributeType.Categorical),
-                "key2": (gr.Float(), gr.AttributeType.Continuous),
-            },
-            edges={},
+                "key1": AttributeDataType(Int(), AttributeType.Categorical),
+                "key2": AttributeDataType(Float(), AttributeType.Continuous),
+            }
         )
 
         group_schema.validate_node("0", {"key1": 0, "key2": 0.0})
 
         with pytest.raises(
             ValueError,
-            match=r'Attribute `"key1"` of node with index `"0"` is of type `Float`. Expected `Int`.',
+            match=(
+                r'Attribute `"key1"` of node with index `"0"` is of type '
+                r"`Float`\. Expected `Int`\."
+            ),
         ):
             group_schema.validate_node("0", {"key1": 0.0, "key2": 0.0})
 
     def test_validate_edge(self) -> None:
-        group_schema = gr.GroupSchema(
-            nodes={},
+        graphrecord = GraphRecord().add_node(0, {}).add_node(1, {})
+        graphrecord = graphrecord.add_edge(0, 1, {})
+        edge_index = graphrecord.edge_indices()[0]
+
+        group_schema = GroupSchema(
             edges={
-                "key1": (gr.Int(), gr.AttributeType.Categorical),
-                "key2": (gr.Float(), gr.AttributeType.Continuous),
-            },
+                "key1": AttributeDataType(Int(), AttributeType.Categorical),
+                "key2": AttributeDataType(Float(), AttributeType.Continuous),
+            }
         )
 
-        group_schema.validate_edge(0, {"key1": 0, "key2": 0.0})
+        group_schema.validate_edge(edge_index, {"key1": 0, "key2": 0.0})
 
         with pytest.raises(
             ValueError,
-            match=r'Attribute `"key1"` of edge with index `0` is of type `Float`. Expected `Int`.',
+            match=(
+                rf'Attribute `"key1"` of edge with index `{re.escape(str(edge_index))}` '
+                r"is of type `Float`\. Expected `Int`\."
+            ),
         ):
-            group_schema.validate_edge(0, {"key1": 0.0, "key2": 0.0})
+            group_schema.validate_edge(edge_index, {"key1": 0.0, "key2": 0.0})
+
+    def test_eq(self) -> None:
+        group_schema = GroupSchema(
+            nodes={"key1": AttributeDataType(Int(), AttributeType.Continuous)}
+        )
+
+        assert group_schema == GroupSchema(
+            nodes={"key1": AttributeDataType(Int(), AttributeType.Continuous)}
+        )
+        assert group_schema != GroupSchema(
+            nodes={"key1": AttributeDataType(Float(), AttributeType.Continuous)}
+        )
+        assert group_schema != GroupSchema()
+        assert group_schema != "not a group schema"
+
+    def test_repr(self) -> None:
+        group_schema = GroupSchema(
+            nodes={"key1": AttributeDataType(Int(), AttributeType.Continuous)}
+        )
+
+        assert "key1" in repr(group_schema)
+        assert repr(group_schema) != repr(GroupSchema())
+
+    def test_reduce(self) -> None:
+        group_schema = GroupSchema(
+            nodes={"key1": AttributeDataType(Int(), AttributeType.Continuous)}
+        )
+
+        restored = pickle.loads(pickle.dumps(group_schema))
+
+        assert restored == group_schema
 
 
 class TestSchema(unittest.TestCase):
+    def test_init_defaults(self) -> None:
+        schema = Schema()
+
+        assert schema.groups == {}
+        assert schema.ungrouped.nodes == {}
+        assert schema.ungrouped.edges == {}
+        assert schema.schema_type == SchemaType.Provided
+
+    def test_init_provided(self) -> None:
+        group_schema = GroupSchema(
+            nodes={"key1": AttributeDataType(Int(), AttributeType.Continuous)}
+        )
+
+        schema = Schema(groups={"group1": group_schema}, ungrouped=group_schema)
+
+        assert schema.groups == {"group1": group_schema}
+        assert schema.group("group1").nodes == group_schema.nodes
+        assert schema.ungrouped.nodes == group_schema.nodes
+        assert schema.schema_type == SchemaType.Provided
+
+    def test_init_inferred(self) -> None:
+        schema = Schema(schema_type=SchemaType.Inferred)
+
+        assert schema.schema_type == SchemaType.Inferred
+
     def test_infer(self) -> None:
-        graphrecord = gr.GraphRecord()
-        graphrecord.add_nodes([(0, {"key1": 0}), (1, {"key2": 0.0})])
-        graphrecord.add_edges((0, 1, {"key3": True}))
+        graphrecord = GraphRecord()
+        graphrecord = graphrecord.add_nodes([(0, {"key1": 0}), (1, {"key2": 0.0})])
+        graphrecord = graphrecord.add_edges([(0, 1, {"key3": True})])
 
-        schema = gr.Schema.infer(graphrecord)
+        schema = Schema.infer(graphrecord)
 
-        assert len(schema.ungrouped.nodes) == 2
-        assert len(schema.ungrouped.edges) == 1
+        assert schema.schema_type == SchemaType.Inferred
+        assert schema.groups == {}
+        assert set(schema.ungrouped.nodes) == {"key1", "key2"}
+        assert set(schema.ungrouped.edges) == {"key3"}
 
-        graphrecord.add_group("test", [0, 1], [0])
+        graphrecord = graphrecord.add_group("group1")
+        graphrecord = graphrecord.add_nodes_to_group([0, 1], "group1")
+        graphrecord = graphrecord.add_edges_to_group(
+            graphrecord.edge_indices(), "group1"
+        )
 
-        schema = gr.Schema.infer(graphrecord)
+        schema = Schema.infer(graphrecord)
 
-        assert len(schema.ungrouped.nodes) == 0
-        assert len(schema.ungrouped.edges) == 0
-        assert len(schema.groups) == 1
-        assert len(schema.group("test").nodes) == 2
-        assert len(schema.group("test").edges) == 1
-
-    def test_from_py_schema(self) -> None:
-        assert gr.Schema._from_py_schema(
-            PySchema(
-                groups={},
-                ungrouped=PyGroupSchema(
-                    nodes={
-                        "test": PyAttributeDataType(
-                            gr.String()._inner(), PyAttributeType.Unstructured
-                        )
-                    },
-                    edges={},
-                ),
-            )
-        ).ungrouped.nodes == {"test": (gr.String(), gr.AttributeType.Unstructured)}
+        assert set(schema.groups) == {"group1"}
+        assert set(schema.group("group1").nodes) == {"key1", "key2"}
+        assert set(schema.group("group1").edges) == {"key3"}
+        assert schema.ungrouped.nodes == {}
+        assert schema.ungrouped.edges == {}
 
     def test_groups(self) -> None:
-        schema = gr.Schema(
-            groups={"test": gr.GroupSchema()}, ungrouped=gr.GroupSchema()
-        )
+        schema = Schema(groups={"group1": GroupSchema(), "group2": GroupSchema()})
 
-        assert schema.groups == ["test"]
+        assert schema.groups == {"group1": GroupSchema(), "group2": GroupSchema()}
 
     def test_group(self) -> None:
-        schema = gr.Schema(
-            groups={"test": gr.GroupSchema(nodes={"test": gr.String()}, edges={})},
-            ungrouped=gr.GroupSchema(),
+        group_schema = GroupSchema(
+            nodes={"key1": AttributeDataType(Int(), AttributeType.Continuous)}
         )
+        schema = Schema(groups={"group1": group_schema})
 
-        assert schema.group("test").nodes == {
-            "test": (gr.String(), gr.AttributeType.Unstructured)
-        }
+        assert schema.group("group1").nodes == group_schema.nodes
 
         with pytest.raises(
-            ValueError, match=r'Group `"invalid"` is not defined in the schema'
+            ValueError,
+            match=r'Group with index `"missing"` is not defined in the schema',
         ):
-            schema.group("invalid")
+            schema.group("missing")
 
-    def test_default(self) -> None:
-        schema = gr.Schema(
-            groups={}, ungrouped=gr.GroupSchema(nodes={"test": gr.String()}, edges={})
+    def test_ungrouped(self) -> None:
+        group_schema = GroupSchema(
+            edges={"key1": AttributeDataType(Bool(), AttributeType.Categorical)}
         )
+        schema = Schema(ungrouped=group_schema)
 
-        assert schema.ungrouped.nodes == {
-            "test": (gr.String(), gr.AttributeType.Unstructured)
-        }
+        assert schema.ungrouped.edges == group_schema.edges
 
     def test_schema_type(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
-
-        assert schema.schema_type == gr.SchemaType.Provided
-
-        schema = gr.Schema(
-            groups={}, ungrouped=gr.GroupSchema(), schema_type=gr.SchemaType.Provided
+        assert Schema().schema_type == SchemaType.Provided
+        assert (
+            Schema(schema_type=SchemaType.Provided).schema_type == SchemaType.Provided
         )
-
-        assert schema.schema_type == gr.SchemaType.Provided
-
-        schema = gr.Schema(
-            groups={"test": gr.GroupSchema()},
-            ungrouped=gr.GroupSchema(),
-            schema_type=gr.SchemaType.Inferred,
+        assert (
+            Schema(schema_type=SchemaType.Inferred).schema_type == SchemaType.Inferred
         )
-
-        assert schema.schema_type == gr.SchemaType.Inferred
 
     def test_validate_node(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
+        schema = Schema(
+            groups={
+                "group1": GroupSchema(
+                    nodes={"key1": AttributeDataType(Int(), AttributeType.Continuous)}
+                )
+            }
+        )
+        schema = schema.set_node_attribute("key1", Bool(), AttributeType.Categorical)
 
-        schema.set_node_attribute("key1", gr.Int(), gr.AttributeType.Continuous)
-
-        schema.validate_node("0", {"key1": 0})
+        schema.validate_node("0", {"key1": True})
+        schema.validate_node("0", {"key1": 0}, "group1")
 
         with pytest.raises(
             ValueError,
-            match=r'Attribute `"key1"` of node with index `"0"` is of type `String`. Expected `Int`.',
+            match=(
+                r'Attribute `"key1"` of node with index `"0"` is of type '
+                r"`Int`\. Expected `Bool`\."
+            ),
         ):
-            schema.validate_node("0", {"key1": "invalid"})
+            schema.validate_node("0", {"key1": 0})
+
+        with pytest.raises(
+            ValueError,
+            match=r'Group with index `"missing"` is not defined in the schema',
+        ):
+            schema.validate_node("0", {"key1": 0}, "missing")
 
     def test_validate_edge(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
+        graphrecord = GraphRecord().add_node(0, {}).add_node(1, {})
+        graphrecord = graphrecord.add_edge(0, 1, {})
+        edge_index = graphrecord.edge_indices()[0]
 
-        schema.set_edge_attribute("key1", gr.Bool(), gr.AttributeType.Categorical)
+        schema = Schema(
+            groups={
+                "group1": GroupSchema(
+                    edges={"key1": AttributeDataType(Int(), AttributeType.Continuous)}
+                )
+            }
+        )
+        schema = schema.set_edge_attribute("key1", Bool(), AttributeType.Categorical)
 
-        schema.validate_edge(0, {"key1": True})
+        schema.validate_edge(edge_index, {"key1": True})
+        schema.validate_edge(edge_index, {"key1": 0}, "group1")
 
         with pytest.raises(
             ValueError,
-            match=r'Attribute `"key1"` of edge with index `0` is of type `Int`. Expected `Bool`.',
+            match=(
+                rf'Attribute `"key1"` of edge with index `{re.escape(str(edge_index))}` '
+                r"is of type `Int`\. Expected `Bool`\."
+            ),
         ):
-            schema.validate_edge(0, {"key1": 0})
-
-    def test_set_node_attribute(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
-
-        schema.set_node_attribute("key1", gr.Int())
-
-        assert schema.ungrouped.nodes["key1"][0] == gr.Int()
-
-        schema.set_node_attribute("key1", gr.Float(), gr.AttributeType.Continuous)
-
-        assert schema.ungrouped.nodes["key1"][0] == gr.Float()
-
-        schema.set_node_attribute(
-            "key1", gr.Float(), gr.AttributeType.Continuous, "group1"
-        )
-
-        assert schema.group("group1").nodes["key1"][0] == gr.Float()
-
-    def test_set_edge_attribute(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
-
-        schema.set_edge_attribute("key1", gr.Bool())
-
-        assert schema.ungrouped.edges["key1"][0] == gr.Bool()
-
-        schema.set_edge_attribute("key1", gr.Float(), gr.AttributeType.Continuous)
-
-        assert schema.ungrouped.edges["key1"][0] == gr.Float()
-
-        schema.set_edge_attribute(
-            "key1", gr.Float(), gr.AttributeType.Continuous, "group1"
-        )
-
-        assert schema.group("group1").edges["key1"][0] == gr.Float()
-
-    def test_update_node_attribute(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
-
-        schema.set_node_attribute("key1", gr.Int(), gr.AttributeType.Continuous)
-
-        schema.update_node_attribute("key1", gr.Float())
-
-        assert schema.ungrouped.nodes["key1"][0] == gr.Union(gr.Int(), gr.Float())
-
-        schema.set_node_attribute(
-            "key1", gr.Int(), gr.AttributeType.Continuous, "group1"
-        )
-
-        schema.update_node_attribute(
-            "key1", gr.Float(), gr.AttributeType.Continuous, "group1"
-        )
-
-        assert schema.group("group1").nodes["key1"][0] == gr.Union(gr.Int(), gr.Float())
-
-    def test_update_edge_attribute(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
-
-        schema.set_edge_attribute("key1", gr.Bool(), gr.AttributeType.Categorical)
-
-        schema.update_edge_attribute("key1", gr.String())
-
-        assert schema.ungrouped.edges["key1"][0] == gr.Union(gr.Bool(), gr.String())
-
-        schema.set_edge_attribute(
-            "key1", gr.Bool(), gr.AttributeType.Categorical, "group1"
-        )
-
-        schema.update_edge_attribute(
-            "key1", gr.String(), gr.AttributeType.Unstructured, "group1"
-        )
-
-        assert schema.group("group1").edges["key1"][0] == gr.Union(
-            gr.Bool(), gr.String()
-        )
-
-    def test_remove_node_attribute(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
-
-        schema.set_node_attribute("key1", gr.Int(), gr.AttributeType.Continuous)
-
-        assert "key1" in schema.ungrouped.nodes
-
-        schema.remove_node_attribute("key1")
-
-        assert "key1" not in schema.ungrouped.nodes
-
-        schema.set_node_attribute(
-            "key1", gr.Int(), gr.AttributeType.Continuous, "group1"
-        )
-
-        assert "key1" in schema.group("group1").nodes
-
-        schema.remove_node_attribute("key1", "group1")
-
-        assert "key1" not in schema.group("group1").nodes
-
-    def test_remove_edge_attribute(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
-
-        schema.set_edge_attribute("key1", gr.Bool(), gr.AttributeType.Categorical)
-
-        assert "key1" in schema.ungrouped.edges
-
-        schema.remove_edge_attribute("key1")
-
-        assert "key1" not in schema.ungrouped.edges
-
-        schema.set_edge_attribute(
-            "key1", gr.Bool(), gr.AttributeType.Categorical, "group1"
-        )
-
-        assert "key1" in schema.group("group1").edges
-
-        schema.remove_edge_attribute("key1", "group1")
-
-        assert "key1" not in schema.group("group1").edges
-
-    def test_add_group(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
-
-        schema.add_group(
-            "group1",
-            gr.GroupSchema(nodes={"key1": gr.Int()}, edges={"key1": gr.Float()}),
-        )
-
-        assert {"key1": (gr.Int(), gr.AttributeType.Continuous)} == schema.group(
-            "group1"
-        ).nodes
-        assert {"key1": (gr.Float(), gr.AttributeType.Continuous)} == schema.group(
-            "group1"
-        ).edges
+            schema.validate_edge(edge_index, {"key1": 0})
 
         with pytest.raises(
-            ValueError, match=r'Group `"group1"` already exists in the schema'
+            ValueError,
+            match=r'Group with index `"missing"` is not defined in the schema',
         ):
-            schema.add_group("group1", gr.GroupSchema())
+            schema.validate_edge(edge_index, {"key1": 0}, "missing")
 
-    def test_remove_group(self) -> None:
-        schema = gr.Schema(
-            groups={"group1": gr.GroupSchema()}, ungrouped=gr.GroupSchema()
+    def test_set_node_attribute(self) -> None:
+        schema = Schema()
+
+        updated = schema.set_node_attribute("key1", Int(), AttributeType.Continuous)
+
+        assert updated is not schema
+        assert updated.ungrouped.nodes == {
+            "key1": AttributeDataType(Int(), AttributeType.Continuous)
+        }
+        assert schema.ungrouped.nodes == {}
+
+        grouped = schema.set_node_attribute(
+            "key1", Float(), AttributeType.Continuous, "group1"
         )
 
-        assert "group1" in schema.groups
+        assert grouped.group("group1").nodes == {
+            "key1": AttributeDataType(Float(), AttributeType.Continuous)
+        }
+        assert set(grouped.groups) == {"group1"}
+        assert schema.groups == {}
 
-        schema.remove_group("group1")
+        overwritten = updated.set_node_attribute(
+            "key1", Bool(), AttributeType.Categorical
+        )
 
-        assert "group1" not in schema.groups
+        assert overwritten.ungrouped.nodes == {
+            "key1": AttributeDataType(Bool(), AttributeType.Categorical)
+        }
+        assert updated.ungrouped.nodes == {
+            "key1": AttributeDataType(Int(), AttributeType.Continuous)
+        }
 
-    def test_freeze_unfreeze(self) -> None:
-        schema = gr.Schema(groups={}, ungrouped=gr.GroupSchema())
+    def test_set_edge_attribute(self) -> None:
+        schema = Schema()
 
-        schema.freeze()
+        updated = schema.set_edge_attribute("key1", Int(), AttributeType.Continuous)
 
-        assert schema.schema_type == gr.SchemaType.Provided
+        assert updated is not schema
+        assert updated.ungrouped.edges == {
+            "key1": AttributeDataType(Int(), AttributeType.Continuous)
+        }
+        assert schema.ungrouped.edges == {}
 
-        schema.unfreeze()
+        grouped = schema.set_edge_attribute(
+            "key1", Bool(), AttributeType.Categorical, "group1"
+        )
 
-        assert schema.schema_type == gr.SchemaType.Inferred
+        assert grouped.group("group1").edges == {
+            "key1": AttributeDataType(Bool(), AttributeType.Categorical)
+        }
+        assert schema.groups == {}
+
+    def test_update_node_attribute(self) -> None:
+        schema = Schema()
+
+        inserted = schema.update_node_attribute("key1", Int(), AttributeType.Continuous)
+
+        assert inserted is not schema
+        assert inserted.ungrouped.nodes == {
+            "key1": AttributeDataType(Int(), AttributeType.Continuous)
+        }
+        assert schema.ungrouped.nodes == {}
+
+        widened = inserted.update_node_attribute(
+            "key1", Float(), AttributeType.Continuous
+        )
+
+        assert widened.ungrouped.nodes == {
+            "key1": AttributeDataType(Union(Int(), Float()), AttributeType.Continuous)
+        }
+        assert inserted.ungrouped.nodes == {
+            "key1": AttributeDataType(Int(), AttributeType.Continuous)
+        }
+
+        grouped = inserted.update_node_attribute(
+            "key1", Float(), AttributeType.Continuous, "group1"
+        )
+
+        assert grouped.group("group1").nodes == {
+            "key1": AttributeDataType(Float(), AttributeType.Continuous)
+        }
+        assert grouped.ungrouped.nodes == {
+            "key1": AttributeDataType(Int(), AttributeType.Continuous)
+        }
+
+    def test_update_edge_attribute(self) -> None:
+        schema = Schema().set_edge_attribute("key1", Bool(), AttributeType.Categorical)
+
+        widened = schema.update_edge_attribute(
+            "key1", String(), AttributeType.Unstructured
+        )
+
+        assert widened is not schema
+        assert widened.ungrouped.edges == {
+            "key1": AttributeDataType(
+                Union(Bool(), String()), AttributeType.Unstructured
+            )
+        }
+        assert schema.ungrouped.edges == {
+            "key1": AttributeDataType(Bool(), AttributeType.Categorical)
+        }
+
+        grouped = schema.set_edge_attribute(
+            "key1", Bool(), AttributeType.Categorical, "group1"
+        ).update_edge_attribute("key1", String(), AttributeType.Unstructured, "group1")
+
+        assert grouped.group("group1").edges == {
+            "key1": AttributeDataType(
+                Union(Bool(), String()), AttributeType.Unstructured
+            )
+        }
+
+    def test_remove_node_attribute(self) -> None:
+        schema = Schema().set_node_attribute("key1", Int(), AttributeType.Continuous)
+
+        removed = schema.remove_node_attribute("key1")
+
+        assert removed is not schema
+        assert removed.ungrouped.nodes == {}
+        assert schema.ungrouped.nodes == {
+            "key1": AttributeDataType(Int(), AttributeType.Continuous)
+        }
+
+        grouped_schema = schema.set_node_attribute(
+            "key1", Int(), AttributeType.Continuous, "group1"
+        )
+        grouped_removed = grouped_schema.remove_node_attribute("key1", "group1")
+
+        assert grouped_removed.group("group1").nodes == {}
+        assert grouped_schema.group("group1").nodes == {
+            "key1": AttributeDataType(Int(), AttributeType.Continuous)
+        }
+
+        noop = schema.remove_node_attribute("missing")
+
+        assert noop is not schema
+        assert noop.ungrouped.nodes == schema.ungrouped.nodes
+
+    def test_remove_edge_attribute(self) -> None:
+        schema = Schema().set_edge_attribute("key1", Bool(), AttributeType.Categorical)
+
+        removed = schema.remove_edge_attribute("key1")
+
+        assert removed is not schema
+        assert removed.ungrouped.edges == {}
+        assert schema.ungrouped.edges == {
+            "key1": AttributeDataType(Bool(), AttributeType.Categorical)
+        }
+
+        grouped_schema = schema.set_edge_attribute(
+            "key1", Bool(), AttributeType.Categorical, "group1"
+        )
+        grouped_removed = grouped_schema.remove_edge_attribute("key1", "group1")
+
+        assert grouped_removed.group("group1").edges == {}
+        assert grouped_schema.group("group1").edges == {
+            "key1": AttributeDataType(Bool(), AttributeType.Categorical)
+        }
+
+    def test_add_group(self) -> None:
+        schema = Schema()
+        group_schema = GroupSchema(
+            nodes={"key1": AttributeDataType(Int(), AttributeType.Continuous)},
+            edges={"key1": AttributeDataType(Float(), AttributeType.Continuous)},
+        )
+
+        added = schema.add_group("group1", group_schema)
+
+        assert added is not schema
+        assert added.groups == {"group1": group_schema}
+        assert added.group("group1").nodes == group_schema.nodes
+        assert added.group("group1").edges == group_schema.edges
+        assert schema.groups == {}
+
+        with pytest.raises(
+            ValueError,
+            match=r'Group with index `"group1"` already exists in the schema',
+        ):
+            added.add_group("group1", GroupSchema())
+
+    def test_remove_group(self) -> None:
+        schema = Schema(groups={"group1": GroupSchema()})
+
+        removed = schema.remove_group("group1")
+
+        assert removed is not schema
+        assert removed.groups == {}
+        assert schema.groups == {"group1": GroupSchema()}
+
+        noop = schema.remove_group("missing")
+
+        assert noop is not schema
+        assert noop.groups == {"group1": GroupSchema()}
+
+    def test_freeze(self) -> None:
+        schema = Schema(schema_type=SchemaType.Inferred)
+
+        frozen = schema.freeze()
+
+        assert frozen is not schema
+        assert frozen.schema_type == SchemaType.Provided
+        assert schema.schema_type == SchemaType.Inferred
+
+    def test_unfreeze(self) -> None:
+        schema = Schema(schema_type=SchemaType.Provided)
+
+        unfrozen = schema.unfreeze()
+
+        assert unfrozen is not schema
+        assert unfrozen.schema_type == SchemaType.Inferred
+        assert schema.schema_type == SchemaType.Provided
+
+    def test_eq(self) -> None:
+        schema = Schema(groups={"group1": GroupSchema()})
+
+        assert schema == Schema(groups={"group1": GroupSchema()})
+        assert schema != Schema(groups={"group2": GroupSchema()})
+        assert schema != Schema()
+        assert schema != "not a schema"
+
+    def test_repr(self) -> None:
+        schema = Schema(groups={"group1": GroupSchema()})
+
+        assert "group1" in repr(schema)
+        assert repr(schema) != repr(Schema())
+
+    def test_reduce(self) -> None:
+        schema = Schema().set_node_attribute("key1", Int(), AttributeType.Continuous)
+
+        restored = pickle.loads(pickle.dumps(schema))
+
+        assert restored == schema
+
+
+class TestGraphRecordSchemaWiring(unittest.TestCase):
+    def test_with_schema(self) -> None:
+        schema = Schema().set_node_attribute("key1", Int(), AttributeType.Continuous)
+
+        graphrecord = GraphRecord.with_schema(schema)
+
+        assert graphrecord.schema.schema_type == SchemaType.Provided
+        assert graphrecord.schema.ungrouped.nodes == schema.ungrouped.nodes
+
+        graphrecord = graphrecord.add_node(0, {"key1": 1})
+
+        assert graphrecord.node_indices() == [0]
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                r'Attribute `"key1"` of node with index `1` is of type '
+                r"`String`\. Expected `Int`\."
+            ),
+        ):
+            graphrecord.add_node(1, {"key1": "invalid"})
+
+    def test_set_schema(self) -> None:
+        graphrecord = GraphRecord().add_node(0, {"key1": 1})
+        schema = Schema().set_node_attribute("key1", Int(), AttributeType.Continuous)
+
+        updated = graphrecord.set_schema(schema)
+
+        assert updated is not graphrecord
+        assert updated.schema.schema_type == SchemaType.Provided
+        assert graphrecord.schema.schema_type == SchemaType.Inferred
+
+        invalid_schema = Schema().set_node_attribute(
+            "key1", String(), AttributeType.Unstructured
+        )
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                r'Attribute `"key1"` of node with index `0` is of type '
+                r"`Int`\. Expected `String`\."
+            ),
+        ):
+            graphrecord.set_schema(invalid_schema)
+
+    def test_freeze_schema(self) -> None:
+        graphrecord = GraphRecord()
+
+        assert graphrecord.schema.schema_type == SchemaType.Inferred
+
+        frozen = graphrecord.freeze_schema()
+
+        assert frozen is not graphrecord
+        assert frozen.schema.schema_type == SchemaType.Provided
+        assert graphrecord.schema.schema_type == SchemaType.Inferred
+
+    def test_unfreeze_schema(self) -> None:
+        graphrecord = GraphRecord.with_schema(Schema(schema_type=SchemaType.Provided))
+
+        unfrozen = graphrecord.unfreeze_schema()
+
+        assert unfrozen is not graphrecord
+        assert unfrozen.schema.schema_type == SchemaType.Inferred
+        assert graphrecord.schema.schema_type == SchemaType.Provided
 
 
 if __name__ == "__main__":
     suite = unittest.TestSuite()
 
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAttributeType))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSchemaType))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAttributeDataType))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGroupSchema))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSchema))
+    suite.addTests(
+        unittest.TestLoader().loadTestsFromTestCase(TestGraphRecordSchemaWiring)
+    )
 
     unittest.TextTestRunner(verbosity=2).run(suite)

@@ -3,7 +3,7 @@ use crate::{
     registry::{
         ArgumentDescriptor, ArgumentMissingPolicy, ArgumentValueSource, ArityDescriptor,
         ExpressionDescriptor, IndexDescriptor, LaneShapeDescriptor, OrderDescriptor,
-        ValueDescriptor, ValueRole,
+        ValueArgumentDescriptor, ValueDescriptor, ValueRole,
     },
 };
 use std::{
@@ -109,24 +109,30 @@ impl Display for ArgumentSourceState<'_> {
     }
 }
 
+struct ValueArgumentState<'a>(&'a ValueArgumentDescriptor);
+
+impl Display for ValueArgumentState<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        ArgumentSourceState(self.0.source()).fmt(formatter)?;
+
+        match self.0.missing() {
+            ArgumentMissingPolicy::None => Ok(()),
+            ArgumentMissingPolicy::Drop => formatter.write_str(" dropping missing values"),
+            ArgumentMissingPolicy::Replace(replacement) => write!(
+                formatter,
+                " replacing missing values with {}",
+                Self(replacement)
+            ),
+        }
+    }
+}
+
 struct ArgumentState<'a>(&'a ArgumentDescriptor);
 
 impl Display for ArgumentState<'_> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
-            ArgumentDescriptor::Value(argument) => {
-                ArgumentSourceState(argument.source()).fmt(formatter)?;
-
-                match argument.missing() {
-                    ArgumentMissingPolicy::None => Ok(()),
-                    ArgumentMissingPolicy::Drop => formatter.write_str(" dropping missing values"),
-                    ArgumentMissingPolicy::Replace(replacement) => write!(
-                        formatter,
-                        " replacing missing values with {}",
-                        ArgumentSourceState(replacement)
-                    ),
-                }
-            }
+            ArgumentDescriptor::Value(argument) => ValueArgumentState(argument).fmt(formatter),
             ArgumentDescriptor::Field(domain) => {
                 write!(formatter, "a field of type {}", TypeName(domain.name()))
             }

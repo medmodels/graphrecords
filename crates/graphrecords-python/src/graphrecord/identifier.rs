@@ -1,8 +1,12 @@
-use super::{traits::DeepFrom, value::convert_pyobject_to_value};
+use super::{traits::DeepFrom, value::value_converter};
 use crate::graphrecord::errors::PyGraphRecordError;
-use graphrecords_core::graphrecord::{AttributeName, Group, Identifier, NodeIndex, PluginName};
+use graphrecords_core::graphrecord::{
+    AttributeName, GroupIndex, Identifier, NodeIndex, NodeIndexView, PluginName,
+};
 use pyo3::{
     Borrowed, Bound, FromPyObject, IntoPyObject, IntoPyObjectExt, PyAny, PyErr, PyResult, Python,
+    exceptions::PyTypeError,
+    types::{PyAnyMethods, PyBytes},
 };
 use std::{hash::Hash, ops::Deref};
 
@@ -54,6 +58,12 @@ macro_rules! implement_identity_conversion {
             }
         }
 
+        impl DeepFrom<&$name> for PyIdentifier {
+            fn deep_from(value: &$name) -> Self {
+                value.clone().into()
+            }
+        }
+
         impl DeepFrom<PyIdentifier> for $name {
             fn deep_from(value: PyIdentifier) -> Self {
                 value.into()
@@ -63,7 +73,13 @@ macro_rules! implement_identity_conversion {
 }
 
 implement_identity_conversion!(NodeIndex);
-implement_identity_conversion!(Group);
+
+impl DeepFrom<NodeIndexView<'_>> for PyIdentifier {
+    fn deep_from(value: NodeIndexView<'_>) -> Self {
+        NodeIndex::from(value).into()
+    }
+}
+implement_identity_conversion!(GroupIndex);
 implement_identity_conversion!(AttributeName);
 implement_identity_conversion!(PluginName);
 
@@ -76,9 +92,20 @@ impl Deref for PyIdentifier {
 }
 
 pub(crate) fn convert_pyobject_to_identifier(ob: &Bound<'_, PyAny>) -> PyResult<Identifier> {
-    Ok(convert_pyobject_to_value(ob)?
-        .try_into()
-        .map_err(PyGraphRecordError::from)?)
+    if ob.is_instance_of::<PyBytes>() {
+        return Err(PyTypeError::new_err(format!(
+            "Failed to convert {ob} into Identifier"
+        )));
+    }
+
+    let Some(convert) = value_converter(ob) else {
+        return Err(PyGraphRecordError::Conversion(format!(
+            "Failed to convert {ob} into Identifier"
+        ))
+        .into());
+    };
+
+    Ok(convert(ob)?.try_into().map_err(PyGraphRecordError::from)?)
 }
 
 impl FromPyObject<'_, '_> for PyIdentifier {

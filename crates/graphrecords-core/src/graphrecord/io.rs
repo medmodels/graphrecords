@@ -1,11 +1,8 @@
 use crate::{
     errors::{GraphRecordError, GraphRecordResult, IoError},
-    graphrecord::{GraphRecord, state::GraphState, writer::Writer},
+    graphrecord::{GraphRecord, writer::Writer},
 };
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
 
 pub struct RonFile {
     path: PathBuf,
@@ -37,7 +34,7 @@ impl Writer for RonFile {
             })?;
         }
 
-        let contents = ron::to_string(graphrecord.state.as_ref()).map_err(|_| {
+        let contents = ron::to_string(graphrecord).map_err(|_| {
             GraphRecordError::Io(IoError::FileWrite {
                 path: path.display().to_string(),
                 kind: std::io::ErrorKind::InvalidData,
@@ -68,24 +65,10 @@ impl GraphRecord {
             })
         })?;
 
-        let corrupted_file_error = || {
+        ron::from_str(&contents).map_err(|_| {
             GraphRecordError::Io(IoError::CorruptedFile {
                 path: path.display().to_string(),
             })
-        };
-
-        let mut state: GraphState = ron::from_str(&contents).map_err(|_| corrupted_file_error())?;
-
-        if !state.is_referentially_consistent() {
-            return Err(corrupted_file_error());
-        }
-
-        state.rebuild_dictionaries();
-
-        Ok(Self {
-            state: Arc::new(state),
-            #[cfg(feature = "plugins")]
-            plugins: Arc::new(Vec::new()),
         })
     }
 }

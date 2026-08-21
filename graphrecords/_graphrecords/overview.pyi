@@ -1,18 +1,29 @@
-from typing import Dict, Union
-
-from typing_extensions import Final
+from typing import Dict, List, TypedDict, Union
 
 from graphrecords._graphrecords.datatype import PyDataType
-from graphrecords.types import (
-    AttributeName,
-    Group,
-    PyCategoricalAttributeOverview,
-    PyContinuousAttributeOverview,
-    PyTemporalAttributeOverview,
-    PyUnstructuredAttributeOverview,
-)
+from graphrecords._graphrecords.schema import PyAttributeType
+from graphrecords.types import AttributeName, GroupIndex, Value
 
-PY_DEFAULT_TRUNCATE_DETAILS: Final[int] = ...
+PY_DEFAULT_TRUNCATE_DETAILS: int
+
+class PyCategoricalAttributeOverview(TypedDict):
+    attribute_type: PyAttributeType
+    distinct_values: List[Value]
+
+class PyContinuousAttributeOverview(TypedDict):
+    attribute_type: PyAttributeType
+    min: Value
+    mean: Value
+    max: Value
+
+class PyTemporalAttributeOverview(TypedDict):
+    attribute_type: PyAttributeType
+    min: Value
+    max: Value
+
+class PyUnstructuredAttributeOverview(TypedDict):
+    attribute_type: PyAttributeType
+    distinct_count: int
 
 class PyAttributeOverview:
     data_type: PyDataType
@@ -37,4 +48,4 @@ class PyGroupOverview:
 
 class PyOverview:
     ungrouped_overview: PyGroupOverview
-    grouped_overviews: Dict[Group, PyGroupOverview]
+    grouped_overviews: Dict[GroupIndex, PyGroupOverview]

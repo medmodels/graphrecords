@@ -1,19 +1,9 @@
-"""This module contains the schema classes for the graphrecords library."""
+"""Schema classes describing the attributes a GraphRecord may hold."""
 
 from __future__ import annotations
 
 from enum import Enum, auto
-from typing import (
-    TYPE_CHECKING,
-    Dict,
-    List,
-    Literal,
-    Optional,
-    Tuple,
-    TypeAlias,
-    Union,
-    overload,
-)
+from typing import TYPE_CHECKING, Dict, Optional
 
 from graphrecords._graphrecords.schema import (
     PyAttributeDataType,
@@ -22,26 +12,17 @@ from graphrecords._graphrecords.schema import (
     PySchema,
     PySchemaType,
 )
-from graphrecords.datatype import (
-    DataType,
-    DateTime,
-    Duration,
-    Float,
-    Int,
-    Null,
-    Option,
-)
-from graphrecords.datatype import Union as DataTypeUnion
-from graphrecords.types import (
-    AttributeName,
-    Attributes,
-    EdgeIndex,
-    NodeIndex,
-)
+from graphrecords.datatype import DataType
 
 if TYPE_CHECKING:
     from graphrecords.graphrecord import GraphRecord
-    from graphrecords.types import Group
+    from graphrecords.types import (
+        AttributeName,
+        Attributes,
+        EdgeIndex,
+        GroupIndex,
+        NodeIndex,
+    )
 
 
 class AttributeType(Enum):
@@ -73,20 +54,6 @@ class AttributeType(Enum):
         msg = "Should never be reached"
         raise NotImplementedError(msg)
 
-    @staticmethod
-    def infer(data_type: DataType) -> AttributeType:
-        """Infers the attribute type from the data type.
-
-        Args:
-            data_type (DataType): The data type to infer the attribute type from.
-
-        Returns:
-            AttributeType: The inferred attribute type.
-        """
-        return AttributeType._from_py_attribute_type(
-            PyAttributeType.infer(data_type._inner())
-        )
-
     def _into_py_attribute_type(self) -> PyAttributeType:
         """Converts an AttributeType to a PyAttributeType.
 
@@ -104,212 +71,35 @@ class AttributeType(Enum):
         msg = "Should never be reached"
         raise NotImplementedError(msg)
 
-    def __repr__(self) -> str:
-        """Returns a string representation of the AttributeType instance.
+    @staticmethod
+    def infer(data_type: DataType) -> AttributeType:
+        """Infers the attribute type from the data type.
+
+        Args:
+            data_type (DataType): The data type to infer the attribute type from.
 
         Returns:
-            str: String representation of the attribute type.
+            AttributeType: The inferred attribute type.
+        """
+        return AttributeType._from_py_attribute_type(
+            PyAttributeType.infer(data_type._inner())
+        )
+
+    def __repr__(self) -> str:
+        """Returns the string representation of the attribute type.
+
+        Returns:
+            str: The string representation of the attribute type.
         """
         return f"AttributeType.{self.name}"
 
     def __str__(self) -> str:
-        """Returns a string representation of the AttributeType instance.
+        """Returns a user-friendly string representation of the attribute type.
 
         Returns:
-            str: String representation of the attribute type.
+            str: The user-friendly string representation of the attribute type.
         """
         return self.name
-
-    def __hash__(self) -> int:
-        """Returns the hash of the AttributeType instance.
-
-        Returns:
-            int: The hash of the AttributeType instance.
-        """
-        return hash(self.name)
-
-    def __eq__(self, value: object) -> bool:
-        """Compares the AttributeType instance to another object for equality.
-
-        Args:
-            value (object): The object to compare against.
-
-        Returns:
-            bool: True if the objects are equal, False otherwise.
-        """
-        if isinstance(value, PyAttributeType):
-            return self._into_py_attribute_type() == value
-        if isinstance(value, AttributeType):
-            return str(self) == str(value)
-
-        return False
-
-
-CategoricalType: TypeAlias = DataType
-CategoricalPair: TypeAlias = Tuple[CategoricalType, Literal[AttributeType.Categorical]]
-
-ContinuousType: TypeAlias = Union[
-    Int,
-    Float,
-    Null,
-    Option["ContinuousType"],
-    DataTypeUnion["ContinuousType", "ContinuousType"],
-]
-ContinuousPair: TypeAlias = Tuple[ContinuousType, Literal[AttributeType.Continuous]]
-
-TemporalType = Union[
-    DateTime,
-    Duration,
-    Null,
-    Option["TemporalType"],
-    DataTypeUnion["TemporalType", "TemporalType"],
-]
-TemporalPair: TypeAlias = Tuple[TemporalType, Literal[AttributeType.Temporal]]
-
-UnstructuredType: TypeAlias = DataType
-UnstructuredPair: TypeAlias = Tuple[
-    UnstructuredType, Literal[AttributeType.Unstructured]
-]
-
-AttributeDataType: TypeAlias = Union[
-    CategoricalPair, ContinuousPair, TemporalPair, UnstructuredPair
-]
-
-AttributesSchema: TypeAlias = Dict[AttributeName, AttributeDataType]
-
-
-class GroupSchema:
-    """A schema for a group of nodes and edges."""
-
-    _group_schema: PyGroupSchema
-
-    def __init__(
-        self,
-        *,
-        nodes: Optional[
-            Dict[
-                AttributeName,
-                Union[DataType, AttributeDataType],
-            ],
-        ] = None,
-        edges: Optional[
-            Dict[
-                AttributeName,
-                Union[DataType, AttributeDataType],
-            ],
-        ] = None,
-    ) -> None:
-        """Initializes a new instance of GroupSchema.
-
-        Args:
-            nodes (Dict[AttributeName, Union[DataType, AttributeDataType]]):
-                A dictionary mapping node attributes to their data
-                types and optional attribute types. Defaults to an empty dictionary.
-                When no attribute type is provided, it is inferred from the data type.
-            edges (Dict[AttributeName, Union[DataType, AttributeDataType]]):
-                A dictionary mapping edge attributes to their data types and
-                optional attribute types. Defaults to an empty dictionary.
-                When no attribute type is provided, it is inferred from the data type.
-        """
-        if edges is None:
-            edges = {}
-        if nodes is None:
-            nodes = {}
-
-        def _convert_input(
-            input: Union[DataType, AttributeDataType],
-        ) -> PyAttributeDataType:
-            if isinstance(input, tuple):
-                return PyAttributeDataType(
-                    input[0]._inner(), input[1]._into_py_attribute_type()
-                )
-
-            return PyAttributeDataType(
-                input._inner(), PyAttributeType.infer(input._inner())
-            )
-
-        self._group_schema = PyGroupSchema(
-            nodes={x: _convert_input(nodes[x]) for x in nodes},
-            edges={x: _convert_input(edges[x]) for x in edges},
-        )
-
-    @classmethod
-    def _from_py_group_schema(cls, group_schema: PyGroupSchema) -> GroupSchema:
-        """Creates a GroupSchema instance from an existing PyGroupSchema.
-
-        Args:
-            group_schema (PyGroupSchema): The PyGroupSchema instance to convert.
-
-        Returns:
-            GroupSchema: A new GroupSchema instance.
-        """
-        new_group_schema = cls()
-        new_group_schema._group_schema = group_schema
-        return new_group_schema
-
-    @property
-    def nodes(self) -> AttributesSchema:
-        """Returns the node attributes in the GroupSchema instance.
-
-        Returns:
-            AttributesSchema: An AttributesSchema object containing the node attributes
-                and their data types.
-        """
-
-        def _convert_node(
-            input: PyAttributeDataType,
-        ) -> AttributeDataType:
-            # SAFETY: The typing is guaranteed to be correct
-            return (
-                DataType._from_py_data_type(input.data_type),
-                AttributeType._from_py_attribute_type(input.attribute_type),
-            )  # pyright: ignore[reportReturnType]
-
-        return {
-            x: _convert_node(self._group_schema.nodes[x])
-            for x in self._group_schema.nodes
-        }
-
-    @property
-    def edges(self) -> AttributesSchema:
-        """Returns the edge attributes in the GroupSchema instance.
-
-        Returns:
-            AttributesSchema: An AttributesSchema object containing the edge attributes
-                and their data types.
-        """
-
-        def _convert_edge(
-            input: PyAttributeDataType,
-        ) -> AttributeDataType:
-            # SAFETY: The typing is guaranteed to be correct
-            return (
-                DataType._from_py_data_type(input.data_type),
-                AttributeType._from_py_attribute_type(input.attribute_type),
-            )  # pyright: ignore[reportReturnType]
-
-        return {
-            x: _convert_edge(self._group_schema.edges[x])
-            for x in self._group_schema.edges
-        }
-
-    def validate_node(self, index: NodeIndex, attributes: Attributes) -> None:
-        """Validates the attributes of a node against the schema.
-
-        Args:
-            index (NodeIndex): The index of the node.
-            attributes (Attributes): The attributes of the node.
-        """
-        self._group_schema.validate_node(index, attributes)
-
-    def validate_edge(self, index: EdgeIndex, attributes: Attributes) -> None:
-        """Validates the attributes of an edge against the schema.
-
-        Args:
-            index (EdgeIndex): The index of the edge.
-            attributes (Attributes): The attributes of the edge.
-        """
-        self._group_schema.validate_edge(index, attributes)
 
 
 class SchemaType(Enum):
@@ -332,7 +122,6 @@ class SchemaType(Enum):
             return SchemaType.Provided
         if py_schema_type == PySchemaType.Inferred:
             return SchemaType.Inferred
-
         msg = "Should never be reached"
         raise NotImplementedError(msg)
 
@@ -346,435 +135,574 @@ class SchemaType(Enum):
             return PySchemaType.Provided
         if self == SchemaType.Inferred:
             return PySchemaType.Inferred
-
         msg = "Should never be reached"
         raise NotImplementedError(msg)
 
+    def __repr__(self) -> str:
+        """Returns the string representation of the schema type.
 
-class Schema:
-    """A schema for a collection of groups."""
+        Returns:
+            str: The string representation of the schema type.
+        """
+        return f"SchemaType.{self.name}"
 
-    _schema: PySchema
+    def __str__(self) -> str:
+        """Returns a user-friendly string representation of the schema type.
+
+        Returns:
+            str: The user-friendly string representation of the schema type.
+        """
+        return self.name
+
+
+class AttributeDataType:
+    """The data type of an attribute together with its statistical type."""
+
+    _py_attribute_data_type: PyAttributeDataType
+
+    def __init__(
+        self, data_type: DataType, attribute_type: Optional[AttributeType] = None
+    ) -> None:
+        """Initializes an AttributeDataType.
+
+        Args:
+            data_type (DataType): The data type of the attribute.
+            attribute_type (Optional[AttributeType]): The statistical type of the
+                attribute. Defaults to the type inferred from the data type.
+        """
+        self._py_attribute_data_type = PyAttributeDataType(
+            data_type._inner(),
+            None
+            if attribute_type is None
+            else attribute_type._into_py_attribute_type(),
+        )
+
+    @classmethod
+    def _from_py_attribute_data_type(
+        cls, py_attribute_data_type: PyAttributeDataType
+    ) -> AttributeDataType:
+        """Creates an AttributeDataType from a PyAttributeDataType.
+
+        Args:
+            py_attribute_data_type (PyAttributeDataType): The PyAttributeDataType to
+                convert.
+
+        Returns:
+            AttributeDataType: The converted AttributeDataType.
+        """
+        attribute_data_type = cls.__new__(cls)
+        attribute_data_type._py_attribute_data_type = py_attribute_data_type
+        return attribute_data_type
+
+    @property
+    def data_type(self) -> DataType:
+        """The data type of the attribute.
+
+        Returns:
+            DataType: The data type of the attribute.
+        """
+        return DataType._from_py_data_type(self._py_attribute_data_type.data_type)
+
+    @property
+    def attribute_type(self) -> AttributeType:
+        """The statistical type of the attribute.
+
+        Returns:
+            AttributeType: The statistical type of the attribute.
+        """
+        return AttributeType._from_py_attribute_type(
+            self._py_attribute_data_type.attribute_type
+        )
+
+    def __eq__(self, value: object) -> bool:
+        """Checks whether the AttributeDataType is equal to another one.
+
+        Args:
+            value (object): The value to compare.
+
+        Returns:
+            bool: True if both describe the same attribute, otherwise False.
+        """
+        if not isinstance(value, AttributeDataType):
+            return NotImplemented
+
+        return (
+            self.data_type == value.data_type
+            and self.attribute_type == value.attribute_type
+        )
+
+    def __repr__(self) -> str:
+        """Returns the string representation of the AttributeDataType.
+
+        Returns:
+            str: The string representation of the AttributeDataType.
+        """
+        return f"AttributeDataType({self.data_type!r}, {self.attribute_type!r})"
+
+
+class GroupSchema:
+    """The node and edge attributes of a single group."""
+
+    _py_group_schema: PyGroupSchema
 
     def __init__(
         self,
         *,
-        groups: Optional[Dict[Group, GroupSchema]] = None,
-        ungrouped: Optional[GroupSchema] = None,
-        schema_type: Optional[SchemaType] = None,
+        nodes: Optional[Dict[AttributeName, AttributeDataType]] = None,
+        edges: Optional[Dict[AttributeName, AttributeDataType]] = None,
     ) -> None:
-        """Initializes a new instance of Schema.
+        """Initializes a GroupSchema.
 
         Args:
-            groups (Dict[Group, GroupSchema], optional): A dictionary of group names
-                to their schemas. Defaults to None.
-            ungrouped (Optional[GroupSchema], optional): The group schema for all nodes
-                not in a group. If not provided, an empty group schema is used.
-                Defaults to None.
-            schema_type (Optional[SchemaType], optional): The type of the schema.
-                If not provided, the schema is of type provided. Defaults to None.
+            nodes (Optional[Dict[AttributeName, AttributeDataType]]): The attributes
+                the nodes of the group hold. Defaults to no attributes.
+            edges (Optional[Dict[AttributeName, AttributeDataType]]): The attributes
+                the edges of the group hold. Defaults to no attributes.
         """
-        if not ungrouped:
-            ungrouped = GroupSchema()
+        if nodes is None:
+            nodes = {}
+        if edges is None:
+            edges = {}
 
+        self._py_group_schema = PyGroupSchema(
+            {
+                attribute_name: attribute_data_type._py_attribute_data_type
+                for attribute_name, attribute_data_type in nodes.items()
+            },
+            {
+                attribute_name: attribute_data_type._py_attribute_data_type
+                for attribute_name, attribute_data_type in edges.items()
+            },
+        )
+
+    @classmethod
+    def _from_py_group_schema(cls, py_group_schema: PyGroupSchema) -> GroupSchema:
+        """Creates a GroupSchema from a PyGroupSchema.
+
+        Args:
+            py_group_schema (PyGroupSchema): The PyGroupSchema to convert.
+
+        Returns:
+            GroupSchema: The converted GroupSchema.
+        """
+        group_schema = cls.__new__(cls)
+        group_schema._py_group_schema = py_group_schema
+        return group_schema
+
+    @property
+    def nodes(self) -> Dict[AttributeName, AttributeDataType]:
+        """The attributes the nodes of the group hold.
+
+        Returns:
+            Dict[AttributeName, AttributeDataType]: The data type of every node
+                attribute.
+        """
+        return {
+            attribute_name: AttributeDataType._from_py_attribute_data_type(
+                attribute_data_type
+            )
+            for attribute_name, attribute_data_type in self._py_group_schema.nodes.items()
+        }
+
+    @property
+    def edges(self) -> Dict[AttributeName, AttributeDataType]:
+        """The attributes the edges of the group hold.
+
+        Returns:
+            Dict[AttributeName, AttributeDataType]: The data type of every edge
+                attribute.
+        """
+        return {
+            attribute_name: AttributeDataType._from_py_attribute_data_type(
+                attribute_data_type
+            )
+            for attribute_name, attribute_data_type in self._py_group_schema.edges.items()
+        }
+
+    def validate_node(self, node_index: NodeIndex, attributes: Attributes) -> None:
+        """Validates the attributes of a node against the group schema.
+
+        Args:
+            node_index (NodeIndex): The index of the node.
+            attributes (Attributes): The attributes of the node.
+        """
+        self._py_group_schema.validate_node(node_index, attributes)
+
+    def validate_edge(self, edge_index: EdgeIndex, attributes: Attributes) -> None:
+        """Validates the attributes of an edge against the group schema.
+
+        Args:
+            edge_index (EdgeIndex): The index of the edge.
+            attributes (Attributes): The attributes of the edge.
+        """
+        self._py_group_schema.validate_edge(edge_index._py_edge_index, attributes)
+
+    def __eq__(self, value: object) -> bool:
+        """Checks whether the GroupSchema is equal to another one.
+
+        Args:
+            value (object): The value to compare.
+
+        Returns:
+            bool: True if both describe the same attributes, otherwise False.
+        """
+        if not isinstance(value, GroupSchema):
+            return NotImplemented
+
+        return self._py_group_schema == value._py_group_schema
+
+    def __repr__(self) -> str:
+        """Returns the string representation of the GroupSchema.
+
+        Returns:
+            str: The string representation of the GroupSchema.
+        """
+        return repr(self._py_group_schema)
+
+
+class Schema:
+    """The attributes of every group of a GraphRecord, and of its ungrouped part."""
+
+    _py_schema: PySchema
+
+    def __init__(
+        self,
+        *,
+        groups: Optional[Dict[GroupIndex, GroupSchema]] = None,
+        ungrouped: Optional[GroupSchema] = None,
+        schema_type: SchemaType = SchemaType.Provided,
+    ) -> None:
+        """Initializes a Schema.
+
+        Args:
+            groups (Optional[Dict[GroupIndex, GroupSchema]]): The schema of every
+                group. Defaults to no groups.
+            ungrouped (Optional[GroupSchema]): The schema of everything outside a
+                group. Defaults to no attributes.
+            schema_type (SchemaType): Whether the schema is provided or inferred.
+                Defaults to SchemaType.Provided.
+        """
         if groups is None:
             groups = {}
+        if ungrouped is None:
+            ungrouped = GroupSchema()
 
-        if schema_type:
-            self._schema = PySchema(
-                groups={x: groups[x]._group_schema for x in groups},
-                ungrouped=ungrouped._group_schema,
-                schema_type=schema_type._into_py_schema_type(),
-            )
-        else:
-            self._schema = PySchema(
-                groups={x: groups[x]._group_schema for x in groups},
-                ungrouped=ungrouped._group_schema,
-            )
+        self._py_schema = PySchema(
+            {
+                group_index: group_schema._py_group_schema
+                for group_index, group_schema in groups.items()
+            },
+            ungrouped._py_group_schema,
+            schema_type._into_py_schema_type(),
+        )
+
+    @classmethod
+    def _from_py_schema(cls, py_schema: PySchema) -> Schema:
+        """Creates a Schema from a PySchema.
+
+        Args:
+            py_schema (PySchema): The PySchema to convert.
+
+        Returns:
+            Schema: The converted Schema.
+        """
+        schema = cls.__new__(cls)
+        schema._py_schema = py_schema
+        return schema
 
     @classmethod
     def infer(cls, graphrecord: GraphRecord) -> Schema:
-        """Infers a schema from a GraphRecord instance.
+        """Infers the schema of a GraphRecord from the data it holds.
 
         Args:
-            graphrecord (GraphRecord): The GraphRecord instance to infer the
-                schema from.
+            graphrecord (GraphRecord): The GraphRecord to infer the schema from.
 
         Returns:
             Schema: The inferred schema.
         """
-        new_schema = cls()
-        new_schema._schema = PySchema.infer(graphrecord._graphrecord)
-        return new_schema
-
-    @classmethod
-    def _from_py_schema(cls, schema: PySchema) -> Schema:
-        """Creates a Schema instance from an existing PySchema.
-
-        Args:
-            schema (PySchema): The PySchema instance to convert.
-
-        Returns:
-            Schema: A new Schema instance.
-        """
-        new_schema = cls()
-        new_schema._schema = schema
-        return new_schema
+        return cls._from_py_schema(PySchema.infer(graphrecord._py_graphrecord))
 
     @property
-    def groups(self) -> List[Group]:
-        """Lists all the groups in the Schema instance.
+    def groups(self) -> Dict[GroupIndex, GroupSchema]:
+        """The groups the schema describes.
 
         Returns:
-            List[Group]: A list of groups.
+            Dict[GroupIndex, GroupSchema]: The schema of every described group.
         """
-        return self._schema.groups
+        return {
+            group_index: GroupSchema._from_py_group_schema(group_schema)
+            for group_index, group_schema in self._py_schema.groups.items()
+        }
 
-    def group(self, group: Group) -> GroupSchema:
-        """Retrieves the schema for a specific group.
+    def group(self, group_index: GroupIndex) -> GroupSchema:
+        """Returns the schema of a single group.
 
         Args:
-            group (Group): The name of the group.
+            group_index (GroupIndex): The group to return the schema of.
 
         Returns:
-            GroupSchema: The schema for the specified group.
-
-        Raises:
-            ValueError: If the group does not exist in the schema.
-        """  # noqa: DOC502
-        return GroupSchema._from_py_group_schema(self._schema.group(group))
+            GroupSchema: The schema of the group.
+        """
+        return GroupSchema._from_py_group_schema(self._py_schema.group(group_index))
 
     @property
     def ungrouped(self) -> GroupSchema:
-        """Retrieves the group schema for all ungrouped nodes and edges.
+        """The schema of everything outside a group.
 
         Returns:
-            GroupSchema: The ungrouped group schema.
+            GroupSchema: The schema of the ungrouped part.
         """
-        return GroupSchema._from_py_group_schema(self._schema.ungrouped)
+        return GroupSchema._from_py_group_schema(self._py_schema.ungrouped)
 
     @property
     def schema_type(self) -> SchemaType:
-        """Retrieves the schema type.
+        """Whether the schema was provided or inferred.
 
         Returns:
-            SchemaType: The schema type.
+            SchemaType: The type of the schema.
         """
-        return SchemaType._from_py_schema_type(self._schema.schema_type)
+        return SchemaType._from_py_schema_type(self._py_schema.schema_type)
 
     def validate_node(
-        self, index: NodeIndex, attributes: Attributes, group: Optional[Group] = None
+        self,
+        node_index: NodeIndex,
+        attributes: Attributes,
+        group_index: Optional[GroupIndex] = None,
     ) -> None:
         """Validates the attributes of a node against the schema.
 
         Args:
-            index (NodeIndex): The index of the node.
+            node_index (NodeIndex): The index of the node.
             attributes (Attributes): The attributes of the node.
-            group (Optional[Group], optional): The group to validate the node against.
-                If not provided, the ungrouped schema is used. Defaults to None.
+            group_index (Optional[GroupIndex]): The group the node belongs to.
+                Defaults to the ungrouped part.
         """
-        self._schema.validate_node(index, attributes, group)
+        self._py_schema.validate_node(node_index, attributes, group_index)
 
     def validate_edge(
-        self, index: EdgeIndex, attributes: Attributes, group: Optional[Group] = None
+        self,
+        edge_index: EdgeIndex,
+        attributes: Attributes,
+        group_index: Optional[GroupIndex] = None,
     ) -> None:
         """Validates the attributes of an edge against the schema.
 
         Args:
-            index (EdgeIndex): The index of the edge.
+            edge_index (EdgeIndex): The index of the edge.
             attributes (Attributes): The attributes of the edge.
-            group (Optional[Group], optional): The group to validate the edge against.
-                If not provided, the ungrouped schema is used. Defaults to None.
+            group_index (Optional[GroupIndex]): The group the edge belongs to.
+                Defaults to the ungrouped part.
         """
-        self._schema.validate_edge(index, attributes, group)
-
-    @overload
-    def set_node_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: DataType,
-        attribute_type: Optional[
-            Literal[AttributeType.Categorical, AttributeType.Unstructured]
-        ] = None,
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    @overload
-    def set_node_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: ContinuousType,
-        attribute_type: Literal[AttributeType.Continuous],
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    @overload
-    def set_node_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: TemporalType,
-        attribute_type: Literal[AttributeType.Temporal],
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    def set_node_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: DataType,
-        attribute_type: Optional[AttributeType] = None,
-        group: Optional[Group] = None,
-    ) -> None:
-        """Sets the data type and attribute type of a node attribute.
-
-        If a data type for the attribute already exists, it is overwritten.
-
-        Args:
-            attribute (AttributeName): The name of the attribute.
-            data_type (DataType): The data type of the attribute.
-            attribute_type (Optional[AttributeType], optional): The attribute type of
-                the attribute. If not provided, the attribute type is inferred
-                from the data type. Defaults to None.
-            group (Optional[Group], optional): The group to set the attribute for.
-                If no schema for the group exists, a new schema is created.
-                If not provided, the ungrouped schema is used. Defaults to None.
-        """
-        if not attribute_type:
-            attribute_type = AttributeType.infer(data_type)
-
-        self._schema.set_node_attribute(
-            attribute,
-            data_type._inner(),
-            attribute_type._into_py_attribute_type(),
-            group,
+        self._py_schema.validate_edge(
+            edge_index._py_edge_index, attributes, group_index
         )
 
-    @overload
-    def set_edge_attribute(
+    def set_node_attribute(
         self,
-        attribute: AttributeName,
+        attribute_name: AttributeName,
         data_type: DataType,
-        attribute_type: Optional[
-            Literal[AttributeType.Categorical, AttributeType.Unstructured]
-        ] = None,
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    @overload
-    def set_edge_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: ContinuousType,
-        attribute_type: Literal[AttributeType.Continuous],
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    @overload
-    def set_edge_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: TemporalType,
-        attribute_type: Literal[AttributeType.Temporal],
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    def set_edge_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: DataType,
-        attribute_type: Optional[AttributeType] = None,
-        group: Optional[Group] = None,
-    ) -> None:
-        """Sets the data type and attribute type of an edge attribute.
-
-        If a data type for the attribute already exists, it is overwritten.
+        attribute_type: AttributeType,
+        group_index: Optional[GroupIndex] = None,
+    ) -> Schema:
+        """Adds a node attribute to the schema, overwriting it if it already exists.
 
         Args:
-            attribute (AttributeName): The name of the attribute.
+            attribute_name (AttributeName): The name of the attribute.
             data_type (DataType): The data type of the attribute.
-            attribute_type (Optional[AttributeType], optional): The attribute type of
-                the attribute. If not provided, the attribute type is inferred
-                from the data type. Defaults to None.
-            group (Optional[Group], optional): The group to set the attribute for.
-                If no schema for this group exists, a new schema is created.
-                If not provided, the ungrouped schema is used. Defaults to None.
-        """
-        if not attribute_type:
-            attribute_type = AttributeType.infer(data_type)
+            attribute_type (AttributeType): The statistical type of the attribute.
+            group_index (Optional[GroupIndex]): The group to add the attribute to.
+                Defaults to the ungrouped part.
 
-        self._schema.set_edge_attribute(
-            attribute,
-            data_type._inner(),
-            attribute_type._into_py_attribute_type(),
-            group,
+        Returns:
+            Schema: A Schema describing the attribute.
+        """
+        return self._from_py_schema(
+            self._py_schema.set_node_attribute(
+                attribute_name,
+                data_type._inner(),
+                attribute_type._into_py_attribute_type(),
+                group_index,
+            )
         )
 
-    @overload
-    def update_node_attribute(
+    def set_edge_attribute(
         self,
-        attribute: AttributeName,
+        attribute_name: AttributeName,
         data_type: DataType,
-        attribute_type: Optional[
-            Literal[AttributeType.Categorical, AttributeType.Unstructured]
-        ] = None,
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    @overload
-    def update_node_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: ContinuousType,
-        attribute_type: Literal[AttributeType.Continuous],
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    @overload
-    def update_node_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: TemporalType,
-        attribute_type: Literal[AttributeType.Temporal],
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    def update_node_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: DataType,
-        attribute_type: Optional[AttributeType] = None,
-        group: Optional[Group] = None,
-    ) -> None:
-        """Updates the data type and attribute type of a node attribute.
-
-        If a data type for the attribute already exists, it is merged
-        with the new data type.
+        attribute_type: AttributeType,
+        group_index: Optional[GroupIndex] = None,
+    ) -> Schema:
+        """Adds an edge attribute to the schema, overwriting it if it already exists.
 
         Args:
-            attribute (AttributeName): The name of the attribute.
+            attribute_name (AttributeName): The name of the attribute.
             data_type (DataType): The data type of the attribute.
-            attribute_type (Optional[AttributeType], optional): The attribute type of
-                the attribute. If not provided, the attribute type is inferred
-                from the data type. Defaults to None.
-            group (Optional[Group], optional): The group to update the attribute for.
-                If no schema for this group exists, a new schema is created.
-                If not provided, the ungrouped schema is used. Defaults to None.
-        """
-        if not attribute_type:
-            attribute_type = AttributeType.infer(data_type)
+            attribute_type (AttributeType): The statistical type of the attribute.
+            group_index (Optional[GroupIndex]): The group to add the attribute to.
+                Defaults to the ungrouped part.
 
-        self._schema.update_node_attribute(
-            attribute,
-            data_type._inner(),
-            attribute_type._into_py_attribute_type(),
-            group,
+        Returns:
+            Schema: A Schema describing the attribute.
+        """
+        return self._from_py_schema(
+            self._py_schema.set_edge_attribute(
+                attribute_name,
+                data_type._inner(),
+                attribute_type._into_py_attribute_type(),
+                group_index,
+            )
         )
 
-    @overload
-    def update_edge_attribute(
+    def update_node_attribute(
         self,
-        attribute: AttributeName,
+        attribute_name: AttributeName,
         data_type: DataType,
-        attribute_type: Optional[
-            Literal[AttributeType.Categorical, AttributeType.Unstructured]
-        ] = None,
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    @overload
-    def update_edge_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: ContinuousType,
-        attribute_type: Literal[AttributeType.Continuous],
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    @overload
-    def update_edge_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: TemporalType,
-        attribute_type: Literal[AttributeType.Temporal],
-        group: Optional[Group] = None,
-    ) -> None: ...
-
-    def update_edge_attribute(
-        self,
-        attribute: AttributeName,
-        data_type: DataType,
-        attribute_type: Optional[AttributeType] = None,
-        group: Optional[Group] = None,
-    ) -> None:
-        """Updates the data type and attribute type of an edge attribute.
-
-        If a data type for the attribute already exists, it is merged
-        with the new data type.
+        attribute_type: AttributeType,
+        group_index: Optional[GroupIndex] = None,
+    ) -> Schema:
+        """Widens a node attribute of the schema to also cover the given types.
 
         Args:
-            attribute (AttributeName): The name of the attribute.
-            data_type (DataType): The data type of the attribute.
-            attribute_type (Optional[AttributeType], optional): The attribute type of
-                the attribute. If not provided, the attribute type is inferred
-                from the data type. Defaults to None.
-            group (Optional[Group], optional): The group to update the attribute for.
-                If no schema for this group exists, a new schema is created.
-                If not provided, the ungrouped schema is used. Defaults to None.
-        """
-        if not attribute_type:
-            attribute_type = AttributeType.infer(data_type)
+            attribute_name (AttributeName): The name of the attribute.
+            data_type (DataType): The data type to cover as well.
+            attribute_type (AttributeType): The statistical type of the attribute.
+            group_index (Optional[GroupIndex]): The group holding the attribute.
+                Defaults to the ungrouped part.
 
-        self._schema.update_edge_attribute(
-            attribute,
-            data_type._inner(),
-            attribute_type._into_py_attribute_type(),
-            group,
+        Returns:
+            Schema: A Schema describing the widened attribute.
+        """
+        return self._from_py_schema(
+            self._py_schema.update_node_attribute(
+                attribute_name,
+                data_type._inner(),
+                attribute_type._into_py_attribute_type(),
+                group_index,
+            )
+        )
+
+    def update_edge_attribute(
+        self,
+        attribute_name: AttributeName,
+        data_type: DataType,
+        attribute_type: AttributeType,
+        group_index: Optional[GroupIndex] = None,
+    ) -> Schema:
+        """Widens an edge attribute of the schema to also cover the given types.
+
+        Args:
+            attribute_name (AttributeName): The name of the attribute.
+            data_type (DataType): The data type to cover as well.
+            attribute_type (AttributeType): The statistical type of the attribute.
+            group_index (Optional[GroupIndex]): The group holding the attribute.
+                Defaults to the ungrouped part.
+
+        Returns:
+            Schema: A Schema describing the widened attribute.
+        """
+        return self._from_py_schema(
+            self._py_schema.update_edge_attribute(
+                attribute_name,
+                data_type._inner(),
+                attribute_type._into_py_attribute_type(),
+                group_index,
+            )
         )
 
     def remove_node_attribute(
-        self, attribute: AttributeName, group: Optional[Group] = None
-    ) -> None:
+        self, attribute_name: AttributeName, group_index: Optional[GroupIndex] = None
+    ) -> Schema:
         """Removes a node attribute from the schema.
 
         Args:
-            attribute (AttributeName): The name of the attribute to remove.
-            group (Optional[Group], optional): The group to remove the attribute from.
-                If not provided, the ungrouped schema is used. Defaults to None.
+            attribute_name (AttributeName): The name of the attribute to remove.
+            group_index (Optional[GroupIndex]): The group holding the attribute.
+                Defaults to the ungrouped part.
+
+        Returns:
+            Schema: A Schema without that attribute.
         """
-        self._schema.remove_node_attribute(attribute, group)
+        return self._from_py_schema(
+            self._py_schema.remove_node_attribute(attribute_name, group_index)
+        )
 
     def remove_edge_attribute(
-        self, attribute: AttributeName, group: Optional[Group] = None
-    ) -> None:
+        self, attribute_name: AttributeName, group_index: Optional[GroupIndex] = None
+    ) -> Schema:
         """Removes an edge attribute from the schema.
 
         Args:
-            attribute (AttributeName): The name of the attribute to remove.
-            group (Optional[Group], optional): The group to remove the attribute from.
-                If not provided, the ungrouped schema is used. Defaults to None.
-        """
-        self._schema.remove_edge_attribute(attribute, group)
+            attribute_name (AttributeName): The name of the attribute to remove.
+            group_index (Optional[GroupIndex]): The group holding the attribute.
+                Defaults to the ungrouped part.
 
-    def add_group(self, group: Group, group_schema: GroupSchema) -> None:
-        """Adds a new group to the schema.
+        Returns:
+            Schema: A Schema without that attribute.
+        """
+        return self._from_py_schema(
+            self._py_schema.remove_edge_attribute(attribute_name, group_index)
+        )
+
+    def add_group(self, group_index: GroupIndex, group_schema: GroupSchema) -> Schema:
+        """Adds the schema of a group.
 
         Args:
-            group (Group): The name of the group.
-            group_schema (GroupSchema): The schema for the group.
-        """
-        self._schema.add_group(group, group_schema._group_schema)
+            group_index (GroupIndex): The group to describe.
+            group_schema (GroupSchema): The schema of the group.
 
-    def remove_group(self, group: Group) -> None:
-        """Removes a group from the schema.
+        Returns:
+            Schema: A Schema describing that group.
+        """
+        return self._from_py_schema(
+            self._py_schema.add_group(group_index, group_schema._py_group_schema)
+        )
+
+    def remove_group(self, group_index: GroupIndex) -> Schema:
+        """Removes the schema of a group.
 
         Args:
-            group (Group): The name of the group to remove.
+            group_index (GroupIndex): The group to stop describing.
+
+        Returns:
+            Schema: A Schema without that group.
         """
-        self._schema.remove_group(group)
+        return self._from_py_schema(self._py_schema.remove_group(group_index))
 
-    def freeze(self) -> None:
-        """Freezes the schema. No changes are automatically inferred."""
-        self._schema.freeze()
+    def freeze(self) -> Schema:
+        """Stops the schema from growing with the data written to a GraphRecord.
 
-    def unfreeze(self) -> None:
-        """Unfreezes the schema. Changes are automatically inferred."""
-        self._schema.unfreeze()
+        Returns:
+            Schema: A frozen Schema.
+        """
+        return self._from_py_schema(self._py_schema.freeze())
+
+    def unfreeze(self) -> Schema:
+        """Lets the schema grow with the data written to a GraphRecord again.
+
+        Returns:
+            Schema: An unfrozen Schema.
+        """
+        return self._from_py_schema(self._py_schema.unfreeze())
+
+    def __eq__(self, value: object) -> bool:
+        """Checks whether the Schema is equal to another one.
+
+        Args:
+            value (object): The value to compare.
+
+        Returns:
+            bool: True if both describe the same groups and attributes, otherwise
+                False.
+        """
+        if not isinstance(value, Schema):
+            return NotImplemented
+
+        return self._py_schema == value._py_schema
+
+    def __repr__(self) -> str:
+        """Returns the string representation of the Schema.
+
+        Returns:
+            str: The string representation of the Schema.
+        """
+        return repr(self._py_schema)

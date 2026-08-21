@@ -13,6 +13,8 @@ pub mod plugins;
 mod polars;
 pub mod schema;
 pub mod selection;
+#[cfg(feature = "serde")]
+mod serde;
 pub mod source;
 pub(crate) mod state;
 pub mod state_view;
@@ -164,22 +166,29 @@ impl GraphRecord {
         name: impl Into<PluginName>,
         plugin: impl Plugin + 'static,
     ) -> GraphRecordResult<Self> {
-        let name = name.into();
+        self.add_plugin_entry(name.into(), Arc::new(plugin))
+    }
 
+    #[cfg(feature = "plugins")]
+    fn add_plugin_entry(
+        &self,
+        name: PluginName,
+        plugin: Arc<dyn Plugin>,
+    ) -> GraphRecordResult<Self> {
         if self.plugins.iter().any(|entry| entry.0 == name) {
             return Err(GraphRecordError::PluginAlreadyExists { name });
         }
 
-        let plugin: Arc<dyn Plugin> = Arc::new(plugin);
+        let initializer = Arc::clone(&plugin);
         let mut plugins = (*self.plugins).clone();
-        plugins.push((name, Arc::clone(&plugin)));
+        plugins.push((name, plugin));
 
         let candidate = Self {
             state: Arc::clone(&self.state),
             plugins: Arc::new(plugins),
         };
 
-        let changes = plugin.initialize(&candidate)?;
+        let changes = initializer.initialize(&candidate)?;
         if changes.is_empty() {
             return Ok(candidate);
         }
@@ -224,6 +233,48 @@ impl GraphRecord {
     #[cfg(feature = "plugins")]
     pub fn plugins(&self) -> impl Iterator<Item = &PluginName> {
         self.plugins.iter().map(|entry| &entry.0)
+    }
+
+    #[cfg(feature = "plugins")]
+    pub fn plugin_entries(&self) -> impl Iterator<Item = (&PluginName, &Arc<dyn Plugin>)> {
+        self.plugins.iter().map(|entry| (&entry.0, &entry.1))
+    }
+
+    #[cfg(feature = "plugins")]
+    pub fn with_plugins(
+        &self,
+        plugins: impl IntoIterator<Item = (impl Into<PluginName>, Arc<dyn Plugin>)>,
+    ) -> GraphRecordResult<Self> {
+        let mut record = self.clone();
+
+        for (name, plugin) in plugins {
+            record = record.add_plugin_entry(name.into(), plugin)?;
+        }
+
+        Ok(record)
+    }
+
+    #[cfg(feature = "plugins")]
+    pub fn reattach_plugins(
+        &self,
+        plugins: impl IntoIterator<Item = (impl Into<PluginName>, Arc<dyn Plugin>)>,
+    ) -> GraphRecordResult<Self> {
+        let mut entries: Vec<(PluginName, Arc<dyn Plugin>)> = Vec::new();
+
+        for (name, plugin) in plugins {
+            let name = name.into();
+
+            if entries.iter().any(|entry| entry.0 == name) {
+                return Err(GraphRecordError::PluginAlreadyExists { name });
+            }
+
+            entries.push((name, plugin));
+        }
+
+        Ok(Self {
+            state: Arc::clone(&self.state),
+            plugins: Arc::new(entries),
+        })
     }
 
     pub fn add_nodes(&self, source: impl NodeSource) -> GraphRecordResult<Self> {
@@ -792,7 +843,8 @@ impl GraphRecord {
         group_index: impl SingleSelection<GroupIndex>,
     ) -> GraphRecordResult<Self> {
         let node_indices = NodeIndex::verify(self, node_indices.resolve(self)?)?;
-        let group_index = GroupIndex::verify(self, group_index.resolve(self)?)?
+        let group_index = group_index
+            .resolve(self)?
             .pop()
             .ok_or(GraphRecordError::NoGroupSelected)?;
 
@@ -818,7 +870,8 @@ impl GraphRecord {
         group_index: impl SingleSelection<GroupIndex>,
     ) -> GraphRecordResult<Self> {
         let edge_indices = EdgeIndex::verify(self, edge_indices.resolve(self)?)?;
-        let group_index = GroupIndex::verify(self, group_index.resolve(self)?)?
+        let group_index = group_index
+            .resolve(self)?
             .pop()
             .ok_or(GraphRecordError::NoGroupSelected)?;
 
@@ -943,6 +996,92 @@ impl GraphRecord {
         group_index: impl Into<GroupIndexView<'a>>,
     ) -> GraphRecordResult<GroupView<'_>> {
         GroupView::new(self, group_index.into())
+    }
+}
+
+impl PartialEq for GraphRecord {
+    fn eq(&self, other: &Self) -> bool {
+        if Arc::ptr_eq(&self.state, &other.state) {
+            return true;
+        }
+
+        if self.schema() != other.schema()
+            || self.node_count() != other.node_count()
+            || self.edge_count() != other.edge_count()
+            || self.group_count() != other.group_count()
+        {
+            return false;
+        }
+
+        let group_indices: GrHashSet<_> = self.group_indices().collect();
+        if !other
+            .group_indices()
+            .all(|group_index| group_indices.contains(group_index))
+        {
+            return false;
+        }
+
+        for node_index in self.node_indices() {
+            let lookups = (self.node(node_index.clone()), other.node(node_index));
+            let (Ok(node), Ok(other_node)) = lookups else {
+                return false;
+            };
+
+            let mut attribute_count = 0;
+            for (attribute_name, value) in node.attributes() {
+                attribute_count += 1;
+
+                if other_node.attribute(attribute_name) != Some(value) {
+                    return false;
+                }
+            }
+            if attribute_count != other_node.attributes().count() {
+                return false;
+            }
+
+            let groups: GrHashSet<_> = node.groups().collect();
+            if groups.len() != other_node.groups().count()
+                || !other_node
+                    .groups()
+                    .all(|group_index| groups.contains(group_index))
+            {
+                return false;
+            }
+        }
+
+        for edge_index in self.edge_indices() {
+            let lookups = (self.edge(&edge_index), other.edge(&edge_index));
+            let (Ok(edge), Ok(other_edge)) = lookups else {
+                return false;
+            };
+
+            if edge.source() != other_edge.source() || edge.target() != other_edge.target() {
+                return false;
+            }
+
+            let mut attribute_count = 0;
+            for (attribute_name, value) in edge.attributes() {
+                attribute_count += 1;
+
+                if other_edge.attribute(attribute_name) != Some(value) {
+                    return false;
+                }
+            }
+            if attribute_count != other_edge.attributes().count() {
+                return false;
+            }
+
+            let groups: GrHashSet<_> = edge.groups().collect();
+            if groups.len() != other_edge.groups().count()
+                || !other_edge
+                    .groups()
+                    .all(|group_index| groups.contains(group_index))
+            {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
@@ -2127,6 +2266,79 @@ mod test {
                 .attribute("lorem")
                 .map(Value::from)
         );
+    }
+
+    #[test]
+    fn test_eq() {
+        let graphrecord = create_graphrecord_with_two_nodes();
+
+        assert_eq!(graphrecord, graphrecord.clone());
+
+        let reordered = GraphRecord::new()
+            .add_node("ipsum", AttributeMap::new())
+            .unwrap()
+            .add_node("lorem", create_lorem_attributes())
+            .unwrap();
+
+        assert_eq!(graphrecord, reordered);
+
+        let reattributed = reordered
+            .set_node_attributes(
+                vec!["ipsum"],
+                AttributeMap::from([("sed".into(), 1.into())]),
+            )
+            .unwrap();
+
+        assert_ne!(graphrecord, reattributed);
+
+        let frozen = graphrecord.freeze_schema().unwrap();
+
+        assert_ne!(graphrecord, frozen);
+
+        let (with_edge, edge_index) = create_graphrecord_with_one_edge();
+        let sibling = with_edge.add_group("amet").unwrap();
+        let twin = with_edge.add_group("amet").unwrap();
+
+        assert_eq!(twin, sibling);
+        assert_ne!(with_edge, sibling);
+
+        let node_grouped = sibling.add_nodes_to_group(vec!["lorem"], "amet").unwrap();
+
+        assert_ne!(sibling, node_grouped);
+
+        let edge_grouped = twin.add_edges_to_group(vec![edge_index], "amet").unwrap();
+
+        assert_ne!(twin, edge_grouped);
+
+        let edge_reattributed = with_edge
+            .set_edge_attributes(
+                vec![edge_index],
+                AttributeMap::from([("sed".into(), 1.into())]),
+            )
+            .unwrap();
+
+        assert_ne!(with_edge, edge_reattributed);
+    }
+
+    #[test]
+    #[cfg(feature = "plugins")]
+    fn test_eq_plugins() {
+        use crate::graphrecord::Plugin;
+
+        struct Quiet;
+
+        impl Plugin for Quiet {}
+
+        let graphrecord = create_graphrecord_with_two_nodes();
+        let with_plugin = GraphRecord::new()
+            .add_node("lorem", create_lorem_attributes())
+            .unwrap()
+            .add_node("ipsum", AttributeMap::new())
+            .unwrap()
+            .add_plugin("sed", Quiet)
+            .unwrap();
+
+        assert_eq!(graphrecord, with_plugin);
     }
 
     #[test]

@@ -442,7 +442,7 @@ impl AlignmentDescriptor {
             }
             ArgumentMissingPolicy::Replace(replacement) => {
                 self.admits_lookup(argument.source(), capabilities, bindings)
-                    && self.admits_source(replacement, capabilities, bindings)
+                    && self.admits(replacement, capabilities, bindings)
             }
         }
     }
@@ -492,7 +492,7 @@ impl AlignmentDescriptor {
                 LaneShapeDescriptor::Indexed { index, .. },
                 ArityDescriptor::Multiple { .. },
             ) => pattern.matches(index, capabilities, bindings),
-            (Self::Unaligned, LaneShapeDescriptor::Bare { .. }, ArityDescriptor::Single) => true,
+            (_, LaneShapeDescriptor::Bare { .. }, ArityDescriptor::Single) => true,
             _ => false,
         }
     }
@@ -583,6 +583,6 @@ impl ArgumentPattern {
             return true;
         };
 
-        pattern.matches(replacement.value(), capabilities, bindings)
+        Self::matches_value(pattern, replacement, capabilities, bindings)
     }
 }

@@ -1,6 +1,7 @@
 use graphrecords::core::GraphRecord;
 use pyo3::{
     Borrowed, Bound, FromPyObject, IntoPyObject, PyAny, PyErr, PyResult, Python,
+    exceptions::PyValueError,
     types::{PyAnyMethods, PyBytes, PyBytesMethods},
 };
 
@@ -34,7 +35,7 @@ impl FromPyObject<'_, '_> for PyGraphRecord {
         let py_bytes: &Bound<'_, PyBytes> = bytes.cast()?;
 
         let graphrecord = bincode::deserialize(py_bytes.as_bytes())
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+            .map_err(|error| PyErr::new::<PyValueError, _>(error.to_string()))?;
 
         Ok(Self(graphrecord))
     }
@@ -47,12 +48,12 @@ impl<'py> IntoPyObject<'py> for PyGraphRecord {
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         let bytes = bincode::serialize(&self.0)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+            .map_err(|error| PyErr::new::<PyValueError, _>(error.to_string()))?;
 
         let py_bytes = PyBytes::new(py, &bytes);
 
         let py_graphrecord_class = py
-            .import("graphrecords._graphrecords")?
+            .import("graphrecords._graphrecords.graphrecord")?
             .getattr("PyGraphRecord")?;
         let obj = py_graphrecord_class.call_method1("_from_bytes", (py_bytes,))?;
 

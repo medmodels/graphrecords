@@ -364,20 +364,20 @@ impl GroupSchema {
 
     pub fn validate_node(
         &self,
-        index: &NodeIndex,
+        node_index: &NodeIndex,
         attributes: &AttributeMap,
     ) -> Result<(), SchemaError> {
         self.nodes
-            .validate(attributes, &AttributeSchemaKind::Node(index))
+            .validate(attributes, &AttributeSchemaKind::Node(node_index))
     }
 
     pub fn validate_edge(
         &self,
-        index: &EdgeIndex,
+        edge_index: &EdgeIndex,
         attributes: &AttributeMap,
     ) -> Result<(), SchemaError> {
         self.edges
-            .validate(attributes, &AttributeSchemaKind::Edge(index))
+            .validate(attributes, &AttributeSchemaKind::Edge(edge_index))
     }
 
     #[must_use]
@@ -566,7 +566,7 @@ impl Schema {
 
     pub fn validate_node(
         &self,
-        index: &NodeIndex,
+        node_index: &NodeIndex,
         attributes: &AttributeMap,
         group_index: Option<&GroupIndex>,
     ) -> Result<(), SchemaError> {
@@ -579,15 +579,15 @@ impl Schema {
                             group_index: group_index.clone(),
                         })?;
 
-                schema.validate_node(index, attributes)
+                schema.validate_node(node_index, attributes)
             }
-            None => self.ungrouped.validate_node(index, attributes),
+            None => self.ungrouped.validate_node(node_index, attributes),
         }
     }
 
     pub fn validate_edge(
         &self,
-        index: &EdgeIndex,
+        edge_index: &EdgeIndex,
         attributes: &AttributeMap,
         group_index: Option<&GroupIndex>,
     ) -> Result<(), SchemaError> {
@@ -600,9 +600,9 @@ impl Schema {
                             group_index: group_index.clone(),
                         })?;
 
-                schema.validate_edge(index, attributes)
+                schema.validate_edge(edge_index, attributes)
             }
-            None => self.ungrouped.validate_edge(index, attributes),
+            None => self.ungrouped.validate_edge(edge_index, attributes),
         }
     }
 
@@ -762,34 +762,34 @@ impl Schema {
 
     pub fn remove_node_attribute(
         &mut self,
-        attribute: &AttributeName,
+        attribute_name: &AttributeName,
         group_index: Option<&GroupIndex>,
     ) {
         match group_index {
             Some(group_index) => {
                 if let Some(group_schema) = self.groups.get_mut(group_index) {
-                    group_schema.nodes.0.remove(attribute);
+                    group_schema.nodes.0.remove(attribute_name);
                 }
             }
             None => {
-                self.ungrouped.nodes.0.remove(attribute);
+                self.ungrouped.nodes.0.remove(attribute_name);
             }
         }
     }
 
     pub fn remove_edge_attribute(
         &mut self,
-        attribute: &AttributeName,
+        attribute_name: &AttributeName,
         group_index: Option<&GroupIndex>,
     ) {
         match group_index {
             Some(group_index) => {
                 if let Some(group_schema) = self.groups.get_mut(group_index) {
-                    group_schema.edges.0.remove(attribute);
+                    group_schema.edges.0.remove(attribute_name);
                 }
             }
             None => {
-                self.ungrouped.edges.0.remove(attribute);
+                self.ungrouped.edges.0.remove(attribute_name);
             }
         }
     }

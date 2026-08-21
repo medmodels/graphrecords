@@ -8,7 +8,7 @@ license = { workspace = true }
 readme = "README.md"
 
 [dependencies]
-graphrecords = { workspace = true }
+graphrecords = { workspace = true, features = ["serde"] }
 graphrecords-python = { workspace = true }
 
 pyo3 = { workspace = true }

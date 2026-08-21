@@ -75,7 +75,7 @@ impl GraphState {
         }
     }
 
-    #[cfg(feature = "io")]
+    #[cfg(feature = "serde")]
     pub(crate) fn rebuild_dictionaries(&mut self) {
         let mut hashed_addresses = Vec::new();
 
@@ -95,7 +95,7 @@ impl GraphState {
         self.groups.rebuild_indices();
     }
 
-    #[cfg(feature = "io")]
+    #[cfg(feature = "serde")]
     pub(crate) fn is_referentially_consistent(&self) -> bool {
         let edges_consistent = self.edge_addresses().all(|address| {
             self.edge_index(address).is_some()
@@ -1720,7 +1720,7 @@ mod test {
         assert_eq!(0, state.edge_addresses().count());
     }
 
-    #[cfg(feature = "io")]
+    #[cfg(feature = "serde")]
     #[test]
     fn test_rebuild_dictionaries() {
         let (mut state, addresses) = create_state_with_three_nodes();
@@ -1734,7 +1734,7 @@ mod test {
         );
     }
 
-    #[cfg(feature = "io")]
+    #[cfg(feature = "serde")]
     #[test]
     fn test_is_referentially_consistent() {
         let (state, _, _) = create_state_with_one_edge();

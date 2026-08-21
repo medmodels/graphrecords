@@ -72,6 +72,14 @@ pub struct DynTerminalKeyFailure {
 pub type DynTerminalPartitionParts = (Vec<DynTerminalBucket>, Vec<DynTerminalKeyFailure>);
 
 impl<T> DynArityContainer<T> {
+    pub(crate) fn into_elements(self) -> Vec<T> {
+        match self {
+            Self::MultipleOrdered(elements) | Self::MultipleUnordered(elements) => elements,
+            Self::Single(element) => element.into_iter().collect(),
+            Self::Definite(element) => vec![element],
+        }
+    }
+
     fn from_stream<'a, U: 'a>(stream: DynArityStream<'a, U>, function: impl Fn(U) -> T) -> Self {
         match stream {
             DynArityStream::MultipleOrdered(stream) => {

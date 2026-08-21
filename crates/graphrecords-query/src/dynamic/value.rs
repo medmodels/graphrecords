@@ -32,7 +32,7 @@ use std::{
 };
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-enum DynEntityReferenceKind {
+pub enum DynEntityReferenceKind {
     Node(NodeIndex),
     Edge(EdgeIndex),
     Group(GroupIndex),
@@ -63,6 +63,11 @@ impl DynEntityReference {
         Self {
             kind: DynEntityReferenceKind::Group(index),
         }
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> &DynEntityReferenceKind {
+        &self.kind
     }
 
     #[must_use]

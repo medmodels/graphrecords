@@ -52,7 +52,7 @@ jobs:
 
       - name: Run Rust tests
         run: >
-          cargo hack test --feature-powerset
+          cargo hack test --feature-powerset --clean-per-run
           -p graphrecords
           -p graphrecords-core
           -p graphrecords-macros

@@ -53,11 +53,17 @@ mod sealed {
 #[cfg(test)]
 mod test {
     use crate::{
-        And, Attribute, EdgeDirection, Failure, Filter, HasAttribute, InGroup, Index, Inherit,
-        Maximum, Not, OnError, OnMissing, Queryable, Random, ReturnExpression, Uppercase, ViaEdges,
+        And, Attribute, BroadcastVia, Cache, EdgeDirection, EqualTo, Errors, Failure, Filter,
+        GroupBy, HasAttribute, HasErrorCause, InErrorGroup, InGroup, Index, Inherit, IsErrorKind,
+        Keys, Maximum, Not, OnBucketError, OnBucketErrorIn, OnBucketErrorOf,
+        OnBucketErrorWithCause, OnError, OnErrorIn, OnErrorOf, OnErrorWithCause, OnKeyError,
+        OnKeyErrorIn, OnKeyErrorOf, OnKeyErrorWithCause, OnMissing, Queryable, Random,
+        ReturnExpression, Scalar, Transition, Ungroup, Uppercase, ViaEdges,
         error::{
             argument::{Absent, ArgumentMissing},
+            groups::AbsenceErrors,
             index::UncoveredIndices,
+            structure::MissingAttribute,
         },
         expressions::{groups, nodes},
         operations::policy::Drop,
@@ -287,6 +293,334 @@ Graph: skipped (no rules)",
                 "{:?}",
                 nodes.attribute("adipiscing").on_error(Drop).uppercase()
             )
+        );
+    }
+
+    #[test]
+    fn test_every_series_operation() {
+        let graphrecord = create_graphrecord();
+        let nodes = graphrecord.nodes();
+
+        let lorem = nodes.attribute("lorem");
+
+        assert_eq!(1, lorem.on_error(Drop).evaluate().unwrap().count());
+        assert_eq!(
+            1,
+            lorem
+                .on_error_of::<MissingAttribute>(Drop)
+                .evaluate()
+                .unwrap()
+                .count()
+        );
+        assert_eq!(
+            1,
+            lorem
+                .on_error_in::<AbsenceErrors>(Drop)
+                .evaluate()
+                .unwrap()
+                .count()
+        );
+
+        let dropped_with_cause = lorem.on_error_with_cause::<MissingAttribute>(Drop);
+        let elements: Vec<_> = dropped_with_cause.evaluate().unwrap().collect();
+
+        assert_eq!(1, elements.len());
+
+        let (node_index, value) = elements.into_iter().next().unwrap();
+
+        assert_eq!(NodeIndex::from("0"), NodeIndex::from(node_index));
+        assert_eq!(Value::from("ipsum"), Value::from(value.unwrap()));
+
+        let bucketed = nodes
+            .group_by(nodes.in_group("ipsum"))
+            .attribute("lorem")
+            .random();
+
+        assert_eq!(
+            1,
+            bucketed
+                .on_bucket_error(Drop)
+                .ungroup()
+                .evaluate()
+                .unwrap()
+                .count()
+        );
+        assert_eq!(
+            1,
+            bucketed
+                .on_bucket_error_of::<MissingAttribute>(Drop)
+                .ungroup()
+                .evaluate()
+                .unwrap()
+                .count()
+        );
+        assert_eq!(
+            1,
+            bucketed
+                .on_bucket_error_in::<AbsenceErrors>(Drop)
+                .ungroup()
+                .evaluate()
+                .unwrap()
+                .count()
+        );
+
+        let bucket_dropped_with_cause = bucketed
+            .on_bucket_error_with_cause::<MissingAttribute>(Drop)
+            .ungroup();
+        let bucket_elements: Vec<_> = bucket_dropped_with_cause
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), Value::from(value.unwrap())))
+            .collect();
+
+        assert_eq!(
+            vec![(NodeIndex::from("0"), Value::from("ipsum"))],
+            bucket_elements
+        );
+
+        let keyed = nodes.group_by(nodes.attribute("lorem"));
+
+        assert_eq!(
+            1,
+            keyed.on_key_error(Drop).keys().evaluate().unwrap().count()
+        );
+        assert_eq!(
+            1,
+            keyed
+                .on_key_error_of::<MissingAttribute>(Drop)
+                .keys()
+                .evaluate()
+                .unwrap()
+                .count()
+        );
+        assert_eq!(
+            1,
+            keyed
+                .on_key_error_in::<AbsenceErrors>(Drop)
+                .keys()
+                .evaluate()
+                .unwrap()
+                .count()
+        );
+
+        let key_dropped_with_cause = keyed
+            .on_key_error_with_cause::<MissingAttribute>(Drop)
+            .keys();
+        let keys: Vec<_> = key_dropped_with_cause
+            .evaluate()
+            .unwrap()
+            .map(|key| key.unwrap())
+            .collect();
+
+        assert_eq!(vec![Value::from("ipsum")], keys);
+
+        let missing_lorem = nodes.attribute("lorem").errors();
+
+        let is_missing_attribute = missing_lorem.is::<MissingAttribute>();
+        let kinds: Vec<_> = is_missing_attribute
+            .evaluate()
+            .unwrap()
+            .map(|(_, value)| value.unwrap())
+            .collect();
+
+        assert_eq!(vec![true, true, true], kinds);
+
+        let in_absence_errors = missing_lorem.in_error_group::<AbsenceErrors>();
+        let error_groups: Vec<_> = in_absence_errors
+            .evaluate()
+            .unwrap()
+            .map(|(_, value)| value.unwrap())
+            .collect();
+
+        assert_eq!(vec![true, true, true], error_groups);
+
+        let has_missing_attribute_cause = missing_lorem.has_cause::<MissingAttribute>();
+        let causes: Vec<_> = has_missing_attribute_cause
+            .evaluate()
+            .unwrap()
+            .map(|(_, value)| value.unwrap())
+            .collect();
+
+        assert_eq!(vec![true, true, true], causes);
+
+        let transition = nodes.in_group("lorem").transition::<Scalar>();
+        let transitioned: HashMap<_, _> = transition
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), Value::from(value.unwrap())))
+            .collect();
+
+        assert_eq!(
+            HashMap::from([
+                (NodeIndex::from("0"), Value::from(true)),
+                (NodeIndex::from("1"), Value::from(true)),
+                (NodeIndex::from("2"), Value::from(false)),
+                (NodeIndex::from("3"), Value::from(false)),
+            ]),
+            transitioned
+        );
+
+        let cached = nodes.cache();
+
+        assert_eq!("AllNodes → Cache", cached.expression().compact_plan());
+        assert_eq!(4, cached.evaluate().unwrap().count());
+
+        let broadcasted = nodes
+            .group_by(nodes.index())
+            .random()
+            .broadcast_via(nodes.index());
+        let broadcast_elements: Vec<_> = broadcasted.evaluate().unwrap().collect();
+
+        assert_eq!(4, broadcast_elements.len());
+        assert!(broadcast_elements.iter().all(Result::is_ok));
+
+        let and = nodes.in_group("lorem") & nodes.in_group("ipsum");
+        let anded: HashMap<_, _> = and
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), value.unwrap()))
+            .collect();
+
+        assert_eq!(
+            HashMap::from([
+                (NodeIndex::from("0"), true),
+                (NodeIndex::from("1"), false),
+                (NodeIndex::from("2"), false),
+                (NodeIndex::from("3"), false),
+            ]),
+            anded
+        );
+
+        let failing = nodes.attribute("lorem").equal_to("ipsum");
+        let determined_and: HashMap<_, _> = (failing.clone() & false)
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), value.unwrap()))
+            .collect();
+
+        assert_eq!(
+            HashMap::from([
+                (NodeIndex::from("0"), false),
+                (NodeIndex::from("1"), false),
+                (NodeIndex::from("2"), false),
+                (NodeIndex::from("3"), false),
+            ]),
+            determined_and
+        );
+
+        let propagated_and: HashMap<_, _> = (failing.clone() & true)
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), value.ok()))
+            .collect();
+
+        assert_eq!(
+            HashMap::from([
+                (NodeIndex::from("0"), Some(true)),
+                (NodeIndex::from("1"), None),
+                (NodeIndex::from("2"), None),
+                (NodeIndex::from("3"), None),
+            ]),
+            propagated_and
+        );
+
+        let or = nodes.in_group("lorem") | nodes.in_group("ipsum");
+        let ored: HashMap<_, _> = or
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), value.unwrap()))
+            .collect();
+
+        assert_eq!(
+            HashMap::from([
+                (NodeIndex::from("0"), true),
+                (NodeIndex::from("1"), true),
+                (NodeIndex::from("2"), false),
+                (NodeIndex::from("3"), false),
+            ]),
+            ored
+        );
+
+        let determined_or: HashMap<_, _> = (failing.clone() | true)
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), value.unwrap()))
+            .collect();
+
+        assert_eq!(
+            HashMap::from([
+                (NodeIndex::from("0"), true),
+                (NodeIndex::from("1"), true),
+                (NodeIndex::from("2"), true),
+                (NodeIndex::from("3"), true),
+            ]),
+            determined_or
+        );
+
+        let propagated_or: HashMap<_, _> = (failing.clone() | false)
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), value.ok()))
+            .collect();
+
+        assert_eq!(
+            HashMap::from([
+                (NodeIndex::from("0"), Some(true)),
+                (NodeIndex::from("1"), None),
+                (NodeIndex::from("2"), None),
+                (NodeIndex::from("3"), None),
+            ]),
+            propagated_or
+        );
+
+        let xor = nodes.in_group("lorem") ^ nodes.in_group("ipsum");
+        let xored: HashMap<_, _> = xor
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), value.unwrap()))
+            .collect();
+
+        assert_eq!(
+            HashMap::from([
+                (NodeIndex::from("0"), false),
+                (NodeIndex::from("1"), true),
+                (NodeIndex::from("2"), false),
+                (NodeIndex::from("3"), false),
+            ]),
+            xored
+        );
+
+        let strict_xor: HashMap<_, _> = (failing ^ true)
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), value.ok()))
+            .collect();
+
+        assert_eq!(
+            HashMap::from([
+                (NodeIndex::from("0"), Some(false)),
+                (NodeIndex::from("1"), None),
+                (NodeIndex::from("2"), None),
+                (NodeIndex::from("3"), None),
+            ]),
+            strict_xor
+        );
+
+        let not = !nodes.in_group("lorem");
+        let negated: HashMap<_, _> = not
+            .evaluate()
+            .unwrap()
+            .map(|(node_index, value)| (NodeIndex::from(node_index), value.unwrap()))
+            .collect();
+
+        assert_eq!(
+            HashMap::from([
+                (NodeIndex::from("0"), false),
+                (NodeIndex::from("1"), false),
+                (NodeIndex::from("2"), true),
+                (NodeIndex::from("3"), true),
+            ]),
+            negated
         );
     }
 

@@ -1,4 +1,4 @@
-use super::{combine_masks_bare, combine_masks_indexed};
+use super::{combine_masks_kleene_bare, combine_masks_kleene_indexed};
 use crate::{
     And, Arity, Bare, ElementShape, Explain, IndexDomain, Indexed, Labeled, Mask, QueryResult,
     Series,
@@ -11,6 +11,8 @@ use crate::{
 };
 use graphrecords_core::GraphRecord;
 use std::ops::BitAnd;
+
+const DETERMINING: bool = false;
 
 #[derive(
     Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
@@ -33,10 +35,10 @@ impl<I: IndexDomain, M: ArgumentSource<Keyed<I>, Mask>> ElementKernel<Indexed<I,
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, Mask>, Self>> {
-        Ok(combine_masks_indexed::<_, M>(
+        Ok(combine_masks_kleene_indexed::<_, M>(
             graphrecord,
             prepared,
-            |left, right| left && right,
+            DETERMINING,
             Self::LABEL,
         ))
     }
@@ -62,10 +64,10 @@ impl<M: ArgumentSource<Unaligned, Mask>> ElementKernel<Bare<Mask>> for AndOperat
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<Mask>, Self>> {
-        Ok(combine_masks_bare::<M>(
+        Ok(combine_masks_kleene_bare::<M>(
             graphrecord,
             prepared,
-            |left, right| left && right,
+            DETERMINING,
             Self::LABEL,
         ))
     }

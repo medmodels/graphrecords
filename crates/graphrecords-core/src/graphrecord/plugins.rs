@@ -9,8 +9,9 @@ use super::{
     },
 };
 use crate::errors::GraphRecordResult;
+use std::any::Any;
 
-pub trait Plugin: Send + Sync {
+pub trait Plugin: Any + Send + Sync {
     #[allow(unused_variables)]
     fn initialize(&self, record: &GraphRecord) -> GraphRecordResult<Changes> {
         Ok(Changes::new())
@@ -1568,6 +1569,38 @@ mod test {
             GraphRecordError::PluginAlreadyExists { name }
                 if name == "lorem".into()
         )));
+    }
+
+    #[test]
+    fn test_with_plugins() {
+        let plugins: Vec<(PluginName, Arc<dyn Plugin>)> = vec![
+            ("lorem".into(), Arc::new(PassThroughPlugin)),
+            ("ipsum".into(), Arc::new(LifecyclePlugin)),
+        ];
+
+        let graphrecord = GraphRecord::new().with_plugins(plugins).unwrap();
+
+        assert_eq!(
+            vec![&PluginName::from("lorem"), &PluginName::from("ipsum")],
+            graphrecord.plugins().collect::<Vec<_>>()
+        );
+        assert!(graphrecord.contains_group("dolor"));
+    }
+
+    #[test]
+    fn test_reattach_plugins() {
+        let plugins: Vec<(PluginName, Arc<dyn Plugin>)> = vec![
+            ("lorem".into(), Arc::new(PassThroughPlugin)),
+            ("ipsum".into(), Arc::new(LifecyclePlugin)),
+        ];
+
+        let graphrecord = GraphRecord::new().reattach_plugins(plugins).unwrap();
+
+        assert_eq!(
+            vec![&PluginName::from("lorem"), &PluginName::from("ipsum")],
+            graphrecord.plugins().collect::<Vec<_>>()
+        );
+        assert!(!graphrecord.contains_group("dolor"));
     }
 
     #[test]
