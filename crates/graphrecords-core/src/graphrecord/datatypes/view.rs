@@ -1,5 +1,5 @@
 use super::{
-    AttributeName, Group, Identifier, NodeIndex, PluginName, Value,
+    AttributeName, GroupIndex, Identifier, NodeIndex, PluginName, Value,
     value::{collapse_nan_and_negative_zero, int_float_cmp, int_float_eq},
 };
 use chrono::{NaiveDateTime, TimeDelta};
@@ -31,6 +31,24 @@ impl From<IdentifierView<'_>> for Identifier {
             IdentifierView::String(value) => Self::String(value.into_owned()),
             IdentifierView::Int(value) => Self::Int(value),
         }
+    }
+}
+
+impl<'a> From<&'a str> for IdentifierView<'a> {
+    fn from(value: &'a str) -> Self {
+        Self::String(Cow::Borrowed(value))
+    }
+}
+
+impl<'a> From<&'a String> for IdentifierView<'a> {
+    fn from(value: &'a String) -> Self {
+        Self::String(Cow::Borrowed(value))
+    }
+}
+
+impl From<i64> for IdentifierView<'_> {
+    fn from(value: i64) -> Self {
+        Self::Int(value)
     }
 }
 
@@ -103,6 +121,30 @@ macro_rules! implement_identifier_view_wrapper {
             }
         }
 
+        impl<'a> From<&'a $owned> for $name<'a> {
+            fn from(owned: &'a $owned) -> Self {
+                Self(IdentifierView::from(owned.identifier()))
+            }
+        }
+
+        impl<'a> From<&'a str> for $name<'a> {
+            fn from(value: &'a str) -> Self {
+                Self(IdentifierView::from(value))
+            }
+        }
+
+        impl<'a> From<&'a String> for $name<'a> {
+            fn from(value: &'a String) -> Self {
+                Self(IdentifierView::from(value))
+            }
+        }
+
+        impl From<i64> for $name<'_> {
+            fn from(value: i64) -> Self {
+                Self(IdentifierView::from(value))
+            }
+        }
+
         impl Display for $name<'_> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 self.0.fmt(f)
@@ -112,7 +154,7 @@ macro_rules! implement_identifier_view_wrapper {
 }
 
 implement_identifier_view_wrapper!(NodeIndexView, NodeIndex);
-implement_identifier_view_wrapper!(GroupView, Group);
+implement_identifier_view_wrapper!(GroupIndexView, GroupIndex);
 implement_identifier_view_wrapper!(AttributeNameView, AttributeName);
 implement_identifier_view_wrapper!(PluginNameView, PluginName);
 

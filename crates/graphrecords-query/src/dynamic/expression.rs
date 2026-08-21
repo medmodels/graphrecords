@@ -1,7 +1,7 @@
 use super::{
-    DynArity, DynExpressionProjection, DynIndex, DynInvokeArgument, DynPayload, DynStream,
-    DynStreamShape, DynTerminal, DynValue, DynYield, OperationCapture,
-    operation_dynamic_element_apply,
+    DynArity, DynElementOperation, DynExpressionProjection, DynIndex, DynInvokeArgument,
+    DynPayload, DynShapeProjection, DynStream, DynStreamShape, DynTerminal, DynValue, DynYield,
+    OperationCapture, apply_grouped_operation, apply_lane_operation,
 };
 use crate::{
     Bare, Cache, Definite, ElementShape, EvaluateExpression, Explanation, Expression, Failure,
@@ -12,7 +12,7 @@ use crate::{
         AllEdges, AllGroups, AllNodes, EdgesExpression, ExpressionHandle, GroupedExpression,
         GroupsExpression, NodesExpression,
     },
-    operations::TransitionOperation,
+    operations::{ElementKernel, TransitionOperation},
     optimizer::{OptimizationReport, Optimizer, Stats},
     registry::{
         ArgumentDescriptor, ArityDescriptor, ExpressionDescriptor, IndexDescriptor,
@@ -22,7 +22,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, Group, NodeIndex},
+    graphrecord::{EdgeIndex, GroupIndex, NodeIndex},
 };
 use std::{
     fmt::{self, Display, Formatter},
@@ -101,7 +101,7 @@ pub fn groups() -> DynExpression {
     let handle = GroupsExpression::new(AllGroups).erase_expression();
     let descriptor = ExpressionDescriptor::Lane {
         shape: LaneShapeDescriptor::Indexed {
-            index: IndexDescriptor::domain::<Group>(),
+            index: IndexDescriptor::domain::<GroupIndex>(),
             value: ValueDescriptor::unit(),
         },
         arity: ArityDescriptor::Multiple {
@@ -494,20 +494,65 @@ impl DynExpression {
     }
 
     pub(crate) fn erase_mask_lane(&self) -> Self {
+        type Emission =
+            <TransitionOperation<DynValue> as ElementKernel<Indexed<DynIndex, Mask>>>::Emission;
+        type DynamicOperation = DynElementOperation<
+            TransitionOperation<DynValue>,
+            Indexed<DynIndex, Mask>,
+            Indexed<DynIndex, DynValue>,
+            Emission,
+        >;
+        type DynamicShape = <Indexed<DynIndex, Mask> as DynShapeProjection>::Dynamic;
+
         let capture = OperationCapture::<TransitionOperation<DynValue>>::capture();
         let operation = capture.transition::<DynValue>().operation();
         let output = self
             .descriptor()
             .with_lane_value(ValueDescriptor::index(IndexDescriptor::domain::<bool>()));
 
-        operation_dynamic_element_apply!(
-            operation,
-            self,
-            output,
-            TransitionOperation<DynValue>,
-            Indexed<DynIndex, Mask>,
-            Indexed<DynIndex, DynValue>
-        )
+        let operation = DynamicOperation::new(operation);
+
+        let DynHandle::Lane(handle) = &self.handle else {
+            return match self.descriptor().lane_arity() {
+                ArityDescriptor::Multiple {
+                    order: OrderDescriptor::Ordered,
+                } => apply_grouped_operation::<DynamicShape, Multiple<Ordered>, _>(
+                    self, operation, output,
+                ),
+                ArityDescriptor::Multiple {
+                    order: OrderDescriptor::Unordered,
+                } => apply_grouped_operation::<DynamicShape, Multiple<Unordered>, _>(
+                    self, operation, output,
+                ),
+                ArityDescriptor::Single => {
+                    apply_grouped_operation::<DynamicShape, Single, _>(self, operation, output)
+                }
+                ArityDescriptor::Definite => {
+                    apply_grouped_operation::<DynamicShape, Definite, _>(self, operation, output)
+                }
+            };
+        };
+
+        let handles = <DynamicShape as DynLaneState>::handles(handle);
+
+        match handles {
+            DynArityHandle::MultipleOrdered(_) => {
+                apply_lane_operation::<DynamicShape, Multiple<Ordered>, _>(
+                    handles, operation, output,
+                )
+            }
+            DynArityHandle::MultipleUnordered(_) => {
+                apply_lane_operation::<DynamicShape, Multiple<Unordered>, _>(
+                    handles, operation, output,
+                )
+            }
+            DynArityHandle::Single(_) => {
+                apply_lane_operation::<DynamicShape, Single, _>(handles, operation, output)
+            }
+            DynArityHandle::Definite(_) => {
+                apply_lane_operation::<DynamicShape, Definite, _>(handles, operation, output)
+            }
+        }
     }
 
     pub fn evaluate(&self, graphrecord: &GraphRecord) -> QueryResult<DynTerminal> {
@@ -643,7 +688,7 @@ mod test {
     };
     use graphrecords_core::{
         GraphRecord,
-        graphrecord::{AttributeMap, EdgeIndex, Group, NodeIndex, Value},
+        graphrecord::{AttributeMap, EdgeIndex, GroupIndex, NodeIndex, Value},
     };
     use std::collections::HashMap;
 
@@ -718,7 +763,7 @@ mod test {
     fn create_unit_group_descriptor() -> ExpressionDescriptor {
         ExpressionDescriptor::Lane {
             shape: LaneShapeDescriptor::Indexed {
-                index: IndexDescriptor::domain::<Group>(),
+                index: IndexDescriptor::domain::<GroupIndex>(),
                 value: ValueDescriptor::unit(),
             },
             arity: ArityDescriptor::Multiple {

@@ -1,5 +1,5 @@
 use crate::{
-    EntityDomain, EntityRef, EntityReference, FailureKind, FailureKindValue, IndexDomain,
+    EntityIndexDomain, EntityRef, EntityReference, FailureKind, FailureKindValue, IndexDomain,
     IndexValue, Mask, Scalar, ValueDomain,
 };
 use graphrecords_core::graphrecord::{AttributeName, ValueView, datatypes::AttributeNameView};
@@ -48,7 +48,7 @@ impl<I: IndexDomain> ValueEquivalence for IndexValue<I> {
     }
 }
 
-impl<E: EntityDomain> ValueEquivalence for EntityReference<E> {
+impl<E: EntityIndexDomain> ValueEquivalence for EntityReference<E> {
     type Key<'a>
         = EntityRef<'a, E>
     where

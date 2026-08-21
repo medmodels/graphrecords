@@ -1,9 +1,9 @@
-use graphrecords_core::{graphrecord::Group, prelude::AttributeName};
+use graphrecords_core::{graphrecord::GroupIndex, prelude::AttributeName};
 
 pub trait Attribute {
     type Output;
 
-    fn attribute(&self, attribute: AttributeName) -> Self::Output;
+    fn attribute(&self, attribute: impl Into<AttributeName>) -> Self::Output;
 }
 
 pub trait Attributes {
@@ -15,13 +15,13 @@ pub trait Attributes {
 pub trait HasAttribute {
     type Output;
 
-    fn has_attribute(&self, attribute: AttributeName) -> Self::Output;
+    fn has_attribute(&self, attribute: impl Into<AttributeName>) -> Self::Output;
 }
 
 pub trait InGroup {
     type Output;
 
-    fn in_group(&self, group: Group) -> Self::Output;
+    fn in_group(&self, group_index: impl Into<GroupIndex>) -> Self::Output;
 }
 
 pub trait Filter<M> {

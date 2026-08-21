@@ -5,22 +5,22 @@ use super::{Change, sealed::Sealed};
 use crate::graphrecord::{GraphRecord, plugins::Plugin};
 use crate::{
     errors::GraphRecordResult,
-    graphrecord::{datatypes::Group, state::GraphState},
+    graphrecord::{datatypes::GroupIndex, state::GraphState},
 };
 
 pub struct AddGroup {
-    group: Group,
+    group_index: GroupIndex,
 }
 
 impl AddGroup {
     #[must_use]
-    pub const fn new(group: Group) -> Self {
-        Self { group }
+    pub const fn new(group_index: GroupIndex) -> Self {
+        Self { group_index }
     }
 
     #[must_use]
-    pub const fn group(&self) -> &Group {
-        &self.group
+    pub const fn group_index(&self) -> &GroupIndex {
+        &self.group_index
     }
 }
 
@@ -28,7 +28,7 @@ impl Sealed for AddGroup {}
 
 impl Change for AddGroup {
     fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        state.insert_group(self.group)?;
+        state.insert_group(self.group_index)?;
 
         Ok(state)
     }

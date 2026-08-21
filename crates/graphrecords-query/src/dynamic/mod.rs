@@ -2,7 +2,6 @@ pub(crate) mod argument;
 pub(crate) mod dispatch;
 pub(crate) mod expression;
 mod index;
-mod manifest;
 mod optimizer;
 pub(crate) mod payload;
 pub(crate) mod projection;
@@ -28,7 +27,6 @@ pub use index::{
     DynExpandedAddress, DynExpandedOwned, DynExpandedView, DynIndex, DynIndexAddress,
     DynIndexOwned, DynIndexView,
 };
-pub(crate) use manifest::{operation_dynamic_element_apply, operation_dynamic_shape_apply};
 pub use optimizer::register_dyn_builtins;
 pub use payload::{
     DynArityContainer, DynTerminal, DynTerminalBucket, DynTerminalKeyFailure, DynTerminalLane,

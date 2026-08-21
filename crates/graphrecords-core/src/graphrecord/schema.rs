@@ -1,4 +1,4 @@
-use super::{AttributeMap, AttributeName, EdgeIndex, GraphRecord, Group, NodeIndex};
+use super::{AttributeMap, AttributeName, EdgeIndex, GraphRecord, GroupIndex, NodeIndex};
 use crate::{errors::SchemaError, graphrecord::datatypes::DataType};
 use graphrecords_utils::aliases::GrHashMap;
 #[cfg(any(feature = "serde", feature = "io"))]
@@ -353,12 +353,12 @@ impl GroupSchema {
     }
 
     #[must_use]
-    pub fn nodes(&self) -> &AttributeSchemaMapping {
+    pub const fn nodes(&self) -> &AttributeSchema {
         &self.nodes
     }
 
     #[must_use]
-    pub fn edges(&self) -> &AttributeSchemaMapping {
+    pub const fn edges(&self) -> &AttributeSchema {
         &self.edges
     }
 
@@ -411,14 +411,17 @@ pub enum SchemaType {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(any(feature = "serde", feature = "io"), derive(Serialize, Deserialize))]
 pub struct Schema {
-    groups: HashMap<Group, GroupSchema>,
+    groups: HashMap<GroupIndex, GroupSchema>,
     ungrouped: GroupSchema,
     r#type: SchemaType,
 }
 
 impl Schema {
     #[must_use]
-    pub const fn new_inferred(groups: HashMap<Group, GroupSchema>, ungrouped: GroupSchema) -> Self {
+    pub const fn new_inferred(
+        groups: HashMap<GroupIndex, GroupSchema>,
+        ungrouped: GroupSchema,
+    ) -> Self {
         Self {
             groups,
             ungrouped,
@@ -427,7 +430,10 @@ impl Schema {
     }
 
     #[must_use]
-    pub const fn new_provided(groups: HashMap<Group, GroupSchema>, ungrouped: GroupSchema) -> Self {
+    pub const fn new_provided(
+        groups: HashMap<GroupIndex, GroupSchema>,
+        ungrouped: GroupSchema,
+    ) -> Self {
         Self {
             groups,
             ungrouped,
@@ -444,16 +450,16 @@ impl Schema {
             .group_addresses()
             .map(|group_address| {
                 state
-                    .group_name(group_address)
+                    .group_index(group_address)
                     .cloned()
                     .expect("Group must exist.")
             })
-            .map(|group| (group, Vec::new()))
+            .map(|group_index| (group_index, Vec::new()))
             .collect();
         let mut group_edge_attribute_maps: GrHashMap<_, Vec<_>> = group_node_attribute_maps
             .keys()
             .cloned()
-            .map(|group| (group, Vec::new()))
+            .map(|group_index| (group_index, Vec::new()))
             .collect();
 
         let mut ungrouped_node_attribute_maps = Vec::new();
@@ -461,24 +467,24 @@ impl Schema {
 
         for node_address in state.node_addresses() {
             let attributes = state.node_attribute_map(node_address);
-            let groups: Vec<_> = state
+            let group_indices: Vec<_> = state
                 .node_memberships(node_address)
                 .map(|group_address| {
                     state
-                        .group_name(group_address)
+                        .group_index(group_address)
                         .cloned()
                         .expect("Group must exist.")
                 })
                 .collect();
 
-            if groups.is_empty() {
+            if group_indices.is_empty() {
                 ungrouped_node_attribute_maps.push(attributes);
                 continue;
             }
 
-            for group in groups {
+            for group_index in group_indices {
                 group_node_attribute_maps
-                    .get_mut(&group)
+                    .get_mut(&group_index)
                     .expect("Group must exist.")
                     .push(attributes.clone());
             }
@@ -486,24 +492,24 @@ impl Schema {
 
         for edge_address in state.edge_addresses() {
             let attributes = state.edge_attribute_map(edge_address);
-            let groups: Vec<_> = state
+            let group_indices: Vec<_> = state
                 .edge_memberships(edge_address)
                 .map(|group_address| {
                     state
-                        .group_name(group_address)
+                        .group_index(group_address)
                         .cloned()
                         .expect("Group must exist.")
                 })
                 .collect();
 
-            if groups.is_empty() {
+            if group_indices.is_empty() {
                 ungrouped_edge_attribute_maps.push(attributes);
                 continue;
             }
 
-            for group in groups {
+            for group_index in group_indices {
                 group_edge_attribute_maps
-                    .get_mut(&group)
+                    .get_mut(&group_index)
                     .expect("Group must exist.")
                     .push(attributes.clone());
             }
@@ -512,13 +518,13 @@ impl Schema {
         let group_schemas =
             group_node_attribute_maps
                 .into_iter()
-                .map(|(group, node_attribute_maps)| {
+                .map(|(group_index, node_attribute_maps)| {
                     let edge_attribute_maps = group_edge_attribute_maps
-                        .remove(&group)
+                        .remove(&group_index)
                         .expect("Group must exist.");
 
                     (
-                        group,
+                        group_index,
                         GroupSchema::infer(&node_attribute_maps, &edge_attribute_maps),
                     )
                 });
@@ -536,15 +542,15 @@ impl Schema {
     }
 
     #[must_use]
-    pub const fn groups(&self) -> &HashMap<Group, GroupSchema> {
+    pub const fn groups(&self) -> &HashMap<GroupIndex, GroupSchema> {
         &self.groups
     }
 
-    pub fn group(&self, group: &Group) -> Result<&GroupSchema, SchemaError> {
+    pub fn group(&self, group_index: &GroupIndex) -> Result<&GroupSchema, SchemaError> {
         self.groups
-            .get(group)
+            .get(group_index)
             .ok_or_else(|| SchemaError::GroupNotInSchema {
-                group: group.clone(),
+                group_index: group_index.clone(),
             })
     }
 
@@ -562,15 +568,15 @@ impl Schema {
         &self,
         index: &NodeIndex,
         attributes: &AttributeMap,
-        group: Option<&Group>,
+        group_index: Option<&GroupIndex>,
     ) -> Result<(), SchemaError> {
-        match group {
-            Some(group) => {
+        match group_index {
+            Some(group_index) => {
                 let schema =
                     self.groups
-                        .get(group)
+                        .get(group_index)
                         .ok_or_else(|| SchemaError::GroupNotInSchema {
-                            group: group.clone(),
+                            group_index: group_index.clone(),
                         })?;
 
                 schema.validate_node(index, attributes)
@@ -583,15 +589,15 @@ impl Schema {
         &self,
         index: &EdgeIndex,
         attributes: &AttributeMap,
-        group: Option<&Group>,
+        group_index: Option<&GroupIndex>,
     ) -> Result<(), SchemaError> {
-        match group {
-            Some(group) => {
+        match group_index {
+            Some(group_index) => {
                 let schema =
                     self.groups
-                        .get(group)
+                        .get(group_index)
                         .ok_or_else(|| SchemaError::GroupNotInSchema {
-                            group: group.clone(),
+                            group_index: group_index.clone(),
                         })?;
 
                 schema.validate_edge(index, attributes)
@@ -603,13 +609,13 @@ impl Schema {
     pub(crate) fn update_node(
         &mut self,
         attributes: &AttributeMap,
-        group: Option<&Group>,
+        group_index: Option<&GroupIndex>,
         population_was_empty: bool,
     ) {
-        match group {
-            Some(group) => {
+        match group_index {
+            Some(group_index) => {
                 self.groups
-                    .entry(group.clone())
+                    .entry(group_index.clone())
                     .or_default()
                     .update_node(attributes, population_was_empty);
             }
@@ -620,13 +626,13 @@ impl Schema {
     pub(crate) fn update_edge(
         &mut self,
         attributes: &AttributeMap,
-        group: Option<&Group>,
+        group_index: Option<&GroupIndex>,
         population_was_empty: bool,
     ) {
-        match group {
-            Some(group) => {
+        match group_index {
+            Some(group_index) => {
                 self.groups
-                    .entry(group.clone())
+                    .entry(group_index.clone())
                     .or_default()
                     .update_edge(attributes, population_was_empty);
             }
@@ -639,13 +645,13 @@ impl Schema {
         attribute_name: &AttributeName,
         data_type: DataType,
         attribute_type: AttributeType,
-        group: Option<&Group>,
+        group_index: Option<&GroupIndex>,
     ) -> Result<(), SchemaError> {
         let attribute_data_type = AttributeDataType::new(data_type, attribute_type)?;
 
-        match group {
-            Some(group) => {
-                let group_schema = self.groups.entry(group.clone()).or_default();
+        match group_index {
+            Some(group_index) => {
+                let group_schema = self.groups.entry(group_index.clone()).or_default();
                 group_schema
                     .nodes
                     .0
@@ -667,13 +673,13 @@ impl Schema {
         attribute_name: &AttributeName,
         data_type: DataType,
         attribute_type: AttributeType,
-        group: Option<&Group>,
+        group_index: Option<&GroupIndex>,
     ) -> Result<(), SchemaError> {
         let attribute_data_type = AttributeDataType::new(data_type, attribute_type)?;
 
-        match group {
-            Some(group) => {
-                let group_schema = self.groups.entry(group.clone()).or_default();
+        match group_index {
+            Some(group_index) => {
+                let group_schema = self.groups.entry(group_index.clone()).or_default();
                 group_schema
                     .edges
                     .0
@@ -695,13 +701,13 @@ impl Schema {
         attribute_name: &AttributeName,
         data_type: DataType,
         attribute_type: AttributeType,
-        group: Option<&Group>,
+        group_index: Option<&GroupIndex>,
     ) -> Result<(), SchemaError> {
         let attribute_data_type = AttributeDataType::new(data_type, attribute_type)?;
 
-        match group {
-            Some(group) => {
-                let group_schema = self.groups.entry(group.clone()).or_default();
+        match group_index {
+            Some(group_index) => {
+                let group_schema = self.groups.entry(group_index.clone()).or_default();
                 group_schema
                     .nodes
                     .0
@@ -727,13 +733,13 @@ impl Schema {
         attribute_name: &AttributeName,
         data_type: DataType,
         attribute_type: AttributeType,
-        group: Option<&Group>,
+        group_index: Option<&GroupIndex>,
     ) -> Result<(), SchemaError> {
         let attribute_data_type = AttributeDataType::new(data_type, attribute_type)?;
 
-        match group {
-            Some(group) => {
-                let group_schema = self.groups.entry(group.clone()).or_default();
+        match group_index {
+            Some(group_index) => {
+                let group_schema = self.groups.entry(group_index.clone()).or_default();
                 group_schema
                     .edges
                     .0
@@ -754,10 +760,14 @@ impl Schema {
         Ok(())
     }
 
-    pub fn remove_node_attribute(&mut self, attribute: &AttributeName, group: Option<&Group>) {
-        match group {
-            Some(group) => {
-                if let Some(group_schema) = self.groups.get_mut(group) {
+    pub fn remove_node_attribute(
+        &mut self,
+        attribute: &AttributeName,
+        group_index: Option<&GroupIndex>,
+    ) {
+        match group_index {
+            Some(group_index) => {
+                if let Some(group_schema) = self.groups.get_mut(group_index) {
                     group_schema.nodes.0.remove(attribute);
                 }
             }
@@ -767,10 +777,14 @@ impl Schema {
         }
     }
 
-    pub fn remove_edge_attribute(&mut self, attribute: &AttributeName, group: Option<&Group>) {
-        match group {
-            Some(group) => {
-                if let Some(group_schema) = self.groups.get_mut(group) {
+    pub fn remove_edge_attribute(
+        &mut self,
+        attribute: &AttributeName,
+        group_index: Option<&GroupIndex>,
+    ) {
+        match group_index {
+            Some(group_index) => {
+                if let Some(group_schema) = self.groups.get_mut(group_index) {
                     group_schema.edges.0.remove(attribute);
                 }
             }
@@ -780,18 +794,22 @@ impl Schema {
         }
     }
 
-    pub fn add_group(&mut self, group: Group, schema: GroupSchema) -> Result<(), SchemaError> {
-        if self.groups.contains_key(&group) {
-            return Err(SchemaError::GroupAlreadyInSchema { group });
+    pub fn add_group(
+        &mut self,
+        group_index: GroupIndex,
+        schema: GroupSchema,
+    ) -> Result<(), SchemaError> {
+        if self.groups.contains_key(&group_index) {
+            return Err(SchemaError::GroupAlreadyInSchema { group_index });
         }
 
-        self.groups.insert(group, schema);
+        self.groups.insert(group_index, schema);
 
         Ok(())
     }
 
-    pub fn remove_group(&mut self, group: &Group) {
-        self.groups.remove(group);
+    pub fn remove_group(&mut self, group_index: &GroupIndex) {
+        self.groups.remove(group_index);
     }
 
     pub const fn freeze(&mut self) {
@@ -1380,7 +1398,7 @@ mod test {
 
         let group_schema = GroupSchema::new(nodes.clone(), AttributeSchema::default());
 
-        assert_eq!(&nodes.0, group_schema.nodes());
+        assert_eq!(&nodes, group_schema.nodes());
     }
 
     #[test]
@@ -1402,7 +1420,7 @@ mod test {
 
         let group_schema = GroupSchema::new(AttributeSchema::default(), edges.clone());
 
-        assert_eq!(&edges.0, group_schema.edges());
+        assert_eq!(&edges, group_schema.edges());
     }
 
     #[test]
@@ -1618,11 +1636,11 @@ mod test {
 
     #[test]
     fn test_schema_new_inferred() {
-        let groups: HashMap<_, _> = vec![("dolor".into(), GroupSchema::default())]
+        let group_indices: HashMap<_, _> = vec![("dolor".into(), GroupSchema::default())]
             .into_iter()
             .collect();
 
-        let schema = Schema::new_inferred(groups, GroupSchema::default());
+        let schema = Schema::new_inferred(group_indices, GroupSchema::default());
 
         assert_eq!(&SchemaType::Inferred, schema.schema_type());
         assert_eq!(1, schema.groups().len());
@@ -1632,11 +1650,11 @@ mod test {
 
     #[test]
     fn test_schema_new_provided() {
-        let groups: HashMap<_, _> = vec![("dolor".into(), GroupSchema::default())]
+        let group_indices: HashMap<_, _> = vec![("dolor".into(), GroupSchema::default())]
             .into_iter()
             .collect();
 
-        let schema = Schema::new_provided(groups, GroupSchema::default());
+        let schema = Schema::new_provided(group_indices, GroupSchema::default());
 
         assert_eq!(&SchemaType::Provided, schema.schema_type());
         assert_eq!(1, schema.groups().len());
@@ -1647,15 +1665,11 @@ mod test {
     #[test]
     fn test_schema_infer() {
         let graphrecord = GraphRecord::new()
-            .add_node(0.into(), AttributeMap::from([("lorem".into(), 0.into())]))
+            .add_node(0, AttributeMap::from([("lorem".into(), 0.into())]))
             .unwrap()
-            .add_node(1.into(), AttributeMap::from([("ipsum".into(), 0.0.into())]))
+            .add_node(1, AttributeMap::from([("ipsum".into(), 0.0.into())]))
             .unwrap()
-            .add_edge(
-                0.into(),
-                1.into(),
-                AttributeMap::from([("sit".into(), true.into())]),
-            )
+            .add_edge(0, 1, AttributeMap::from([("sit".into(), true.into())]))
             .unwrap();
 
         let schema = Schema::infer(&graphrecord);
@@ -1666,11 +1680,11 @@ mod test {
         let edge_index = graphrecord.edge_indices().next().unwrap();
 
         let graphrecord = graphrecord
-            .add_group("dolor".into())
+            .add_group("dolor")
             .unwrap()
-            .add_nodes_to_group("dolor".into(), vec![0.into(), 1.into()])
+            .add_nodes_to_group(vec![0, 1], "dolor")
             .unwrap()
-            .add_edges_to_group("dolor".into(), vec![edge_index])
+            .add_edges_to_group(vec![edge_index], "dolor")
             .unwrap();
 
         let schema = Schema::infer(&graphrecord);

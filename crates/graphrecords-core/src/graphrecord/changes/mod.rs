@@ -1,9 +1,9 @@
 mod add_edges;
-mod add_edges_in_groups;
+mod add_edges_in_group;
 mod add_edges_to_group;
 mod add_group;
 mod add_nodes;
-mod add_nodes_in_groups;
+mod add_nodes_in_group;
 mod add_nodes_to_group;
 mod clear;
 mod freeze_schema;
@@ -26,16 +26,15 @@ mod sealed {
 }
 
 pub use self::{
-    add_edges::AddEdges, add_edges_in_groups::AddEdgesInGroups,
-    add_edges_to_group::AddEdgesToGroup, add_group::AddGroup, add_nodes::AddNodes,
-    add_nodes_in_groups::AddNodesInGroups, add_nodes_to_group::AddNodesToGroup, clear::Clear,
-    freeze_schema::FreezeSchema, remove_edge_attributes::RemoveEdgeAttributes,
-    remove_edges::RemoveEdges, remove_edges_from_group::RemoveEdgesFromGroup,
-    remove_groups::RemoveGroups, remove_node_attributes::RemoveNodeAttributes,
-    remove_nodes::RemoveNodes, remove_nodes_from_group::RemoveNodesFromGroup,
-    replace_edge_attributes::ReplaceEdgeAttributes, replace_node_attributes::ReplaceNodeAttributes,
-    set_edge_attributes::SetEdgeAttributes, set_node_attributes::SetNodeAttributes,
-    set_schema::SetSchema, unfreeze_schema::UnfreezeSchema,
+    add_edges::AddEdges, add_edges_in_group::AddEdgesInGroup, add_edges_to_group::AddEdgesToGroup,
+    add_group::AddGroup, add_nodes::AddNodes, add_nodes_in_group::AddNodesInGroup,
+    add_nodes_to_group::AddNodesToGroup, clear::Clear, freeze_schema::FreezeSchema,
+    remove_edge_attributes::RemoveEdgeAttributes, remove_edges::RemoveEdges,
+    remove_edges_from_group::RemoveEdgesFromGroup, remove_groups::RemoveGroups,
+    remove_node_attributes::RemoveNodeAttributes, remove_nodes::RemoveNodes,
+    remove_nodes_from_group::RemoveNodesFromGroup, replace_edge_attributes::ReplaceEdgeAttributes,
+    replace_node_attributes::ReplaceNodeAttributes, set_edge_attributes::SetEdgeAttributes,
+    set_node_attributes::SetNodeAttributes, set_schema::SetSchema, unfreeze_schema::UnfreezeSchema,
 };
 #[cfg(feature = "plugins")]
 use crate::graphrecord::{GraphRecord, plugins::Plugin};

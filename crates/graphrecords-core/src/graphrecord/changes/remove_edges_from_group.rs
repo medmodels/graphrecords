@@ -6,31 +6,31 @@ use crate::graphrecord::{GraphRecord, plugins::Plugin};
 use crate::{
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
-        datatypes::{EdgeIndex, Group},
+        datatypes::{EdgeIndex, GroupIndex},
         state::GraphState,
     },
 };
 use graphrecords_utils::distinct::Distinct;
 
 pub struct RemoveEdgesFromGroup {
-    group: Group,
+    group_index: GroupIndex,
     edge_indices: Vec<EdgeIndex>,
 }
 
 impl RemoveEdgesFromGroup {
     #[must_use]
-    pub fn new(group: Group, edge_indices: Vec<EdgeIndex>) -> Self {
+    pub fn new(edge_indices: Vec<EdgeIndex>, group_index: GroupIndex) -> Self {
         let edge_indices: Vec<_> = edge_indices.into_iter().collect::<Distinct<_>>().into();
 
         Self {
-            group,
+            group_index,
             edge_indices,
         }
     }
 
     #[must_use]
-    pub const fn group(&self) -> &Group {
-        &self.group
+    pub const fn group_index(&self) -> &GroupIndex {
+        &self.group_index
     }
 
     #[must_use]
@@ -44,13 +44,13 @@ impl Sealed for RemoveEdgesFromGroup {}
 impl Change for RemoveEdgesFromGroup {
     fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
         let Self {
-            group,
+            group_index,
             edge_indices,
         } = *self;
 
         let group_address = state
-            .resolve_group_address(&group)
-            .ok_or(GraphRecordError::GroupNotFound { group })?;
+            .resolve_group_address(&group_index)
+            .ok_or(GraphRecordError::GroupNotFound { group_index })?;
 
         for edge_index in edge_indices {
             let edge_address = state
@@ -87,20 +87,20 @@ impl Change for RemoveEdgesFromGroup {
 #[cfg(test)]
 mod test {
     use super::RemoveEdgesFromGroup;
-    use crate::graphrecord::datatypes::{EdgeIndex, Group};
+    use crate::graphrecord::datatypes::{EdgeIndex, GroupIndex};
 
     #[test]
     fn test_new() {
         let removal = RemoveEdgesFromGroup::new(
-            "dolor".into(),
             vec![
                 EdgeIndex::new(1, 0),
                 EdgeIndex::new(1, 1),
                 EdgeIndex::new(1, 0),
             ],
+            "dolor".into(),
         );
 
-        assert_eq!(&Group::from("dolor"), removal.group());
+        assert_eq!(&GroupIndex::from("dolor"), removal.group_index());
         assert_eq!(
             vec![EdgeIndex::new(1, 0), EdgeIndex::new(1, 1)],
             removal.edge_indices()

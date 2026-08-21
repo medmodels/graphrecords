@@ -1,5 +1,5 @@
 use crate::{
-    Bare, Definite, EntityDomain, EntityReference, EvaluateExpression, Explain, IndexDomain,
+    Bare, Definite, EntityIndexDomain, EntityReference, EvaluateExpression, Explain, IndexDomain,
     Indexed, Multiple, OrderState, QueryResult, Single, Unordered,
     expressions::{DefiniteElementExpression, ElementExpression, ElementsExpression},
     operations::{BareStream, Build, KeyedStream, LaneKernel, Operation, Prepare},
@@ -36,7 +36,7 @@ const fn single_estimate(input: &Estimate) -> Estimate {
     }
 }
 
-impl<E: EntityDomain, I: IndexDomain, O: OrderState>
+impl<E: EntityIndexDomain, I: IndexDomain, O: OrderState>
     LaneKernel<Indexed<I, EntityReference<E>>, Multiple<O>> for SelectOperation
 {
     type Output = ElementsExpression<E, Unordered>;
@@ -59,7 +59,7 @@ impl<E: EntityDomain, I: IndexDomain, O: OrderState>
     }
 }
 
-impl<E: EntityDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>, Single>
+impl<E: EntityIndexDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>, Single>
     for SelectOperation
 {
     type Output = ElementExpression<E>;
@@ -82,7 +82,7 @@ impl<E: EntityDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>,
     }
 }
 
-impl<E: EntityDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>, Definite>
+impl<E: EntityIndexDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>, Definite>
     for SelectOperation
 {
     type Output = DefiniteElementExpression<E>;
@@ -102,7 +102,7 @@ impl<E: EntityDomain, I: IndexDomain> LaneKernel<Indexed<I, EntityReference<E>>,
     }
 }
 
-impl<E: EntityDomain, O: OrderState> LaneKernel<Bare<EntityReference<E>>, Multiple<O>>
+impl<E: EntityIndexDomain, O: OrderState> LaneKernel<Bare<EntityReference<E>>, Multiple<O>>
     for SelectOperation
 {
     type Output = ElementsExpression<E, Unordered>;
@@ -125,7 +125,7 @@ impl<E: EntityDomain, O: OrderState> LaneKernel<Bare<EntityReference<E>>, Multip
     }
 }
 
-impl<E: EntityDomain> LaneKernel<Bare<EntityReference<E>>, Single> for SelectOperation {
+impl<E: EntityIndexDomain> LaneKernel<Bare<EntityReference<E>>, Single> for SelectOperation {
     type Output = ElementExpression<E>;
 
     fn execute<'a>(
@@ -143,7 +143,7 @@ impl<E: EntityDomain> LaneKernel<Bare<EntityReference<E>>, Single> for SelectOpe
     }
 }
 
-impl<E: EntityDomain> LaneKernel<Bare<EntityReference<E>>, Definite> for SelectOperation {
+impl<E: EntityIndexDomain> LaneKernel<Bare<EntityReference<E>>, Definite> for SelectOperation {
     type Output = DefiniteElementExpression<E>;
 
     fn execute<'a>(
@@ -173,37 +173,37 @@ operation_manifest! {
         scope: lane;
 
         kernel {
-            parameters: <E: EntityDomain, I: IndexDomain, O: OrderState>;
+            parameters: <E: EntityIndexDomain, I: IndexDomain, O: OrderState>;
             input: (Indexed<I, EntityReference<E>>, Multiple<O>);
             output: ElementsExpression<E, Unordered>;
         }
 
         kernel {
-            parameters: <E: EntityDomain, I: IndexDomain>;
+            parameters: <E: EntityIndexDomain, I: IndexDomain>;
             input: (Indexed<I, EntityReference<E>>, Single);
             output: ElementExpression<E>;
         }
 
         kernel {
-            parameters: <E: EntityDomain, I: IndexDomain>;
+            parameters: <E: EntityIndexDomain, I: IndexDomain>;
             input: (Indexed<I, EntityReference<E>>, Definite);
             output: DefiniteElementExpression<E>;
         }
 
         kernel {
-            parameters: <E: EntityDomain, O: OrderState>;
+            parameters: <E: EntityIndexDomain, O: OrderState>;
             input: (Bare<EntityReference<E>>, Multiple<O>);
             output: ElementsExpression<E, Unordered>;
         }
 
         kernel {
-            parameters: <E: EntityDomain>;
+            parameters: <E: EntityIndexDomain>;
             input: (Bare<EntityReference<E>>, Single);
             output: ElementExpression<E>;
         }
 
         kernel {
-            parameters: <E: EntityDomain>;
+            parameters: <E: EntityIndexDomain>;
             input: (Bare<EntityReference<E>>, Definite);
             output: DefiniteElementExpression<E>;
         }

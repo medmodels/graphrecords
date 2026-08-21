@@ -1,1 +1,3 @@
-pub use crate::{GroupOverviewable, OverviewError, OverviewResult, Overviewable};
+pub use crate::{
+    GroupOverview, GroupOverviewable, Overview, OverviewError, OverviewResult, Overviewable,
+};

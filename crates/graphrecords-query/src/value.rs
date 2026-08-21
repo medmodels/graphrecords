@@ -1,12 +1,12 @@
-use crate::{EntityDomain, Failure, FailureKind, IndexDomain, error::QueryResult};
+use crate::{EntityIndexDomain, Failure, FailureKind, IndexDomain, error::QueryResult};
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, Value, ValueView, datatypes::AttributeNameView},
+    graphrecord::{AttributeName, StateView, Value, ValueView, datatypes::AttributeNameView},
 };
 use std::{
+    fmt,
     hash::{Hash, Hasher},
     marker::PhantomData,
-    ptr,
 };
 
 pub trait ValueDomain: 'static {
@@ -39,16 +39,16 @@ pub struct Scalar;
 pub struct Mask;
 pub struct Unit;
 pub struct IndexValue<I: IndexDomain>(PhantomData<I>);
-pub struct EntityReference<E: EntityDomain>(PhantomData<E>);
+pub struct EntityReference<E: EntityIndexDomain>(PhantomData<E>);
 pub struct FailureValue;
 pub struct FailureKindValue;
 
-pub struct EntityRef<'a, E: EntityDomain> {
+pub struct EntityRef<'a, E: EntityIndexDomain> {
     graphrecord: &'a GraphRecord,
     address: E::Address,
 }
 
-impl<'a, E: EntityDomain> EntityRef<'a, E> {
+impl<'a, E: EntityIndexDomain> EntityRef<'a, E> {
     #[must_use]
     pub const fn new(graphrecord: &'a GraphRecord, address: E::Address) -> Self {
         Self {
@@ -78,7 +78,16 @@ impl<'a, E: EntityDomain> EntityRef<'a, E> {
     }
 }
 
-impl<E: EntityDomain> Clone for EntityRef<'_, E> {
+impl<E: EntityIndexDomain> fmt::Debug for EntityRef<'_, E> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("EntityRef")
+            .field(&self.index())
+            .finish()
+    }
+}
+
+impl<E: EntityIndexDomain> Clone for EntityRef<'_, E> {
     fn clone(&self) -> Self {
         Self {
             graphrecord: self.graphrecord,
@@ -87,17 +96,19 @@ impl<E: EntityDomain> Clone for EntityRef<'_, E> {
     }
 }
 
-impl<E: EntityDomain> PartialEq for EntityRef<'_, E> {
+impl<E: EntityIndexDomain> PartialEq for EntityRef<'_, E> {
     fn eq(&self, other: &Self) -> bool {
-        ptr::eq(self.graphrecord, other.graphrecord) && self.address == other.address
+        StateView::of(self.graphrecord).state_identity()
+            == StateView::of(other.graphrecord).state_identity()
+            && self.address == other.address
     }
 }
 
-impl<E: EntityDomain> Eq for EntityRef<'_, E> {}
+impl<E: EntityIndexDomain> Eq for EntityRef<'_, E> {}
 
-impl<E: EntityDomain> Hash for EntityRef<'_, E> {
+impl<E: EntityIndexDomain> Hash for EntityRef<'_, E> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        ptr::from_ref(self.graphrecord).hash(state);
+        StateView::of(self.graphrecord).state_identity().hash(state);
         self.address.hash(state);
     }
 }
@@ -168,7 +179,7 @@ impl ValueDomain for AttributeName {
         owned: &'a Self::Owned,
         _label: &'static str,
     ) -> QueryResult<Self::Value<'a>> {
-        Ok(AttributeNameView::from(owned.identifier()))
+        Ok(AttributeNameView::from(owned))
     }
 
     fn into_cached(value: Self::Value<'_>) -> Self::Cached {
@@ -176,7 +187,7 @@ impl ValueDomain for AttributeName {
     }
 
     fn from_cached<'a>(_graphrecord: &'a GraphRecord, cached: &'a Self::Cached) -> Self::Value<'a> {
-        AttributeNameView::from(cached.identifier())
+        AttributeNameView::from(cached)
     }
 }
 
@@ -230,7 +241,7 @@ impl<I: IndexDomain> ValueDomain for IndexValue<I> {
     }
 }
 
-impl<E: EntityDomain> ValueDomain for EntityReference<E> {
+impl<E: EntityIndexDomain> ValueDomain for EntityReference<E> {
     type Cached = E::Address;
     type Owned = E::Owned;
     type Value<'a> = EntityRef<'a, E>;
@@ -315,7 +326,7 @@ impl BareValueDomain for Scalar {}
 impl BareValueDomain for Mask {}
 impl BareValueDomain for AttributeName {}
 impl<I: IndexDomain> BareValueDomain for IndexValue<I> {}
-impl<E: EntityDomain> BareValueDomain for EntityReference<E> {}
+impl<E: EntityIndexDomain> BareValueDomain for EntityReference<E> {}
 impl BareValueDomain for FailureValue {}
 impl BareValueDomain for FailureKindValue {}
 
@@ -323,6 +334,6 @@ impl ReturnValueDomain for Scalar {}
 impl ReturnValueDomain for Mask {}
 impl ReturnValueDomain for AttributeName {}
 impl<I: IndexDomain> ReturnValueDomain for IndexValue<I> {}
-impl<E: EntityDomain> ReturnValueDomain for EntityReference<E> {}
+impl<E: EntityIndexDomain> ReturnValueDomain for EntityReference<E> {}
 impl ReturnValueDomain for FailureValue {}
 impl ReturnValueDomain for FailureKindValue {}

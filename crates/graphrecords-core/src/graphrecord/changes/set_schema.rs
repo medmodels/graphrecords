@@ -40,12 +40,12 @@ impl Change for SetSchema {
 
         for node_address in state.node_addresses() {
             let attributes = state.node_attribute_map(node_address);
-            let groups: Vec<_> = state
+            let group_indices: Vec<_> = state
                 .node_memberships(node_address)
-                .filter_map(|group_address| state.group_name(group_address).cloned())
+                .filter_map(|group_address| state.group_index(group_address).cloned())
                 .collect();
 
-            if groups.is_empty() {
+            if group_indices.is_empty() {
                 match schema.schema_type() {
                     SchemaType::Inferred => {
                         let population_was_empty = !ungrouped_nodes_visited;
@@ -66,12 +66,12 @@ impl Change for SetSchema {
                 continue;
             }
 
-            for group in groups {
+            for group_index in group_indices {
                 match schema.schema_type() {
                     SchemaType::Inferred => {
-                        let population_was_empty = visited_node_groups.insert(group.clone());
+                        let population_was_empty = visited_node_groups.insert(group_index.clone());
 
-                        schema.update_node(&attributes, Some(&group), population_was_empty);
+                        schema.update_node(&attributes, Some(&group_index), population_was_empty);
                     }
                     SchemaType::Provided => {
                         let identifier = Identifier::from(
@@ -79,7 +79,7 @@ impl Change for SetSchema {
                         );
                         let node_index = NodeIndex::from(identifier);
 
-                        schema.validate_node(&node_index, &attributes, Some(&group))?;
+                        schema.validate_node(&node_index, &attributes, Some(&group_index))?;
                     }
                 }
             }
@@ -90,12 +90,12 @@ impl Change for SetSchema {
 
         for edge_address in state.edge_addresses() {
             let attributes = state.edge_attribute_map(edge_address);
-            let groups: Vec<_> = state
+            let group_indices: Vec<_> = state
                 .edge_memberships(edge_address)
-                .filter_map(|group_address| state.group_name(group_address).cloned())
+                .filter_map(|group_address| state.group_index(group_address).cloned())
                 .collect();
 
-            if groups.is_empty() {
+            if group_indices.is_empty() {
                 match schema.schema_type() {
                     SchemaType::Inferred => {
                         let population_was_empty = !ungrouped_edges_visited;
@@ -113,17 +113,17 @@ impl Change for SetSchema {
                 continue;
             }
 
-            for group in groups {
+            for group_index in group_indices {
                 match schema.schema_type() {
                     SchemaType::Inferred => {
-                        let population_was_empty = visited_edge_groups.insert(group.clone());
+                        let population_was_empty = visited_edge_groups.insert(group_index.clone());
 
-                        schema.update_edge(&attributes, Some(&group), population_was_empty);
+                        schema.update_edge(&attributes, Some(&group_index), population_was_empty);
                     }
                     SchemaType::Provided => {
                         let edge_index = state.edge_index(edge_address).expect("Edge must exist.");
 
-                        schema.validate_edge(&edge_index, &attributes, Some(&group))?;
+                        schema.validate_edge(&edge_index, &attributes, Some(&group_index))?;
                     }
                 }
             }

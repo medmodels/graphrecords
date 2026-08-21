@@ -5,14 +5,18 @@ use crate::{
     error::{argument::Absent, index::DuplicateIndex},
     execution::EvaluationCache,
     expressions::ExpressionHandle,
-    operations::{Alignment, ArgumentSource, Keyed, Lookup, OnMissing, Prepare, SourceDomain},
+    operations::{
+        Alignment, ArgumentSource, IndexedElementContainer, IndexedElementSource, Keyed, Lookup,
+        OnMissing, Prepare, SetSource, SourceDomain,
+    },
 };
 use graphrecords_core::{GraphRecord, graphrecord::AttributeName};
-use graphrecords_utils::aliases::GrHashMap;
-use std::sync::Arc;
+use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
+use std::{hash::Hash, sync::Arc};
 
 pub struct PreparedSeriesArgument<'a, I: IndexDomain, V: ValueDomain> {
     graphrecord: &'a GraphRecord,
+    addresses: Vec<I::Address>,
     values: Vec<QueryResult<V::Value<'a>>>,
     positions: GrHashMap<I::Address, usize>,
 }
@@ -22,6 +26,7 @@ impl<'a, I: IndexDomain, V: ValueDomain> PreparedSeriesArgument<'a, I, V> {
         graphrecord: &'a GraphRecord,
         elements: BoxedIterator<'a, (I::Address, QueryResult<V::Value<'a>>)>,
     ) -> QueryResult<Arc<Self>> {
+        let mut addresses = Vec::new();
         let mut values = Vec::new();
         let mut positions = GrHashMap::default();
 
@@ -36,12 +41,14 @@ impl<'a, I: IndexDomain, V: ValueDomain> PreparedSeriesArgument<'a, I, V> {
                 ));
             }
 
-            positions.insert(address, values.len());
+            positions.insert(address.clone(), values.len());
+            addresses.push(address);
             values.push(outcome);
         }
 
         Ok(Arc::new(Self {
             graphrecord,
+            addresses,
             values,
             positions,
         }))
@@ -111,6 +118,43 @@ macro_rules! series_indexed_argument {
             for Series<ExpressionHandle<Indexed<I, $value>, Multiple<O>>>
         {
         }
+
+        impl<I: IndexDomain, O: OrderState $(, $J: IndexDomain)?> IndexedElementSource
+            for Series<ExpressionHandle<Indexed<I, $value>, Multiple<O>>>
+        {
+            type IndexDomain = I;
+            type Arity = Multiple<O>;
+
+            fn elements<'a>(
+                prepared: Self::Prepared<'a>,
+            ) -> IndexedElementContainer<'a, I, <$value as ValueDomain>::Value<'a>, Multiple<O>>
+            where
+                Self: 'a,
+            {
+                Box::new((0..prepared.values.len()).map(move |position| {
+                    (
+                        prepared.addresses[position].clone(),
+                        prepared.values[position].clone(),
+                    )
+                }))
+            }
+        }
+
+        impl<I: IndexDomain, O: OrderState $(, $J: IndexDomain)?> SetSource<$value>
+            for Series<ExpressionHandle<Indexed<I, $value>, Multiple<O>>>
+        {
+            fn set<'a>(
+                _graphrecord: &'a GraphRecord,
+                prepared: Self::Prepared<'a>,
+                _label: &'static str,
+            ) -> QueryResult<GrHashSet<<$value as ValueDomain>::Value<'a>>>
+            where
+                Self: 'a,
+                <$value as ValueDomain>::Value<'a>: Eq + Hash,
+            {
+                prepared.values.iter().cloned().collect()
+            }
+        }
     };
 }
 
@@ -159,6 +203,20 @@ macro_rules! series_bare_argument {
         impl<A: Alignment $(, $J: IndexDomain)?> OnMissing<A>
             for Series<ExpressionHandle<Bare<$value>, Single>>
         {
+        }
+
+        impl<$($J: IndexDomain)?> SetSource<$value> for Series<ExpressionHandle<Bare<$value>, Single>> {
+            fn set<'a>(
+                _graphrecord: &'a GraphRecord,
+                prepared: Self::Prepared<'a>,
+                _label: &'static str,
+            ) -> QueryResult<GrHashSet<<$value as ValueDomain>::Value<'a>>>
+            where
+                Self: 'a,
+                <$value as ValueDomain>::Value<'a>: Eq + Hash,
+            {
+                prepared.into_iter().collect()
+            }
         }
     };
 }

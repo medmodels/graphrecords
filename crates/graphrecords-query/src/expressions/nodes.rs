@@ -1,4 +1,4 @@
-use super::{DefiniteElementExpression, ElementExpression, ElementsExpression};
+use super::{DefiniteElementExpression, ElementExpression, ElementsExpression, Expression};
 use crate::{
     EvaluateContext, EvaluateExpression, Explain, QueryResult, Unordered,
     execution::EvaluationCache,
@@ -16,6 +16,11 @@ pub type DefiniteNodeExpression = DefiniteElementExpression<NodeIndex>;
 #[derive(PlanNode, MatchInputs, OptimizePlan, OptimizerHints, Explain)]
 #[plan(expression = NodesExpression<Unordered>)]
 pub struct AllNodes;
+
+#[must_use]
+pub fn nodes() -> NodesExpression<Unordered> {
+    NodesExpression::new(AllNodes)
+}
 
 impl Estimated for AllNodes {
     fn estimate(&self, stats: &Stats) -> Estimate {

@@ -1,5 +1,5 @@
 pub use crate::{
-    EdgeDirection, EdgesSeries, EntityDomain, EntityRef, Expression, Failure, FailureKind,
+    EdgeDirection, EdgesSeries, EntityIndexDomain, EntityRef, Expression, Failure, FailureKind,
     GroupsSeries, IndexDomain, NodesSeries, OnMissing, OrderState, Ordered, QueryResult, Queryable,
     Series, Unordered, cast,
     expressions::{
@@ -20,7 +20,7 @@ pub use crate::{
         FailuresExpression, GroupExpression, GroupedExpression, GroupsExpression, IndexExpression,
         IndicesExpression, NodeExpression, NodesExpression, ReferenceExpression,
         ReferenceIndexExpression, ReferenceIndicesExpression, ReferencesExpression,
-        ValueExpression, ValuesExpression,
+        ValueExpression, ValuesExpression, edges, groups, nodes,
     },
     operations::policy::{self, Drop, Raise},
     optimizer::Optimizer,

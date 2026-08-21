@@ -1,4 +1,4 @@
-use crate::{Failure, IndexDomain, QueryResult, ValueDomain};
+use crate::{Failure, IndexDomain, OwnedIndex, QueryResult, ValueDomain};
 use graphrecords_core::GraphRecord;
 use std::{
     cmp::Ordering,
@@ -97,6 +97,8 @@ impl<P: Ord, C: Ord> Ord for ExpandedIndexRepresentation<P, C> {
 pub struct ExpandedIndexOwned<P: IndexDomain, C: IndexDomain> {
     representation: ExpandedIndexRepresentation<P::Owned, C::Owned>,
 }
+
+impl<P: IndexDomain, C: IndexDomain> OwnedIndex for ExpandedIndexOwned<P, C> {}
 
 impl<P: IndexDomain, C: IndexDomain> ExpandedIndexOwned<P, C> {
     #[must_use]

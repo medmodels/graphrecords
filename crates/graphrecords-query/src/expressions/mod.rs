@@ -29,7 +29,7 @@ pub use bool::{
     DefiniteBareBoolExpression, DefiniteBoolExpression,
 };
 pub use context::{EvaluateContext, ExpressionContext};
-pub use edges::{AllEdges, DefiniteEdgeExpression, EdgeExpression, EdgesExpression};
+pub use edges::{AllEdges, DefiniteEdgeExpression, EdgeExpression, EdgesExpression, edges};
 pub use elements::{DefiniteElementExpression, ElementExpression, ElementsExpression};
 pub use errors::{
     BareFailureExpression, BareFailureKindExpression, BareFailureKindsExpression,
@@ -46,12 +46,12 @@ pub use grouped::{
     PartitionParts, PartitionShape, ReturnBucket, ReturnKeyFailure, ReturnPartition,
     ReturnPartitionParts,
 };
-pub use groups::{AllGroups, DefiniteGroupExpression, GroupExpression, GroupsExpression};
+pub use groups::{AllGroups, DefiniteGroupExpression, GroupExpression, GroupsExpression, groups};
 pub use indices::{
     BareIndexExpression, BareIndicesExpression, DefiniteBareIndexExpression,
     DefiniteIndexExpression, IndexExpression, IndicesExpression,
 };
-pub use nodes::{AllNodes, DefiniteNodeExpression, NodeExpression, NodesExpression};
+pub use nodes::{AllNodes, DefiniteNodeExpression, NodeExpression, NodesExpression, nodes};
 pub use references::{
     BareReferenceExpression, BareReferencesExpression, DefiniteBareReferenceExpression,
     DefiniteReferenceExpression, DefiniteReferenceIndexExpression, ReferenceExpression,

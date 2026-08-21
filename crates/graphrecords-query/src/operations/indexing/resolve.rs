@@ -1,5 +1,5 @@
 use crate::{
-    Bare, EntityDomain, EntityRef, EntityReference, Explain, IndexDomain, IndexValue, Indexed,
+    Bare, EntityIndexDomain, EntityRef, EntityReference, Explain, IndexDomain, IndexValue, Indexed,
     Labeled, QueryResult,
     element::{Pipeline, Preserving},
     operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
@@ -17,7 +17,7 @@ use graphrecords_core::GraphRecord;
 #[plan(optimizer_hints(allows_limit_pushdown, empty = if_any))]
 pub struct ResolveOperation;
 
-impl<E: EntityDomain, I: IndexDomain> ElementKernel<Indexed<I, IndexValue<E>>>
+impl<E: EntityIndexDomain, I: IndexDomain> ElementKernel<Indexed<I, IndexValue<E>>>
     for ResolveOperation
 {
     type Emission = Preserving;
@@ -38,7 +38,7 @@ impl<E: EntityDomain, I: IndexDomain> ElementKernel<Indexed<I, IndexValue<E>>>
     }
 }
 
-impl<E: EntityDomain> ElementKernel<Bare<IndexValue<E>>> for ResolveOperation {
+impl<E: EntityIndexDomain> ElementKernel<Bare<IndexValue<E>>> for ResolveOperation {
     type Emission = Preserving;
     type OutShape = Bare<EntityReference<E>>;
 
@@ -70,14 +70,14 @@ operation_manifest! {
         scope: element;
 
         kernel {
-            parameters: <E: EntityDomain, I: IndexDomain>;
+            parameters: <E: EntityIndexDomain, I: IndexDomain>;
             input: Indexed<I, IndexValue<E>>;
             output: Indexed<I, EntityReference<E>>;
             emission: Preserving;
         }
 
         kernel {
-            parameters: <E: EntityDomain>;
+            parameters: <E: EntityIndexDomain>;
             input: Bare<IndexValue<E>>;
             output: Bare<EntityReference<E>>;
             emission: Preserving;

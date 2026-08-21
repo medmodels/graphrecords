@@ -1,5 +1,5 @@
 use crate::{
-    index::EntityDomain,
+    index::EntityIndexDomain,
     optimizer::{
         EdgeAttributeCardinality, EdgeGroupSize, NodeAttributeCardinality, NodeGroupSize, Stats,
     },
@@ -7,12 +7,12 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     graphrecord::{
-        AttributeName, AttributeNameView, EdgeAttributeAddress, EdgeIndex, Group, GroupAddress,
-        NodeAttributeAddress, NodeIndex, StateView, ValueView,
+        AttributeName, AttributeNameView, EdgeAttributeAddress, EdgeIndex, GroupAddress,
+        GroupIndex, NodeAttributeAddress, NodeIndex, StateView, ValueView,
     },
 };
 
-pub trait EntityAttributes: EntityDomain {
+pub trait EntityAttributes: EntityIndexDomain {
     type AttributeAddress: Copy;
 
     fn attribute_addresses(
@@ -118,7 +118,7 @@ impl EntityAttributes for EdgeIndex {
     }
 }
 
-pub trait GroupMembership: EntityDomain {
+pub trait GroupMembership: EntityIndexDomain {
     fn addresses_in_group(
         graphrecord: &GraphRecord,
         group_address: GroupAddress,
@@ -129,7 +129,7 @@ pub trait GroupMembership: EntityDomain {
         address: &Self::Address,
     ) -> impl Iterator<Item = GroupAddress> + 'a;
 
-    fn group_size(stats: &Stats, group: &Group) -> usize;
+    fn group_size(stats: &Stats, group_index: &GroupIndex) -> usize;
 }
 
 impl GroupMembership for NodeIndex {
@@ -147,8 +147,8 @@ impl GroupMembership for NodeIndex {
         StateView::of(graphrecord).node_group_addresses(*address)
     }
 
-    fn group_size(stats: &Stats, group: &Group) -> usize {
-        stats.get::<NodeGroupSize>(group)
+    fn group_size(stats: &Stats, group_index: &GroupIndex) -> usize {
+        stats.get::<NodeGroupSize>(group_index)
     }
 }
 
@@ -167,7 +167,7 @@ impl GroupMembership for EdgeIndex {
         StateView::of(graphrecord).edge_group_addresses(*address)
     }
 
-    fn group_size(stats: &Stats, group: &Group) -> usize {
-        stats.get::<EdgeGroupSize>(group)
+    fn group_size(stats: &Stats, group_index: &GroupIndex) -> usize {
+        stats.get::<EdgeGroupSize>(group_index)
     }
 }

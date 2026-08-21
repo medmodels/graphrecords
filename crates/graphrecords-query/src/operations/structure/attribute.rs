@@ -128,8 +128,10 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
 impl<E: Build<AttributeOperation>> Attribute for E {
     type Output = E::Output;
 
-    fn attribute(&self, attribute: AttributeName) -> Self::Output {
-        self.build(AttributeOperation { attribute })
+    fn attribute(&self, attribute: impl Into<AttributeName>) -> Self::Output {
+        self.build(AttributeOperation {
+            attribute: attribute.into(),
+        })
     }
 }
 

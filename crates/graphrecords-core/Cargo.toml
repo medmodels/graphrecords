@@ -10,15 +10,19 @@ readme = "../../README.md"
 [dependencies]
 graphrecords-utils = { workspace = true }
 
+arrow = { version = "59.2.0", default-features = false, optional = true }
 ron = { version = "0.8.1", optional = true }
 
 chrono = { workspace = true }
 parking_lot = { workspace = true }
+polars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 
 [features]
+arrow = ["dep:arrow"]
 io = ["serde", "dep:ron"]
 plugins = []
+polars = ["dep:polars"]
 serde = ["dep:serde"]
 
 [lints]

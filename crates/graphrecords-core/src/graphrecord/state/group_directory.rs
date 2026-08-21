@@ -2,7 +2,7 @@ use super::{
     ADDRESSES_PER_CHUNK, CHUNK_LOCAL_ADDRESS_BITS, GroupAddress, chunk_tree::ChunkTree,
     dictionary::KeyDictionary, presence::PresenceBitmap,
 };
-use crate::graphrecord::datatypes::Group;
+use crate::graphrecord::datatypes::{GroupIndex, GroupIndexView, IdentifierView};
 #[cfg(any(feature = "serde", feature = "io"))]
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 #[cfg_attr(any(feature = "serde", feature = "io"), derive(Serialize, Deserialize))]
 pub struct GroupDirectory {
     #[cfg_attr(any(feature = "serde", feature = "io"), serde(skip))]
-    names: KeyDictionary,
+    indices: KeyDictionary,
     records: ChunkTree<GroupChunk>,
     next_group_address: GroupAddress,
     group_count: usize,
@@ -22,7 +22,7 @@ pub struct GroupDirectory {
 impl GroupDirectory {
     pub fn new() -> Self {
         Self {
-            names: KeyDictionary::new(),
+            indices: KeyDictionary::new(),
             records: ChunkTree::new(),
             next_group_address: GroupAddress::new(0),
             group_count: 0,
@@ -31,12 +31,17 @@ impl GroupDirectory {
         }
     }
 
-    pub fn resolve(&self, group: &Group) -> Option<GroupAddress> {
-        let hash = self.hash_group_name(group);
-        self.names.candidates(hash).find_map(|candidate_index| {
+    pub fn resolve<'a>(&self, group_index: impl Into<GroupIndexView<'a>>) -> Option<GroupAddress> {
+        let group_index = group_index.into();
+        let hash = self.indices.hash_one(group_index.identifier_view());
+
+        self.indices.candidates(hash).find_map(|candidate_index| {
             let group_address = GroupAddress::new(candidate_index);
             let record = self.record(group_address)?;
-            (record.name == *group).then_some(group_address)
+
+            (IdentifierView::from(record.group_index.identifier())
+                == *group_index.identifier_view())
+            .then_some(group_address)
         })
     }
 
@@ -52,27 +57,27 @@ impl GroupDirectory {
             .get_mut(group_address.chunk_local_address())
     }
 
-    pub fn name(&self, group_address: GroupAddress) -> Option<&Group> {
-        self.record(group_address).map(|record| &record.name)
+    pub fn group_index(&self, group_address: GroupAddress) -> Option<&GroupIndex> {
+        self.record(group_address).map(|record| &record.group_index)
     }
 
-    pub fn add(&mut self, name: Group) -> Option<GroupAddress> {
-        if self.resolve(&name).is_some() {
+    pub fn add(&mut self, group_index: GroupIndex) -> Option<GroupAddress> {
+        if self.resolve(&group_index).is_some() {
             return None;
         }
 
         let group_address = self.next_group_address;
         self.next_group_address = GroupAddress::new(group_address.index() + 1);
 
-        let hash = self.hash_group_name(&name);
-        self.names.insert(hash, group_address.index());
+        let hash = self.hash_group_index(&group_index);
+        self.indices.insert(hash, group_address.index());
 
         self.records
             .get_mut_or_default(group_address.chunk_index())
             .set(
                 group_address.chunk_local_address(),
                 GroupRecord {
-                    name,
+                    group_index,
                     node_members: GroupMembers::new(),
                     edge_members: GroupMembers::new(),
                 },
@@ -84,16 +89,19 @@ impl GroupDirectory {
     }
 
     #[cfg(feature = "io")]
-    pub(crate) fn rebuild_names(&mut self) {
+    pub(crate) fn rebuild_indices(&mut self) {
         let hashed_addresses: Vec<_> = self
             .iter()
             .map(|(group_address, record)| {
-                (self.hash_group_name(&record.name), group_address.index())
+                (
+                    self.hash_group_index(&record.group_index),
+                    group_address.index(),
+                )
             })
             .collect();
 
         for (hash, address_index) in hashed_addresses {
-            self.names.insert(hash, address_index);
+            self.indices.insert(hash, address_index);
         }
     }
 
@@ -106,8 +114,8 @@ impl GroupDirectory {
             .get(chunk_local_address)?
             .clone();
 
-        let hash = self.hash_group_name(&record.name);
-        self.names.remove(hash, group_address.index());
+        let hash = self.hash_group_index(&record.group_index);
+        self.indices.remove(hash, group_address.index());
 
         let chunk = self
             .records
@@ -163,8 +171,9 @@ impl GroupDirectory {
         self.ungrouped_edge_count -= 1;
     }
 
-    fn hash_group_name(&self, group: &Group) -> u64 {
-        self.names.hash_one(group.identifier())
+    fn hash_group_index(&self, group_index: &GroupIndex) -> u64 {
+        self.indices
+            .hash_one(IdentifierView::from(group_index.identifier()))
     }
 }
 
@@ -233,7 +242,7 @@ impl GroupChunk {
 #[derive(Clone)]
 #[cfg_attr(any(feature = "serde", feature = "io"), derive(Serialize, Deserialize))]
 pub struct GroupRecord {
-    pub name: Group,
+    pub group_index: GroupIndex,
     pub node_members: GroupMembers,
     pub edge_members: GroupMembers,
 }
@@ -328,18 +337,18 @@ impl GroupMembers {
 #[cfg(test)]
 mod test {
     use super::{GroupChunk, GroupDirectory, GroupMembers, GroupRecord};
-    use crate::graphrecord::{datatypes::Group, state::GroupAddress};
+    use crate::graphrecord::{datatypes::GroupIndex, state::GroupAddress};
 
     fn create_directory_with_lorem() -> (GroupDirectory, GroupAddress) {
         let mut directory = GroupDirectory::new();
-        let address = directory.add(Group::from("lorem")).unwrap();
+        let address = directory.add(GroupIndex::from("lorem")).unwrap();
 
         (directory, address)
     }
 
     fn create_group_record(name: &str) -> GroupRecord {
         GroupRecord {
-            name: Group::from(name),
+            group_index: GroupIndex::from(name),
             node_members: GroupMembers::new(),
             edge_members: GroupMembers::new(),
         }
@@ -364,14 +373,14 @@ mod test {
     fn test_group_directory_resolve() {
         let (directory, address) = create_directory_with_lorem();
 
-        assert_eq!(Some(address), directory.resolve(&Group::from("lorem")));
+        assert_eq!(Some(address), directory.resolve(&GroupIndex::from("lorem")));
     }
 
     #[test]
     fn test_invalid_group_directory_resolve() {
         let directory = create_directory_with_lorem().0;
 
-        assert_eq!(None, directory.resolve(&Group::from("missing")));
+        assert_eq!(None, directory.resolve(&GroupIndex::from("missing")));
     }
 
     #[test]
@@ -379,8 +388,8 @@ mod test {
         let (directory, address) = create_directory_with_lorem();
 
         assert_eq!(
-            &Group::from("lorem"),
-            &directory.record(address).unwrap().name
+            &GroupIndex::from("lorem"),
+            &directory.record(address).unwrap().group_index
         );
     }
 
@@ -410,37 +419,40 @@ mod test {
     }
 
     #[test]
-    fn test_group_directory_name() {
+    fn test_group_directory_group_index() {
         let (directory, address) = create_directory_with_lorem();
 
-        assert_eq!(Some(&Group::from("lorem")), directory.name(address));
+        assert_eq!(
+            Some(&GroupIndex::from("lorem")),
+            directory.group_index(address)
+        );
     }
 
     #[test]
     fn test_invalid_group_directory_name() {
         let directory = create_directory_with_lorem().0;
 
-        assert_eq!(None, directory.name(GroupAddress::new(999)));
+        assert_eq!(None, directory.group_index(GroupAddress::new(999)));
     }
 
     #[test]
     fn test_group_directory_add() {
         let mut directory = GroupDirectory::new();
-        let first = directory.add(Group::from("lorem")).unwrap();
-        let second = directory.add(Group::from("ipsum")).unwrap();
+        let first = directory.add(GroupIndex::from("lorem")).unwrap();
+        let second = directory.add(GroupIndex::from("ipsum")).unwrap();
 
         assert_ne!(first, second);
         assert_eq!(2, directory.group_count());
 
-        let first_address = directory.add(Group::from("dolor")).unwrap();
+        let first_address = directory.add(GroupIndex::from("dolor")).unwrap();
         directory.remove(first_address).unwrap();
 
-        let second_address = directory.add(Group::from("dolor")).unwrap();
+        let second_address = directory.add(GroupIndex::from("dolor")).unwrap();
 
         assert_ne!(first_address, second_address);
         assert_eq!(
             Some(second_address),
-            directory.resolve(&Group::from("dolor"))
+            directory.resolve(&GroupIndex::from("dolor"))
         );
     }
 
@@ -448,7 +460,7 @@ mod test {
     fn test_invalid_group_directory_add() {
         let mut directory = create_directory_with_lorem().0;
 
-        assert!(directory.add(Group::from("lorem")).is_none());
+        assert!(directory.add(GroupIndex::from("lorem")).is_none());
         assert_eq!(1, directory.group_count());
     }
 
@@ -457,10 +469,10 @@ mod test {
     fn test_group_directory_rebuild_names() {
         let (mut directory, address) = create_directory_with_lorem();
 
-        directory.names = super::KeyDictionary::new();
-        directory.rebuild_names();
+        directory.indices = super::KeyDictionary::new();
+        directory.rebuild_indices();
 
-        assert_eq!(Some(address), directory.resolve(&Group::from("lorem")));
+        assert_eq!(Some(address), directory.resolve(&GroupIndex::from("lorem")));
     }
 
     #[test]
@@ -469,8 +481,8 @@ mod test {
 
         let removed = directory.remove(address).unwrap();
 
-        assert_eq!(Group::from("lorem"), removed.name);
-        assert_eq!(None, directory.resolve(&Group::from("lorem")));
+        assert_eq!(GroupIndex::from("lorem"), removed.group_index);
+        assert_eq!(None, directory.resolve(&GroupIndex::from("lorem")));
         assert!(directory.record(address).is_none());
         assert_eq!(0, directory.group_count());
     }
@@ -478,19 +490,19 @@ mod test {
     #[test]
     fn test_group_directory_iter() {
         let mut directory = GroupDirectory::new();
-        let first = directory.add(Group::from("lorem")).unwrap();
-        let second = directory.add(Group::from("ipsum")).unwrap();
+        let first = directory.add(GroupIndex::from("lorem")).unwrap();
+        let second = directory.add(GroupIndex::from("ipsum")).unwrap();
 
         let mut observed: Vec<_> = directory
             .iter()
-            .map(|(address, record)| (address, record.name.clone()))
+            .map(|(address, record)| (address, record.group_index.clone()))
             .collect();
         observed.sort_by_key(|(address, _)| address.index());
 
         assert_eq!(
             vec![
-                (first, Group::from("lorem")),
-                (second, Group::from("ipsum"))
+                (first, GroupIndex::from("lorem")),
+                (second, GroupIndex::from("ipsum"))
             ],
             observed
         );
@@ -502,7 +514,7 @@ mod test {
 
         assert_eq!(0, directory.group_count());
 
-        directory.add(Group::from("lorem")).unwrap();
+        directory.add(GroupIndex::from("lorem")).unwrap();
 
         assert_eq!(1, directory.group_count());
     }
@@ -570,7 +582,10 @@ mod test {
         let mut chunk = GroupChunk::default();
         chunk.set(5, create_group_record("lorem"));
 
-        assert_eq!(&Group::from("lorem"), &chunk.get(5).unwrap().name);
+        assert_eq!(
+            &GroupIndex::from("lorem"),
+            &chunk.get(5).unwrap().group_index
+        );
     }
 
     #[test]
@@ -596,11 +611,17 @@ mod test {
 
         chunk.set(5, create_group_record("lorem"));
 
-        assert_eq!(&Group::from("lorem"), &chunk.get(5).unwrap().name);
+        assert_eq!(
+            &GroupIndex::from("lorem"),
+            &chunk.get(5).unwrap().group_index
+        );
 
         chunk.set(5, create_group_record("ipsum"));
 
-        assert_eq!(&Group::from("ipsum"), &chunk.get(5).unwrap().name);
+        assert_eq!(
+            &GroupIndex::from("ipsum"),
+            &chunk.get(5).unwrap().group_index
+        );
     }
 
     #[test]
@@ -643,11 +664,14 @@ mod test {
 
         let observed: Vec<_> = chunk
             .iter()
-            .map(|(cell_index, record)| (cell_index, record.name.clone()))
+            .map(|(cell_index, record)| (cell_index, record.group_index.clone()))
             .collect();
 
         assert_eq!(
-            vec![(2, Group::from("ipsum")), (5, Group::from("lorem"))],
+            vec![
+                (2, GroupIndex::from("ipsum")),
+                (5, GroupIndex::from("lorem"))
+            ],
             observed
         );
     }

@@ -53,14 +53,13 @@ pub struct Policy {
 
 pub struct PolicyConstructor {
     pub owner: Ident,
-    pub access: PolicyAccess,
-    pub function: Ident,
+    pub call: PolicyCall,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum PolicyAccess {
-    Dot,
-    Path,
+pub enum PolicyCall {
+    Dot(Ident),
+    Path(Ident),
+    Tuple,
 }
 
 pub struct Kernel {
@@ -315,22 +314,19 @@ impl Policy {
         let constructor = if body.peek(Token![=]) {
             body.parse::<Token![=]>()?;
             let owner = body.parse()?;
-            let access = if body.peek(Token![.]) {
+            let call = if body.peek(Token![.]) {
                 body.parse::<Token![.]>()?;
-                PolicyAccess::Dot
-            } else {
+                PolicyCall::Dot(body.parse()?)
+            } else if body.peek(Token![::]) {
                 body.parse::<Token![::]>()?;
-                PolicyAccess::Path
+                PolicyCall::Path(body.parse()?)
+            } else {
+                PolicyCall::Tuple
             };
-            let function = body.parse()?;
             let argument;
             syn::parenthesized!(argument in body);
             argument.parse::<Ident>()?;
-            Some(PolicyConstructor {
-                owner,
-                access,
-                function,
-            })
+            Some(PolicyConstructor { owner, call })
         } else {
             None
         };

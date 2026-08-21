@@ -1,7 +1,7 @@
 use crate::{Failure, IndexValue, QueryResult, Scalar, ValueDomain, error::string::NonStringValue};
 use graphrecords_core::graphrecord::{
-    AttributeName, Group, GroupView, IdentifierView, NodeIndex, NodeIndexView, Value, ValueView,
-    datatypes::AttributeNameView,
+    AttributeName, GroupIndex, GroupIndexView, IdentifierView, NodeIndex, NodeIndexView, Value,
+    ValueView, datatypes::AttributeNameView,
 };
 
 pub trait ValueString: ValueDomain {
@@ -79,19 +79,19 @@ impl ValueString for IndexValue<NodeIndex> {
     }
 }
 
-impl ValueString for IndexValue<Group> {
+impl ValueString for IndexValue<GroupIndex> {
     fn as_str<'a>(value: &'a Self::Value<'_>, label: &'static str) -> QueryResult<&'a str> {
         match value.identifier_view() {
             IdentifierView::String(cow) => Ok(cow.as_ref()),
             IdentifierView::Int(_) => Err(Failure::new(
-                NonStringValue::new(Group::from(value.clone())),
+                NonStringValue::new(GroupIndex::from(value.clone())),
                 label,
             )),
         }
     }
 
     fn with_string<'a>(_original: &Self::Value<'_>, string: String) -> Self::Value<'a> {
-        GroupView::from(IdentifierView::String(string.into()))
+        GroupIndexView::from(IdentifierView::String(string.into()))
     }
 }
 

@@ -20,7 +20,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     graphrecord::{
-        AttributeName, AttributeNameView, EdgeIndex, Group, NodeIndex, Value, ValueView,
+        AttributeName, AttributeNameView, EdgeIndex, GroupIndex, NodeIndex, Value, ValueView,
     },
 };
 use std::{
@@ -35,7 +35,7 @@ use std::{
 enum DynEntityReferenceKind {
     Node(NodeIndex),
     Edge(EdgeIndex),
-    Group(Group),
+    Group(GroupIndex),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -59,7 +59,7 @@ impl DynEntityReference {
     }
 
     #[must_use]
-    pub(crate) const fn group(index: Group) -> Self {
+    pub(crate) const fn group(index: GroupIndex) -> Self {
         Self {
             kind: DynEntityReferenceKind::Group(index),
         }
@@ -82,7 +82,7 @@ impl DynEntityReference {
     }
 
     #[must_use]
-    pub const fn group_index(&self) -> Option<&Group> {
+    pub const fn group_index(&self) -> Option<&GroupIndex> {
         match &self.kind {
             DynEntityReferenceKind::Group(index) => Some(index),
             DynEntityReferenceKind::Node(_) | DynEntityReferenceKind::Edge(_) => None,
@@ -93,7 +93,7 @@ impl DynEntityReference {
         match index {
             DynIndexView::Node(index) => Self::node(NodeIndex::own_index(index)),
             DynIndexView::Edge(index) => Self::edge(EdgeIndex::own_index(index)),
-            DynIndexView::Group(index) => Self::group(Group::own_index(index)),
+            DynIndexView::Group(index) => Self::group(GroupIndex::own_index(index)),
             index => {
                 let index_domain = index.description();
                 panic!(
@@ -116,7 +116,7 @@ impl DynEntityReference {
                 EdgeIndex::resolve(graphrecord, index, label).map(DynIndexAddress::Edge)
             }
             DynEntityReferenceKind::Group(index) => {
-                Group::resolve(graphrecord, index, label).map(DynIndexAddress::Group)
+                GroupIndex::resolve(graphrecord, index, label).map(DynIndexAddress::Group)
             }
         }
     }
@@ -125,7 +125,7 @@ impl DynEntityReference {
         match self.kind {
             DynEntityReferenceKind::Node(_) => ValueDescriptor::entity_reference::<NodeIndex>(),
             DynEntityReferenceKind::Edge(_) => ValueDescriptor::entity_reference::<EdgeIndex>(),
-            DynEntityReferenceKind::Group(_) => ValueDescriptor::entity_reference::<Group>(),
+            DynEntityReferenceKind::Group(_) => ValueDescriptor::entity_reference::<GroupIndex>(),
         }
     }
 }
@@ -135,7 +135,7 @@ impl Display for DynEntityReference {
         match &self.kind {
             DynEntityReferenceKind::Node(node) => node.fmt(formatter),
             DynEntityReferenceKind::Edge(edge) => edge.fmt(formatter),
-            DynEntityReferenceKind::Group(group) => group.fmt(formatter),
+            DynEntityReferenceKind::Group(group_index) => group_index.fmt(formatter),
         }
     }
 }
@@ -1109,7 +1109,7 @@ impl ValueString for DynValue {
                 IndexValue::<NodeIndex>::as_str(value, label)
             }
             DynValueView::Index(DynIndexView::Group(value)) => {
-                IndexValue::<Group>::as_str(value, label)
+                IndexValue::<GroupIndex>::as_str(value, label)
             }
             DynValueView::Index(DynIndexView::Attribute(value)) => {
                 IndexValue::<AttributeName>::as_str(value, label)
@@ -1136,7 +1136,7 @@ impl ValueString for DynValue {
                 DynIndexView::Node(IndexValue::<NodeIndex>::with_string(original, string)),
             ),
             DynValueView::Index(DynIndexView::Group(original)) => DynValueView::Index(
-                DynIndexView::Group(IndexValue::<Group>::with_string(original, string)),
+                DynIndexView::Group(IndexValue::<GroupIndex>::with_string(original, string)),
             ),
             DynValueView::Index(DynIndexView::Attribute(original)) => DynValueView::Index(
                 DynIndexView::Attribute(IndexValue::<AttributeName>::with_string(original, string)),
@@ -1166,7 +1166,7 @@ const ATTRIBUTE_NAME_INDEX_TARGET: &str = "IndexValue<AttributeName>";
 const BOOL_INDEX_TARGET: &str = "IndexValue<bool>";
 const FAILURE_KIND_INDEX_TARGET: &str = "IndexValue<FailureKind>";
 const FAILURE_KIND_VALUE_TARGET: &str = "FailureKindValue";
-const GROUP_TARGET: &str = "IndexValue<Group>";
+const GROUP_TARGET: &str = "IndexValue<GroupIndex>";
 const MASK_TARGET: &str = "Mask";
 const NODE_INDEX_TARGET: &str = "IndexValue<NodeIndex>";
 const POSITIONAL_INDEX_TARGET: &str = "IndexValue<Positional>";
@@ -1189,7 +1189,7 @@ impl ValueTransition<AttributeName> for DynValue {
                 <IndexValue<NodeIndex> as ValueTransition<AttributeName>>::transition(value, label)
             }
             DynValueView::Index(DynIndexView::Group(value)) => {
-                <IndexValue<Group> as ValueTransition<AttributeName>>::transition(value, label)
+                <IndexValue<GroupIndex> as ValueTransition<AttributeName>>::transition(value, label)
             }
             DynValueView::Index(DynIndexView::Attribute(value)) => {
                 <IndexValue<AttributeName> as ValueTransition<AttributeName>>::transition(
@@ -1255,7 +1255,7 @@ impl ValueTransition<IndexValue<AttributeName>> for DynValue {
                 )
             }
             DynValueView::Index(DynIndexView::Group(value)) => {
-                <IndexValue<Group> as ValueTransition<IndexValue<AttributeName>>>::transition(
+                <IndexValue<GroupIndex> as ValueTransition<IndexValue<AttributeName>>>::transition(
                     value, label,
                 )
             }
@@ -1318,28 +1318,30 @@ impl ValueTransition<IndexValue<FailureKind>> for DynValue {
     }
 }
 
-impl ValueTransition<IndexValue<Group>> for DynValue {
+impl ValueTransition<IndexValue<GroupIndex>> for DynValue {
     fn transition<'a>(
         value: Self::Value<'a>,
         label: &'static str,
-    ) -> QueryResult<<IndexValue<Group> as ValueDomain>::Value<'a>> {
+    ) -> QueryResult<<IndexValue<GroupIndex> as ValueDomain>::Value<'a>> {
         match value {
             DynValueView::Scalar(value) => {
-                <Scalar as ValueTransition<IndexValue<Group>>>::transition(value, label)
+                <Scalar as ValueTransition<IndexValue<GroupIndex>>>::transition(value, label)
             }
             DynValueView::Index(DynIndexView::Value(value)) => {
-                <IndexValue<Value> as ValueTransition<IndexValue<Group>>>::transition(value, label)
+                <IndexValue<Value> as ValueTransition<IndexValue<GroupIndex>>>::transition(
+                    value, label,
+                )
             }
             DynValueView::Attribute(value) => {
-                <AttributeName as ValueTransition<IndexValue<Group>>>::transition(value, label)
+                <AttributeName as ValueTransition<IndexValue<GroupIndex>>>::transition(value, label)
             }
             DynValueView::Index(DynIndexView::Attribute(value)) => {
-                <IndexValue<AttributeName> as ValueTransition<IndexValue<Group>>>::transition(
+                <IndexValue<AttributeName> as ValueTransition<IndexValue<GroupIndex>>>::transition(
                     value, label,
                 )
             }
             DynValueView::Index(DynIndexView::Positional(value)) => {
-                <IndexValue<Positional> as ValueTransition<IndexValue<Group>>>::transition(
+                <IndexValue<Positional> as ValueTransition<IndexValue<GroupIndex>>>::transition(
                     value, label,
                 )
             }
@@ -1415,7 +1417,7 @@ impl ValueTransition<IndexValue<Positional>> for DynValue {
                 )
             }
             DynValueView::Index(DynIndexView::Group(value)) => {
-                <IndexValue<Group> as ValueTransition<IndexValue<Positional>>>::transition(
+                <IndexValue<GroupIndex> as ValueTransition<IndexValue<Positional>>>::transition(
                     value, label,
                 )
             }
@@ -1453,7 +1455,9 @@ impl ValueTransition<IndexValue<Value>> for DynValue {
                 )
             }
             DynValueView::Index(DynIndexView::Group(value)) => {
-                <IndexValue<Group> as ValueTransition<IndexValue<Value>>>::transition(value, label)
+                <IndexValue<GroupIndex> as ValueTransition<IndexValue<Value>>>::transition(
+                    value, label,
+                )
             }
             DynValueView::Index(DynIndexView::Attribute(value)) => {
                 <IndexValue<AttributeName> as ValueTransition<IndexValue<Value>>>::transition(
@@ -1521,7 +1525,7 @@ impl ValueTransition<Scalar> for DynValue {
                 <IndexValue<NodeIndex> as ValueTransition<Scalar>>::transition(value, label)
             }
             DynValueView::Index(DynIndexView::Group(value)) => {
-                <IndexValue<Group> as ValueTransition<Scalar>>::transition(value, label)
+                <IndexValue<GroupIndex> as ValueTransition<Scalar>>::transition(value, label)
             }
             DynValueView::Index(DynIndexView::Attribute(value)) => {
                 <IndexValue<AttributeName> as ValueTransition<Scalar>>::transition(value, label)

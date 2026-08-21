@@ -8,7 +8,7 @@ use crate::{
     registry::operation_manifest,
     traits::ViaGroups,
 };
-use graphrecords_core::{GraphRecord, graphrecord::Group};
+use graphrecords_core::{GraphRecord, graphrecord::GroupIndex};
 
 #[derive(
     Clone, Explain, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare,
@@ -20,7 +20,7 @@ pub struct ViaGroupsOperation;
 
 impl<E: GroupMembership> ElementKernel<Indexed<E, Unit>> for ViaGroupsOperation {
     type Emission = Expanding<Unordered>;
-    type OutShape = Indexed<ExpandedIndex<E, Group>, EntityReference<Group>>;
+    type OutShape = Indexed<ExpandedIndex<E, GroupIndex>, EntityReference<GroupIndex>>;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
@@ -38,7 +38,7 @@ impl<E: GroupMembership, I: IndexDomain> ElementKernel<Indexed<I, EntityReferenc
     for ViaGroupsOperation
 {
     type Emission = Expanding<Unordered>;
-    type OutShape = Indexed<ExpandedIndex<I, Group>, EntityReference<Group>>;
+    type OutShape = Indexed<ExpandedIndex<I, GroupIndex>, EntityReference<GroupIndex>>;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
@@ -68,14 +68,14 @@ operation_manifest! {
         kernel {
             parameters: <E: GroupMembership>;
             input: Indexed<E, Unit>;
-            output: Indexed<ExpandedIndex<E, Group>, EntityReference<Group>>;
+            output: Indexed<ExpandedIndex<E, GroupIndex>, EntityReference<GroupIndex>>;
             emission: Expanding<Unordered>;
         }
 
         kernel {
             parameters: <E: GroupMembership, I: IndexDomain>;
             input: Indexed<I, EntityReference<E>>;
-            output: Indexed<ExpandedIndex<I, Group>, EntityReference<Group>>;
+            output: Indexed<ExpandedIndex<I, GroupIndex>, EntityReference<GroupIndex>>;
             emission: Expanding<Unordered>;
         }
     }

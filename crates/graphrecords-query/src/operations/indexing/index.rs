@@ -1,5 +1,5 @@
 use crate::{
-    EntityDomain, EntityRef, EntityReference, Explain, IndexDomain, IndexValue, Indexed,
+    EntityIndexDomain, EntityRef, EntityReference, Explain, IndexDomain, IndexValue, Indexed,
     QueryResult, Unit,
     element::{Pipeline, Preserving},
     operations::{Build, ElementKernel, ElementPipeline, Operation, Prepare},
@@ -38,7 +38,7 @@ impl<K: IndexDomain> ElementKernel<Indexed<K, Unit>> for IndexOperation {
     }
 }
 
-impl<E: EntityDomain, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
+impl<E: EntityIndexDomain, I: IndexDomain> ElementKernel<Indexed<I, EntityReference<E>>>
     for IndexOperation
 {
     type Emission = Preserving;
@@ -79,7 +79,7 @@ operation_manifest! {
         }
 
         kernel {
-            parameters: <E: EntityDomain, I: IndexDomain>;
+            parameters: <E: EntityIndexDomain, I: IndexDomain>;
             input: Indexed<I, EntityReference<E>>;
             output: Indexed<I, IndexValue<E>>;
             emission: Preserving;

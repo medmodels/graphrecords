@@ -1,3 +1,4 @@
+use super::EdgesForNode;
 use crate::{
     EdgeDirection, EntityRef, EntityReference, ExpandedChild, ExpandedIndex, Explain, IndexDomain,
     Indexed, QueryResult, Unit, Unordered,

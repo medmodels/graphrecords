@@ -207,7 +207,7 @@ impl Diagnostic for OperationNotApplicable {
     }
 
     fn help(&self) -> Option<String> {
-        Some("choose an operation and arguments supported by the expression descriptor".to_string())
+        Some("choose an operation and arguments this expression supports".to_string())
     }
 }
 

@@ -1,7 +1,7 @@
 use super::{
     Changes, GraphRecord,
     changes::{
-        AddEdges, AddEdgesInGroups, AddEdgesToGroup, AddGroup, AddNodes, AddNodesInGroups,
+        AddEdges, AddEdgesInGroup, AddEdgesToGroup, AddGroup, AddNodes, AddNodesInGroup,
         AddNodesToGroup, Clear, FreezeSchema, RemoveEdgeAttributes, RemoveEdges,
         RemoveEdgesFromGroup, RemoveGroups, RemoveNodeAttributes, RemoveNodes,
         RemoveNodesFromGroup, ReplaceEdgeAttributes, ReplaceNodeAttributes, SetEdgeAttributes,
@@ -36,16 +36,16 @@ pub trait Plugin: Send + Sync {
     }
 
     #[allow(unused_variables)]
-    fn on_add_nodes_in_groups(
+    fn on_add_nodes_in_group(
         &self,
         record: &GraphRecord,
-        addition: AddNodesInGroups,
+        addition: AddNodesInGroup,
     ) -> GraphRecordResult<Changes> {
         Ok(addition.into())
     }
 
     #[allow(unused_variables)]
-    fn post_add_nodes_in_groups(
+    fn post_add_nodes_in_group(
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
@@ -68,16 +68,16 @@ pub trait Plugin: Send + Sync {
     }
 
     #[allow(unused_variables)]
-    fn on_add_edges_in_groups(
+    fn on_add_edges_in_group(
         &self,
         record: &GraphRecord,
-        addition: AddEdgesInGroups,
+        addition: AddEdgesInGroup,
     ) -> GraphRecordResult<Changes> {
         Ok(addition.into())
     }
 
     #[allow(unused_variables)]
-    fn post_add_edges_in_groups(
+    fn post_add_edges_in_group(
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
@@ -401,7 +401,7 @@ pub trait Plugin: Send + Sync {
 #[cfg(test)]
 mod test {
     use super::{
-        AddEdges, AddEdgesInGroups, AddEdgesToGroup, AddGroup, AddNodes, AddNodesInGroups,
+        AddEdges, AddEdgesInGroup, AddEdgesToGroup, AddGroup, AddNodes, AddNodesInGroup,
         AddNodesToGroup, Changes, Clear, FreezeSchema, GraphRecord, Plugin, RemoveEdgeAttributes,
         RemoveEdges, RemoveEdgesFromGroup, RemoveGroups, RemoveNodeAttributes, RemoveNodes,
         RemoveNodesFromGroup, ReplaceEdgeAttributes, ReplaceNodeAttributes, SetEdgeAttributes,
@@ -409,9 +409,15 @@ mod test {
     };
     use crate::{
         errors::{GraphRecordError, GraphRecordResult},
-        graphrecord::{AttributeMap, Group, NodeBatch, PluginName, Value, schema::Schema},
+        graphrecord::{
+            AttributeMap, GroupIndex, NodeBatch, NodeIndex, PluginName, Value, schema::Schema,
+        },
     };
-    use std::sync::{Arc, Mutex};
+    use std::{
+        error::Error,
+        fmt::{Display, Formatter, Result as FmtResult},
+        sync::{Arc, Mutex},
+    };
 
     struct PassThroughPlugin;
 
@@ -453,7 +459,7 @@ mod test {
     }
 
     struct ExpandingPlugin {
-        group: Group,
+        group_index: GroupIndex,
     }
 
     impl Plugin for ExpandingPlugin {
@@ -463,7 +469,7 @@ mod test {
             addition: AddNodes,
         ) -> GraphRecordResult<Changes> {
             let mut changes = Changes::from(addition);
-            changes.push(AddGroup::new(self.group.clone()));
+            changes.push(AddGroup::new(self.group_index.clone()));
 
             Ok(changes)
         }
@@ -481,6 +487,19 @@ mod test {
         }
     }
 
+    #[derive(Debug)]
+    struct VetoError {
+        label: &'static str,
+    }
+
+    impl Display for VetoError {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+            write!(f, "{}", self.label)
+        }
+    }
+
+    impl Error for VetoError {}
+
     struct VetoingPlugin;
 
     impl Plugin for VetoingPlugin {
@@ -490,7 +509,7 @@ mod test {
             _addition: AddNodes,
         ) -> GraphRecordResult<Changes> {
             Err(GraphRecordError::PluginFailure {
-                message: "lorem".to_string(),
+                cause: Arc::new(VetoError { label: "lorem" }),
             })
         }
     }
@@ -504,7 +523,7 @@ mod test {
             _candidate: &GraphRecord,
         ) -> GraphRecordResult<()> {
             Err(GraphRecordError::PluginFailure {
-                message: "ipsum".to_string(),
+                cause: Arc::new(VetoError { label: "ipsum" }),
             })
         }
     }
@@ -596,20 +615,20 @@ mod test {
             Ok(())
         }
 
-        fn on_add_nodes_in_groups(
+        fn on_add_nodes_in_group(
             &self,
             _record: &GraphRecord,
-            addition: AddNodesInGroups,
+            addition: AddNodesInGroup,
         ) -> GraphRecordResult<Changes> {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_add_nodes_in_groups".into());
+                .push("on_add_nodes_in_group".into());
 
             Ok(addition.into())
         }
 
-        fn post_add_nodes_in_groups(
+        fn post_add_nodes_in_group(
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
@@ -617,7 +636,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("post_add_nodes_in_groups".into());
+                .push("post_add_nodes_in_group".into());
 
             Ok(())
         }
@@ -642,20 +661,20 @@ mod test {
             Ok(())
         }
 
-        fn on_add_edges_in_groups(
+        fn on_add_edges_in_group(
             &self,
             _record: &GraphRecord,
-            addition: AddEdgesInGroups,
+            addition: AddEdgesInGroup,
         ) -> GraphRecordResult<Changes> {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_add_edges_in_groups".into());
+                .push("on_add_edges_in_group".into());
 
             Ok(addition.into())
         }
 
-        fn post_add_edges_in_groups(
+        fn post_add_edges_in_group(
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
@@ -663,7 +682,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("post_add_edges_in_groups".into());
+                .push("post_add_edges_in_group".into());
 
             Ok(())
         }
@@ -1087,19 +1106,19 @@ mod test {
 
     #[test]
     fn test_dispatch() {
-        let record = GraphRecord::new()
-            .add_plugin("noop".into(), PassThroughPlugin)
+        let graphrecord = GraphRecord::new()
+            .add_plugin("noop", PassThroughPlugin)
             .unwrap()
-            .add_node("lorem".into(), AttributeMap::new())
+            .add_node("lorem", AttributeMap::new())
             .unwrap();
 
-        assert_eq!(1, record.node_count());
-        assert!(record.contains_node(&"lorem".into()));
+        assert_eq!(1, graphrecord.node_count());
+        assert!(graphrecord.contains_node("lorem"));
 
         let log = Arc::new(Mutex::new(Vec::new()));
-        let record = GraphRecord::new()
+        let graphrecord = GraphRecord::new()
             .add_plugin(
-                "first".into(),
+                "first",
                 RecordingPlugin {
                     label: "first",
                     log: Arc::clone(&log),
@@ -1107,7 +1126,7 @@ mod test {
             )
             .unwrap()
             .add_plugin(
-                "second".into(),
+                "second",
                 RecordingPlugin {
                     label: "second",
                     log: Arc::clone(&log),
@@ -1115,9 +1134,7 @@ mod test {
             )
             .unwrap();
 
-        record
-            .add_node("lorem".into(), AttributeMap::new())
-            .unwrap();
+        graphrecord.add_node("lorem", AttributeMap::new()).unwrap();
 
         assert_eq!(
             Some(&"first:on_add_nodes:len=1".to_string()),
@@ -1129,9 +1146,9 @@ mod test {
         );
 
         let log = Arc::new(Mutex::new(Vec::new()));
-        let record = GraphRecord::new()
+        let graphrecord = GraphRecord::new()
             .add_plugin(
-                "recorder".into(),
+                "recorder",
                 RecordingPlugin {
                     label: "recorder",
                     log: Arc::clone(&log),
@@ -1139,7 +1156,9 @@ mod test {
             )
             .unwrap();
 
-        record.add_nodes(NodeBatch::default()).unwrap();
+        graphrecord
+            .add_nodes(Vec::<(NodeIndex, AttributeMap)>::new())
+            .unwrap();
 
         assert_eq!(
             Some(&"recorder:on_add_nodes:len=0".to_string()),
@@ -1149,16 +1168,18 @@ mod test {
 
     #[test]
     fn test_dispatch_rewriting() {
-        let record = GraphRecord::new()
-            .add_plugin("rewriter".into(), RewritingPlugin)
+        let graphrecord = GraphRecord::new()
+            .add_plugin("rewriter", RewritingPlugin)
             .unwrap()
-            .add_node("lorem".into(), AttributeMap::new())
+            .add_node("lorem", AttributeMap::new())
             .unwrap();
 
         assert_eq!(
             Some(Value::from(true)),
-            record
-                .node_attribute(&"lorem".into(), &"rewritten".into())
+            graphrecord
+                .node("lorem")
+                .unwrap()
+                .attribute("rewritten")
                 .map(Value::from)
         );
     }
@@ -1166,16 +1187,16 @@ mod test {
     #[test]
     fn test_dispatch_expansion() {
         let log = Arc::new(Mutex::new(Vec::new()));
-        let record = GraphRecord::new()
+        let graphrecord = GraphRecord::new()
             .add_plugin(
-                "expander".into(),
+                "expander",
                 ExpandingPlugin {
-                    group: "derived".into(),
+                    group_index: "derived".into(),
                 },
             )
             .unwrap()
             .add_plugin(
-                "recorder".into(),
+                "recorder",
                 RecordingPlugin {
                     label: "recorder",
                     log: Arc::clone(&log),
@@ -1183,14 +1204,12 @@ mod test {
             )
             .unwrap();
 
-        let derived = record
-            .add_node("lorem".into(), AttributeMap::new())
-            .unwrap();
+        let derived = graphrecord.add_node("lorem", AttributeMap::new()).unwrap();
 
         assert_eq!(1, derived.node_count());
-        assert!(derived.contains_node(&"lorem".into()));
+        assert!(derived.contains_node("lorem"));
         assert_eq!(1, derived.group_count());
-        assert!(derived.contains_group(&"derived".into()));
+        assert!(derived.contains_group("derived"));
         assert_eq!(
             vec![
                 "recorder:on_add_nodes:len=1".to_string(),
@@ -1206,12 +1225,12 @@ mod test {
     fn test_dispatch_swallowing() {
         let log = Arc::new(Mutex::new(Vec::new()));
         let with_plugins = GraphRecord::new()
-            .add_node("existing".into(), AttributeMap::new())
+            .add_node("existing", AttributeMap::new())
             .unwrap()
-            .add_plugin("swallower".into(), SwallowingPlugin)
+            .add_plugin("swallower", SwallowingPlugin)
             .unwrap()
             .add_plugin(
-                "second".into(),
+                "second",
                 RecordingPlugin {
                     label: "second",
                     log: Arc::clone(&log),
@@ -1219,13 +1238,11 @@ mod test {
             )
             .unwrap();
 
-        let derived = with_plugins
-            .add_node("lorem".into(), AttributeMap::new())
-            .unwrap();
+        let derived = with_plugins.add_node("lorem", AttributeMap::new()).unwrap();
 
         assert_eq!(1, derived.node_count());
-        assert!(derived.contains_node(&"existing".into()));
-        assert!(!derived.contains_node(&"lorem".into()));
+        assert!(derived.contains_node("existing"));
+        assert!(!derived.contains_node("lorem"));
         assert!(log.lock().unwrap().is_empty());
         assert_eq!(with_plugins.state().identity(), derived.state().identity());
         assert!(Arc::ptr_eq(with_plugins.state(), derived.state()));
@@ -1234,28 +1251,27 @@ mod test {
     #[test]
     fn test_dispatch_veto() {
         let original = GraphRecord::new()
-            .add_plugin("vetoer".into(), VetoingPlugin)
+            .add_plugin("vetoer", VetoingPlugin)
             .unwrap();
 
-        let result = original
-            .add_node("lorem".into(), AttributeMap::new())
-            .map(|_| ());
+        let result = original.add_node("lorem", AttributeMap::new());
 
-        assert_eq!(
-            Err(GraphRecordError::PluginFailure {
-                message: "lorem".to_string()
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::PluginFailure { cause }
+                if cause
+                    .downcast_ref::<VetoError>()
+                    .is_some_and(|veto_error| veto_error.label == "lorem")
+        )));
         assert_eq!(0, original.node_count());
     }
 
     #[test]
     fn test_post_dispatch() {
         let log = Arc::new(Mutex::new(Vec::new()));
-        let record = GraphRecord::new()
+        let graphrecord = GraphRecord::new()
             .add_plugin(
-                "recorder".into(),
+                "recorder",
                 RecordingPlugin {
                     label: "recorder",
                     log: Arc::clone(&log),
@@ -1263,10 +1279,10 @@ mod test {
             )
             .unwrap();
 
-        record
+        graphrecord
             .add_nodes(vec![
-                ("lorem".into(), AttributeMap::new()),
-                ("ipsum".into(), AttributeMap::new()),
+                ("lorem", AttributeMap::new()),
+                ("ipsum", AttributeMap::new()),
             ])
             .unwrap();
 
@@ -1279,9 +1295,9 @@ mod test {
         );
 
         let log = Arc::new(Mutex::new(Vec::new()));
-        let record = GraphRecord::new()
+        let graphrecord = GraphRecord::new()
             .add_plugin(
-                "first".into(),
+                "first",
                 RecordingPlugin {
                     label: "first",
                     log: Arc::clone(&log),
@@ -1289,7 +1305,7 @@ mod test {
             )
             .unwrap()
             .add_plugin(
-                "second".into(),
+                "second",
                 RecordingPlugin {
                     label: "second",
                     log: Arc::clone(&log),
@@ -1297,9 +1313,7 @@ mod test {
             )
             .unwrap();
 
-        record
-            .add_node("lorem".into(), AttributeMap::new())
-            .unwrap();
+        graphrecord.add_node("lorem", AttributeMap::new()).unwrap();
 
         assert_eq!(
             Some(&"first:post_add_nodes:delta=1".to_string()),
@@ -1311,9 +1325,9 @@ mod test {
         );
 
         let log = Arc::new(Mutex::new(Vec::new()));
-        let record = GraphRecord::new()
+        let graphrecord = GraphRecord::new()
             .add_plugin(
-                "recorder".into(),
+                "recorder",
                 RecordingPlugin {
                     label: "recorder",
                     log: Arc::clone(&log),
@@ -1321,7 +1335,9 @@ mod test {
             )
             .unwrap();
 
-        record.add_nodes(NodeBatch::default()).unwrap();
+        graphrecord
+            .add_nodes(Vec::<(NodeIndex, AttributeMap)>::new())
+            .unwrap();
 
         assert_eq!(
             Some(&"recorder:post_add_nodes:delta=0".to_string()),
@@ -1332,44 +1348,42 @@ mod test {
     #[test]
     fn test_post_dispatch_post_veto() {
         let original = GraphRecord::new()
-            .add_plugin("post_vetoer".into(), PostVetoingPlugin)
+            .add_plugin("post_vetoer", PostVetoingPlugin)
             .unwrap();
 
-        let result = original
-            .add_node("lorem".into(), AttributeMap::new())
-            .map(|_| ());
+        let result = original.add_node("lorem", AttributeMap::new());
 
-        assert_eq!(
-            Err(GraphRecordError::PluginFailure {
-                message: "ipsum".to_string()
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::PluginFailure { cause }
+                if cause
+                    .downcast_ref::<VetoError>()
+                    .is_some_and(|veto_error| veto_error.label == "ipsum")
+        )));
         assert_eq!(0, original.node_count());
 
         let log = Arc::new(Mutex::new(Vec::new()));
-        let record = GraphRecord::new()
+        let graphrecord = GraphRecord::new()
             .add_plugin(
-                "recorder".into(),
+                "recorder",
                 RecordingPlugin {
                     label: "recorder",
                     log: Arc::clone(&log),
                 },
             )
             .unwrap()
-            .add_plugin("post_vetoer".into(), PostVetoingPlugin)
+            .add_plugin("post_vetoer", PostVetoingPlugin)
             .unwrap();
 
-        let result = record
-            .add_node("lorem".into(), AttributeMap::new())
-            .map(|_| ());
+        let result = graphrecord.add_node("lorem", AttributeMap::new());
 
-        assert_eq!(
-            Err(GraphRecordError::PluginFailure {
-                message: "ipsum".to_string()
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::PluginFailure { cause }
+                if cause
+                    .downcast_ref::<VetoError>()
+                    .is_some_and(|veto_error| veto_error.label == "ipsum")
+        )));
         assert!(
             log.lock()
                 .unwrap()
@@ -1380,116 +1394,110 @@ mod test {
     #[test]
     fn test_post_dispatch_tracing() {
         let log = Arc::new(Mutex::new(Vec::new()));
-        let record = GraphRecord::new()
+        let graphrecord = GraphRecord::new()
             .add_plugin(
-                "tracer".into(),
+                "tracer",
                 TracingPlugin {
                     log: Arc::clone(&log),
                 },
             )
             .unwrap();
 
-        let record = record.add_group("dolor".into()).unwrap();
-        let record = record
+        let graphrecord = graphrecord.add_group("dolor").unwrap();
+        let graphrecord = graphrecord
             .add_nodes(vec![
-                ("lorem".into(), AttributeMap::new()),
-                ("ipsum".into(), AttributeMap::new()),
+                ("lorem", AttributeMap::new()),
+                ("ipsum", AttributeMap::new()),
             ])
             .unwrap();
-        let record = record
-            .add_nodes_in_groups(
-                vec![("amet".into(), AttributeMap::new())],
-                vec!["dolor".into()],
-            )
+        let graphrecord = graphrecord
+            .add_nodes_in_group(vec![("amet", AttributeMap::new())], "dolor")
             .unwrap();
 
-        let record = record
-            .add_edges(vec![("lorem".into(), "ipsum".into(), AttributeMap::new())])
+        let graphrecord = graphrecord
+            .add_edges(vec![("lorem", "ipsum", AttributeMap::new())])
             .unwrap();
-        let first_edge_index = record.edge_indices().next().unwrap();
-        let record = record
-            .add_edges_in_groups(
-                vec![("amet".into(), "lorem".into(), AttributeMap::new())],
-                vec!["dolor".into()],
-            )
+        let first_edge_index = graphrecord.edge_indices().next().unwrap();
+        let graphrecord = graphrecord
+            .add_edges_in_group(vec![("amet", "lorem", AttributeMap::new())], "dolor")
             .unwrap();
-        let second_edge_index = record
+        let second_edge_index = graphrecord
             .edge_indices()
             .find(|edge_index| *edge_index != first_edge_index)
             .unwrap();
 
-        let record = record
-            .add_nodes_to_group("dolor".into(), vec!["ipsum".into()])
+        let graphrecord = graphrecord
+            .add_nodes_to_group(vec!["ipsum"], "dolor")
             .unwrap();
-        let record = record
-            .add_edges_to_group("dolor".into(), vec![first_edge_index])
+        let graphrecord = graphrecord
+            .add_edges_to_group(vec![first_edge_index], "dolor")
             .unwrap();
 
-        let record = record
+        let graphrecord = graphrecord
             .set_node_attributes(
-                vec!["lorem".into()],
+                vec!["lorem"],
                 AttributeMap::from([("sed".into(), true.into())]),
             )
             .unwrap();
-        let record = record
+        let graphrecord = graphrecord
             .replace_node_attributes(
-                vec!["lorem".into()],
+                vec!["lorem"],
                 AttributeMap::from([("amet".into(), 7.into())]),
             )
             .unwrap();
-        let record = record
-            .remove_node_attributes(vec!["lorem".into()], vec!["amet".into()])
+        let graphrecord = graphrecord
+            .remove_node_attributes(vec!["lorem"], vec!["amet"])
             .unwrap();
 
-        let record = record
+        let graphrecord = graphrecord
             .set_edge_attributes(
                 vec![first_edge_index],
                 AttributeMap::from([("sed".into(), true.into())]),
             )
             .unwrap();
-        let record = record
+        let graphrecord = graphrecord
             .replace_edge_attributes(
                 vec![first_edge_index],
                 AttributeMap::from([("amet".into(), 7.into())]),
             )
             .unwrap();
-        let record = record
-            .remove_edge_attributes(vec![first_edge_index], vec!["amet".into()])
+        let graphrecord = graphrecord
+            .remove_edge_attributes(vec![first_edge_index], vec!["amet"])
             .unwrap();
 
-        let schema = Schema::infer(&record);
-        let record = record.set_schema(schema).unwrap();
-        let record = record.freeze_schema().unwrap();
-        let record = record.unfreeze_schema().unwrap();
+        let schema = Schema::infer(&graphrecord);
+        let graphrecord = graphrecord.set_schema(schema).unwrap();
+        let graphrecord = graphrecord.freeze_schema().unwrap();
+        let graphrecord = graphrecord.unfreeze_schema().unwrap();
 
-        let record = record
-            .remove_nodes_from_group("dolor".into(), vec!["ipsum".into()])
+        let graphrecord = graphrecord
+            .remove_nodes_from_group(vec!["ipsum"], "dolor")
             .unwrap();
-        let record = record
-            .remove_edges_from_group("dolor".into(), vec![first_edge_index])
+        let graphrecord = graphrecord
+            .remove_edges_from_group(vec![first_edge_index], "dolor")
             .unwrap();
-        let record = record.remove_groups(vec!["dolor".into()]).unwrap();
-        let record = record
+        let graphrecord = graphrecord.remove_groups(vec!["dolor"]).unwrap();
+        let graphrecord = graphrecord
             .remove_edges(vec![first_edge_index, second_edge_index])
             .unwrap();
-        let record = record
-            .remove_nodes(vec!["lorem".into(), "ipsum".into(), "amet".into()])
+        let graphrecord = graphrecord
+            .remove_nodes(vec!["lorem", "ipsum", "amet"])
             .unwrap();
-        let record = record.clear().unwrap();
+        let graphrecord = graphrecord.clear().unwrap();
 
-        assert_eq!(0, record.node_count());
+        assert_eq!(0, graphrecord.node_count());
         assert_eq!(
             vec![
                 "on_add_group".to_string(),
                 "post_add_group".to_string(),
                 "on_add_nodes".to_string(),
                 "post_add_nodes".to_string(),
-                "on_add_nodes_in_groups".to_string(),
-                "post_add_nodes_in_groups".to_string(),
+                "on_add_nodes_in_group".to_string(),
+                "post_add_nodes_in_group".to_string(),
                 "on_add_edges".to_string(),
                 "post_add_edges".to_string(),
-                "on_add_edges_in_groups".to_string(),
-                "post_add_edges_in_groups".to_string(),
+                "on_add_edges_in_group".to_string(),
+                "post_add_edges_in_group".to_string(),
                 "on_add_nodes_to_group".to_string(),
                 "post_add_nodes_to_group".to_string(),
                 "on_add_edges_to_group".to_string(),
@@ -1531,47 +1539,44 @@ mod test {
 
     #[test]
     fn test_add_plugin() {
-        let record = GraphRecord::new()
-            .add_plugin("lorem".into(), PassThroughPlugin)
+        let graphrecord = GraphRecord::new()
+            .add_plugin("lorem", PassThroughPlugin)
             .unwrap();
 
         assert_eq!(
             vec![&PluginName::from("lorem")],
-            record.plugins().collect::<Vec<_>>()
+            graphrecord.plugins().collect::<Vec<_>>()
         );
 
         let initialized = GraphRecord::new()
-            .add_plugin("ipsum".into(), LifecyclePlugin)
+            .add_plugin("ipsum", LifecyclePlugin)
             .unwrap();
 
-        assert!(initialized.contains_group(&"dolor".into()));
+        assert!(initialized.contains_group("dolor"));
     }
 
     #[test]
     fn test_invalid_add_plugin() {
-        let record = GraphRecord::new()
-            .add_plugin("lorem".into(), PassThroughPlugin)
+        let graphrecord = GraphRecord::new()
+            .add_plugin("lorem", PassThroughPlugin)
             .unwrap();
 
-        let result = record
-            .add_plugin("lorem".into(), PassThroughPlugin)
-            .map(|_| ());
+        let result = graphrecord.add_plugin("lorem", PassThroughPlugin);
 
-        assert_eq!(
-            Err(GraphRecordError::PluginAlreadyExists {
-                name: "lorem".into()
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::PluginAlreadyExists { name }
+                if name == "lorem".into()
+        )));
     }
 
     #[test]
     fn test_remove_plugin() {
-        let record = GraphRecord::new()
-            .add_plugin("lorem".into(), PassThroughPlugin)
+        let graphrecord = GraphRecord::new()
+            .add_plugin("lorem", PassThroughPlugin)
             .unwrap();
 
-        let removed = record.remove_plugin(&"lorem".into()).unwrap();
+        let removed = graphrecord.remove_plugin("lorem").unwrap();
 
         assert_eq!(
             Vec::<&PluginName>::new(),
@@ -1579,12 +1584,12 @@ mod test {
         );
 
         let initialized = GraphRecord::new()
-            .add_plugin("ipsum".into(), LifecyclePlugin)
+            .add_plugin("ipsum", LifecyclePlugin)
             .unwrap();
 
-        let finalized = initialized.remove_plugin(&"ipsum".into()).unwrap();
+        let finalized = initialized.remove_plugin("ipsum").unwrap();
 
-        assert!(!finalized.contains_group(&"dolor".into()));
+        assert!(!finalized.contains_group("dolor"));
         assert_eq!(
             Vec::<&PluginName>::new(),
             finalized.plugins().collect::<Vec<_>>()
@@ -1593,27 +1598,22 @@ mod test {
 
     #[test]
     fn test_invalid_remove_plugin() {
-        let result = GraphRecord::new()
-            .remove_plugin(&"lorem".into())
-            .map(|_| ());
+        let result = GraphRecord::new().remove_plugin("lorem");
 
-        assert_eq!(
-            Err(GraphRecordError::PluginNotFound {
-                name: "lorem".into()
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::PluginNotFound { name }
+                if name == "lorem".into()
+        )));
     }
 
     #[test]
     fn test_plugins() {
-        let record = GraphRecord::new()
-            .add_plugin("lorem".into(), PassThroughPlugin)
+        let graphrecord = GraphRecord::new()
+            .add_plugin("lorem", PassThroughPlugin)
             .unwrap();
 
-        let derived = record
-            .add_node("ipsum".into(), AttributeMap::new())
-            .unwrap();
+        let derived = graphrecord.add_node("ipsum", AttributeMap::new()).unwrap();
 
         assert_eq!(
             vec![&PluginName::from("lorem")],

@@ -1,5 +1,5 @@
 use crate::{
-    EdgeEndpointRole, FailureKind, IndexDomain, Position, Positional, QueryResult,
+    EdgeEndpointRole, FailureKind, IndexDomain, OwnedIndex, Position, Positional, QueryResult,
     capabilities::{EnsureSortable, incomparable_pair},
     operations::IndexTiebreak,
     registry::IndexDescriptor,
@@ -7,8 +7,8 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     graphrecord::{
-        AttributeName, AttributeNameView, EdgeAddress, EdgeIndex, Group, GroupAddress, GroupView,
-        NodeAddress, NodeIndex, NodeIndexView, Value,
+        AttributeName, AttributeNameView, EdgeAddress, EdgeIndex, GroupAddress, GroupIndex,
+        GroupIndexView, NodeAddress, NodeIndex, NodeIndexView, Value,
     },
 };
 use std::{
@@ -24,7 +24,7 @@ pub enum DynIndexOwned {
     Positional(Position),
     Node(NodeIndex),
     Edge(EdgeIndex),
-    Group(Group),
+    Group(GroupIndex),
     Attribute(AttributeName),
     Value(Value),
     Bool(bool),
@@ -33,12 +33,14 @@ pub enum DynIndexOwned {
     Expanded(Box<DynExpandedOwned>),
 }
 
+impl OwnedIndex for DynIndexOwned {}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum DynIndexView<'a> {
     Positional(Position),
     Node(NodeIndexView<'a>),
     Edge(EdgeIndex),
-    Group(GroupView<'a>),
+    Group(GroupIndexView<'a>),
     Attribute(AttributeNameView<'a>),
     Value(Value),
     Bool(bool),
@@ -199,7 +201,7 @@ impl DynIndexOwned {
             Self::Positional(_) => IndexDescriptor::domain::<Positional>(),
             Self::Node(_) => IndexDescriptor::domain::<NodeIndex>(),
             Self::Edge(_) => IndexDescriptor::domain::<EdgeIndex>(),
-            Self::Group(_) => IndexDescriptor::domain::<Group>(),
+            Self::Group(_) => IndexDescriptor::domain::<GroupIndex>(),
             Self::Attribute(_) => IndexDescriptor::domain::<AttributeName>(),
             Self::Value(_) => IndexDescriptor::domain::<Value>(),
             Self::Bool(_) => IndexDescriptor::domain::<bool>(),
@@ -304,7 +306,7 @@ macro_rules! implement_dynamic_index {
                     Self::Positional(position) => position.fmt(formatter),
                     Self::Node(node) => node.fmt(formatter),
                     Self::Edge(edge) => edge.fmt(formatter),
-                    Self::Group(group) => group.fmt(formatter),
+                    Self::Group(group_index) => group_index.fmt(formatter),
                     Self::Attribute(attribute) => attribute.fmt(formatter),
                     Self::Value(value) => value.fmt(formatter),
                     Self::Bool(value) => value.fmt(formatter),
@@ -454,11 +456,11 @@ macro_rules! implement_dynamic_index {
     };
 }
 
-implement_dynamic_index!(DynIndexOwned, NodeIndex, Group, AttributeName);
+implement_dynamic_index!(DynIndexOwned, NodeIndex, GroupIndex, AttributeName);
 implement_dynamic_index!(
     DynIndexView<'_>,
     NodeIndexView<'_>,
-    GroupView<'_>,
+    GroupIndexView<'_>,
     AttributeNameView<'_>
 );
 
@@ -506,7 +508,9 @@ impl IndexDomain for DynIndex {
             }
             DynIndexAddress::Node(node) => DynIndexView::Node(NodeIndex::index(graphrecord, node)),
             DynIndexAddress::Edge(edge) => DynIndexView::Edge(EdgeIndex::index(graphrecord, edge)),
-            DynIndexAddress::Group(group) => DynIndexView::Group(Group::index(graphrecord, group)),
+            DynIndexAddress::Group(group_index) => {
+                DynIndexView::Group(GroupIndex::index(graphrecord, group_index))
+            }
             DynIndexAddress::Attribute(attribute) => {
                 DynIndexView::Attribute(AttributeName::index(graphrecord, attribute))
             }
@@ -537,7 +541,9 @@ impl IndexDomain for DynIndex {
             }
             DynIndexView::Node(node) => DynIndexOwned::Node(NodeIndex::own_index(node)),
             DynIndexView::Edge(edge) => DynIndexOwned::Edge(EdgeIndex::own_index(edge)),
-            DynIndexView::Group(group) => DynIndexOwned::Group(Group::own_index(group)),
+            DynIndexView::Group(group_index) => {
+                DynIndexOwned::Group(GroupIndex::own_index(group_index))
+            }
             DynIndexView::Attribute(attribute) => {
                 DynIndexOwned::Attribute(AttributeName::own_index(attribute))
             }
@@ -568,7 +574,9 @@ impl IndexDomain for DynIndex {
             }
             DynIndexOwned::Node(node) => DynIndexView::Node(NodeIndex::borrow_index(node)),
             DynIndexOwned::Edge(edge) => DynIndexView::Edge(EdgeIndex::borrow_index(edge)),
-            DynIndexOwned::Group(group) => DynIndexView::Group(Group::borrow_index(group)),
+            DynIndexOwned::Group(group_index) => {
+                DynIndexView::Group(GroupIndex::borrow_index(group_index))
+            }
             DynIndexOwned::Attribute(attribute) => {
                 DynIndexView::Attribute(AttributeName::borrow_index(attribute))
             }
@@ -606,8 +614,8 @@ impl IndexDomain for DynIndex {
             DynIndexOwned::Edge(edge) => {
                 EdgeIndex::resolve(graphrecord, edge, label).map(DynIndexAddress::Edge)
             }
-            DynIndexOwned::Group(group) => {
-                Group::resolve(graphrecord, group, label).map(DynIndexAddress::Group)
+            DynIndexOwned::Group(group_index) => {
+                GroupIndex::resolve(graphrecord, group_index, label).map(DynIndexAddress::Group)
             }
             DynIndexOwned::Attribute(attribute) => {
                 AttributeName::resolve(graphrecord, attribute, label)
@@ -675,8 +683,8 @@ impl IndexTiebreak for DynIndex {
             .iter()
             .all(|element| matches!(address(element), DynIndexAddress::Group(_)))
         {
-            Group::tiebreak(graphrecord, run, |element| match address(element) {
-                DynIndexAddress::Group(group) => group,
+            GroupIndex::tiebreak(graphrecord, run, |element| match address(element) {
+                DynIndexAddress::Group(group_index) => group_index,
                 _ => unreachable!("dynamic addresses were checked as group addresses"),
             });
 

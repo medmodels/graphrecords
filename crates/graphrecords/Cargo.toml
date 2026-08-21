@@ -17,6 +17,8 @@ graphrecords-overview = { workspace = true }
 serde = ["graphrecords-core/serde"]
 io = ["graphrecords-core/io"]
 plugins = ["graphrecords-core/plugins"]
+polars = ["graphrecords-core/polars"]
+arrow = ["graphrecords-core/arrow"]
 dynamic = ["graphrecords-query/dynamic"]
 
 [lints]

@@ -5,21 +5,18 @@ use super::{Change, sealed::Sealed};
 use crate::graphrecord::{GraphRecord, plugins::Plugin};
 use crate::{
     errors::{GraphRecordError, GraphRecordResult},
-    graphrecord::{batch::EdgeBatch, datatypes::Group, state::GraphState},
+    graphrecord::{batch::EdgeBatch, datatypes::GroupIndex, state::GraphState},
 };
-use graphrecords_utils::distinct::Distinct;
 
-pub struct AddEdgesInGroups {
+pub struct AddEdgesInGroup {
     batch: EdgeBatch,
-    groups: Vec<Group>,
+    group_index: GroupIndex,
 }
 
-impl AddEdgesInGroups {
+impl AddEdgesInGroup {
     #[must_use]
-    pub fn new(batch: EdgeBatch, groups: Vec<Group>) -> Self {
-        let groups: Vec<_> = groups.into_iter().collect::<Distinct<_>>().into();
-
-        Self { batch, groups }
+    pub const fn new(batch: EdgeBatch, group_index: GroupIndex) -> Self {
+        Self { batch, group_index }
     }
 
     #[must_use]
@@ -28,25 +25,21 @@ impl AddEdgesInGroups {
     }
 
     #[must_use]
-    pub fn groups(&self) -> &[Group] {
-        &self.groups
+    pub const fn group_index(&self) -> &GroupIndex {
+        &self.group_index
     }
 }
 
-impl Sealed for AddEdgesInGroups {}
+impl Sealed for AddEdgesInGroup {}
 
-impl Change for AddEdgesInGroups {
+impl Change for AddEdgesInGroup {
     fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        let Self { batch, groups } = *self;
+        let Self { batch, group_index } = *self;
 
-        let group_addresses: Vec<_> = groups
-            .into_iter()
-            .map(|group| {
-                state
-                    .resolve_group_address(&group)
-                    .ok_or(GraphRecordError::GroupNotFound { group })
-            })
-            .collect::<GraphRecordResult<_>>()?;
+        let group_address = match state.resolve_group_address(&group_index) {
+            Some(group_address) => group_address,
+            None => state.insert_group(group_index)?,
+        };
 
         let resolved_edges: Vec<_> = batch
             .into_iter()
@@ -66,7 +59,7 @@ impl Change for AddEdgesInGroups {
             })
             .collect::<GraphRecordResult<_>>()?;
 
-        state.insert_edges(resolved_edges, &group_addresses)?;
+        state.insert_edges(resolved_edges, &[group_address])?;
 
         Ok(state)
     }
@@ -77,7 +70,7 @@ impl Change for AddEdgesInGroups {
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_add_edges_in_groups(record, *self)
+        plugin.on_add_edges_in_group(record, *self)
     }
 
     #[cfg(feature = "plugins")]
@@ -88,26 +81,23 @@ impl Change for AddEdgesInGroups {
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_add_edges_in_groups(previous, candidate)
+        |plugin, previous, candidate| plugin.post_add_edges_in_group(previous, candidate)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::AddEdgesInGroups;
-    use crate::graphrecord::{AttributeMap, batch::EdgeBatch, datatypes::Group};
+    use super::AddEdgesInGroup;
+    use crate::graphrecord::{AttributeMap, batch::EdgeBatch, datatypes::GroupIndex};
 
     #[test]
     fn test_new() {
-        let addition = AddEdgesInGroups::new(
+        let addition = AddEdgesInGroup::new(
             EdgeBatch::from(vec![("lorem".into(), "ipsum".into(), AttributeMap::new())]),
-            vec!["dolor".into(), "sed".into(), "dolor".into()],
+            "dolor".into(),
         );
 
         assert_eq!(1, addition.batch().len());
-        assert_eq!(
-            vec![Group::from("dolor"), Group::from("sed")],
-            addition.groups()
-        );
+        assert_eq!(&GroupIndex::from("dolor"), addition.group_index());
     }
 }

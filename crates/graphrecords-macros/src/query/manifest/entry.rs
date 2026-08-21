@@ -270,7 +270,7 @@ fn entry_alias(
         ("IndexDomain" | "GroupMember", None, []) => {
             quote!(#query::registry::describe::IndexPatternVariable<{ #position }>)
         }
-        ("EntityDomain", None, []) => {
+        ("EntityIndexDomain", None, []) => {
             quote!(#query::registry::describe::EntityPatternVariable<{ #position }>)
         }
         ("EntityAttributes", None, []) => {

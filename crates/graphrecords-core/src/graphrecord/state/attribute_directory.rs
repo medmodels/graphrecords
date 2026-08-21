@@ -2,7 +2,9 @@ use super::{
     ADDRESSES_PER_CHUNK, AttributeAddress, CHUNK_LOCAL_ADDRESS_BITS,
     attribute_chunk::AttributeChunk, chunk_tree::ChunkTree,
 };
-use crate::graphrecord::datatypes::{AttributeName, Identifier, Value};
+use crate::graphrecord::datatypes::{
+    AttributeName, AttributeNameView, Identifier, IdentifierView, Value,
+};
 #[cfg(any(feature = "serde", feature = "io"))]
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -20,9 +22,11 @@ impl AttributeDirectory {
         }
     }
 
-    pub fn resolve(&self, name: &AttributeName) -> Option<AttributeAddress> {
+    pub fn resolve<'a>(&self, name: impl Into<AttributeNameView<'a>>) -> Option<AttributeAddress> {
+        let name = name.into();
+
         self.attributes
-            .binary_search_by(|(candidate, _)| Self::compare_names(candidate, name))
+            .binary_search_by(|(candidate, _)| Self::compare_name_to_view(candidate, &name))
             .ok()
             .map(|index| AttributeAddress::new(index as u32))
     }
@@ -124,15 +128,19 @@ impl AttributeDirectory {
     }
 
     fn compare_names(left: &AttributeName, right: &AttributeName) -> Ordering {
-        match (left.identifier(), right.identifier()) {
-            (Identifier::Int(left_value), Identifier::Int(right_value)) => {
+        Self::compare_name_to_view(left, &AttributeNameView::from(right))
+    }
+
+    fn compare_name_to_view(left: &AttributeName, right: &AttributeNameView<'_>) -> Ordering {
+        match (left.identifier(), right.identifier_view()) {
+            (Identifier::Int(left_value), IdentifierView::Int(right_value)) => {
                 left_value.cmp(right_value)
             }
-            (Identifier::String(left_value), Identifier::String(right_value)) => {
-                left_value.cmp(right_value)
+            (Identifier::String(left_value), IdentifierView::String(right_value)) => {
+                left_value.as_str().cmp(right_value.as_ref())
             }
-            (Identifier::Int(_), Identifier::String(_)) => Ordering::Less,
-            (Identifier::String(_), Identifier::Int(_)) => Ordering::Greater,
+            (Identifier::Int(_), IdentifierView::String(_)) => Ordering::Less,
+            (Identifier::String(_), IdentifierView::Int(_)) => Ordering::Greater,
         }
     }
 }

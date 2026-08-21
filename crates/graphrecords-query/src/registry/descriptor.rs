@@ -1,4 +1,4 @@
-use crate::{EntityDomain, IndexDomain, Unit, ValueDomain};
+use crate::{EntityIndexDomain, IndexDomain, Unit, ValueDomain};
 use std::any::{TypeId, type_name};
 
 struct IndexValueDescriptor;
@@ -91,7 +91,7 @@ impl ValueDescriptor {
     }
 
     #[must_use]
-    pub fn entity_reference<E: EntityDomain>() -> Self {
+    pub fn entity_reference<E: EntityIndexDomain>() -> Self {
         Self {
             domain: DomainDescriptor::of::<EntityReferenceDescriptor>(),
             role: ValueRole::EntityReference(IndexDescriptor::domain::<E>()),

@@ -165,6 +165,6 @@ macro_rules! implement_identifier_wrapper {
 }
 
 implement_identifier_wrapper!(NodeIndex);
-implement_identifier_wrapper!(Group);
+implement_identifier_wrapper!(GroupIndex);
 implement_identifier_wrapper!(AttributeName);
 implement_identifier_wrapper!(PluginName);

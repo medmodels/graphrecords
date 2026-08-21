@@ -34,14 +34,14 @@ use crate::{
     expressions::{
         EvaluateExpression, Expression, ExpressionContext, ExpressionHandle, GroupedExpression,
     },
-    index::EntityDomain,
+    index::EntityIndexDomain,
     operations::{Alignment, IndexTiebreak, Keyed, Unaligned},
     optimizer::{Estimate, PlanNode},
     sealed::Sealed,
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, EdgeIndex, Group, NodeIndex, Value},
+    graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value},
 };
 use std::{marker::PhantomData, sync::Arc};
 
@@ -237,7 +237,7 @@ impl<const N: usize> IndexDomain for EntityPatternVariable<N> {
     }
 }
 
-impl<const N: usize> EntityDomain for EntityPatternVariable<N> {}
+impl<const N: usize> EntityIndexDomain for EntityPatternVariable<N> {}
 
 impl<const N: usize> Clone for EntityAttributesPatternVariable<N> {
     fn clone(&self) -> Self {
@@ -271,7 +271,7 @@ impl<const N: usize> IndexDomain for EntityAttributesPatternVariable<N> {
     }
 }
 
-impl<const N: usize> EntityDomain for EntityAttributesPatternVariable<N> {}
+impl<const N: usize> EntityIndexDomain for EntityAttributesPatternVariable<N> {}
 
 impl<const N: usize> Clone for GroupMembershipPatternVariable<N> {
     fn clone(&self) -> Self {
@@ -305,7 +305,7 @@ impl<const N: usize> IndexDomain for GroupMembershipPatternVariable<N> {
     }
 }
 
-impl<const N: usize> EntityDomain for GroupMembershipPatternVariable<N> {}
+impl<const N: usize> EntityIndexDomain for GroupMembershipPatternVariable<N> {}
 
 impl<const N: usize> Clone for GroupKeyPatternVariable<N> {
     fn clone(&self) -> Self {
@@ -743,7 +743,7 @@ describe_concrete_index!(
     Positional,
     NodeIndex,
     EdgeIndex,
-    Group,
+    GroupIndex,
     EdgeEndpointRole,
 );
 
@@ -847,7 +847,7 @@ impl<I: DescribeIndex + IndexDomain> DescribeValue for IndexValue<I> {
     }
 }
 
-impl<E: DescribeIndex + EntityDomain> DescribeValue for EntityReference<E> {
+impl<E: DescribeIndex + EntityIndexDomain> DescribeValue for EntityReference<E> {
     fn value_pattern() -> ValuePattern {
         ValuePattern::EntityReference(E::index_pattern())
     }

@@ -1,3 +1,4 @@
+use super::EdgesForNode;
 use crate::{
     Definite, EdgeDirection, EntityReference, EvaluateExpression, Explain, IndexDomain, Indexed,
     Multiple, OrderState, QueryResult, Single, Unit, Unordered,

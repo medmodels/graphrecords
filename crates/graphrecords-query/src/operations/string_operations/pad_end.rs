@@ -1,9 +1,7 @@
 use super::{padding_character, string_pad_bare, string_pad_indexed};
 use crate::{
-    Bare, BareValueDomain, Explain, External, Failure, IndexDomain, Indexed, Labeled, Position,
-    QueryResult,
-    capabilities::{ValueInt, ValueString},
-    element::Retention,
+    Bare, BareValueDomain, Explain, External, Failure, IndexDomain, Indexed, Labeled, QueryResult,
+    capabilities::ValueString,
     error::string::StringPaddingOverflow,
     execution::EvaluationCache,
     operations::{
@@ -16,7 +14,7 @@ use crate::{
 use graphrecords_core::GraphRecord;
 use std::iter::repeat_n;
 
-fn pad(value: &str, width: Position, character: &str, label: &'static str) -> QueryResult<String> {
+fn pad(value: &str, width: usize, character: &str, label: &'static str) -> QueryResult<String> {
     let mut value = value.to_string();
     let character = padding_character(character, label)?;
     let padding_length = width.saturating_sub(value.chars().count());
@@ -40,16 +38,16 @@ fn pad(value: &str, width: Position, character: &str, label: &'static str) -> Qu
 #[operation(scope = Element)]
 #[explain(label = "PadEnd")]
 #[plan(optimizer_hints(empty = if_all))]
-pub struct PadEndOperation<W, C> {
+pub struct PadEndOperation<A> {
+    #[explain(label)]
+    width: usize,
     #[argument]
-    width: W,
-    #[argument]
-    character: C,
+    character: A,
 }
 
-impl<W: Prepare, C: Prepare> Prepare for PadEndOperation<W, C> {
+impl<A: Prepare> Prepare for PadEndOperation<A> {
     type Prepared<'a>
-        = (W::Prepared<'a>, C::Prepared<'a>)
+        = (usize, A::Prepared<'a>)
     where
         Self: 'a;
 
@@ -58,30 +56,25 @@ impl<W: Prepare, C: Prepare> Prepare for PadEndOperation<W, C> {
         graphrecord: &'a GraphRecord,
         cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
-        Ok((
-            self.width.prepare(graphrecord, cache)?,
-            self.character.prepare(graphrecord, cache)?,
-        ))
+        Ok((self.width, self.character.prepare(graphrecord, cache)?))
     }
 }
 
-impl<I, V, W, C> ElementKernel<Indexed<I, V>> for PadEndOperation<W, C>
+impl<I, V, A> ElementKernel<Indexed<I, V>> for PadEndOperation<A>
 where
     I: IndexDomain,
     V: ValueString,
-    W: ArgumentSource<Keyed<I>>,
-    W::ValueDomain: ValueInt,
-    C: ArgumentSource<Keyed<I>>,
-    C::ValueDomain: ValueString,
+    A: ArgumentSource<Keyed<I>>,
+    A::ValueDomain: ValueString,
 {
-    type Emission = <W::Retention as Retention>::Then<C::Retention>;
+    type Emission = A::Retention;
     type OutShape = Indexed<I, V>;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Indexed<I, V>, Self>> {
-        Ok(string_pad_indexed::<_, V, W, C>(
+        Ok(string_pad_indexed::<_, V, A>(
             graphrecord,
             prepared,
             pad,
@@ -94,22 +87,20 @@ where
     }
 }
 
-impl<V, W, C> ElementKernel<Bare<V>> for PadEndOperation<W, C>
+impl<V, A> ElementKernel<Bare<V>> for PadEndOperation<A>
 where
     V: ValueString + BareValueDomain,
-    W: ArgumentSource<Unaligned>,
-    W::ValueDomain: ValueInt,
-    C: ArgumentSource<Unaligned>,
-    C::ValueDomain: ValueString,
+    A: ArgumentSource<Unaligned>,
+    A::ValueDomain: ValueString,
 {
-    type Emission = <W::Retention as Retention>::Then<C::Retention>;
+    type Emission = A::Retention;
     type OutShape = Bare<V>;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         prepared: Self::Prepared<'a>,
     ) -> QueryResult<ElementPipeline<'a, Bare<V>, Self>> {
-        Ok(string_pad_bare::<V, W, C>(
+        Ok(string_pad_bare::<V, A>(
             graphrecord,
             prepared,
             pad,
@@ -122,27 +113,27 @@ where
     }
 }
 
-impl<E, W, C> PadEnd<W, C> for E
+impl<E, A> PadEnd<A> for E
 where
-    PadEndOperation<W, C>: Operation,
-    E: Build<PadEndOperation<W, C>>,
+    PadEndOperation<A>: Operation,
+    E: Build<PadEndOperation<A>>,
 {
     type Output = E::Output;
 
-    fn pad_end(&self, width: W, character: C) -> Self::Output {
+    fn pad_end(&self, width: usize, character: A) -> Self::Output {
         self.build(PadEndOperation { width, character })
     }
 }
 
 operation_manifest! {
-    PadEndOperation<W, C> {
-        method: PadEnd<W, C>::pad_end;
+    PadEndOperation<A> {
+        method: PadEnd<A>::pad_end;
         scope: element;
 
         kernel {
             parameters: <I: IndexDomain, V: ValueString>;
-            argument: W: ArgumentSource<Keyed<I>> where W::ValueDomain: ValueInt;
-            argument: C: ArgumentSource<Keyed<I>> where C::ValueDomain: ValueString;
+            field: width: usize;
+            argument: A: ArgumentSource<Keyed<I>> where A::ValueDomain: ValueString;
             input: Indexed<I, V>;
             output: Indexed<I, V>;
             emission: ArgumentRetention;
@@ -150,8 +141,8 @@ operation_manifest! {
 
         kernel {
             parameters: <V: ValueString + BareValueDomain>;
-            argument: W: ArgumentSource<Unaligned> where W::ValueDomain: ValueInt;
-            argument: C: ArgumentSource<Unaligned> where C::ValueDomain: ValueString;
+            field: width: usize;
+            argument: A: ArgumentSource<Unaligned> where A::ValueDomain: ValueString;
             input: Bare<V>;
             output: Bare<V>;
             emission: ArgumentRetention;

@@ -8,7 +8,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord, StateView,
-    graphrecord::{Group, ValueView},
+    graphrecord::{GroupIndex, ValueView},
 };
 
 #[derive(
@@ -19,14 +19,14 @@ use graphrecords_core::{
 #[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct NodeCountOperation;
 
-impl ElementKernel<Indexed<Group, Unit>> for NodeCountOperation {
+impl ElementKernel<Indexed<GroupIndex, Unit>> for NodeCountOperation {
     type Emission = Preserving;
-    type OutShape = Indexed<Group, Scalar>;
+    type OutShape = Indexed<GroupIndex, Scalar>;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<Group, Unit>, Self>> {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<GroupIndex, Unit>, Self>> {
         Ok(Pipeline::keyed(
             move |address, membership: QueryResult<_>| {
                 membership.map(|()| {
@@ -41,17 +41,19 @@ impl ElementKernel<Indexed<Group, Unit>> for NodeCountOperation {
     }
 }
 
-impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<Group>>> for NodeCountOperation {
+impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<GroupIndex>>> for NodeCountOperation {
     type Emission = Preserving;
     type OutShape = Indexed<I, Scalar>;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<Group>>, Self>> {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<GroupIndex>>, Self>> {
         Ok(Pipeline::unkeyed(move |reference: QueryResult<_>| {
-            reference.map(|group: EntityRef<'a, Group>| {
-                ValueView::Int(StateView::of(graphrecord).group_node_count(*group.address()) as i64)
+            reference.map(|group_index: EntityRef<'a, GroupIndex>| {
+                ValueView::Int(
+                    StateView::of(graphrecord).group_node_count(*group_index.address()) as i64,
+                )
             })
         }))
     }
@@ -76,14 +78,14 @@ operation_manifest! {
 
         kernel {
             parameters: <>;
-            input: Indexed<Group, Unit>;
-            output: Indexed<Group, Scalar>;
+            input: Indexed<GroupIndex, Unit>;
+            output: Indexed<GroupIndex, Scalar>;
             emission: Preserving;
         }
 
         kernel {
             parameters: <I: IndexDomain>;
-            input: Indexed<I, EntityReference<Group>>;
+            input: Indexed<I, EntityReference<GroupIndex>>;
             output: Indexed<I, Scalar>;
             emission: Preserving;
         }

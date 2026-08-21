@@ -1,5 +1,5 @@
 use super::model::{
-    Field, Kernel, KernelInput, Manifest, Policy, PolicyAccess, Scope, ValueArgument, ViaArgument,
+    Field, Kernel, KernelInput, Manifest, Policy, PolicyCall, Scope, ValueArgument, ViaArgument,
     type_application, type_ident,
 };
 use proc_macro2::TokenStream;
@@ -1278,7 +1278,7 @@ impl Applier<'_> {
         let dispatched = self.kernel.parameters.iter().any(|parameter| {
             matches!(
                 parameter.bound.to_string().as_str(),
-                "EntityDomain" | "EntityAttributes" | "GroupMembership"
+                "EntityIndexDomain" | "EntityAttributes" | "GroupMembership"
             )
         });
 
@@ -1365,7 +1365,9 @@ impl Applier<'_> {
             let bare = parameter.target.is_none() && parameter.additional.is_empty();
             let alias = match parameter.bound.to_string().as_str() {
                 "IndexDomain" | "EnsureSortable" if bare => quote!(#query::dynamic::DynIndex),
-                "EntityDomain" | "EntityAttributes" | "GroupMembership" if bare => entity.clone(),
+                "EntityIndexDomain" | "EntityAttributes" | "GroupMembership" if bare => {
+                    entity.clone()
+                }
                 "ElementShape" if bare => shape.clone(),
                 "OrderState" if bare => order.clone(),
                 "Arity" if bare => arity.clone(),
@@ -1407,6 +1409,7 @@ impl Applier<'_> {
                 let alignment = &argument.alignment;
                 let value = &argument.value;
                 let retention = &argument.retention;
+                let argument_position = road.fields.len();
                 let argument_type =
                     self.argument_type(alignment, value.as_ref(), &quote!(#retention));
                 let argument_value = self.argument_value(
@@ -1421,7 +1424,7 @@ impl Applier<'_> {
                     {
                         type #name = #argument_type;
 
-                        let source = #query::dynamic::invoke_argument_source(arguments, 0);
+                        let source = #query::dynamic::invoke_argument_source(arguments, #argument_position);
                         let first_argument = #argument_value;
                         let operation = #capture;
                         #apply
@@ -1439,6 +1442,7 @@ impl Applier<'_> {
                 let name = &argument.name;
                 let alignment = &argument.alignment;
                 let value = argument.value.as_ref();
+                let argument_position = road.fields.len();
                 let dropping = self.argument_retention(
                     apply,
                     road,
@@ -1458,7 +1462,7 @@ impl Applier<'_> {
 
                 Ok(quote! {
                     {
-                        let source = #query::dynamic::invoke_argument_source(arguments, 0);
+                        let source = #query::dynamic::invoke_argument_source(arguments, #argument_position);
                         if source.is_dropping() {
                             #dropping
                         } else {
@@ -1522,10 +1526,13 @@ impl Applier<'_> {
                 let dropped_preserved = pair(&dropping, &preserving)?;
                 let dropped_dropped = pair(&dropping, &dropping)?;
 
+                let first_position = road.fields.len();
+                let second_position = first_position + 1;
+
                 Ok(quote! {
                     {
-                        let first_source = #query::dynamic::invoke_argument_source(arguments, 0);
-                        let second_source = #query::dynamic::invoke_argument_source(arguments, 1);
+                        let first_source = #query::dynamic::invoke_argument_source(arguments, #first_position);
+                        let second_source = #query::dynamic::invoke_argument_source(arguments, #second_position);
                         match (first_source.is_dropping(), second_source.is_dropping()) {
                             (false, false) => #preserved_preserved,
                             (false, true) => #preserved_dropped,
@@ -1759,10 +1766,10 @@ impl Applier<'_> {
                 }),
                 (Some(constructor), [first]) => {
                     let owner = &constructor.owner;
-                    let function = &constructor.function;
-                    let construction = match constructor.access {
-                        PolicyAccess::Path => quote!(#owner::#function(#first)),
-                        PolicyAccess::Dot => quote!(#owner.#function(#first)),
+                    let construction = match &constructor.call {
+                        PolicyCall::Path(function) => quote!(#owner::#function(#first)),
+                        PolicyCall::Dot(function) => quote!(#owner.#function(#first)),
+                        PolicyCall::Tuple => quote!(#owner(#first)),
                     };
 
                     Ok(quote! {
@@ -1827,15 +1834,8 @@ impl Applier<'_> {
         }
 
         if !road.fields.is_empty() {
-            if !values.is_empty() {
-                return Err(Error::new(
-                    method.span(),
-                    "the fields have no dynamic capture",
-                ));
-            }
-
-            return match road.fields {
-                [field] => {
+            return match (road.fields, values) {
+                ([field], []) => {
                     let invoke = self.field_invoke(field, &quote!(0))?;
 
                     Ok(quote! {
@@ -1847,7 +1847,7 @@ impl Applier<'_> {
                         }
                     })
                 }
-                [first, second] => {
+                ([first, second], []) => {
                     let first_invoke = self.field_invoke(first, &quote!(0))?;
                     let second_invoke = self.field_invoke(second, &quote!(1))?;
 
@@ -1857,6 +1857,18 @@ impl Applier<'_> {
                             let first_field = #first_invoke;
                             let second_field = #second_invoke;
                             let captured = capture.#method(first_field, second_field);
+                            captured.operation()
+                        }
+                    })
+                }
+                ([field], [value]) => {
+                    let invoke = self.field_invoke(field, &quote!(0))?;
+
+                    Ok(quote! {
+                        {
+                            let capture = #query::dynamic::OperationCapture::<#operation>::capture();
+                            let field = #invoke;
+                            let captured = capture.#method(field, #value);
                             captured.operation()
                         }
                     })
@@ -1903,7 +1915,7 @@ impl Applier<'_> {
 
         let function = match field.field_type.to_string().as_str() {
             "AttributeName" => quote!(invoke_attribute),
-            "Group" => quote!(invoke_group),
+            "GroupIndex" => quote!(invoke_group),
             "EdgeDirection" => quote!(invoke_direction),
             "usize" => quote!(invoke_position),
             _ => {

@@ -6,31 +6,31 @@ use crate::graphrecord::{GraphRecord, plugins::Plugin};
 use crate::{
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
-        datatypes::{Group, NodeIndex},
+        datatypes::{GroupIndex, NodeIndex},
         state::GraphState,
     },
 };
 use graphrecords_utils::distinct::Distinct;
 
 pub struct AddNodesToGroup {
-    group: Group,
+    group_index: GroupIndex,
     node_indices: Vec<NodeIndex>,
 }
 
 impl AddNodesToGroup {
     #[must_use]
-    pub fn new(group: Group, node_indices: Vec<NodeIndex>) -> Self {
+    pub fn new(node_indices: Vec<NodeIndex>, group_index: GroupIndex) -> Self {
         let node_indices: Vec<_> = node_indices.into_iter().collect::<Distinct<_>>().into();
 
         Self {
-            group,
+            group_index,
             node_indices,
         }
     }
 
     #[must_use]
-    pub const fn group(&self) -> &Group {
-        &self.group
+    pub const fn group_index(&self) -> &GroupIndex {
+        &self.group_index
     }
 
     #[must_use]
@@ -44,13 +44,13 @@ impl Sealed for AddNodesToGroup {}
 impl Change for AddNodesToGroup {
     fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
         let Self {
-            group,
+            group_index,
             node_indices,
         } = *self;
 
         let group_address = state
-            .resolve_group_address(&group)
-            .ok_or(GraphRecordError::GroupNotFound { group })?;
+            .resolve_group_address(&group_index)
+            .ok_or(GraphRecordError::GroupNotFound { group_index })?;
 
         for node_index in node_indices {
             let node_address = state
@@ -87,16 +87,16 @@ impl Change for AddNodesToGroup {
 #[cfg(test)]
 mod test {
     use super::AddNodesToGroup;
-    use crate::graphrecord::datatypes::{Group, NodeIndex};
+    use crate::graphrecord::datatypes::{GroupIndex, NodeIndex};
 
     #[test]
     fn test_new() {
         let addition = AddNodesToGroup::new(
-            "dolor".into(),
             vec!["lorem".into(), "ipsum".into(), "lorem".into()],
+            "dolor".into(),
         );
 
-        assert_eq!(&Group::from("dolor"), addition.group());
+        assert_eq!(&GroupIndex::from("dolor"), addition.group_index());
         assert_eq!(
             vec![NodeIndex::from("lorem"), NodeIndex::from("ipsum")],
             addition.node_indices()

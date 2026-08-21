@@ -1,6 +1,6 @@
 use crate::{
-    EntityDomain, EntityReference, FailureKind, FailureKindValue, IndexDomain, IndexValue, Mask,
-    Scalar, capabilities::ValueEquivalence,
+    EntityIndexDomain, EntityReference, FailureKind, FailureKindValue, IndexDomain, IndexValue,
+    Mask, Scalar, capabilities::ValueEquivalence,
 };
 use graphrecords_core::graphrecord::{AttributeName, Value};
 
@@ -54,7 +54,7 @@ impl<I: IndexDomain> ValueGrouping for IndexValue<I> {
     }
 }
 
-impl<E: EntityDomain> ValueGrouping for EntityReference<E> {
+impl<E: EntityIndexDomain> ValueGrouping for EntityReference<E> {
     type KeyDomain = E;
 
     fn to_group_key(value: &Self::Value<'_>) -> <Self::KeyDomain as IndexDomain>::Owned {

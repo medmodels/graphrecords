@@ -1,4 +1,4 @@
-use super::model::{Kernel, Manifest, Parameter, Scope, ValueArgument};
+use super::model::{Field, Kernel, Manifest, Parameter, Scope, ValueArgument};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Error, Ident, Path, Result, Type};
@@ -273,7 +273,7 @@ fn verify_method(manifest: &Manifest, kernel: &Kernel, query: &Path) -> Result<T
                 ));
             };
             let receiver = quote!(#query::expressions::ExpressionHandle<#shape, #arity>);
-            policy_method(manifest, query, None, &receiver)
+            policy_method(manifest, query, None, &receiver, &kernel.fields)
         }
         Scope::Element => {
             let shape = kernel.shape();
@@ -303,7 +303,13 @@ fn verify_method(manifest: &Manifest, kernel: &Kernel, query: &Path) -> Result<T
             let receiver = quote! {
                 #query::expressions::ExpressionHandle<#shape, #query::Multiple<#query::Ordered>>
             };
-            policy_method(manifest, query, kernel.selector.as_ref(), &receiver)
+            policy_method(
+                manifest,
+                query,
+                kernel.selector.as_ref(),
+                &receiver,
+                &kernel.fields,
+            )
         }
         Scope::Group => {
             let Some(group) = &kernel.group else {
@@ -316,7 +322,7 @@ fn verify_method(manifest: &Manifest, kernel: &Kernel, query: &Path) -> Result<T
             let key = &group.key;
             let payload = kernel.shape();
             let receiver = quote!(#query::expressions::GroupedExpression<#member, #key, #payload>);
-            policy_method(manifest, query, None, &receiver)
+            policy_method(manifest, query, None, &receiver, &kernel.fields)
         }
     }
 }
@@ -326,6 +332,7 @@ fn policy_method(
     query: &Path,
     target: Option<&Path>,
     receiver: &TokenStream,
+    fields: &[Field],
 ) -> Result<TokenStream> {
     let method = &manifest.method;
 
@@ -389,9 +396,18 @@ fn policy_method(
         .as_ref()
         .map(|arguments| quote!(<#(#arguments),*>));
 
+    let call = if fields.is_empty() {
+        quote!(let _ = E::#method;)
+    } else {
+        let field_types = fields.iter().map(|field| &field.field_type);
+        let argument_types = manifest.trait_arguments.iter().flatten();
+
+        quote!(let _: fn(&E, #(#field_types,)* #(#argument_types),*) -> E::Output = E::#method;)
+    };
+
     Ok(quote! {
         const fn verify_method<E: #method_trait #trait_arguments>() {
-            let _ = E::#method;
+            #call
         }
 
         verify_method::<#receiver>();
@@ -411,7 +427,7 @@ fn parameter_alias(
 
     let witness = match (bound.as_str(), &parameter.target, &additional[..]) {
         ("IndexDomain", None, []) => quote!(#query::registry::IndexWitness),
-        ("EntityDomain", None, []) => quote!(#query::registry::EntityWitness),
+        ("EntityIndexDomain", None, []) => quote!(#query::registry::EntityWitness),
         ("EntityAttributes", None, []) => quote!(#query::registry::EntityAttributesWitness),
         ("GroupMembership", None, []) => quote!(#query::registry::GroupMembershipWitness),
         ("GroupMember", None, []) => quote!(#query::registry::GroupMemberWitness),
@@ -569,7 +585,7 @@ pub fn capability_marker(
             "TransitionFailureKindIndexCapability"
         }
         ("ValueTransition", Some("FailureKindValue")) => "TransitionFailureKindValueCapability",
-        ("ValueTransition", Some("(IndexValue<Group>)")) => "TransitionGroupIndexCapability",
+        ("ValueTransition", Some("(IndexValue<GroupIndex>)")) => "TransitionGroupIndexCapability",
         ("ValueTransition", Some("Mask")) => "TransitionMaskCapability",
         ("ValueTransition", Some("(IndexValue<NodeIndex>)")) => "TransitionNodeIndexCapability",
         ("ValueTransition", Some("(IndexValue<Positional>)")) => {

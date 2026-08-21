@@ -4,8 +4,8 @@ use crate::{
     Scalar, ValueDomain, error::conversion::InvalidTransition,
 };
 use graphrecords_core::graphrecord::{
-    AttributeName, Group, GroupView, Identifier, IdentifierView, NodeIndex, NodeIndexView, Value,
-    ValueView, datatypes::AttributeNameView,
+    AttributeName, GroupIndex, GroupIndexView, Identifier, IdentifierView, NodeIndex,
+    NodeIndexView, Value, ValueView, datatypes::AttributeNameView,
 };
 
 pub trait ValueTransition<T: ValueDomain>: ValueDomain {
@@ -15,7 +15,7 @@ pub trait ValueTransition<T: ValueDomain>: ValueDomain {
 const ATTRIBUTE_NAME_INDEX_TARGET: &str = "IndexValue<AttributeName>";
 const ATTRIBUTE_NAME_TARGET: &str = "AttributeName";
 const BOOL_INDEX_TARGET: &str = "IndexValue<bool>";
-const GROUP_TARGET: &str = "IndexValue<Group>";
+const GROUP_TARGET: &str = "IndexValue<GroupIndex>";
 const MASK_TARGET: &str = "Mask";
 const NODE_INDEX_TARGET: &str = "IndexValue<NodeIndex>";
 const POSITIONAL_INDEX_TARGET: &str = "IndexValue<Positional>";
@@ -121,12 +121,12 @@ impl ValueTransition<IndexValue<NodeIndex>> for Scalar {
     }
 }
 
-impl ValueTransition<IndexValue<Group>> for Scalar {
+impl ValueTransition<IndexValue<GroupIndex>> for Scalar {
     fn transition<'a>(
         value: Self::Value<'a>,
         label: &'static str,
-    ) -> QueryResult<<IndexValue<Group> as ValueDomain>::Value<'a>> {
-        value_view_to_identifier_view(value, GROUP_TARGET, label).map(GroupView::from)
+    ) -> QueryResult<<IndexValue<GroupIndex> as ValueDomain>::Value<'a>> {
+        value_view_to_identifier_view(value, GROUP_TARGET, label).map(GroupIndexView::from)
     }
 }
 
@@ -196,13 +196,13 @@ impl ValueTransition<IndexValue<NodeIndex>> for IndexValue<Value> {
     }
 }
 
-impl ValueTransition<IndexValue<Group>> for IndexValue<Value> {
+impl ValueTransition<IndexValue<GroupIndex>> for IndexValue<Value> {
     fn transition<'a>(
         value: Self::Value<'a>,
         label: &'static str,
-    ) -> QueryResult<<IndexValue<Group> as ValueDomain>::Value<'a>> {
+    ) -> QueryResult<<IndexValue<GroupIndex> as ValueDomain>::Value<'a>> {
         value_to_identifier(value, GROUP_TARGET, label)
-            .map(|identifier| GroupView::from(identifier_into_view(identifier)))
+            .map(|identifier| GroupIndexView::from(identifier_into_view(identifier)))
     }
 }
 
@@ -272,12 +272,12 @@ impl ValueTransition<IndexValue<NodeIndex>> for AttributeName {
     }
 }
 
-impl ValueTransition<IndexValue<Group>> for AttributeName {
+impl ValueTransition<IndexValue<GroupIndex>> for AttributeName {
     fn transition<'a>(
         value: Self::Value<'a>,
         _label: &'static str,
-    ) -> QueryResult<<IndexValue<Group> as ValueDomain>::Value<'a>> {
-        Ok(GroupView::from(value.identifier_view().clone()))
+    ) -> QueryResult<<IndexValue<GroupIndex> as ValueDomain>::Value<'a>> {
+        Ok(GroupIndexView::from(value.identifier_view().clone()))
     }
 }
 
@@ -370,7 +370,7 @@ impl ValueTransition<IndexValue<Positional>> for IndexValue<NodeIndex> {
     }
 }
 
-impl ValueTransition<Scalar> for IndexValue<Group> {
+impl ValueTransition<Scalar> for IndexValue<GroupIndex> {
     fn transition<'a>(
         value: Self::Value<'a>,
         _label: &'static str,
@@ -381,16 +381,18 @@ impl ValueTransition<Scalar> for IndexValue<Group> {
     }
 }
 
-impl ValueTransition<IndexValue<Value>> for IndexValue<Group> {
+impl ValueTransition<IndexValue<Value>> for IndexValue<GroupIndex> {
     fn transition<'a>(
         value: Self::Value<'a>,
         _label: &'static str,
     ) -> QueryResult<<IndexValue<Value> as ValueDomain>::Value<'a>> {
-        Ok(identifier_to_value(Identifier::from(Group::from(value))))
+        Ok(identifier_to_value(Identifier::from(GroupIndex::from(
+            value,
+        ))))
     }
 }
 
-impl ValueTransition<AttributeName> for IndexValue<Group> {
+impl ValueTransition<AttributeName> for IndexValue<GroupIndex> {
     fn transition<'a>(
         value: Self::Value<'a>,
         _label: &'static str,
@@ -399,7 +401,7 @@ impl ValueTransition<AttributeName> for IndexValue<Group> {
     }
 }
 
-impl ValueTransition<IndexValue<AttributeName>> for IndexValue<Group> {
+impl ValueTransition<IndexValue<AttributeName>> for IndexValue<GroupIndex> {
     fn transition<'a>(
         value: Self::Value<'a>,
         _label: &'static str,
@@ -408,7 +410,7 @@ impl ValueTransition<IndexValue<AttributeName>> for IndexValue<Group> {
     }
 }
 
-impl ValueTransition<IndexValue<Positional>> for IndexValue<Group> {
+impl ValueTransition<IndexValue<Positional>> for IndexValue<GroupIndex> {
     fn transition<'a>(
         value: Self::Value<'a>,
         label: &'static str,
@@ -416,12 +418,12 @@ impl ValueTransition<IndexValue<Positional>> for IndexValue<Group> {
         match value.identifier_view() {
             IdentifierView::Int(integer) => Position::try_from(*integer).map_err(|_| {
                 Failure::new(
-                    InvalidTransition::new(Group::from(value), POSITIONAL_INDEX_TARGET),
+                    InvalidTransition::new(GroupIndex::from(value), POSITIONAL_INDEX_TARGET),
                     label,
                 )
             }),
             IdentifierView::String(_) => Err(Failure::new(
-                InvalidTransition::new(Group::from(value), POSITIONAL_INDEX_TARGET),
+                InvalidTransition::new(GroupIndex::from(value), POSITIONAL_INDEX_TARGET),
                 label,
             )),
         }
@@ -468,12 +470,12 @@ impl ValueTransition<IndexValue<NodeIndex>> for IndexValue<AttributeName> {
     }
 }
 
-impl ValueTransition<IndexValue<Group>> for IndexValue<AttributeName> {
+impl ValueTransition<IndexValue<GroupIndex>> for IndexValue<AttributeName> {
     fn transition<'a>(
         value: Self::Value<'a>,
         _label: &'static str,
-    ) -> QueryResult<<IndexValue<Group> as ValueDomain>::Value<'a>> {
-        Ok(GroupView::from(value.identifier_view().clone()))
+    ) -> QueryResult<<IndexValue<GroupIndex> as ValueDomain>::Value<'a>> {
+        Ok(GroupIndexView::from(value.identifier_view().clone()))
     }
 }
 
@@ -589,13 +591,13 @@ impl ValueTransition<IndexValue<NodeIndex>> for IndexValue<Positional> {
     }
 }
 
-impl ValueTransition<IndexValue<Group>> for IndexValue<Positional> {
+impl ValueTransition<IndexValue<GroupIndex>> for IndexValue<Positional> {
     fn transition<'a>(
         value: Self::Value<'a>,
         label: &'static str,
-    ) -> QueryResult<<IndexValue<Group> as ValueDomain>::Value<'a>> {
+    ) -> QueryResult<<IndexValue<GroupIndex> as ValueDomain>::Value<'a>> {
         position_to_integer(value, GROUP_TARGET, label)
-            .map(|integer| GroupView::from(IdentifierView::Int(integer)))
+            .map(|integer| GroupIndexView::from(IdentifierView::Int(integer)))
     }
 }
 

@@ -12,7 +12,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     errors::GraphRecordError,
-    graphrecord::{Group, GroupAddress, StateView},
+    graphrecord::{GroupAddress, GroupIndex, StateView},
 };
 use graphrecords_utils::aliases::GrHashSet;
 
@@ -22,7 +22,7 @@ use graphrecords_utils::aliases::GrHashSet;
 #[plan(optimizer_hints(commutes_with_filter, allows_limit_pushdown, empty = if_any))]
 pub struct InGroupOperation {
     #[explain(label)]
-    group: Group,
+    group_index: GroupIndex,
 }
 
 impl Prepare for InGroupOperation {
@@ -34,11 +34,11 @@ impl Prepare for InGroupOperation {
         _cache: &'a EvaluationCache,
     ) -> QueryResult<Self::Prepared<'a>> {
         StateView::of(graphrecord)
-            .resolve_group_address(&self.group)
+            .resolve_group_address(&self.group_index)
             .ok_or_else(|| {
                 Failure::new(
                     GraphRecordError::GroupNotFound {
-                        group: self.group.clone(),
+                        group_index: self.group_index.clone(),
                     },
                     Self::LABEL,
                 )
@@ -64,7 +64,7 @@ impl<I: GroupMembership> ElementKernel<Indexed<I, Unit>> for InGroupOperation {
     }
 
     fn estimate(&self, input: Estimate, stats: &Stats) -> Estimate {
-        let size = I::group_size(stats, &self.group);
+        let size = I::group_size(stats, &self.group_index);
         let selectivity = input
             .elements
             .map(|elements| size.min(elements) as f64 / elements.max(1) as f64);
@@ -104,8 +104,10 @@ impl<E: GroupMembership, I: IndexDomain> ElementKernel<Indexed<I, EntityReferenc
 impl<E: Build<InGroupOperation>> InGroup for E {
     type Output = E::Output;
 
-    fn in_group(&self, group: Group) -> Self::Output {
-        self.build(InGroupOperation { group })
+    fn in_group(&self, group_index: impl Into<GroupIndex>) -> Self::Output {
+        self.build(InGroupOperation {
+            group_index: group_index.into(),
+        })
     }
 }
 
@@ -116,7 +118,7 @@ operation_manifest! {
 
         kernel {
             parameters: <I: GroupMembership>;
-            field: group: Group;
+            field: group_index: GroupIndex;
             input: Indexed<I, Unit>;
             output: Indexed<I, Mask>;
             emission: Preserving;
@@ -124,7 +126,7 @@ operation_manifest! {
 
         kernel {
             parameters: <E: GroupMembership, I: IndexDomain>;
-            field: group: Group;
+            field: group_index: GroupIndex;
             input: Indexed<I, EntityReference<E>>;
             output: Indexed<I, Mask>;
             emission: Preserving;

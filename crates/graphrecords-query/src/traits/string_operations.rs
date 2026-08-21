@@ -94,16 +94,16 @@ pub trait Reverse {
     fn reverse(&self) -> Self::Output;
 }
 
-pub trait PadStart<W, C> {
+pub trait PadStart<A> {
     type Output;
 
-    fn pad_start(&self, width: W, character: C) -> Self::Output;
+    fn pad_start(&self, width: usize, character: A) -> Self::Output;
 }
 
-pub trait PadEnd<W, C> {
+pub trait PadEnd<A> {
     type Output;
 
-    fn pad_end(&self, width: W, character: C) -> Self::Output;
+    fn pad_end(&self, width: usize, character: A) -> Self::Output;
 }
 
 pub trait Matches<A> {

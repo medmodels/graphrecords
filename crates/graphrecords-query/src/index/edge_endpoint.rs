@@ -1,4 +1,4 @@
-use crate::{IndexDomain, QueryResult};
+use crate::{IndexDomain, OwnedIndex, QueryResult};
 use graphrecords_core::GraphRecord;
 use std::fmt::{self, Display, Formatter};
 
@@ -16,6 +16,8 @@ impl Display for EdgeEndpointRole {
         }
     }
 }
+
+impl OwnedIndex for EdgeEndpointRole {}
 
 impl IndexDomain for EdgeEndpointRole {
     type Address = Self;

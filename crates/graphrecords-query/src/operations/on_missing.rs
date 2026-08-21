@@ -19,12 +19,12 @@ use std::{
 };
 
 pub trait OnMissing<A: Alignment>: ArgumentSource<A> {
-    fn on_missing<P>(self, policy: P) -> WithMissing<A, Self, P>
+    fn on_missing<P>(&self, policy: P) -> WithMissing<A, Self, P>
     where
-        Self: Sized,
+        Self: Sized + Clone,
         P: MissingPolicy<A, Self::ValueDomain>,
     {
-        WithMissing::new(self, policy)
+        WithMissing::new(self.clone(), policy)
     }
 }
 

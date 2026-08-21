@@ -1,6 +1,6 @@
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, Group, StateView},
+    graphrecord::{AttributeName, GroupIndex, StateView},
 };
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 use std::{
@@ -49,7 +49,7 @@ impl<'a> Stats<'a> {
 pub struct NodeGroupSize;
 
 impl Statistic for NodeGroupSize {
-    type Key = Group;
+    type Key = GroupIndex;
     type Value = usize;
 
     fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {
@@ -64,7 +64,7 @@ impl Statistic for NodeGroupSize {
 pub struct EdgeGroupSize;
 
 impl Statistic for EdgeGroupSize {
-    type Key = Group;
+    type Key = GroupIndex;
     type Value = usize;
 
     fn compute(graphrecord: &GraphRecord, key: &Self::Key) -> Self::Value {

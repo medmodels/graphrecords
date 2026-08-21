@@ -5,25 +5,25 @@ use super::{Change, sealed::Sealed};
 use crate::graphrecord::{GraphRecord, plugins::Plugin};
 use crate::{
     errors::{GraphRecordError, GraphRecordResult},
-    graphrecord::{datatypes::Group, state::GraphState},
+    graphrecord::{datatypes::GroupIndex, state::GraphState},
 };
 use graphrecords_utils::distinct::Distinct;
 
 pub struct RemoveGroups {
-    groups: Vec<Group>,
+    group_indices: Vec<GroupIndex>,
 }
 
 impl RemoveGroups {
     #[must_use]
-    pub fn new(groups: Vec<Group>) -> Self {
-        let groups: Vec<_> = groups.into_iter().collect::<Distinct<_>>().into();
+    pub fn new(group_indices: Vec<GroupIndex>) -> Self {
+        let group_indices: Vec<_> = group_indices.into_iter().collect::<Distinct<_>>().into();
 
-        Self { groups }
+        Self { group_indices }
     }
 
     #[must_use]
-    pub fn groups(&self) -> &[Group] {
-        &self.groups
+    pub fn group_indices(&self) -> &[GroupIndex] {
+        &self.group_indices
     }
 }
 
@@ -31,10 +31,10 @@ impl Sealed for RemoveGroups {}
 
 impl Change for RemoveGroups {
     fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        for group in self.groups {
+        for group_index in self.group_indices {
             let address = state
-                .resolve_group_address(&group)
-                .ok_or(GraphRecordError::GroupNotFound { group })?;
+                .resolve_group_address(&group_index)
+                .ok_or(GraphRecordError::GroupNotFound { group_index })?;
 
             state.remove_group(address)?;
         }
@@ -66,15 +66,15 @@ impl Change for RemoveGroups {
 #[cfg(test)]
 mod test {
     use super::RemoveGroups;
-    use crate::graphrecord::datatypes::Group;
+    use crate::graphrecord::datatypes::GroupIndex;
 
     #[test]
     fn test_new() {
         let removal = RemoveGroups::new(vec!["lorem".into(), "ipsum".into(), "lorem".into()]);
 
         assert_eq!(
-            vec![Group::from("lorem"), Group::from("ipsum")],
-            removal.groups()
+            vec![GroupIndex::from("lorem"), GroupIndex::from("ipsum")],
+            removal.group_indices()
         );
     }
 }

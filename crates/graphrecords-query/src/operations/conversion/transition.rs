@@ -11,7 +11,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, Group, NodeIndex, Value},
+    graphrecord::{AttributeName, GroupIndex, NodeIndex, Value},
 };
 use std::{
     any::type_name,
@@ -281,28 +281,28 @@ pub(super) mod failure_kind_value {
 
 pub(super) mod group_index {
     use super::{
-        Bare, Group, IndexValue, Indexed, Preserving, Transition, TransitionOperation,
+        Bare, GroupIndex, IndexValue, Indexed, Preserving, Transition, TransitionOperation,
         operation_manifest,
     };
 
     operation_manifest! {
-        TransitionOperation<IndexValue<Group>> {
+        TransitionOperation<IndexValue<GroupIndex>> {
             method: Transition::transition;
             scope: element;
 
             kernel {
-                parameters: <I: IndexDomain, S: ValueTransition<(IndexValue<Group>)>,>;
-                selector: IndexValue<Group>;
+                parameters: <I: IndexDomain, S: ValueTransition<(IndexValue<GroupIndex>)>,>;
+                selector: IndexValue<GroupIndex>;
                 input: Indexed<I, S>;
-                output: Indexed<I, IndexValue<Group>>;
+                output: Indexed<I, IndexValue<GroupIndex>>;
                 emission: Preserving;
             }
 
             kernel {
-                parameters: <S: ValueTransition<(IndexValue<Group>)> + BareValueDomain>;
-                selector: IndexValue<Group>;
+                parameters: <S: ValueTransition<(IndexValue<GroupIndex>)> + BareValueDomain>;
+                selector: IndexValue<GroupIndex>;
                 input: Bare<S>;
-                output: Bare<IndexValue<Group>>;
+                output: Bare<IndexValue<GroupIndex>>;
                 emission: Preserving;
             }
         }

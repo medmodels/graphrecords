@@ -133,55 +133,6 @@ impl<I: IndexDomain> Diagnostic for UnresolvedIndex<I> {
     }
 }
 
-pub struct UnresolvedIndices<I: IndexDomain> {
-    indices: Vec<I::Owned>,
-}
-
-impl<I: IndexDomain> UnresolvedIndices<I> {
-    #[must_use]
-    pub const fn new(indices: Vec<I::Owned>) -> Self {
-        Self { indices }
-    }
-
-    #[must_use]
-    pub fn indices(&self) -> &[I::Owned] {
-        &self.indices
-    }
-}
-
-impl<I: IndexDomain> Debug for UnresolvedIndices<I> {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("UnresolvedIndices")
-            .field("indices", &self.indices)
-            .finish()
-    }
-}
-
-impl<I: IndexDomain> Display for UnresolvedIndices<I> {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{} missing element(s)", self.indices.len())?;
-
-        for index in &self.indices {
-            write!(formatter, "\nindex `{index}` does not exist")?;
-        }
-
-        Ok(())
-    }
-}
-
-impl<I: IndexDomain> Error for UnresolvedIndices<I> {}
-
-impl<I: IndexDomain> Diagnostic for UnresolvedIndices<I> {
-    fn name() -> &'static str {
-        "UnresolvedIndices"
-    }
-
-    fn help(&self) -> Option<String> {
-        Some("drop the missing elements with `on_missing(Drop)`".to_string())
-    }
-}
-
 pub struct UncoveredIndices<I: IndexDomain> {
     indices: Vec<I::Owned>,
 }

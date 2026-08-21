@@ -86,37 +86,6 @@ impl<T: Debug + Display + Send + Sync + 'static> Diagnostic for InvalidClipBound
 }
 
 #[derive(Debug)]
-pub struct NegativeLength {
-    value: i64,
-}
-
-impl NegativeLength {
-    #[must_use]
-    pub const fn new(value: i64) -> Self {
-        Self { value }
-    }
-
-    #[must_use]
-    pub const fn value(&self) -> i64 {
-        self.value
-    }
-}
-
-impl Display for NegativeLength {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "`{}` is a negative length", self.value)
-    }
-}
-
-impl Error for NegativeLength {}
-
-impl Diagnostic for NegativeLength {
-    fn name() -> &'static str {
-        "NegativeLength"
-    }
-}
-
-#[derive(Debug)]
 pub struct NegativeSquareRoot {
     value: Value,
 }

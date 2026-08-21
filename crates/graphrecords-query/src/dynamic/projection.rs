@@ -28,7 +28,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, EdgeIndex, Group as GroupIndex, NodeIndex, Value},
+    graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value},
 };
 use graphrecords_utils::aliases::GrHashSet;
 use std::{

@@ -1,4 +1,4 @@
-use crate::graphrecord::{AttributeName, EdgeIndex, Group, NodeIndex, datatypes::DataType};
+use crate::graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, datatypes::DataType};
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -6,12 +6,6 @@ use std::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SchemaError {
-    GroupNotInSchema {
-        group: Group,
-    },
-    GroupAlreadyInSchema {
-        group: Group,
-    },
     NodeAttributeMissing {
         node_index: NodeIndex,
         attribute: AttributeName,
@@ -42,6 +36,12 @@ pub enum SchemaError {
         edge_index: EdgeIndex,
         attributes: Vec<AttributeName>,
     },
+    GroupNotInSchema {
+        group_index: GroupIndex,
+    },
+    GroupAlreadyInSchema {
+        group_index: GroupIndex,
+    },
     ContinuousAttributeNotNumeric,
     TemporalAttributeNotTemporal,
 }
@@ -59,12 +59,6 @@ fn join_attributes(attributes: &[AttributeName]) -> String {
 impl Display for SchemaError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Self::GroupNotInSchema { group } => {
-                write!(f, "Group `{group}` is not defined in the schema")
-            }
-            Self::GroupAlreadyInSchema { group } => {
-                write!(f, "Group `{group}` already exists in the schema")
-            }
             Self::NodeAttributeMissing {
                 node_index,
                 attribute,
@@ -115,6 +109,18 @@ impl Display for SchemaError {
                 "Attributes [{}] of edge with index `{edge_index}` do not exist in schema.",
                 join_attributes(attributes)
             ),
+            Self::GroupNotInSchema { group_index } => {
+                write!(
+                    f,
+                    "Group with index `{group_index}` is not defined in the schema"
+                )
+            }
+            Self::GroupAlreadyInSchema { group_index } => {
+                write!(
+                    f,
+                    "Group with index `{group_index}` already exists in the schema"
+                )
+            }
             Self::ContinuousAttributeNotNumeric => {
                 write!(
                     f,
@@ -139,16 +145,16 @@ mod test {
     #[test]
     fn test_display_groups() {
         assert_eq!(
-            "Group `\"test\"` is not defined in the schema",
+            "Group with index `\"test\"` is not defined in the schema",
             SchemaError::GroupNotInSchema {
-                group: "test".into()
+                group_index: "test".into()
             }
             .to_string()
         );
         assert_eq!(
-            "Group `\"test\"` already exists in the schema",
+            "Group with index `\"test\"` already exists in the schema",
             SchemaError::GroupAlreadyInSchema {
-                group: "test".into()
+                group_index: "test".into()
             }
             .to_string()
         );

@@ -11,8 +11,9 @@ pub use expanded::{
 use graphrecords_core::{
     GraphRecord,
     graphrecord::{
-        AttributeName, AttributeNameView, EdgeAddress, EdgeIndex, Group, GroupAddress, GroupView,
-        Identifier, IdentifierView, NodeAddress, NodeIndex, NodeIndexView, StateView, Value,
+        AttributeName, AttributeNameView, EdgeAddress, EdgeIndex, GroupAddress, GroupIndex,
+        GroupIndexView, Identifier, IdentifierView, NodeAddress, NodeIndex, NodeIndexView,
+        StateView, Value,
     },
 };
 use std::{
@@ -26,12 +27,20 @@ pub type Position = usize;
 
 pub trait OwnedIndex: Any + Debug + Display + Send + Sync {}
 
-impl<T: Any + Debug + Display + Send + Sync> OwnedIndex for T {}
+impl OwnedIndex for Position {}
+impl OwnedIndex for NodeIndex {}
+impl OwnedIndex for EdgeIndex {}
+impl OwnedIndex for GroupIndex {}
+impl OwnedIndex for AttributeName {}
+impl OwnedIndex for Value {}
+impl OwnedIndex for FailureKind {}
+impl OwnedIndex for bool {}
+impl OwnedIndex for i8 {}
 
 pub trait IndexDomain: 'static + Clone {
     type Owned: 'static + Clone + Eq + Hash + OwnedIndex;
 
-    type Index<'a>: Clone + Eq + Hash + 'a
+    type Index<'a>: Clone + Debug + Eq + Hash + 'a
     where
         Self: 'a;
 
@@ -50,7 +59,7 @@ pub trait IndexDomain: 'static + Clone {
     ) -> QueryResult<Self::Address>;
 }
 
-pub trait EntityDomain: IndexDomain {}
+pub trait EntityIndexDomain: IndexDomain {}
 
 #[derive(Clone, Debug)]
 pub struct Positional;
@@ -95,7 +104,7 @@ impl IndexDomain for NodeIndex {
     }
 
     fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
-        NodeIndexView::from(owned.identifier())
+        NodeIndexView::from(owned)
     }
 
     fn resolve(
@@ -145,13 +154,13 @@ impl IndexDomain for EdgeIndex {
     }
 }
 
-impl IndexDomain for Group {
+impl IndexDomain for GroupIndex {
     type Address = GroupAddress;
-    type Index<'a> = GroupView<'a>;
+    type Index<'a> = GroupIndexView<'a>;
     type Owned = Self;
 
     fn index<'a>(graphrecord: &'a GraphRecord, address: &Self::Address) -> Self::Index<'a> {
-        GroupView::from(StateView::of(graphrecord).group_name(*address).identifier())
+        GroupIndexView::from(StateView::of(graphrecord).group_index(*address))
     }
 
     fn own_index(index: &Self::Index<'_>) -> Self::Owned {
@@ -159,7 +168,7 @@ impl IndexDomain for Group {
     }
 
     fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
-        GroupView::from(owned.identifier())
+        GroupIndexView::from(owned)
     }
 
     fn resolve(
@@ -248,7 +257,7 @@ impl IndexDomain for AttributeName {
     }
 
     fn borrow_index(owned: &Self::Owned) -> Self::Index<'_> {
-        AttributeNameView::from(owned.identifier())
+        AttributeNameView::from(owned)
     }
 
     fn resolve(
@@ -286,8 +295,8 @@ impl IndexDomain for bool {
     }
 }
 
-impl EntityDomain for NodeIndex {}
+impl EntityIndexDomain for NodeIndex {}
 
-impl EntityDomain for EdgeIndex {}
+impl EntityIndexDomain for EdgeIndex {}
 
-impl EntityDomain for Group {}
+impl EntityIndexDomain for GroupIndex {}

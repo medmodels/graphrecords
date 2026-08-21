@@ -14,7 +14,7 @@ use crate::{
 pub use first::FirstOperation;
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, EdgeIndex, Group, NodeIndex, Value},
+    graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value},
 };
 pub use last::LastOperation;
 pub use reverse_order::ReverseOrderOperation;
@@ -87,7 +87,7 @@ impl IndexTiebreak for NodeIndex {
     }
 }
 
-impl IndexTiebreak for Group {
+impl IndexTiebreak for GroupIndex {
     fn tiebreak<T, F: Fn(&T) -> &Self::Address>(
         graphrecord: &GraphRecord,
         run: &mut [T],

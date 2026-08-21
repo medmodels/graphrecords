@@ -1,7 +1,7 @@
 use super::descriptor::{DomainDescriptor, IndexDescriptor, ValueDescriptor, ValueRole};
 use crate::{
-    BareValueDomain, EdgeEndpointRole, EntityDomain, FailureKind, FailureKindValue, FailureValue,
-    IndexDomain, IndexValue, Mask, Positional, Scalar, ValueDomain,
+    BareValueDomain, EdgeEndpointRole, EntityIndexDomain, FailureKind, FailureKindValue,
+    FailureValue, IndexDomain, IndexValue, Mask, Positional, Scalar, ValueDomain,
     capabilities::{
         EnsureSortable, ValueAbsolute, ValueAdd, ValueCast, ValueCeil, ValueClip, ValueCubeRoot,
         ValueDivide, ValueEquality, ValueEquivalence, ValueExponential, ValueFloor, ValueGrouping,
@@ -16,7 +16,7 @@ use crate::{
     },
     index::{EntityAttributes, GroupMembership},
 };
-use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, Group, NodeIndex, Value};
+use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value};
 use graphrecords_utils::aliases::{GrHashMap, GrHashSet};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -204,7 +204,7 @@ impl CapabilityRegistry {
         register_value_transition_attribute_name_index_domain => TransitionAttributeNameIndex: ValueTransition<IndexValue<AttributeName>>,
         register_value_transition_bool_index_domain => TransitionBoolIndex: ValueTransition<IndexValue<bool>>,
         register_value_transition_failure_kind_index_domain => TransitionFailureKindIndex: ValueTransition<IndexValue<FailureKind>>,
-        register_value_transition_group_index_domain => TransitionGroupIndex: ValueTransition<IndexValue<Group>>,
+        register_value_transition_group_index_domain => TransitionGroupIndex: ValueTransition<IndexValue<GroupIndex>>,
         register_value_transition_mask_domain => TransitionMask: ValueTransition<Mask>,
         register_value_transition_node_index_domain => TransitionNodeIndex: ValueTransition<IndexValue<NodeIndex>>,
         register_value_transition_positional_index_domain => TransitionPositionalIndex: ValueTransition<IndexValue<Positional>>,
@@ -246,7 +246,7 @@ impl CapabilityRegistry {
         register_value_transition_attribute_name_index_index => TransitionAttributeNameIndex: ValueTransition<IndexValue<AttributeName>>,
         register_value_transition_bool_index_index => TransitionBoolIndex: ValueTransition<IndexValue<bool>>,
         register_value_transition_failure_kind_value_index => TransitionFailureKindValue: ValueTransition<FailureKindValue>,
-        register_value_transition_group_index_index => TransitionGroupIndex: ValueTransition<IndexValue<Group>>,
+        register_value_transition_group_index_index => TransitionGroupIndex: ValueTransition<IndexValue<GroupIndex>>,
         register_value_transition_mask_index => TransitionMask: ValueTransition<Mask>,
         register_value_transition_node_index_index => TransitionNodeIndex: ValueTransition<IndexValue<NodeIndex>>,
         register_value_transition_positional_index_index => TransitionPositionalIndex: ValueTransition<IndexValue<Positional>>,
@@ -278,7 +278,7 @@ impl CapabilityRegistry {
         registry.register_index_domain::<Positional>();
         registry.register_index_domain::<NodeIndex>();
         registry.register_index_domain::<EdgeIndex>();
-        registry.register_index_domain::<Group>();
+        registry.register_index_domain::<GroupIndex>();
         registry.register_index_domain::<EdgeEndpointRole>();
 
         registry.register_value_domain::<Scalar>();
@@ -335,9 +335,9 @@ impl CapabilityRegistry {
         registry.register_bare_value_domain::<FailureValue>();
         registry.register_bare_value_domain::<FailureKindValue>();
 
-        registry.register_entity_domain::<EdgeIndex>();
-        registry.register_entity_domain::<NodeIndex>();
-        registry.register_entity_domain::<Group>();
+        registry.register_entity_index_domain::<EdgeIndex>();
+        registry.register_entity_index_domain::<NodeIndex>();
+        registry.register_entity_index_domain::<GroupIndex>();
 
         registry.register_group_key::<Value>();
         registry.register_group_key::<bool>();
@@ -346,7 +346,7 @@ impl CapabilityRegistry {
         registry.register_group_key::<Positional>();
         registry.register_group_key::<NodeIndex>();
         registry.register_group_key::<EdgeIndex>();
-        registry.register_group_key::<Group>();
+        registry.register_group_key::<GroupIndex>();
         registry.register_group_key::<EdgeEndpointRole>();
 
         registry.register_entity_attributes::<NodeIndex>();
@@ -360,7 +360,7 @@ impl CapabilityRegistry {
         registry.register_index_sortable::<AttributeName>();
         registry.register_index_sortable::<Positional>();
         registry.register_index_sortable::<NodeIndex>();
-        registry.register_index_sortable::<Group>();
+        registry.register_index_sortable::<GroupIndex>();
 
         registry.register_value_absolute_domain::<Scalar>();
         registry.register_value_absolute_domain::<AttributeName>();
@@ -487,7 +487,7 @@ impl CapabilityRegistry {
         registry.register_value_string_domain::<AttributeName>();
         registry.register_value_string_index::<Value>();
         registry.register_value_string_index::<NodeIndex>();
-        registry.register_value_string_index::<Group>();
+        registry.register_value_string_index::<GroupIndex>();
         registry.register_value_string_index::<AttributeName>();
 
         registry.register_value_subtract_domain::<Scalar>();
@@ -499,14 +499,14 @@ impl CapabilityRegistry {
 
         registry.register_value_transition_attribute_name_domain::<Scalar>();
         registry.register_value_transition_attribute_name_index::<AttributeName>();
-        registry.register_value_transition_attribute_name_index::<Group>();
+        registry.register_value_transition_attribute_name_index::<GroupIndex>();
         registry.register_value_transition_attribute_name_index::<NodeIndex>();
         registry.register_value_transition_attribute_name_index::<Positional>();
         registry.register_value_transition_attribute_name_index::<Value>();
 
         registry.register_value_transition_attribute_name_index_domain::<AttributeName>();
         registry.register_value_transition_attribute_name_index_domain::<Scalar>();
-        registry.register_value_transition_attribute_name_index_index::<Group>();
+        registry.register_value_transition_attribute_name_index_index::<GroupIndex>();
         registry.register_value_transition_attribute_name_index_index::<NodeIndex>();
         registry.register_value_transition_attribute_name_index_index::<Positional>();
         registry.register_value_transition_attribute_name_index_index::<Value>();
@@ -538,14 +538,14 @@ impl CapabilityRegistry {
         registry.register_value_transition_positional_index_domain::<AttributeName>();
         registry.register_value_transition_positional_index_domain::<Scalar>();
         registry.register_value_transition_positional_index_index::<AttributeName>();
-        registry.register_value_transition_positional_index_index::<Group>();
+        registry.register_value_transition_positional_index_index::<GroupIndex>();
         registry.register_value_transition_positional_index_index::<NodeIndex>();
         registry.register_value_transition_positional_index_index::<Value>();
 
         registry.register_value_transition_scalar_domain::<AttributeName>();
         registry.register_value_transition_scalar_domain::<Mask>();
         registry.register_value_transition_scalar_index::<AttributeName>();
-        registry.register_value_transition_scalar_index::<Group>();
+        registry.register_value_transition_scalar_index::<GroupIndex>();
         registry.register_value_transition_scalar_index::<NodeIndex>();
         registry.register_value_transition_scalar_index::<Positional>();
         registry.register_value_transition_scalar_index::<Value>();
@@ -555,7 +555,7 @@ impl CapabilityRegistry {
         registry.register_value_transition_value_index_domain::<Mask>();
         registry.register_value_transition_value_index_domain::<Scalar>();
         registry.register_value_transition_value_index_index::<AttributeName>();
-        registry.register_value_transition_value_index_index::<Group>();
+        registry.register_value_transition_value_index_index::<GroupIndex>();
         registry.register_value_transition_value_index_index::<NodeIndex>();
         registry.register_value_transition_value_index_index::<Positional>();
         registry.register_value_transition_value_index_index::<bool>();
@@ -578,7 +578,7 @@ impl CapabilityRegistry {
             .push(ValueCapabilityMember::EntityReference);
     }
 
-    fn register_entity_domain<I: EntityDomain>(&mut self) {
+    fn register_entity_index_domain<I: EntityIndexDomain>(&mut self) {
         self.index_members
             .entry(CapabilityIdentifier::Entity)
             .or_default()

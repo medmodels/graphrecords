@@ -26,7 +26,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, EdgeIndex, Group, NodeIndex, Value},
+    graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value},
 };
 use std::{
     fmt::{self, Display, Write},
@@ -51,7 +51,7 @@ pub enum DynValueTarget {
     AttributeNameIndex,
     NodeIndex,
     EdgeIndex,
-    Group,
+    GroupIndex,
     PositionalIndex,
     BoolIndex,
     Mask,
@@ -109,7 +109,7 @@ pub enum DynInvokeArgument {
     CastTarget(DynCastTarget),
     ValueTarget(DynValueTarget),
     Attribute(AttributeName),
-    Group(Group),
+    Group(GroupIndex),
     Direction(EdgeDirection),
     Position(usize),
 }
@@ -372,7 +372,9 @@ impl DynInvokeArgument {
                 DynValueTarget::EdgeIndex => {
                     ArgumentDescriptor::selector::<IndexValue<EdgeIndex>>()
                 }
-                DynValueTarget::Group => ArgumentDescriptor::selector::<IndexValue<Group>>(),
+                DynValueTarget::GroupIndex => {
+                    ArgumentDescriptor::selector::<IndexValue<GroupIndex>>()
+                }
                 DynValueTarget::PositionalIndex => {
                     ArgumentDescriptor::selector::<IndexValue<Positional>>()
                 }
@@ -384,7 +386,7 @@ impl DynInvokeArgument {
                 }
             },
             Self::Attribute(_) => ArgumentDescriptor::field::<AttributeName>(),
-            Self::Group(_) => ArgumentDescriptor::field::<Group>(),
+            Self::Group(_) => ArgumentDescriptor::field::<GroupIndex>(),
             Self::Direction(_) => ArgumentDescriptor::field::<EdgeDirection>(),
             Self::Position(_) => ArgumentDescriptor::field::<usize>(),
         }
@@ -408,14 +410,10 @@ impl DynArgumentBuilder<Keyed<DynIndex>, Preserving> for DynValue {
                 match &source.handle {
                     DynHandle::Lane(DynLaneHandle::IndexedValue(
                         DynArityHandle::MultipleOrdered(handle),
-                    )) => {
-                        WithMissing::new(handle.clone(), Replace::new(replacement)).into_argument()
-                    }
+                    )) => WithMissing::new(handle.clone(), Replace(replacement)).into_argument(),
                     DynHandle::Lane(DynLaneHandle::IndexedValue(
                         DynArityHandle::MultipleUnordered(handle),
-                    )) => {
-                        WithMissing::new(handle.clone(), Replace::new(replacement)).into_argument()
-                    }
+                    )) => WithMissing::new(handle.clone(), Replace(replacement)).into_argument(),
                     _ => panic!(
                         "argument conversion violated the replaceable keyed dynamic-value source roster"
                     ),
@@ -471,7 +469,7 @@ impl DynArgumentBuilder<Unaligned, Preserving> for DynValue {
                         "argument conversion violated the replaceable unaligned dynamic-value source roster"
                     )
                 };
-                WithMissing::new(handle.clone(), Replace::new(replacement)).into_argument()
+                WithMissing::new(handle.clone(), Replace(replacement)).into_argument()
             }
             DynArgumentSourceKind::Mask(_)
             | DynArgumentSourceKind::Values(_)
@@ -516,14 +514,10 @@ impl DynArgumentBuilder<Keyed<DynIndex>, Preserving> for Mask {
                 match &source.handle {
                     DynHandle::Lane(DynLaneHandle::IndexedMask(
                         DynArityHandle::MultipleOrdered(handle),
-                    )) => {
-                        WithMissing::new(handle.clone(), Replace::new(replacement)).into_argument()
-                    }
+                    )) => WithMissing::new(handle.clone(), Replace(replacement)).into_argument(),
                     DynHandle::Lane(DynLaneHandle::IndexedMask(
                         DynArityHandle::MultipleUnordered(handle),
-                    )) => {
-                        WithMissing::new(handle.clone(), Replace::new(replacement)).into_argument()
-                    }
+                    )) => WithMissing::new(handle.clone(), Replace(replacement)).into_argument(),
                     _ => panic!(
                         "argument conversion violated the replaceable keyed mask source roster"
                     ),
@@ -579,7 +573,7 @@ impl DynArgumentBuilder<Unaligned, Preserving> for Mask {
                         "argument conversion violated the replaceable unaligned mask source roster"
                     )
                 };
-                WithMissing::new(handle.clone(), Replace::new(replacement)).into_argument()
+                WithMissing::new(handle.clone(), Replace(replacement)).into_argument()
             }
             DynArgumentSourceKind::Value(_)
             | DynArgumentSourceKind::Values(_)

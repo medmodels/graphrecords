@@ -10,7 +10,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{EdgeIndex, Group, NodeIndex, StateView},
+    graphrecord::{EdgeIndex, GroupIndex, NodeIndex, StateView},
 };
 
 #[derive(
@@ -71,14 +71,14 @@ impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<EdgeIndex>>> for V
     }
 }
 
-impl ElementKernel<Indexed<Group, Unit>> for ViaNodesOperation {
+impl ElementKernel<Indexed<GroupIndex, Unit>> for ViaNodesOperation {
     type Emission = Expanding<Unordered>;
-    type OutShape = Indexed<ExpandedIndex<Group, NodeIndex>, EntityReference<NodeIndex>>;
+    type OutShape = Indexed<ExpandedIndex<GroupIndex, NodeIndex>, EntityReference<NodeIndex>>;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<Group, Unit>, Self>> {
+    ) -> QueryResult<ElementPipeline<'a, Indexed<GroupIndex, Unit>, Self>> {
         Ok(Pipeline::keyed(move |parent_address, ()| {
             Ok(NodeIndex::addresses_in_group(graphrecord, parent_address)
                 .map(|node| ExpandedChild::success(node, EntityRef::new(graphrecord, node)))
@@ -87,19 +87,23 @@ impl ElementKernel<Indexed<Group, Unit>> for ViaNodesOperation {
     }
 }
 
-impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<Group>>> for ViaNodesOperation {
+impl<I: IndexDomain> ElementKernel<Indexed<I, EntityReference<GroupIndex>>> for ViaNodesOperation {
     type Emission = Expanding<Unordered>;
     type OutShape = Indexed<ExpandedIndex<I, NodeIndex>, EntityReference<NodeIndex>>;
 
     fn pipeline<'a>(
         graphrecord: &'a GraphRecord,
         _prepared: Self::Prepared<'a>,
-    ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<Group>>, Self>> {
-        Ok(Pipeline::unkeyed(move |group: EntityRef<'a, Group>| {
-            Ok(NodeIndex::addresses_in_group(graphrecord, *group.address())
-                .map(|node| ExpandedChild::success(node, EntityRef::new(graphrecord, node)))
-                .collect())
-        }))
+    ) -> QueryResult<ElementPipeline<'a, Indexed<I, EntityReference<GroupIndex>>, Self>> {
+        Ok(Pipeline::unkeyed(
+            move |group_index: EntityRef<'a, GroupIndex>| {
+                Ok(
+                    NodeIndex::addresses_in_group(graphrecord, *group_index.address())
+                        .map(|node| ExpandedChild::success(node, EntityRef::new(graphrecord, node)))
+                        .collect(),
+                )
+            },
+        ))
     }
 }
 
@@ -132,14 +136,14 @@ operation_manifest! {
 
         kernel {
             parameters: <>;
-            input: Indexed<Group, Unit>;
-            output: Indexed<ExpandedIndex<Group, NodeIndex>, EntityReference<NodeIndex>>;
+            input: Indexed<GroupIndex, Unit>;
+            output: Indexed<ExpandedIndex<GroupIndex, NodeIndex>, EntityReference<NodeIndex>>;
             emission: Expanding<Unordered>;
         }
 
         kernel {
             parameters: <I: IndexDomain>;
-            input: Indexed<I, EntityReference<Group>>;
+            input: Indexed<I, EntityReference<GroupIndex>>;
             output: Indexed<ExpandedIndex<I, NodeIndex>, EntityReference<NodeIndex>>;
             emission: Expanding<Unordered>;
         }

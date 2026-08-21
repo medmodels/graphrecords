@@ -1,12 +1,30 @@
 use crate::{
     errors::{GraphRecordError, GraphRecordResult, IoError},
-    graphrecord::{GraphRecord, state::GraphState},
+    graphrecord::{GraphRecord, state::GraphState, writer::Writer},
 };
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-impl GraphRecord {
-    pub fn to_ron(&self, path: impl AsRef<Path>) -> GraphRecordResult<()> {
-        let path = path.as_ref();
+pub struct RonFile {
+    path: PathBuf,
+}
+
+impl RonFile {
+    #[must_use]
+    pub fn new(path: impl AsRef<Path>) -> Self {
+        Self {
+            path: path.as_ref().to_path_buf(),
+        }
+    }
+}
+
+impl Writer for RonFile {
+    type Output = ();
+
+    fn write(self, graphrecord: &GraphRecord) -> GraphRecordResult<Self::Output> {
+        let path = self.path.as_path();
 
         if let Some(parent) = path.parent()
             && !parent.as_os_str().is_empty()
@@ -19,7 +37,7 @@ impl GraphRecord {
             })?;
         }
 
-        let contents = ron::to_string(self.state.as_ref()).map_err(|_| {
+        let contents = ron::to_string(graphrecord.state.as_ref()).map_err(|_| {
             GraphRecordError::Io(IoError::FileWrite {
                 path: path.display().to_string(),
                 kind: std::io::ErrorKind::InvalidData,
@@ -32,6 +50,12 @@ impl GraphRecord {
                 kind: error.kind(),
             })
         })
+    }
+}
+
+impl GraphRecord {
+    pub fn to_ron(&self, path: impl AsRef<Path>) -> GraphRecordResult<()> {
+        self.export(RonFile::new(path))
     }
 
     pub fn from_ron(path: impl AsRef<Path>) -> GraphRecordResult<Self> {
@@ -71,7 +95,7 @@ mod test {
     use crate::{
         errors::{GraphRecordError, IoError},
         graphrecord::{
-            AttributeMap, EdgeIndex, GraphRecord, Group, NodeIndex, Value,
+            AttributeMap, EdgeIndex, GraphRecord, GroupIndex, NodeIndex, Value,
             state::{EdgeEndpoints, NodeAddress},
         },
     };
@@ -120,36 +144,32 @@ mod test {
             )
             .unwrap()
             .add_node(
-                "consectetur".into(),
+                "consectetur",
                 AttributeMap::from([("count".into(), "text".into())]),
             )
             .unwrap()
-            .add_node("adipiscing".into(), AttributeMap::new())
+            .add_node("adipiscing", AttributeMap::new())
             .unwrap();
 
         let graphrecord = graphrecord
             .add_edge(
                 NodeIndex::from(1_i64),
-                "consectetur".into(),
+                "consectetur",
                 AttributeMap::from([("weight".into(), 1.5.into())]),
             )
             .unwrap();
         let grouped_edge_index = graphrecord.edge_indices().next().unwrap();
 
         let graphrecord = graphrecord
-            .add_edge(
-                "adipiscing".into(),
-                "adipiscing".into(),
-                AttributeMap::new(),
-            )
+            .add_edge("adipiscing", "adipiscing", AttributeMap::new())
             .unwrap();
 
-        let graphrecord = graphrecord.add_group("elit".into()).unwrap();
+        let graphrecord = graphrecord.add_group("elit").unwrap();
         let graphrecord = graphrecord
-            .add_nodes_to_group("elit".into(), vec![NodeIndex::from(1_i64)])
+            .add_nodes_to_group(vec![NodeIndex::from(1_i64)], "elit")
             .unwrap();
         let graphrecord = graphrecord
-            .add_edges_to_group("elit".into(), vec![grouped_edge_index])
+            .add_edges_to_group(vec![grouped_edge_index], "elit")
             .unwrap();
 
         (graphrecord, grouped_edge_index)
@@ -228,23 +248,29 @@ mod test {
         assert_eq!(
             Some("\"ipsum dolor sit amet\"".to_string()),
             loaded_graphrecord
-                .node_attribute(&NodeIndex::from(1_i64), &"lorem".into())
+                .node(1_i64)
+                .unwrap()
+                .attribute("lorem")
                 .map(|value| value.to_string())
         );
         assert_eq!(
             Some(Value::Null.to_string()),
             loaded_graphrecord
-                .node_attribute(&NodeIndex::from(1_i64), &"nothing".into())
+                .node(1_i64)
+                .unwrap()
+                .attribute("nothing")
                 .map(|value| value.to_string())
         );
         assert_eq!(
             Some(1.5.to_string()),
             loaded_graphrecord
-                .edge_attribute(&grouped_edge_index, &"weight".into())
+                .edge(&grouped_edge_index)
+                .unwrap()
+                .attribute("weight")
                 .map(|value| value.to_string())
         );
 
-        assert!(loaded_graphrecord.contains_group(&Group::from("elit")));
+        assert!(loaded_graphrecord.contains_group(&GroupIndex::from("elit")));
     }
 
     #[test]

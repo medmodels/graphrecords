@@ -19,13 +19,10 @@ mod trim_start;
 mod uppercase;
 
 use crate::{
-    Failure, IndexDomain, Position, QueryResult, ValueDomain,
-    capabilities::{ValueInt, ValueString},
+    Failure, IndexDomain, QueryResult, ValueDomain,
+    capabilities::ValueString,
     element::{BarePipeline, IndexedValuePipeline, Pipeline, Preserving, Retention},
-    error::{
-        numeric::{IntegerOverflow, NegativeLength},
-        string::InvalidPaddingCharacter,
-    },
+    error::string::InvalidPaddingCharacter,
     operations::{ArgumentSource, Keyed, Unaligned},
     registry::OperationManifest,
 };
@@ -435,127 +432,77 @@ fn padding_character(value: &str, label: &'static str) -> QueryResult<char> {
     Ok(character)
 }
 
-fn padding_width(value: i64, label: &'static str) -> QueryResult<Position> {
-    if value < 0 {
-        return Err(Failure::new(NegativeLength::new(value), label));
-    }
+type StringPadFunction = fn(&str, usize, &str, &'static str) -> QueryResult<String>;
 
-    Position::try_from(value).map_err(|_| Failure::new(IntegerOverflow::new(value), label))
-}
-
-type StringPadFunction = fn(&str, Position, &str, &'static str) -> QueryResult<String>;
-
-fn string_pad_indexed<'a, I, V, W, C>(
+fn string_pad_indexed<'a, I, V, A>(
     graphrecord: &'a GraphRecord,
-    prepared: (W::Prepared<'a>, C::Prepared<'a>),
+    prepared: (usize, A::Prepared<'a>),
     operation: StringPadFunction,
     label: &'static str,
-) -> IndexedValuePipeline<'a, I, V, V, <W::Retention as Retention>::Then<C::Retention>>
+) -> IndexedValuePipeline<'a, I, V, V, A::Retention>
 where
     I: IndexDomain,
     V: ValueString,
-    W: ArgumentSource<Keyed<I>>,
-    W::ValueDomain: ValueInt,
-    C: ArgumentSource<Keyed<I>>,
-    C::ValueDomain: ValueString,
+    A: ArgumentSource<Keyed<I>>,
+    A::ValueDomain: ValueString,
 {
     Pipeline::keyed(move |address, outcome: QueryResult<V::Value<'a>>| {
         let value = match outcome {
-            Err(failure) => {
-                return <<W::Retention as Retention>::Then<C::Retention> as Retention>::keep(Err(
-                    failure,
-                ));
-            }
+            Err(failure) => return A::Retention::keep(Err(failure)),
             Ok(value) => value,
         };
 
         if let Err(failure) = V::as_str(&value, label) {
-            return <<W::Retention as Retention>::Then<C::Retention> as Retention>::keep(Err(
-                failure.at_address::<I>(graphrecord, &address),
-            ));
+            return A::Retention::keep(Err(failure.at_address::<I>(graphrecord, &address)));
         }
 
-        let width = W::resolve(graphrecord, &prepared.0, &address, label);
+        let character = A::resolve(graphrecord, &prepared.1, &address, label);
 
-        W::Retention::and_then(width, |width| {
-            let width = match W::ValueDomain::into_int(width, label)
-                .and_then(|width| padding_width(width, label))
-            {
-                Ok(width) => width,
-                Err(failure) => {
-                    return C::Retention::keep(Err(failure.at_address::<I>(graphrecord, &address)));
-                }
-            };
+        A::Retention::map_step(character, |character| {
+            character.and_then(|character| {
+                let character = A::ValueDomain::as_str(&character, label)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
+                let string = V::as_str(&value, label)
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
 
-            let character = C::resolve(graphrecord, &prepared.1, &address, label);
-
-            C::Retention::map_step(character, |character| {
-                character.and_then(|character| {
-                    let character = C::ValueDomain::as_str(&character, label)
-                        .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
-                    let string = V::as_str(&value, label)
-                        .map_err(|failure| failure.at_address::<I>(graphrecord, &address))?;
-
-                    operation(string, width, character, label)
-                        .map(|string| V::with_string(&value, string))
-                        .map_err(|failure| failure.at_address::<I>(graphrecord, &address))
-                })
+                operation(string, prepared.0, character, label)
+                    .map(|string| V::with_string(&value, string))
+                    .map_err(|failure| failure.at_address::<I>(graphrecord, &address))
             })
         })
     })
 }
 
-fn string_pad_bare<'a, V, W, C>(
+fn string_pad_bare<'a, V, A>(
     graphrecord: &'a GraphRecord,
-    prepared: (W::Prepared<'a>, C::Prepared<'a>),
+    prepared: (usize, A::Prepared<'a>),
     operation: StringPadFunction,
     label: &'static str,
-) -> BarePipeline<'a, V, V, <W::Retention as Retention>::Then<C::Retention>>
+) -> BarePipeline<'a, V, V, A::Retention>
 where
     V: ValueString,
-    W: ArgumentSource<Unaligned>,
-    W::ValueDomain: ValueInt,
-    C: ArgumentSource<Unaligned>,
-    C::ValueDomain: ValueString,
+    A: ArgumentSource<Unaligned>,
+    A::ValueDomain: ValueString,
 {
     Pipeline::new(move |outcome: QueryResult<V::Value<'a>>| {
         let value = match outcome {
-            Err(failure) => {
-                return <<W::Retention as Retention>::Then<C::Retention> as Retention>::keep(Err(
-                    failure,
-                ));
-            }
+            Err(failure) => return A::Retention::keep(Err(failure)),
             Ok(value) => value,
         };
 
         if let Err(failure) = V::as_str(&value, label) {
-            return <<W::Retention as Retention>::Then<C::Retention> as Retention>::keep(Err(
-                failure,
-            ));
+            return A::Retention::keep(Err(failure));
         }
 
-        let width = W::resolve(graphrecord, &prepared.0, &(), label);
+        let character = A::resolve(graphrecord, &prepared.1, &(), label);
 
-        W::Retention::and_then(width, |width| {
-            let width = match W::ValueDomain::into_int(width, label)
-                .and_then(|width| padding_width(width, label))
-            {
-                Ok(width) => width,
-                Err(failure) => {
-                    return C::Retention::keep(Err(failure));
-                }
-            };
+        A::Retention::map_step(character, |character| {
+            character.and_then(|character| {
+                let character = A::ValueDomain::as_str(&character, label)?;
+                let string = V::as_str(&value, label)?;
 
-            let character = C::resolve(graphrecord, &prepared.1, &(), label);
-
-            C::Retention::map_step(character, |character| {
-                character.and_then(|character| {
-                    let character = C::ValueDomain::as_str(&character, label)?;
-                    let string = V::as_str(&value, label)?;
-
-                    operation(string, width, character, label)
-                        .map(|string| V::with_string(&value, string))
-                })
+                operation(string, prepared.0, character, label)
+                    .map(|string| V::with_string(&value, string))
             })
         })
     })

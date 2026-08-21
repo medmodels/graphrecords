@@ -1,5 +1,10 @@
-use crate::{GroupOverview, OverviewResult, tabled_modifiers::MergeDuplicatesVerticalByColumn};
-use graphrecords_core::{GraphRecord, prelude::Group};
+use crate::{
+    GroupOverview, OverviewResult,
+    group::{EdgeGroupOverview, NodeGroupOverview},
+    tabled_modifiers::MergeDuplicatesVerticalByColumn,
+};
+use graphrecords_core::{GraphRecord, prelude::GroupIndex};
+use graphrecords_query::{QueryResult, Queryable};
 use graphrecords_utils::aliases::GrHashMap;
 use std::fmt::{Display, Formatter};
 use tabled::{
@@ -10,7 +15,7 @@ use tabled::{
 #[derive(Debug, Clone)]
 pub struct Overview {
     pub ungrouped_overview: GroupOverview,
-    pub grouped_overviews: GrHashMap<Group, GroupOverview>,
+    pub grouped_overviews: GrHashMap<GroupIndex, GroupOverview>,
 
     truncate_details: Option<usize>,
 }
@@ -28,20 +33,22 @@ impl Display for Overview {
             "Details",
         ]);
 
-        for (group, group_overview) in std::iter::once((None, &self.ungrouped_overview)).chain(
-            self.grouped_overviews
-                .iter()
-                .map(|(group, overview)| (Some(group), overview)),
-        ) {
-            let group_name =
-                group.map_or_else(|| "Ungrouped".to_string(), std::string::ToString::to_string);
+        for (group_index, group_overview) in std::iter::once((None, &self.ungrouped_overview))
+            .chain(
+                self.grouped_overviews
+                    .iter()
+                    .map(|(group_index, overview)| (Some(group_index), overview)),
+            )
+        {
+            let group_label = group_index
+                .map_or_else(|| "Ungrouped".to_string(), std::string::ToString::to_string);
             let count = group_overview.node_overview.count;
 
             for (attribute, overview) in &group_overview.node_overview.attributes {
                 let details = overview.data.details();
 
                 builder.push_record([
-                    &group_name,
+                    &group_label,
                     &count.to_string(),
                     &attribute.to_string(),
                     overview.data.attribute_type_name(),
@@ -51,7 +58,7 @@ impl Display for Overview {
             }
 
             if group_overview.node_overview.attributes.is_empty() && count > 0 {
-                builder.push_record([&group_name, &count.to_string(), "-", "-", "-", "-"]);
+                builder.push_record([&group_label, &count.to_string(), "-", "-", "-", "-"]);
             }
         }
 
@@ -79,20 +86,22 @@ impl Display for Overview {
             "Details",
         ]);
 
-        for (group, group_overview) in std::iter::once((None, &self.ungrouped_overview)).chain(
-            self.grouped_overviews
-                .iter()
-                .map(|(group, overview)| (Some(group), overview)),
-        ) {
-            let group_name =
-                group.map_or_else(|| "Ungrouped".to_string(), std::string::ToString::to_string);
+        for (group_index, group_overview) in std::iter::once((None, &self.ungrouped_overview))
+            .chain(
+                self.grouped_overviews
+                    .iter()
+                    .map(|(group_index, overview)| (Some(group_index), overview)),
+            )
+        {
+            let group_label = group_index
+                .map_or_else(|| "Ungrouped".to_string(), std::string::ToString::to_string);
             let count = group_overview.edge_overview.count;
 
             for (attribute, overview) in &group_overview.edge_overview.attributes {
                 let details = overview.data.details();
 
                 builder.push_record([
-                    &group_name,
+                    &group_label,
                     &count.to_string(),
                     &attribute.to_string(),
                     overview.data.attribute_type_name(),
@@ -102,7 +111,7 @@ impl Display for Overview {
             }
 
             if group_overview.edge_overview.attributes.is_empty() && count > 0 {
-                builder.push_record([&group_name, &count.to_string(), "-", "-", "-", "-"]);
+                builder.push_record([&group_label, &count.to_string(), "-", "-", "-", "-"]);
             }
         }
 
@@ -123,17 +132,31 @@ impl Display for Overview {
 
 impl Overview {
     fn new(graphrecord: &GraphRecord, truncate_details: Option<usize>) -> OverviewResult<Self> {
+        let groups = graphrecord.groups();
+        let live_groups: Vec<_> = groups.evaluate()?.collect::<QueryResult<_>>()?;
+
+        let node_overviews =
+            NodeGroupOverview::for_groups(graphrecord, &live_groups, truncate_details)?;
+        let edge_overviews =
+            EdgeGroupOverview::for_groups(graphrecord, &live_groups, truncate_details)?;
+
+        let grouped_overviews = live_groups
+            .into_iter()
+            .zip(node_overviews.into_iter().zip(edge_overviews))
+            .map(|(group_index, (node_overview, edge_overview))| {
+                (
+                    group_index,
+                    GroupOverview {
+                        node_overview,
+                        edge_overview,
+                    },
+                )
+            })
+            .collect();
+
         Ok(Self {
             ungrouped_overview: GroupOverview::new(graphrecord, None, truncate_details)?,
-            grouped_overviews: graphrecord
-                .groups()
-                .map(|group| {
-                    Ok((
-                        group.clone(),
-                        GroupOverview::new(graphrecord, Some(group), truncate_details)?,
-                    ))
-                })
-                .collect::<OverviewResult<_>>()?,
+            grouped_overviews,
             truncate_details,
         })
     }

@@ -1,6 +1,9 @@
 use crate::graphrecord::{
     GraphRecord,
-    datatypes::{AttributeName, EdgeIndex, Group, NodeIndex, NodeIndexView, ValueView},
+    datatypes::{
+        AttributeName, AttributeNameView, EdgeIndex, GroupIndex, GroupIndexView, NodeIndexView,
+        ValueView,
+    },
     state::{AttributeAddress, EdgeAddress, GraphState, GroupAddress, NodeAddress, StateIdentity},
 };
 
@@ -65,7 +68,10 @@ impl<'a> StateView<'a> {
     }
 
     #[must_use]
-    pub fn resolve_node_address(&self, node_index: &NodeIndex) -> Option<NodeAddress> {
+    pub fn resolve_node_address<'b>(
+        &self,
+        node_index: impl Into<NodeIndexView<'b>>,
+    ) -> Option<NodeAddress> {
         self.state().resolve_node_address(node_index)
     }
 
@@ -75,14 +81,17 @@ impl<'a> StateView<'a> {
     }
 
     #[must_use]
-    pub fn resolve_group_address(&self, group: &Group) -> Option<GroupAddress> {
-        self.state().resolve_group_address(group)
+    pub fn resolve_group_address<'b>(
+        &self,
+        group_index: impl Into<GroupIndexView<'b>>,
+    ) -> Option<GroupAddress> {
+        self.state().resolve_group_address(group_index)
     }
 
     #[must_use]
-    pub fn resolve_node_attribute_address(
+    pub fn resolve_node_attribute_address<'b>(
         &self,
-        attribute_name: &AttributeName,
+        attribute_name: impl Into<AttributeNameView<'b>>,
     ) -> Option<NodeAttributeAddress> {
         self.state()
             .resolve_node_attribute_address(attribute_name)
@@ -90,9 +99,9 @@ impl<'a> StateView<'a> {
     }
 
     #[must_use]
-    pub fn resolve_edge_attribute_address(
+    pub fn resolve_edge_attribute_address<'b>(
         &self,
-        attribute_name: &AttributeName,
+        attribute_name: impl Into<AttributeNameView<'b>>,
     ) -> Option<EdgeAttributeAddress> {
         self.state()
             .resolve_edge_attribute_address(attribute_name)
@@ -124,9 +133,9 @@ impl<'a> StateView<'a> {
     ///
     /// Panics if `group_address` does not name a live group in this record's state.
     #[must_use]
-    pub fn group_name(&self, group_address: GroupAddress) -> &'a Group {
+    pub fn group_index(&self, group_address: GroupAddress) -> &'a GroupIndex {
         self.state()
-            .group_name(group_address)
+            .group_index(group_address)
             .expect("Group must exist.")
     }
 
@@ -293,32 +302,29 @@ mod test {
         NodeAttributeAddress, StateView,
     };
     use crate::graphrecord::{
-        AttributeMap, AttributeName, EdgeIndex, GraphRecord, Group, Identifier, NodeIndex,
+        AttributeMap, AttributeName, EdgeIndex, GraphRecord, GroupIndex, Identifier, NodeIndex,
         datatypes::{NodeIndexView, ValueView},
     };
 
     fn create_graphrecord() -> GraphRecord {
         GraphRecord::new()
-            .add_group("dolor".into())
+            .add_group("dolor")
             .unwrap()
-            .add_nodes_in_groups(
+            .add_nodes_in_group(
                 vec![
-                    (
-                        "lorem".into(),
-                        AttributeMap::from([("sed".into(), 42.into())]),
-                    ),
-                    ("ipsum".into(), AttributeMap::new()),
+                    ("lorem", AttributeMap::from([("sed".into(), 42.into())])),
+                    ("ipsum", AttributeMap::new()),
                 ],
-                vec!["dolor".into()],
+                "dolor",
             )
             .unwrap()
-            .add_edges_in_groups(
+            .add_edges_in_group(
                 vec![(
-                    "lorem".into(),
-                    "ipsum".into(),
+                    "lorem",
+                    "ipsum",
                     AttributeMap::from([("sed".into(), true.into())]),
                 )],
-                vec!["dolor".into()],
+                "dolor",
             )
             .unwrap()
     }
@@ -349,9 +355,7 @@ mod test {
     fn test_state_identity() {
         let graphrecord = create_graphrecord();
         let cloned = graphrecord.clone();
-        let derived = graphrecord
-            .add_node("sed".into(), AttributeMap::new())
-            .unwrap();
+        let derived = graphrecord.add_node("sed", AttributeMap::new()).unwrap();
 
         assert_eq!(
             StateView::of(&graphrecord).state_identity(),
@@ -455,7 +459,11 @@ mod test {
         let graphrecord = create_graphrecord();
         let state = StateView::of(&graphrecord);
 
-        assert!(state.resolve_group_address(&Group::from("dolor")).is_some());
+        assert!(
+            state
+                .resolve_group_address(&GroupIndex::from("dolor"))
+                .is_some()
+        );
     }
 
     #[test]
@@ -463,7 +471,10 @@ mod test {
         let graphrecord = create_graphrecord();
         let state = StateView::of(&graphrecord);
 
-        assert_eq!(None, state.resolve_group_address(&Group::from("missing")));
+        assert_eq!(
+            None,
+            state.resolve_group_address(&GroupIndex::from("missing"))
+        );
     }
 
     #[test]
@@ -555,21 +566,23 @@ mod test {
     }
 
     #[test]
-    fn test_group_name() {
+    fn test_group_index() {
         let graphrecord = create_graphrecord();
         let state = StateView::of(&graphrecord);
-        let group_address = state.resolve_group_address(&Group::from("dolor")).unwrap();
+        let group_address = state
+            .resolve_group_address(&GroupIndex::from("dolor"))
+            .unwrap();
 
-        assert_eq!(&Group::from("dolor"), state.group_name(group_address));
+        assert_eq!(&GroupIndex::from("dolor"), state.group_index(group_address));
     }
 
     #[test]
     #[should_panic(expected = "Group must exist.")]
-    fn test_invalid_group_name() {
+    fn test_invalid_group_index() {
         let graphrecord = create_graphrecord();
         let state = StateView::of(&graphrecord);
 
-        let _ = state.group_name(GroupAddress::new(999));
+        let _ = state.group_index(GroupAddress::new(999));
     }
 
     #[test]
@@ -659,7 +672,9 @@ mod test {
     fn test_node_group_addresses() {
         let graphrecord = create_graphrecord();
         let state = StateView::of(&graphrecord);
-        let group_address = state.resolve_group_address(&Group::from("dolor")).unwrap();
+        let group_address = state
+            .resolve_group_address(&GroupIndex::from("dolor"))
+            .unwrap();
         let lorem_address = state
             .resolve_node_address(&NodeIndex::from("lorem"))
             .unwrap();
@@ -676,7 +691,9 @@ mod test {
     fn test_edge_group_addresses() {
         let graphrecord = create_graphrecord();
         let state = StateView::of(&graphrecord);
-        let group_address = state.resolve_group_address(&Group::from("dolor")).unwrap();
+        let group_address = state
+            .resolve_group_address(&GroupIndex::from("dolor"))
+            .unwrap();
         let edge_index = graphrecord.edge_indices().next().unwrap();
         let edge_address = state.resolve_edge_address(&edge_index).unwrap();
 
@@ -690,7 +707,9 @@ mod test {
     fn test_group_node_addresses() {
         let graphrecord = create_graphrecord();
         let state = StateView::of(&graphrecord);
-        let group_address = state.resolve_group_address(&Group::from("dolor")).unwrap();
+        let group_address = state
+            .resolve_group_address(&GroupIndex::from("dolor"))
+            .unwrap();
         let lorem_address = state
             .resolve_node_address(&NodeIndex::from("lorem"))
             .unwrap();
@@ -713,7 +732,9 @@ mod test {
     fn test_group_edge_addresses() {
         let graphrecord = create_graphrecord();
         let state = StateView::of(&graphrecord);
-        let group_address = state.resolve_group_address(&Group::from("dolor")).unwrap();
+        let group_address = state
+            .resolve_group_address(&GroupIndex::from("dolor"))
+            .unwrap();
         let edge_index = graphrecord.edge_indices().next().unwrap();
         let edge_address = state.resolve_edge_address(&edge_index).unwrap();
 
@@ -729,7 +750,9 @@ mod test {
     fn test_group_node_count() {
         let graphrecord = create_graphrecord();
         let state = StateView::of(&graphrecord);
-        let group_address = state.resolve_group_address(&Group::from("dolor")).unwrap();
+        let group_address = state
+            .resolve_group_address(&GroupIndex::from("dolor"))
+            .unwrap();
 
         assert_eq!(2, state.group_node_count(group_address));
     }
@@ -747,7 +770,9 @@ mod test {
     fn test_group_edge_count() {
         let graphrecord = create_graphrecord();
         let state = StateView::of(&graphrecord);
-        let group_address = state.resolve_group_address(&Group::from("dolor")).unwrap();
+        let group_address = state
+            .resolve_group_address(&GroupIndex::from("dolor"))
+            .unwrap();
 
         assert_eq!(1, state.group_edge_count(group_address));
     }

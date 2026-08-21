@@ -1,7 +1,8 @@
 use super::describe::ArgumentRetention;
 use crate::{
-    Arity, BareValueDomain, ElementShape, EntityDomain, Explain, FailureKind, FailureKindValue,
-    IndexDomain, IndexValue, Indexed, Mask, Positional, QueryResult, Scalar, ValueDomain,
+    Arity, BareValueDomain, ElementShape, EntityIndexDomain, Explain, FailureKind,
+    FailureKindValue, IndexDomain, IndexValue, Indexed, Mask, Positional, QueryResult, Scalar,
+    ValueDomain,
     capabilities::{
         EnsureSortable, PayloadKind, ValueAbsolute, ValueAdd, ValueCast, ValueCeil, ValueClip,
         ValueCubeRoot, ValueDivide, ValueEquality, ValueEquivalence, ValueExponential, ValueFloor,
@@ -27,7 +28,7 @@ use crate::{
 use graphrecords_core::{
     GraphRecord,
     graphrecord::{
-        AttributeName, AttributeNameView, Group, GroupAddress, NodeIndex, Value, ValueView,
+        AttributeName, AttributeNameView, GroupAddress, GroupIndex, NodeIndex, Value, ValueView,
     },
 };
 use graphrecords_utils::aliases::GrHashSet;
@@ -107,7 +108,7 @@ impl IndexDomain for EntityWitness {
     }
 }
 
-impl EntityDomain for EntityWitness {}
+impl EntityIndexDomain for EntityWitness {}
 
 #[derive(Clone)]
 pub struct EntityAttributesWitness;
@@ -138,7 +139,7 @@ impl IndexDomain for EntityAttributesWitness {
     }
 }
 
-impl EntityDomain for EntityAttributesWitness {}
+impl EntityIndexDomain for EntityAttributesWitness {}
 
 impl EntityAttributes for EntityAttributesWitness {
     type AttributeAddress = i8;
@@ -209,7 +210,7 @@ impl IndexDomain for GroupMembershipWitness {
     }
 }
 
-impl EntityDomain for GroupMembershipWitness {}
+impl EntityIndexDomain for GroupMembershipWitness {}
 
 impl GroupMembership for GroupMembershipWitness {
     fn addresses_in_group(
@@ -234,7 +235,7 @@ impl GroupMembership for GroupMembershipWitness {
         empty()
     }
 
-    fn group_size(_stats: &Stats, _group: &Group) -> usize {
+    fn group_size(_stats: &Stats, _group_index: &GroupIndex) -> usize {
         unreachable!("operation manifest witnesses must never execute")
     }
 }
@@ -932,13 +933,13 @@ impl<S: 'static> ValueTransition<FailureKindValue>
     }
 }
 
-impl<S: 'static> ValueTransition<IndexValue<Group>>
+impl<S: 'static> ValueTransition<IndexValue<GroupIndex>>
     for ValueWitness<TransitionGroupIndexCapability, S>
 {
     fn transition<'a>(
         _value: Self::Value<'a>,
         _label: &'static str,
-    ) -> QueryResult<<IndexValue<Group> as ValueDomain>::Value<'a>> {
+    ) -> QueryResult<<IndexValue<GroupIndex> as ValueDomain>::Value<'a>> {
         unreachable!("operation manifest witnesses must never execute")
     }
 }

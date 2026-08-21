@@ -23,17 +23,7 @@ use std::{
 #[derive(Clone, Operation, OperationInputs, OptimizerHints, PlanIdentity, PlanInputs, Prepare)]
 #[operation(scope = Element)]
 #[plan(optimizer_hints(empty = if_all))]
-pub struct Replace<R> {
-    #[argument]
-    replacement: R,
-}
-
-impl<R> Replace<R> {
-    #[must_use]
-    pub const fn new(replacement: R) -> Self {
-        Self { replacement }
-    }
-}
+pub struct Replace<R>(#[argument] pub R);
 
 impl<R> Labeled for Replace<R> {
     const LABEL: &'static str = "Replace";
@@ -42,7 +32,7 @@ impl<R> Labeled for Replace<R> {
 impl<R: Explain> Explain for Replace<R> {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         formatter.write_str(Self::LABEL)?;
-        formatter.labeled_child(&self.replacement, "replacement");
+        formatter.labeled_child(&self.0, "replacement");
 
         Ok(())
     }
@@ -433,7 +423,7 @@ where
     fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(
             input,
-            ReplaceErrorsOf::new(self.replacement.clone()),
+            ReplaceErrorsOf::new(self.0.clone()),
         ))
     }
 }
@@ -450,7 +440,7 @@ where
     fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(
             input,
-            ReplaceErrorsIn::new(self.replacement.clone()),
+            ReplaceErrorsIn::new(self.0.clone()),
         ))
     }
 }
@@ -467,7 +457,7 @@ where
     fn build(&self, input: E) -> Self::Output {
         Self::Output::new(OperationContext::new(
             input,
-            ReplaceErrorsWithCause::new(self.replacement.clone()),
+            ReplaceErrorsWithCause::new(self.0.clone()),
         ))
     }
 }
@@ -475,7 +465,7 @@ where
 operation_manifest! {
     Replace<R> as "on_error_replace" {
         method: OnError::on_error;
-        policy: Replace<R> = Replace::new(R);
+        policy: Replace<R> = Replace(R);
         scope: element;
 
         kernel {

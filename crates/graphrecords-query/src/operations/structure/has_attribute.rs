@@ -78,8 +78,10 @@ impl<E: EntityAttributes, I: IndexDomain> ElementKernel<Indexed<I, EntityReferen
 impl<E: Build<HasAttributeOperation>> HasAttribute for E {
     type Output = E::Output;
 
-    fn has_attribute(&self, attribute: AttributeName) -> Self::Output {
-        self.build(HasAttributeOperation { attribute })
+    fn has_attribute(&self, attribute: impl Into<AttributeName>) -> Self::Output {
+        self.build(HasAttributeOperation {
+            attribute: attribute.into(),
+        })
     }
 }
 

@@ -14,8 +14,8 @@ use crate::{
     graphrecord::{
         AttributeMap,
         datatypes::{
-            AttributeName, EdgeIndex, Group, Identifier, IdentifierView, NodeIndex, Value,
-            ValueView,
+            AttributeName, AttributeNameView, EdgeIndex, GroupIndex, GroupIndexView, Identifier,
+            IdentifierView, NodeIndex, NodeIndexView, Value, ValueView,
         },
         schema::{GroupSchema, Schema, SchemaType},
     },
@@ -92,7 +92,7 @@ impl GraphState {
             self.node_dictionary.insert(hash, address_index);
         }
 
-        self.groups.rebuild_names();
+        self.groups.rebuild_indices();
     }
 
     #[cfg(feature = "io")]
@@ -108,12 +108,12 @@ impl GraphState {
         let node_memberships_consistent = self
             .node_addresses()
             .flat_map(|address| self.node_memberships(address))
-            .all(|group_address| self.group_name(group_address).is_some());
+            .all(|group_address| self.group_index(group_address).is_some());
 
         let edge_memberships_consistent = self
             .edge_addresses()
             .flat_map(|address| self.edge_memberships(address))
-            .all(|group_address| self.group_name(group_address).is_some());
+            .all(|group_address| self.group_index(group_address).is_some());
 
         let group_members_consistent = self.group_addresses().all(|group_address| {
             self.groups.record(group_address).is_some_and(|record| {
@@ -162,16 +162,20 @@ impl GraphState {
         self.edge_endpoints(address).is_some()
     }
 
-    pub fn resolve_node_address(&self, node_index: &NodeIndex) -> Option<NodeAddress> {
-        let hash = self.node_dictionary.hash_one(node_index.identifier());
-        let target = IdentifierView::from(node_index.identifier());
+    pub fn resolve_node_address<'a>(
+        &self,
+        node_index: impl Into<NodeIndexView<'a>>,
+    ) -> Option<NodeAddress> {
+        let node_index = node_index.into();
+        let hash = self.node_dictionary.hash_one(node_index.identifier_view());
 
         self.node_dictionary
             .candidates(hash)
             .find_map(|candidate_index| {
                 let candidate_address = NodeAddress::new(candidate_index);
 
-                (self.node_key(candidate_address)? == target).then_some(candidate_address)
+                (self.node_key(candidate_address)? == *node_index.identifier_view())
+                    .then_some(candidate_address)
             })
     }
 
@@ -259,11 +263,17 @@ impl GraphState {
             .map(|(address, name, _)| (address, name))
     }
 
-    pub fn resolve_node_attribute_address(&self, name: &AttributeName) -> Option<AttributeAddress> {
+    pub fn resolve_node_attribute_address<'a>(
+        &self,
+        name: impl Into<AttributeNameView<'a>>,
+    ) -> Option<AttributeAddress> {
         self.node_attributes.resolve(name)
     }
 
-    pub fn resolve_edge_attribute_address(&self, name: &AttributeName) -> Option<AttributeAddress> {
+    pub fn resolve_edge_attribute_address<'a>(
+        &self,
+        name: impl Into<AttributeNameView<'a>>,
+    ) -> Option<AttributeAddress> {
         self.edge_attributes.resolve(name)
     }
 
@@ -366,12 +376,15 @@ impl GraphState {
         self.contains_edge_address(address).then_some(address)
     }
 
-    pub fn resolve_group_address(&self, group: &Group) -> Option<GroupAddress> {
-        self.groups.resolve(group)
+    pub fn resolve_group_address<'a>(
+        &self,
+        group_index: impl Into<GroupIndexView<'a>>,
+    ) -> Option<GroupAddress> {
+        self.groups.resolve(group_index)
     }
 
-    pub fn group_name(&self, address: GroupAddress) -> Option<&Group> {
-        self.groups.name(address)
+    pub fn group_index(&self, address: GroupAddress) -> Option<&GroupIndex> {
+        self.groups.group_index(address)
     }
 
     pub fn group_addresses(&self) -> impl Iterator<Item = GroupAddress> + '_ {
@@ -438,7 +451,8 @@ impl GraphState {
         self.next_node_address = NodeAddress::new(address.index() + 1);
 
         self.node_dictionary.insert(
-            self.node_dictionary.hash_one(key.identifier()),
+            self.node_dictionary
+                .hash_one(IdentifierView::from(key.identifier())),
             address.index(),
         );
 
@@ -491,8 +505,10 @@ impl GraphState {
             self.groups.decrement_ungrouped_node_count();
         }
 
-        self.node_dictionary
-            .remove(self.node_dictionary.hash_one(&key), address.index());
+        self.node_dictionary.remove(
+            self.node_dictionary.hash_one(IdentifierView::from(&key)),
+            address.index(),
+        );
 
         let key_chunk = self
             .node_keys
@@ -540,11 +556,11 @@ impl GraphState {
         let edge_count = u32::try_from(resolved_edges.len())
             .map_err(|_| GraphRecordError::AddressSpaceExhausted)?;
 
+        self.append_edge_epoch(first_address, edge_count);
+
         for (source_address, target_address, attributes) in resolved_edges {
             self.insert_edge(source_address, target_address, &attributes, group_addresses)?;
         }
-
-        self.append_edge_epoch(first_address, edge_count);
 
         Ok(())
     }
@@ -684,12 +700,15 @@ impl GraphState {
             let node_index = NodeIndex::from(Identifier::from(
                 self.node_key(node_address).expect("Node must exist."),
             ));
-            let group = self
-                .group_name(group_address)
+            let group_index = self
+                .group_index(group_address)
                 .expect("Group must exist.")
                 .clone();
 
-            return Err(GraphRecordError::NodeAlreadyInGroup { node_index, group });
+            return Err(GraphRecordError::NodeAlreadyInGroup {
+                node_index,
+                group_index,
+            });
         }
 
         let node_was_previously_ungrouped = self.node_memberships(node_address).next().is_none();
@@ -713,15 +732,15 @@ impl GraphState {
             was_empty
         };
 
-        let group = self
-            .group_name(group_address)
+        let group_index = self
+            .group_index(group_address)
             .expect("Group must exist.")
             .clone();
         let attributes = self.node_attribute_map(node_address);
 
         self.schema_transition_node(
             node_address,
-            Some(&group),
+            Some(&group_index),
             &attributes,
             group_population_was_empty,
         )
@@ -736,12 +755,15 @@ impl GraphState {
             let node_index = NodeIndex::from(Identifier::from(
                 self.node_key(node_address).expect("Node must exist."),
             ));
-            let group = self
-                .group_name(group_address)
+            let group_index = self
+                .group_index(group_address)
                 .expect("Group must exist.")
                 .clone();
 
-            return Err(GraphRecordError::NodeNotInGroup { node_index, group });
+            return Err(GraphRecordError::NodeNotInGroup {
+                node_index,
+                group_index,
+            });
         }
 
         self.transition_node_to_ungrouped_if_memberless(node_address)
@@ -756,8 +778,8 @@ impl GraphState {
             .edge_memberships(edge_address)
             .any(|candidate| candidate == group_address)
         {
-            let group = self
-                .group_name(group_address)
+            let group_index = self
+                .group_index(group_address)
                 .expect("Group must exist.")
                 .clone();
 
@@ -765,7 +787,7 @@ impl GraphState {
                 edge_index: self
                     .edge_index(edge_address)
                     .expect("Edge must belong to an epoch."),
-                group,
+                group_index,
             });
         }
 
@@ -790,15 +812,15 @@ impl GraphState {
             was_empty
         };
 
-        let group = self
-            .group_name(group_address)
+        let group_index = self
+            .group_index(group_address)
             .expect("Group must exist.")
             .clone();
         let attributes = self.edge_attribute_map(edge_address);
 
         self.schema_transition_edge(
             edge_address,
-            Some(&group),
+            Some(&group_index),
             &attributes,
             group_population_was_empty,
         )
@@ -810,8 +832,8 @@ impl GraphState {
         group_address: GroupAddress,
     ) -> GraphRecordResult<()> {
         if !self.remove_edge_membership(edge_address, group_address) {
-            let group = self
-                .group_name(group_address)
+            let group_index = self
+                .group_index(group_address)
                 .expect("Group must exist.")
                 .clone();
 
@@ -819,19 +841,19 @@ impl GraphState {
                 edge_index: self
                     .edge_index(edge_address)
                     .expect("Edge must belong to an epoch."),
-                group,
+                group_index,
             });
         }
 
         self.transition_edge_to_ungrouped_if_memberless(edge_address)
     }
 
-    pub(crate) fn insert_group(&mut self, name: Group) -> GraphRecordResult<GroupAddress> {
+    pub(crate) fn insert_group(&mut self, name: GroupIndex) -> GraphRecordResult<GroupAddress> {
         let group_address =
             self.groups
                 .add(name.clone())
                 .ok_or_else(|| GraphRecordError::GroupAlreadyExists {
-                    group: name.clone(),
+                    group_index: name.clone(),
                 })?;
 
         match self.schema.schema_type() {
@@ -1095,7 +1117,7 @@ impl GraphState {
             let new_node_address = NodeAddress::new(new_index as u32);
             let identifier =
                 Identifier::from(self.node_key(old_node_address).expect("Node must exist."));
-            let hash = node_dictionary.hash_one(&identifier);
+            let hash = node_dictionary.hash_one(IdentifierView::from(&identifier));
 
             node_dictionary.insert(hash, new_node_address.index());
             node_keys
@@ -1193,7 +1215,7 @@ impl GraphState {
                 .record(old_group_address)
                 .expect("Group must exist.");
             let new_group_address = groups
-                .add(record.name.clone())
+                .add(record.group_index.clone())
                 .expect("Group names must remain unique.");
 
             let group_record = groups
@@ -1275,14 +1297,14 @@ impl GraphState {
         let group_population_was_empty = group_record.node_members.is_empty();
         group_record.node_members.insert(node_address.index());
 
-        let group = self
-            .group_name(group_address)
+        let group_index = self
+            .group_index(group_address)
             .expect("Group must exist.")
             .clone();
 
         self.schema_transition_node(
             node_address,
-            Some(&group),
+            Some(&group_index),
             attributes,
             group_population_was_empty,
         )
@@ -1305,14 +1327,14 @@ impl GraphState {
         let group_population_was_empty = group_record.edge_members.is_empty();
         group_record.edge_members.insert(edge_address.index());
 
-        let group = self
-            .group_name(group_address)
+        let group_index = self
+            .group_index(group_address)
             .expect("Group must exist.")
             .clone();
 
         self.schema_transition_edge(
             edge_address,
-            Some(&group),
+            Some(&group_index),
             attributes,
             group_population_was_empty,
         )
@@ -1407,7 +1429,7 @@ impl GraphState {
     fn schema_transition_node(
         &mut self,
         node_address: NodeAddress,
-        group: Option<&Group>,
+        group_index: Option<&GroupIndex>,
         attributes: &AttributeMap,
         population_was_empty: bool,
     ) -> GraphRecordResult<()> {
@@ -1415,7 +1437,7 @@ impl GraphState {
             SchemaType::Inferred => {
                 Arc::make_mut(&mut self.schema).update_node(
                     attributes,
-                    group,
+                    group_index,
                     population_was_empty,
                 );
 
@@ -1427,7 +1449,7 @@ impl GraphState {
                 ));
 
                 self.schema
-                    .validate_node(&node_index, attributes, group)
+                    .validate_node(&node_index, attributes, group_index)
                     .map_err(GraphRecordError::from)
             }
         }
@@ -1438,24 +1460,24 @@ impl GraphState {
         node_address: NodeAddress,
         attributes: &AttributeMap,
     ) -> GraphRecordResult<()> {
-        let groups: Vec<_> = self
+        let group_indices: Vec<_> = self
             .node_memberships(node_address)
-            .filter_map(|group_address| self.group_name(group_address).cloned())
+            .filter_map(|group_address| self.group_index(group_address).cloned())
             .collect();
 
-        if groups.is_empty() {
+        if group_indices.is_empty() {
             return self.schema_transition_node(node_address, None, attributes, false);
         }
 
-        groups.iter().try_for_each(|group| {
-            self.schema_transition_node(node_address, Some(group), attributes, false)
+        group_indices.iter().try_for_each(|group_index| {
+            self.schema_transition_node(node_address, Some(group_index), attributes, false)
         })
     }
 
     fn schema_transition_edge(
         &mut self,
         edge_address: EdgeAddress,
-        group: Option<&Group>,
+        group_index: Option<&GroupIndex>,
         attributes: &AttributeMap,
         population_was_empty: bool,
     ) -> GraphRecordResult<()> {
@@ -1463,7 +1485,7 @@ impl GraphState {
             SchemaType::Inferred => {
                 Arc::make_mut(&mut self.schema).update_edge(
                     attributes,
-                    group,
+                    group_index,
                     population_was_empty,
                 );
 
@@ -1475,7 +1497,7 @@ impl GraphState {
                     .expect("Edge must belong to an epoch.");
 
                 self.schema
-                    .validate_edge(&edge_index, attributes, group)
+                    .validate_edge(&edge_index, attributes, group_index)
                     .map_err(GraphRecordError::from)
             }
         }
@@ -1486,17 +1508,17 @@ impl GraphState {
         edge_address: EdgeAddress,
         attributes: &AttributeMap,
     ) -> GraphRecordResult<()> {
-        let groups: Vec<_> = self
+        let group_indices: Vec<_> = self
             .edge_memberships(edge_address)
-            .filter_map(|group_address| self.group_name(group_address).cloned())
+            .filter_map(|group_address| self.group_index(group_address).cloned())
             .collect();
 
-        if groups.is_empty() {
+        if group_indices.is_empty() {
             return self.schema_transition_edge(edge_address, None, attributes, false);
         }
 
-        groups.iter().try_for_each(|group| {
-            self.schema_transition_edge(edge_address, Some(group), attributes, false)
+        group_indices.iter().try_for_each(|group_index| {
+            self.schema_transition_edge(edge_address, Some(group_index), attributes, false)
         })
     }
 }
@@ -1515,8 +1537,8 @@ mod test {
         graphrecord::{
             AttributeMap,
             datatypes::{
-                AttributeName, DataType, EdgeIndex, Group, Identifier, IdentifierView, NodeIndex,
-                Value,
+                AttributeName, DataType, EdgeIndex, GroupIndex, Identifier, IdentifierView,
+                NodeIndex, Value,
             },
             schema::{
                 AttributeDataType, AttributeSchema, AttributeType, GroupSchema, Schema, SchemaType,
@@ -1535,7 +1557,9 @@ mod test {
 
         for (position, key) in ["lorem", "ipsum", "dolor"].into_iter().enumerate() {
             let identifier = Identifier::from(key);
-            let hash = state.node_dictionary.hash_one(&identifier);
+            let hash = state
+                .node_dictionary
+                .hash_one(IdentifierView::from(&identifier));
             let address = state.next_node_address;
 
             state.node_dictionary.insert(hash, address.index());
@@ -1599,7 +1623,7 @@ mod test {
 
     fn create_state_with_one_raw_group() -> (GraphState, GroupAddress) {
         let mut state = GraphState::new();
-        let group_address = state.groups.add(Group::from("lorem")).unwrap();
+        let group_address = state.groups.add(GroupIndex::from("lorem")).unwrap();
 
         (state, group_address)
     }
@@ -1638,7 +1662,7 @@ mod test {
 
     fn create_state_with_one_group() -> (GraphState, GroupAddress) {
         let mut state = GraphState::new();
-        let group_address = state.insert_group(Group::from("dolor")).unwrap();
+        let group_address = state.insert_group(GroupIndex::from("dolor")).unwrap();
 
         (state, group_address)
     }
@@ -1785,7 +1809,7 @@ mod test {
 
         assert_eq!(0, state.group_count());
 
-        state.groups.add(Group::from("lorem")).unwrap();
+        state.groups.add(GroupIndex::from("lorem")).unwrap();
 
         assert_eq!(1, state.group_count());
     }
@@ -1823,8 +1847,12 @@ mod test {
         let mut state = GraphState::new();
         let lorem_identifier = Identifier::from("lorem");
         let ipsum_identifier = Identifier::from("ipsum");
-        let lorem_hash = state.node_dictionary.hash_one(&lorem_identifier);
-        let ipsum_hash = state.node_dictionary.hash_one(&ipsum_identifier);
+        let lorem_hash = state
+            .node_dictionary
+            .hash_one(IdentifierView::from(&lorem_identifier));
+        let ipsum_hash = state
+            .node_dictionary
+            .hash_one(IdentifierView::from(&ipsum_identifier));
 
         let lorem_address = state.next_node_address;
         state
@@ -2196,17 +2224,23 @@ mod test {
 
         assert_eq!(
             Some(GroupAddress::new(0)),
-            state.resolve_group_address(&Group::from("lorem"))
+            state.resolve_group_address(&GroupIndex::from("lorem"))
         );
-        assert_eq!(None, state.resolve_group_address(&Group::from("ipsum")));
+        assert_eq!(
+            None,
+            state.resolve_group_address(&GroupIndex::from("ipsum"))
+        );
     }
 
     #[test]
-    fn test_group_name() {
+    fn test_group_index() {
         let (state, group_address) = create_state_with_one_raw_group();
 
-        assert_eq!(Some(&Group::from("lorem")), state.group_name(group_address));
-        assert_eq!(None, state.group_name(GroupAddress::new(999)));
+        assert_eq!(
+            Some(&GroupIndex::from("lorem")),
+            state.group_index(group_address)
+        );
+        assert_eq!(None, state.group_index(GroupAddress::new(999)));
     }
 
     #[test]
@@ -2344,19 +2378,20 @@ mod test {
 
         let result = state.insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[]);
 
-        assert_eq!(
-            Err(GraphRecordError::NodeAlreadyExists {
-                node_index: "lorem".into()
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::NodeAlreadyExists { node_index }
+                if node_index == "lorem".into()
+        )));
 
         let mut state = GraphState::new();
         state.next_node_address = NodeAddress::new(u32::MAX);
 
         let result = state.insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[]);
 
-        assert_eq!(Err(GraphRecordError::AddressSpaceExhausted), result);
+        assert!(
+            result.is_err_and(|error| matches!(error, GraphRecordError::AddressSpaceExhausted))
+        );
     }
 
     #[test]
@@ -2453,7 +2488,7 @@ mod test {
         assert!(
             state
                 .schema
-                .group(&Group::from("dolor"))
+                .group(&GroupIndex::from("dolor"))
                 .expect("Group types must be retained.")
                 .nodes()
                 .contains_key(&AttributeName::from("sed"))
@@ -2544,7 +2579,9 @@ mod test {
 
         let result = state.insert_edge(first_address, second_address, &AttributeMap::new(), &[]);
 
-        assert_eq!(Err(GraphRecordError::AddressSpaceExhausted), result);
+        assert!(
+            result.is_err_and(|error| matches!(error, GraphRecordError::AddressSpaceExhausted))
+        );
     }
 
     #[test]
@@ -2615,13 +2652,11 @@ mod test {
 
         let result = state.add_node_to_group(address, group_address);
 
-        assert_eq!(
-            Err(GraphRecordError::NodeAlreadyInGroup {
-                node_index: "lorem".into(),
-                group: "dolor".into(),
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::NodeAlreadyInGroup { node_index, group_index }
+                if node_index == "lorem".into() && group_index == "dolor".into()
+        )));
     }
 
     #[test]
@@ -2657,13 +2692,11 @@ mod test {
 
         let result = state.remove_node_from_group(address, group_address);
 
-        assert_eq!(
-            Err(GraphRecordError::NodeNotInGroup {
-                node_index: "lorem".into(),
-                group: "dolor".into(),
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::NodeNotInGroup { node_index, group_index }
+                if node_index == "lorem".into() && group_index == "dolor".into()
+        )));
     }
 
     #[test]
@@ -2703,13 +2736,13 @@ mod test {
             .expect("Edge must belong to an epoch.");
         let result = state.add_edge_to_group(edge_address, group_address);
 
-        assert_eq!(
-            Err(GraphRecordError::EdgeAlreadyInGroup {
-                edge_index,
-                group: "dolor".into(),
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::EdgeAlreadyInGroup {
+                edge_index: found_edge_index,
+                group_index
+            } if found_edge_index == edge_index && group_index == "dolor".into()
+        )));
     }
 
     #[test]
@@ -2746,27 +2779,32 @@ mod test {
             .expect("Edge must belong to an epoch.");
         let result = state.remove_edge_from_group(edge_address, group_address);
 
-        assert_eq!(
-            Err(GraphRecordError::EdgeNotInGroup {
-                edge_index,
-                group: "dolor".into(),
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::EdgeNotInGroup {
+                edge_index: found_edge_index,
+                group_index
+            } if found_edge_index == edge_index && group_index == "dolor".into()
+        )));
     }
 
     #[test]
     fn test_insert_group() {
         let mut state = GraphState::new();
 
-        state.insert_group(Group::from("lorem")).unwrap();
+        state.insert_group(GroupIndex::from("lorem")).unwrap();
 
         assert_eq!(1, state.group_count());
         assert_eq!(
             Some(GroupAddress::new(0)),
-            state.resolve_group_address(&Group::from("lorem"))
+            state.resolve_group_address(&GroupIndex::from("lorem"))
         );
-        assert!(state.schema.groups().contains_key(&Group::from("lorem")));
+        assert!(
+            state
+                .schema
+                .groups()
+                .contains_key(&GroupIndex::from("lorem"))
+        );
 
         let (mut state, group_address) = create_state_with_one_group();
         state
@@ -2778,14 +2816,14 @@ mod test {
             .unwrap();
 
         state.remove_group(group_address).unwrap();
-        state.insert_group(Group::from("dolor")).unwrap();
+        state.insert_group(GroupIndex::from("dolor")).unwrap();
 
         // The schema keeps a removed group's accumulated types; re-adding a group
         // under the same name reuses them.
         assert!(
             state
                 .schema
-                .group(&Group::from("dolor"))
+                .group(&GroupIndex::from("dolor"))
                 .expect("Group types must be reused.")
                 .nodes()
                 .contains_key(&AttributeName::from("sed"))
@@ -2795,21 +2833,20 @@ mod test {
     #[test]
     fn test_invalid_insert_group() {
         let mut state = GraphState::new();
-        state.insert_group(Group::from("lorem")).unwrap();
+        state.insert_group(GroupIndex::from("lorem")).unwrap();
 
-        let result = state.insert_group(Group::from("lorem"));
+        let result = state.insert_group(GroupIndex::from("lorem"));
 
-        assert_eq!(
-            Err(GraphRecordError::GroupAlreadyExists {
-                group: "lorem".into()
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::GroupAlreadyExists { group_index }
+                if group_index == "lorem".into()
+        )));
 
         let mut state = GraphState::new();
         state.schema = Arc::new(Schema::new_provided(HashMap::new(), GroupSchema::default()));
 
-        let result = state.insert_group(Group::from("lorem"));
+        let result = state.insert_group(GroupIndex::from("lorem"));
 
         assert!(result.is_err());
         assert_eq!(1, state.group_count());
@@ -2880,7 +2917,7 @@ mod test {
         assert!(
             state
                 .schema
-                .group(&Group::from("dolor"))
+                .group(&GroupIndex::from("dolor"))
                 .unwrap()
                 .nodes()
                 .contains_key(&AttributeName::from("lorem"))
@@ -2957,13 +2994,13 @@ mod test {
 
         let result = state.remove_node_attribute(first_address, &AttributeName::from("missing"));
 
-        assert_eq!(
-            Err(GraphRecordError::NodeAttributeNotFound {
-                node_index: "lorem".into(),
-                attribute_name: "missing".into(),
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::NodeAttributeNotFound {
+                node_index,
+                attribute_name
+            } if node_index == "lorem".into() && attribute_name == "missing".into()
+        )));
     }
 
     #[test]
@@ -3006,7 +3043,7 @@ mod test {
         assert!(
             state
                 .schema
-                .group(&Group::from("dolor"))
+                .group(&GroupIndex::from("dolor"))
                 .unwrap()
                 .edges()
                 .contains_key(&AttributeName::from("lorem"))
@@ -3070,13 +3107,13 @@ mod test {
             .expect("Edge must belong to an epoch.");
         let result = state.remove_edge_attribute(edge_address, &AttributeName::from("missing"));
 
-        assert_eq!(
-            Err(GraphRecordError::EdgeAttributeNotFound {
-                edge_index,
-                attribute_name: "missing".into(),
-            }),
-            result
-        );
+        assert!(result.is_err_and(|error| matches!(
+            error,
+            GraphRecordError::EdgeAttributeNotFound {
+                edge_index: found_edge_index,
+                attribute_name
+            } if found_edge_index == edge_index && attribute_name == "missing".into()
+        )));
     }
 
     #[test]
@@ -3207,7 +3244,9 @@ mod test {
                 .map(Value::from)
         );
 
-        let new_group_address = state.resolve_group_address(&Group::from("dolor")).unwrap();
+        let new_group_address = state
+            .resolve_group_address(&GroupIndex::from("dolor"))
+            .unwrap();
         assert_eq!(GroupAddress::new(0), new_group_address);
         assert_eq!(
             vec![GroupAddress::new(0)],

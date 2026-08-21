@@ -1,6 +1,7 @@
 use crate::{ExpandedIndexOwned, ExpandedIndexReference, IndexDomain, Position};
 use graphrecords_core::graphrecord::{
-    AttributeName, AttributeNameView, Group, GroupView, NodeIndex, NodeIndexView, Value, ValueView,
+    AttributeName, AttributeNameView, GroupIndex, GroupIndexView, NodeIndex, NodeIndexView, Value,
+    ValueView,
 };
 
 pub trait EnsureSortable: PartialOrd + Sized {
@@ -92,13 +93,13 @@ impl EnsureSortable for AttributeNameView<'_> {
     }
 }
 
-impl EnsureSortable for Group {
+impl EnsureSortable for GroupIndex {
     fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)> {
         incomparable_with_first(values)
     }
 }
 
-impl EnsureSortable for GroupView<'_> {
+impl EnsureSortable for GroupIndexView<'_> {
     fn find_incomparable<'a>(values: impl Iterator<Item = &'a Self>) -> Option<(usize, usize)>
     where
         Self: 'a,

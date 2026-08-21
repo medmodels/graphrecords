@@ -1,16 +1,20 @@
+mod edge_direction;
 mod edge_index;
 mod identifier;
 mod identity;
+mod on_conflict;
 mod value;
 mod view;
 
 pub use self::{
+    edge_direction::EdgeDirection,
     edge_index::EdgeIndex,
     identifier::Identifier,
-    identity::{AttributeName, Group, NodeIndex, PluginName},
+    identity::{AttributeName, GroupIndex, NodeIndex, PluginName},
+    on_conflict::OnConflict,
     value::Value,
     view::{
-        AttributeNameView, GroupView, IdentifierView, NodeIndexView, PluginNameView, ValueView,
+        AttributeNameView, GroupIndexView, IdentifierView, NodeIndexView, PluginNameView, ValueView,
     },
 };
 use crate::errors::GraphRecordResult;
@@ -19,6 +23,15 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display, ops::Range};
 
 pub type AttributeMap = HashMap<AttributeName, Value>;
+
+pub(crate) fn collect_attributes(
+    attributes: impl IntoIterator<Item = (impl Into<AttributeName>, impl Into<Value>)>,
+) -> AttributeMap {
+    attributes
+        .into_iter()
+        .map(|(attribute_name, value)| (attribute_name.into(), value.into()))
+        .collect()
+}
 
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(any(feature = "serde", feature = "io"), derive(Serialize, Deserialize))]

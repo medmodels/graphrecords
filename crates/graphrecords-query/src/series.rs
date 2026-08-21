@@ -7,7 +7,7 @@ use crate::{
     optimizer::{
         Estimate, Estimated, OptimizationReport, Optimizer, PlanIdentity, PlanInputs, Stats,
     },
-    selection::QueryExplanation,
+    returns::QueryExplanation,
 };
 use graphrecords_core::{GraphRecord, StateView};
 use std::{

@@ -17,7 +17,7 @@ use crate::{
 };
 use graphrecords_core::{
     GraphRecord,
-    graphrecord::{AttributeName, EdgeIndex, Group, NodeIndex},
+    graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex},
 };
 use std::{
     any::Any,
@@ -774,12 +774,12 @@ pub fn invoke_attribute(arguments: &[DynInvokeArgument], position: usize) -> Att
     attribute.clone()
 }
 
-pub fn invoke_group(arguments: &[DynInvokeArgument], position: usize) -> Group {
-    let Some(DynInvokeArgument::Group(group)) = arguments.get(position) else {
+pub fn invoke_group(arguments: &[DynInvokeArgument], position: usize) -> GroupIndex {
+    let Some(DynInvokeArgument::Group(group_index)) = arguments.get(position) else {
         panic!("registry routed an operation without its declared group argument")
     };
 
-    group.clone()
+    group_index.clone()
 }
 
 pub fn invoke_direction(arguments: &[DynInvokeArgument], position: usize) -> EdgeDirection {
