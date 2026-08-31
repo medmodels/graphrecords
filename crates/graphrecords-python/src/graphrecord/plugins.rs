@@ -1,11 +1,17 @@
 use super::{
     PyAttributeName, PyAttributes, PyGraphRecord, PyGroupIndex, PyNodeIndex,
-    edge_index::PyEdgeIndex, schema::PySchema, traits::DeepInto, value::PyValue,
+    edge_index::PyEdgeIndex,
+    errors::PyGraphRecordError,
+    schema::PySchema,
+    source::{PyEdgeSource, PyNodeSource},
+    traits::DeepInto,
+    value::PyValue,
 };
 use graphrecords_core::{
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
-        AttributeMap, Changes, EdgeBatch, GraphRecord, NodeBatch, NodeIndex, Plugin,
+        AttributeMap, Changes, EdgeBatch, EdgeSource, GraphRecord, NodeBatch, NodeIndex,
+        NodeSource, Plugin,
         changes::{
             AddEdges, AddEdgesInGroup, AddEdgesToGroup, AddGroup, AddNodes, AddNodesInGroup,
             AddNodesToGroup, Clear, FreezeSchema, RemoveEdgeAttributes, RemoveEdges,
@@ -48,8 +54,10 @@ impl From<&PyNodeBatch> for NodeBatch {
 #[pymethods]
 impl PyNodeBatch {
     #[new]
-    pub fn new(nodes: Vec<(PyNodeIndex, PyAttributes)>) -> Self {
-        Self(Arc::new(nodes.deep_into()))
+    pub fn new(nodes: PyNodeSource) -> PyResult<Self> {
+        let batch = nodes.collect_nodes().map_err(PyGraphRecordError::from)?;
+
+        Ok(Self(Arc::new(batch.into_iter().collect())))
     }
 
     pub fn __len__(&self) -> usize {
@@ -132,8 +140,10 @@ impl From<&PyEdgeBatch> for EdgeBatch {
 #[pymethods]
 impl PyEdgeBatch {
     #[new]
-    pub fn new(edges: Vec<(PyNodeIndex, PyNodeIndex, PyAttributes)>) -> Self {
-        Self(Arc::new(edges.deep_into()))
+    pub fn new(edges: PyEdgeSource) -> PyResult<Self> {
+        let batch = edges.collect_edges().map_err(PyGraphRecordError::from)?;
+
+        Ok(Self(Arc::new(batch.into_iter().collect())))
     }
 
     pub fn __len__(&self) -> usize {
