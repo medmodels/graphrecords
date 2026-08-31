@@ -54,8 +54,10 @@ if TYPE_CHECKING:
     from graphrecords.types import (
         AttributeName,
         Attributes,
+        EdgeSource,
         GroupIndex,
         NodeIndex,
+        NodeSource,
         Value,
     )
 
@@ -104,12 +106,11 @@ class NodeBatch:
 
     _py_node_batch: PyNodeBatch
 
-    def __init__(self, nodes: List[Tuple[NodeIndex, Attributes]]) -> None:
+    def __init__(self, nodes: NodeSource) -> None:
         """Initializes a batch of nodes.
 
         Args:
-            nodes (List[Tuple[NodeIndex, Attributes]]): The index and attributes of
-                every node of the batch.
+            nodes (NodeSource): The nodes of the batch.
         """
         self._py_node_batch = PyNodeBatch(nodes)
 
@@ -211,12 +212,11 @@ class EdgeBatch:
 
     _py_edge_batch: PyEdgeBatch
 
-    def __init__(self, edges: List[Tuple[NodeIndex, NodeIndex, Attributes]]) -> None:
+    def __init__(self, edges: EdgeSource) -> None:
         """Initializes a batch of edges.
 
         Args:
-            edges (List[Tuple[NodeIndex, NodeIndex, Attributes]]): The source node
-                index, target node index and attributes of every edge of the batch.
+            edges (EdgeSource): The edges of the batch.
         """
         self._py_edge_batch = PyEdgeBatch(edges)
 

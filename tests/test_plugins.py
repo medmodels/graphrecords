@@ -4,6 +4,7 @@ import pickle
 import unittest
 from typing import TYPE_CHECKING, ClassVar, List, Tuple
 
+import polars as pl
 import pytest
 
 from graphrecords import GraphRecord
@@ -494,6 +495,15 @@ def create_edge_batch(
 
 
 class TestNodeBatch(unittest.TestCase):
+    def test_init(self) -> None:
+        from_rows = NodeBatch([("sit", {"amet": 1}), ("consectetur", {"amet": 2})])
+        from_frame = NodeBatch(
+            (pl.DataFrame({"node_index": ["sit"], "amet": [1]}), "node_index")
+        )
+
+        assert list(from_rows) == [("sit", {"amet": 1}), ("consectetur", {"amet": 2})]
+        assert list(from_frame) == [("sit", {"amet": 1})]
+
     def test_len(self) -> None:
         batch = create_node_batch([("sit", {"amet": 1}), ("consectetur", {"amet": 2})])
 
@@ -525,6 +535,30 @@ class TestNodeBatch(unittest.TestCase):
 
 
 class TestEdgeBatch(unittest.TestCase):
+    def test_init(self) -> None:
+        from_rows = EdgeBatch(
+            [("lorem", "dolor", {"amet": 1}), ("dolor", "lorem", {"amet": 2})]
+        )
+        from_frame = EdgeBatch(
+            (
+                pl.DataFrame(
+                    {
+                        "source_node_index": ["lorem"],
+                        "target_node_index": ["dolor"],
+                        "amet": [1],
+                    }
+                ),
+                "source_node_index",
+                "target_node_index",
+            )
+        )
+
+        assert list(from_rows) == [
+            ("lorem", "dolor", {"amet": 1}),
+            ("dolor", "lorem", {"amet": 2}),
+        ]
+        assert list(from_frame) == [("lorem", "dolor", {"amet": 1})]
+
     def test_len(self) -> None:
         batch = create_edge_batch(
             [("lorem", "dolor", {"amet": 1}), ("dolor", "lorem", {"amet": 2})]
