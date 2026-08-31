@@ -2,6 +2,12 @@
 
 All notable changes to the Python package will be documented in this file.
 
+## [0.6.1] - 2026-08-31
+
+### Features
+
+- enable creating node and edge batches from any source (#84)
+
 ## [0.6.0] - 2026-08-31
 
 ### Breaking Changes
