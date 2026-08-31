@@ -23,7 +23,7 @@ All notable changes to the Python package will be documented in this file.
 
 - query engine typing inconsistencies (#77)
 - Missing type in QueryResult (#65)
-- align EdgeIndexer **delitem** no-match query behavior with NodeIndexer (#61)
+- align EdgeIndexer `__delitem__` no-match query behavior with NodeIndexer (#61)
 
 ### Refactoring
 
