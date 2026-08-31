@@ -2,6 +2,16 @@
 
 All notable changes to the Rust crates will be documented in this file.
 
+## [0.6.0] - 2026-08-31
+
+### Breaking Changes
+
+- refactoring of graphrecord storage and interface (#80)
+
+### Refactoring
+
+- refactoring of graphrecord storage and interface (#80)
+
 ## [0.5.0] - 2026-08-10
 
 ### Breaking Changes
