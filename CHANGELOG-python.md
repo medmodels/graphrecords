@@ -2,6 +2,16 @@
 
 All notable changes to the Python package will be documented in this file.
 
+## [0.7.0] - 2026-09-01
+
+### Breaking Changes
+
+- rework plugin post hooks (#90)
+
+### Refactoring
+
+- rework plugin post hooks (#90)
+
 ## [0.6.1] - 2026-08-31
 
 ### Features
