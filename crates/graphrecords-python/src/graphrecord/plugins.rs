@@ -10,8 +10,7 @@ use super::{
 use graphrecords_core::{
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{
-        AttributeMap, Changes, EdgeBatch, EdgeSource, GraphRecord, NodeBatch, NodeIndex,
-        NodeSource, Plugin,
+        Changes, EdgeBatch, EdgeSource, GraphRecord, NodeBatch, NodeSource, Plugin,
         changes::{
             AddEdges, AddEdgesInGroup, AddEdgesToGroup, AddGroup, AddNodes, AddNodesInGroup,
             AddNodesToGroup, Clear, FreezeSchema, RemoveEdgeAttributes, RemoveEdges,
@@ -32,22 +31,17 @@ use std::sync::Arc;
 #[pyclass(frozen, module = "graphrecords._graphrecords.plugins")]
 #[repr(transparent)]
 #[derive(Clone)]
-pub struct PyNodeBatch(Arc<Vec<(NodeIndex, AttributeMap)>>);
+pub struct PyNodeBatch(NodeBatch);
 
 impl From<&NodeBatch> for PyNodeBatch {
     fn from(batch: &NodeBatch) -> Self {
-        Self(Arc::new(
-            batch
-                .iter()
-                .map(|(node_index, attributes)| (node_index.clone(), attributes.clone()))
-                .collect(),
-        ))
+        Self(batch.clone())
     }
 }
 
 impl From<&PyNodeBatch> for NodeBatch {
     fn from(batch: &PyNodeBatch) -> Self {
-        Self::from(batch.0.as_ref().clone())
+        batch.0.clone()
     }
 }
 
@@ -57,7 +51,7 @@ impl PyNodeBatch {
     pub fn new(nodes: PyNodeSource) -> PyResult<Self> {
         let batch = nodes.collect_nodes().map_err(PyGraphRecordError::from)?;
 
-        Ok(Self(Arc::new(batch.into_iter().collect())))
+        Ok(Self(batch))
     }
 
     pub fn __len__(&self) -> usize {
@@ -70,7 +64,7 @@ impl PyNodeBatch {
 
     pub fn __iter__(&self) -> PyNodeBatchIterator {
         PyNodeBatchIterator {
-            elements: Arc::clone(&self.0),
+            elements: self.0.clone(),
             cursor: 0,
         }
     }
@@ -79,19 +73,15 @@ impl PyNodeBatch {
         let attribute_name = attribute_name.into();
 
         self.0
-            .iter()
-            .filter_map(|(node_index, attributes)| {
-                attributes
-                    .get(&attribute_name)
-                    .map(|value| (node_index.clone(), value.clone()).deep_into())
-            })
+            .attribute_values(&attribute_name)
+            .map(|(node_index, value)| (node_index.clone(), value.clone()).deep_into())
             .collect()
     }
 }
 
 #[pyclass(module = "graphrecords._graphrecords.plugins")]
 pub struct PyNodeBatchIterator {
-    elements: Arc<Vec<(NodeIndex, AttributeMap)>>,
+    elements: NodeBatch,
     cursor: usize,
 }
 
@@ -112,28 +102,17 @@ impl PyNodeBatchIterator {
 #[pyclass(frozen, module = "graphrecords._graphrecords.plugins")]
 #[repr(transparent)]
 #[derive(Clone)]
-pub struct PyEdgeBatch(Arc<Vec<(NodeIndex, NodeIndex, AttributeMap)>>);
+pub struct PyEdgeBatch(EdgeBatch);
 
 impl From<&EdgeBatch> for PyEdgeBatch {
     fn from(batch: &EdgeBatch) -> Self {
-        Self(Arc::new(
-            batch
-                .iter()
-                .map(|(source_node_index, target_node_index, attributes)| {
-                    (
-                        source_node_index.clone(),
-                        target_node_index.clone(),
-                        attributes.clone(),
-                    )
-                })
-                .collect(),
-        ))
+        Self(batch.clone())
     }
 }
 
 impl From<&PyEdgeBatch> for EdgeBatch {
     fn from(batch: &PyEdgeBatch) -> Self {
-        Self::from(batch.0.as_ref().clone())
+        batch.0.clone()
     }
 }
 
@@ -143,7 +122,7 @@ impl PyEdgeBatch {
     pub fn new(edges: PyEdgeSource) -> PyResult<Self> {
         let batch = edges.collect_edges().map_err(PyGraphRecordError::from)?;
 
-        Ok(Self(Arc::new(batch.into_iter().collect())))
+        Ok(Self(batch))
     }
 
     pub fn __len__(&self) -> usize {
@@ -156,7 +135,7 @@ impl PyEdgeBatch {
 
     pub fn __iter__(&self) -> PyEdgeBatchIterator {
         PyEdgeBatchIterator {
-            elements: Arc::clone(&self.0),
+            elements: self.0.clone(),
             cursor: 0,
         }
     }
@@ -168,16 +147,14 @@ impl PyEdgeBatch {
         let attribute_name = attribute_name.into();
 
         self.0
-            .iter()
-            .filter_map(|(source_node_index, target_node_index, attributes)| {
-                attributes.get(&attribute_name).map(|value| {
-                    (
-                        source_node_index.clone(),
-                        target_node_index.clone(),
-                        value.clone(),
-                    )
-                        .deep_into()
-                })
+            .attribute_values(&attribute_name)
+            .map(|(source_node_index, target_node_index, value)| {
+                (
+                    source_node_index.clone(),
+                    target_node_index.clone(),
+                    value.clone(),
+                )
+                    .deep_into()
             })
             .collect()
     }
@@ -185,7 +162,7 @@ impl PyEdgeBatch {
 
 #[pyclass(module = "graphrecords._graphrecords.plugins")]
 pub struct PyEdgeBatchIterator {
-    elements: Arc<Vec<(NodeIndex, NodeIndex, AttributeMap)>>,
+    elements: EdgeBatch,
     cursor: usize,
 }
 
@@ -755,7 +732,7 @@ pub struct PySetSchema(PySchema);
 
 impl From<&SetSchema> for PySetSchema {
     fn from(change: &SetSchema) -> Self {
-        Self(change.schema().clone().into())
+        Self(Arc::clone(change.schema()).into())
     }
 }
 
@@ -857,7 +834,7 @@ impl PyPlugin {
         }
 
         Err(Self::failure(PyTypeError::new_err(
-            "Plugin observer hooks must return None",
+            "Plugin post hooks must return None",
         )))
     }
 
@@ -902,21 +879,28 @@ impl PyPlugin {
         })
     }
 
-    fn observe(
+    fn observe<F>(
         &self,
         name: &str,
         previous: &GraphRecord,
         candidate: &GraphRecord,
-    ) -> GraphRecordResult<()> {
+        payload: F,
+    ) -> GraphRecordResult<()>
+    where
+        F: for<'py> FnOnce(Python<'py>) -> PyResult<Bound<'py, PyAny>>,
+    {
         Python::attach(|py| {
             let Some(method) = self.method(py, name)? else {
                 return Ok(());
             };
 
+            let payload = payload(py).map_err(Self::failure)?;
+
             method
                 .call1((
                     PyGraphRecord::from(previous.clone()),
                     PyGraphRecord::from(candidate.clone()),
+                    payload,
                 ))
                 .map_err(Self::failure)
                 .and_then(|returned| Self::observed(&returned))
@@ -937,7 +921,7 @@ impl PyPlugin {
     }
 }
 
-macro_rules! implement_change_hook {
+macro_rules! implement_pre_hook {
     ($method:ident, $parameter:ident, $core:ident, $payload:ident) => {
         fn $method(&self, record: &GraphRecord, $parameter: $core) -> GraphRecordResult<Changes> {
             let changes = self.dispatch(stringify!($method), record, |py| {
@@ -949,176 +933,249 @@ macro_rules! implement_change_hook {
     };
 }
 
-macro_rules! implement_observer_hook {
-    ($method:ident) => {
+macro_rules! implement_post_hook {
+    ($method:ident, $parameter:ident, $core:ident, $payload:ident) => {
         fn $method(
             &self,
             previous: &GraphRecord,
             candidate: &GraphRecord,
+            $parameter: &$core,
         ) -> GraphRecordResult<()> {
-            self.observe(stringify!($method), previous, candidate)
+            self.observe(stringify!($method), previous, candidate, |py| {
+                $payload::from($parameter).into_bound_py_any(py)
+            })
         }
     };
 }
 
 impl Plugin for PyPlugin {
-    implement_change_hook!(on_add_nodes, addition, AddNodes, PyAddNodes);
+    implement_pre_hook!(pre_add_nodes, addition, AddNodes, PyAddNodes);
 
-    implement_observer_hook!(post_add_nodes);
+    implement_post_hook!(post_add_nodes, addition, AddNodes, PyAddNodes);
 
-    implement_change_hook!(
-        on_add_nodes_in_group,
+    implement_pre_hook!(
+        pre_add_nodes_in_group,
         addition,
         AddNodesInGroup,
         PyAddNodesInGroup
     );
 
-    implement_observer_hook!(post_add_nodes_in_group);
+    implement_post_hook!(
+        post_add_nodes_in_group,
+        addition,
+        AddNodesInGroup,
+        PyAddNodesInGroup
+    );
 
-    implement_change_hook!(on_add_edges, addition, AddEdges, PyAddEdges);
+    implement_pre_hook!(pre_add_edges, addition, AddEdges, PyAddEdges);
 
-    implement_observer_hook!(post_add_edges);
+    implement_post_hook!(post_add_edges, addition, AddEdges, PyAddEdges);
 
-    implement_change_hook!(
-        on_add_edges_in_group,
+    implement_pre_hook!(
+        pre_add_edges_in_group,
         addition,
         AddEdgesInGroup,
         PyAddEdgesInGroup
     );
 
-    implement_observer_hook!(post_add_edges_in_group);
+    implement_post_hook!(
+        post_add_edges_in_group,
+        addition,
+        AddEdgesInGroup,
+        PyAddEdgesInGroup
+    );
 
-    implement_change_hook!(on_remove_nodes, removal, RemoveNodes, PyRemoveNodes);
+    implement_pre_hook!(pre_remove_nodes, removal, RemoveNodes, PyRemoveNodes);
 
-    implement_observer_hook!(post_remove_nodes);
+    implement_post_hook!(post_remove_nodes, removal, RemoveNodes, PyRemoveNodes);
 
-    implement_change_hook!(on_remove_edges, removal, RemoveEdges, PyRemoveEdges);
+    implement_pre_hook!(pre_remove_edges, removal, RemoveEdges, PyRemoveEdges);
 
-    implement_observer_hook!(post_remove_edges);
+    implement_post_hook!(post_remove_edges, removal, RemoveEdges, PyRemoveEdges);
 
-    implement_change_hook!(
-        on_set_node_attributes,
+    implement_pre_hook!(
+        pre_set_node_attributes,
         assignment,
         SetNodeAttributes,
         PySetNodeAttributes
     );
 
-    implement_observer_hook!(post_set_node_attributes);
+    implement_post_hook!(
+        post_set_node_attributes,
+        assignment,
+        SetNodeAttributes,
+        PySetNodeAttributes
+    );
 
-    implement_change_hook!(
-        on_replace_node_attributes,
+    implement_pre_hook!(
+        pre_replace_node_attributes,
         assignment,
         ReplaceNodeAttributes,
         PyReplaceNodeAttributes
     );
 
-    implement_observer_hook!(post_replace_node_attributes);
+    implement_post_hook!(
+        post_replace_node_attributes,
+        assignment,
+        ReplaceNodeAttributes,
+        PyReplaceNodeAttributes
+    );
 
-    implement_change_hook!(
-        on_remove_node_attributes,
+    implement_pre_hook!(
+        pre_remove_node_attributes,
         removal,
         RemoveNodeAttributes,
         PyRemoveNodeAttributes
     );
 
-    implement_observer_hook!(post_remove_node_attributes);
+    implement_post_hook!(
+        post_remove_node_attributes,
+        removal,
+        RemoveNodeAttributes,
+        PyRemoveNodeAttributes
+    );
 
-    implement_change_hook!(
-        on_set_edge_attributes,
+    implement_pre_hook!(
+        pre_set_edge_attributes,
         assignment,
         SetEdgeAttributes,
         PySetEdgeAttributes
     );
 
-    implement_observer_hook!(post_set_edge_attributes);
+    implement_post_hook!(
+        post_set_edge_attributes,
+        assignment,
+        SetEdgeAttributes,
+        PySetEdgeAttributes
+    );
 
-    implement_change_hook!(
-        on_replace_edge_attributes,
+    implement_pre_hook!(
+        pre_replace_edge_attributes,
         assignment,
         ReplaceEdgeAttributes,
         PyReplaceEdgeAttributes
     );
 
-    implement_observer_hook!(post_replace_edge_attributes);
+    implement_post_hook!(
+        post_replace_edge_attributes,
+        assignment,
+        ReplaceEdgeAttributes,
+        PyReplaceEdgeAttributes
+    );
 
-    implement_change_hook!(
-        on_remove_edge_attributes,
+    implement_pre_hook!(
+        pre_remove_edge_attributes,
         removal,
         RemoveEdgeAttributes,
         PyRemoveEdgeAttributes
     );
 
-    implement_observer_hook!(post_remove_edge_attributes);
+    implement_post_hook!(
+        post_remove_edge_attributes,
+        removal,
+        RemoveEdgeAttributes,
+        PyRemoveEdgeAttributes
+    );
 
-    implement_change_hook!(on_add_group, addition, AddGroup, PyAddGroup);
+    implement_pre_hook!(pre_add_group, addition, AddGroup, PyAddGroup);
 
-    implement_observer_hook!(post_add_group);
+    implement_post_hook!(post_add_group, addition, AddGroup, PyAddGroup);
 
-    implement_change_hook!(on_remove_groups, removal, RemoveGroups, PyRemoveGroups);
+    implement_pre_hook!(pre_remove_groups, removal, RemoveGroups, PyRemoveGroups);
 
-    implement_observer_hook!(post_remove_groups);
+    implement_post_hook!(post_remove_groups, removal, RemoveGroups, PyRemoveGroups);
 
-    implement_change_hook!(
-        on_add_nodes_to_group,
+    implement_pre_hook!(
+        pre_add_nodes_to_group,
         membership,
         AddNodesToGroup,
         PyAddNodesToGroup
     );
 
-    implement_observer_hook!(post_add_nodes_to_group);
+    implement_post_hook!(
+        post_add_nodes_to_group,
+        membership,
+        AddNodesToGroup,
+        PyAddNodesToGroup
+    );
 
-    implement_change_hook!(
-        on_remove_nodes_from_group,
+    implement_pre_hook!(
+        pre_remove_nodes_from_group,
         membership,
         RemoveNodesFromGroup,
         PyRemoveNodesFromGroup
     );
 
-    implement_observer_hook!(post_remove_nodes_from_group);
+    implement_post_hook!(
+        post_remove_nodes_from_group,
+        membership,
+        RemoveNodesFromGroup,
+        PyRemoveNodesFromGroup
+    );
 
-    implement_change_hook!(
-        on_add_edges_to_group,
+    implement_pre_hook!(
+        pre_add_edges_to_group,
         membership,
         AddEdgesToGroup,
         PyAddEdgesToGroup
     );
 
-    implement_observer_hook!(post_add_edges_to_group);
+    implement_post_hook!(
+        post_add_edges_to_group,
+        membership,
+        AddEdgesToGroup,
+        PyAddEdgesToGroup
+    );
 
-    implement_change_hook!(
-        on_remove_edges_from_group,
+    implement_pre_hook!(
+        pre_remove_edges_from_group,
         membership,
         RemoveEdgesFromGroup,
         PyRemoveEdgesFromGroup
     );
 
-    implement_observer_hook!(post_remove_edges_from_group);
+    implement_post_hook!(
+        post_remove_edges_from_group,
+        membership,
+        RemoveEdgesFromGroup,
+        PyRemoveEdgesFromGroup
+    );
 
-    implement_change_hook!(on_set_schema, schema_change, SetSchema, PySetSchema);
+    implement_pre_hook!(pre_set_schema, schema_change, SetSchema, PySetSchema);
 
-    implement_observer_hook!(post_set_schema);
+    implement_post_hook!(post_set_schema, schema_change, SetSchema, PySetSchema);
 
-    implement_change_hook!(
-        on_freeze_schema,
+    implement_pre_hook!(
+        pre_freeze_schema,
         schema_change,
         FreezeSchema,
         PyFreezeSchema
     );
 
-    implement_observer_hook!(post_freeze_schema);
+    implement_post_hook!(
+        post_freeze_schema,
+        schema_change,
+        FreezeSchema,
+        PyFreezeSchema
+    );
 
-    implement_change_hook!(
-        on_unfreeze_schema,
+    implement_pre_hook!(
+        pre_unfreeze_schema,
         schema_change,
         UnfreezeSchema,
         PyUnfreezeSchema
     );
 
-    implement_observer_hook!(post_unfreeze_schema);
+    implement_post_hook!(
+        post_unfreeze_schema,
+        schema_change,
+        UnfreezeSchema,
+        PyUnfreezeSchema
+    );
 
-    implement_change_hook!(on_clear, clearing, Clear, PyClear);
+    implement_pre_hook!(pre_clear, clearing, Clear, PyClear);
 
-    implement_observer_hook!(post_clear);
+    implement_post_hook!(post_clear, clearing, Clear, PyClear);
 
     fn initialize(&self, record: &GraphRecord) -> GraphRecordResult<Changes> {
         Ok(self.announce("initialize", record)?.unwrap_or_default())

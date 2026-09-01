@@ -30,11 +30,13 @@ impl RemoveEdges {
 impl Sealed for RemoveEdges {}
 
 impl Change for RemoveEdges {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        for edge_index in self.edge_indices {
-            let address = state
-                .resolve_edge_address(&edge_index)
-                .ok_or(GraphRecordError::EdgeNotFound { edge_index })?;
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        for edge_index in &self.edge_indices {
+            let address = state.resolve_edge_address(edge_index).ok_or_else(|| {
+                GraphRecordError::EdgeNotFound {
+                    edge_index: *edge_index,
+                }
+            })?;
 
             state.remove_edge(address);
         }
@@ -43,23 +45,22 @@ impl Change for RemoveEdges {
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_remove_edges(record, *self)
+        plugin.pre_remove_edges(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_remove_edges(previous, candidate)
+        plugin.post_remove_edges(previous, candidate, self)
     }
 }
 

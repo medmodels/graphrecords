@@ -27,21 +27,23 @@ impl AddEdges {
 impl Sealed for AddEdges {}
 
 impl Change for AddEdges {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
         let resolved_edges: Vec<_> = self
             .batch
-            .into_iter()
+            .iter()
             .map(|(source_node_index, target_node_index, attributes)| {
-                let source_address = state.resolve_node_address(&source_node_index).ok_or(
-                    GraphRecordError::NodeNotFound {
-                        node_index: source_node_index,
-                    },
-                )?;
-                let target_address = state.resolve_node_address(&target_node_index).ok_or(
-                    GraphRecordError::NodeNotFound {
-                        node_index: target_node_index,
-                    },
-                )?;
+                let source_address =
+                    state
+                        .resolve_node_address(source_node_index)
+                        .ok_or_else(|| GraphRecordError::NodeNotFound {
+                            node_index: source_node_index.clone(),
+                        })?;
+                let target_address =
+                    state
+                        .resolve_node_address(target_node_index)
+                        .ok_or_else(|| GraphRecordError::NodeNotFound {
+                            node_index: target_node_index.clone(),
+                        })?;
 
                 Ok((source_address, target_address, attributes))
             })
@@ -53,22 +55,21 @@ impl Change for AddEdges {
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_add_edges(record, *self)
+        plugin.pre_add_edges(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_add_edges(previous, candidate)
+        plugin.post_add_edges(previous, candidate, self)
     }
 }

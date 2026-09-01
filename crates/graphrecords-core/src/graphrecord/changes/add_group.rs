@@ -27,29 +27,28 @@ impl AddGroup {
 impl Sealed for AddGroup {}
 
 impl Change for AddGroup {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        state.insert_group(self.group_index)?;
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        state.insert_group(&self.group_index)?;
 
         Ok(state)
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_add_group(record, *self)
+        plugin.pre_add_group(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_add_group(previous, candidate)
+        plugin.post_add_group(previous, candidate, self)
     }
 }

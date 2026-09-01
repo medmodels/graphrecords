@@ -12,19 +12,22 @@ use crate::{
     },
 };
 use graphrecords_utils::aliases::GrHashSet;
+use std::sync::Arc;
 
 pub struct SetSchema {
-    schema: Schema,
+    schema: Arc<Schema>,
 }
 
 impl SetSchema {
     #[must_use]
-    pub const fn new(schema: Schema) -> Self {
-        Self { schema }
+    pub fn new(schema: Schema) -> Self {
+        Self {
+            schema: Arc::new(schema),
+        }
     }
 
     #[must_use]
-    pub const fn schema(&self) -> &Schema {
+    pub const fn schema(&self) -> &Arc<Schema> {
         &self.schema
     }
 }
@@ -32,8 +35,8 @@ impl SetSchema {
 impl Sealed for SetSchema {}
 
 impl Change for SetSchema {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        let mut schema = self.schema;
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        let mut schema = Arc::clone(&self.schema);
 
         let mut visited_node_groups = GrHashSet::new();
         let mut ungrouped_nodes_visited = false;
@@ -50,7 +53,11 @@ impl Change for SetSchema {
                     SchemaType::Inferred => {
                         let population_was_empty = !ungrouped_nodes_visited;
 
-                        schema.update_node(&attributes, None, population_was_empty);
+                        Arc::make_mut(&mut schema).update_node(
+                            &attributes,
+                            None,
+                            population_was_empty,
+                        );
                         ungrouped_nodes_visited = true;
                     }
                     SchemaType::Provided => {
@@ -71,7 +78,11 @@ impl Change for SetSchema {
                     SchemaType::Inferred => {
                         let population_was_empty = visited_node_groups.insert(group_index.clone());
 
-                        schema.update_node(&attributes, Some(&group_index), population_was_empty);
+                        Arc::make_mut(&mut schema).update_node(
+                            &attributes,
+                            Some(&group_index),
+                            population_was_empty,
+                        );
                     }
                     SchemaType::Provided => {
                         let identifier = Identifier::from(
@@ -100,7 +111,11 @@ impl Change for SetSchema {
                     SchemaType::Inferred => {
                         let population_was_empty = !ungrouped_edges_visited;
 
-                        schema.update_edge(&attributes, None, population_was_empty);
+                        Arc::make_mut(&mut schema).update_edge(
+                            &attributes,
+                            None,
+                            population_was_empty,
+                        );
                         ungrouped_edges_visited = true;
                     }
                     SchemaType::Provided => {
@@ -118,7 +133,11 @@ impl Change for SetSchema {
                     SchemaType::Inferred => {
                         let population_was_empty = visited_edge_groups.insert(group_index.clone());
 
-                        schema.update_edge(&attributes, Some(&group_index), population_was_empty);
+                        Arc::make_mut(&mut schema).update_edge(
+                            &attributes,
+                            Some(&group_index),
+                            population_was_empty,
+                        );
                     }
                     SchemaType::Provided => {
                         let edge_index = state.edge_index(edge_address).expect("Edge must exist.");
@@ -135,22 +154,21 @@ impl Change for SetSchema {
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_set_schema(record, *self)
+        plugin.pre_set_schema(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_set_schema(previous, candidate)
+        plugin.post_set_schema(previous, candidate, self)
     }
 }

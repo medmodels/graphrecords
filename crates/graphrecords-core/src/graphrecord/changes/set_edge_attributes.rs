@@ -39,41 +39,37 @@ impl SetEdgeAttributes {
 impl Sealed for SetEdgeAttributes {}
 
 impl Change for SetEdgeAttributes {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        let Self {
-            edge_indices,
-            attributes,
-        } = *self;
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        for edge_index in &self.edge_indices {
+            let address = state.resolve_edge_address(edge_index).ok_or_else(|| {
+                GraphRecordError::EdgeNotFound {
+                    edge_index: *edge_index,
+                }
+            })?;
 
-        for edge_index in edge_indices {
-            let address = state
-                .resolve_edge_address(&edge_index)
-                .ok_or(GraphRecordError::EdgeNotFound { edge_index })?;
-
-            state.set_edge_attributes(address, &attributes)?;
+            state.set_edge_attributes(address, &self.attributes)?;
         }
 
         Ok(state)
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_set_edge_attributes(record, *self)
+        plugin.pre_set_edge_attributes(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_set_edge_attributes(previous, candidate)
+        plugin.post_set_edge_attributes(previous, candidate, self)
     }
 }
 

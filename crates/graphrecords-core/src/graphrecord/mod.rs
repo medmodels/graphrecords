@@ -84,7 +84,7 @@ impl GraphRecord {
     #[must_use]
     pub fn with_schema(schema: Schema) -> Self {
         let mut state = GraphState::new();
-        state.replace_schema(schema);
+        state.replace_schema(Arc::new(schema));
 
         Self {
             state: Arc::new(state),
@@ -105,7 +105,7 @@ impl GraphRecord {
             let mut next = Changes::new();
 
             for change in current {
-                next.extend(change.dispatch(entry.1.as_ref(), self)?);
+                next.extend(change.pre_dispatch(entry.1.as_ref(), self)?);
             }
 
             current = next;
@@ -118,14 +118,9 @@ impl GraphRecord {
             }
         }
 
-        let post_dispatch_hooks: Vec<_> = current
-            .iter()
-            .map(|change| change.post_dispatch_hook())
-            .collect();
-
         let mut state = (*self.state).clone();
 
-        for change in current {
+        for change in current.iter() {
             state = change.apply(state)?;
         }
 
@@ -136,9 +131,9 @@ impl GraphRecord {
             plugins: Arc::clone(&self.plugins),
         };
 
-        for hook in post_dispatch_hooks {
+        for change in current.iter() {
             for entry in self.plugins.iter() {
-                hook(entry.1.as_ref(), self, &candidate)?;
+                change.post_dispatch(entry.1.as_ref(), self, &candidate)?;
             }
         }
 

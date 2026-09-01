@@ -33,39 +33,36 @@ impl AddNodesInGroup {
 impl Sealed for AddNodesInGroup {}
 
 impl Change for AddNodesInGroup {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        let Self { batch, group_index } = *self;
-
-        let group_address = match state.resolve_group_address(&group_index) {
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        let group_address = match state.resolve_group_address(&self.group_index) {
             Some(group_address) => group_address,
-            None => state.insert_group(group_index)?,
+            None => state.insert_group(&self.group_index)?,
         };
 
-        for (node_index, attributes) in batch {
-            state.insert_node(node_index, &attributes, &[group_address])?;
+        for (node_index, attributes) in self.batch.iter() {
+            state.insert_node(node_index, attributes, &[group_address])?;
         }
 
         Ok(state)
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_add_nodes_in_group(record, *self)
+        plugin.pre_add_nodes_in_group(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_add_nodes_in_group(previous, candidate)
+        plugin.post_add_nodes_in_group(previous, candidate, self)
     }
 }
 

@@ -30,11 +30,13 @@ impl RemoveNodes {
 impl Sealed for RemoveNodes {}
 
 impl Change for RemoveNodes {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        for node_index in self.node_indices {
-            let address = state
-                .resolve_node_address(&node_index)
-                .ok_or(GraphRecordError::NodeNotFound { node_index })?;
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        for node_index in &self.node_indices {
+            let address = state.resolve_node_address(node_index).ok_or_else(|| {
+                GraphRecordError::NodeNotFound {
+                    node_index: node_index.clone(),
+                }
+            })?;
 
             state.remove_node(address);
         }
@@ -43,23 +45,22 @@ impl Change for RemoveNodes {
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_remove_nodes(record, *self)
+        plugin.pre_remove_nodes(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_remove_nodes(previous, candidate)
+        plugin.post_remove_nodes(previous, candidate, self)
     }
 }
 

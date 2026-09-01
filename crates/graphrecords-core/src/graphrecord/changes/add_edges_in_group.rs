@@ -33,27 +33,28 @@ impl AddEdgesInGroup {
 impl Sealed for AddEdgesInGroup {}
 
 impl Change for AddEdgesInGroup {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        let Self { batch, group_index } = *self;
-
-        let group_address = match state.resolve_group_address(&group_index) {
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        let group_address = match state.resolve_group_address(&self.group_index) {
             Some(group_address) => group_address,
-            None => state.insert_group(group_index)?,
+            None => state.insert_group(&self.group_index)?,
         };
 
-        let resolved_edges: Vec<_> = batch
-            .into_iter()
+        let resolved_edges: Vec<_> = self
+            .batch
+            .iter()
             .map(|(source_node_index, target_node_index, attributes)| {
-                let source_address = state.resolve_node_address(&source_node_index).ok_or(
-                    GraphRecordError::NodeNotFound {
-                        node_index: source_node_index,
-                    },
-                )?;
-                let target_address = state.resolve_node_address(&target_node_index).ok_or(
-                    GraphRecordError::NodeNotFound {
-                        node_index: target_node_index,
-                    },
-                )?;
+                let source_address =
+                    state
+                        .resolve_node_address(source_node_index)
+                        .ok_or_else(|| GraphRecordError::NodeNotFound {
+                            node_index: source_node_index.clone(),
+                        })?;
+                let target_address =
+                    state
+                        .resolve_node_address(target_node_index)
+                        .ok_or_else(|| GraphRecordError::NodeNotFound {
+                            node_index: target_node_index.clone(),
+                        })?;
 
                 Ok((source_address, target_address, attributes))
             })
@@ -65,23 +66,22 @@ impl Change for AddEdgesInGroup {
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_add_edges_in_group(record, *self)
+        plugin.pre_add_edges_in_group(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_add_edges_in_group(previous, candidate)
+        plugin.post_add_edges_in_group(previous, candidate, self)
     }
 }
 

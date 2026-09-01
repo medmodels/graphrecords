@@ -42,21 +42,18 @@ impl AddEdgesToGroup {
 impl Sealed for AddEdgesToGroup {}
 
 impl Change for AddEdgesToGroup {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        let Self {
-            group_index,
-            edge_indices,
-        } = *self;
-
-        let group_address = match state.resolve_group_address(&group_index) {
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        let group_address = match state.resolve_group_address(&self.group_index) {
             Some(group_address) => group_address,
-            None => state.insert_group(group_index)?,
+            None => state.insert_group(&self.group_index)?,
         };
 
-        for edge_index in edge_indices {
-            let edge_address = state
-                .resolve_edge_address(&edge_index)
-                .ok_or(GraphRecordError::EdgeNotFound { edge_index })?;
+        for edge_index in &self.edge_indices {
+            let edge_address = state.resolve_edge_address(edge_index).ok_or_else(|| {
+                GraphRecordError::EdgeNotFound {
+                    edge_index: *edge_index,
+                }
+            })?;
 
             state.add_edge_to_group(edge_address, group_address)?;
         }
@@ -65,23 +62,22 @@ impl Change for AddEdgesToGroup {
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_add_edges_to_group(record, *self)
+        plugin.pre_add_edges_to_group(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_add_edges_to_group(previous, candidate)
+        plugin.post_add_edges_to_group(previous, candidate, self)
     }
 }
 

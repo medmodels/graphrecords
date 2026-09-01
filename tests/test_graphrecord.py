@@ -142,8 +142,8 @@ class RecordingPlugin(Plugin):
     def finalize(self, record: GraphRecord) -> None:
         self.calls.append(f"finalize:{record.node_count()}")
 
-    def on_add_nodes(self, record: GraphRecord, payload: AddNodes) -> None:
-        self.calls.append(f"on_add_nodes:{len(payload.batch)}")
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> None:
+        self.calls.append(f"pre_add_nodes:{len(addition.batch)}")
 
 
 class TestOnConflict(unittest.TestCase):

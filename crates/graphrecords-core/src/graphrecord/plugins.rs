@@ -23,7 +23,11 @@ pub trait Plugin: Any + Send + Sync {
     }
 
     #[allow(unused_variables)]
-    fn on_add_nodes(&self, record: &GraphRecord, addition: AddNodes) -> GraphRecordResult<Changes> {
+    fn pre_add_nodes(
+        &self,
+        record: &GraphRecord,
+        addition: AddNodes,
+    ) -> GraphRecordResult<Changes> {
         Ok(addition.into())
     }
 
@@ -32,12 +36,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        addition: &AddNodes,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_add_nodes_in_group(
+    fn pre_add_nodes_in_group(
         &self,
         record: &GraphRecord,
         addition: AddNodesInGroup,
@@ -50,12 +55,17 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        addition: &AddNodesInGroup,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_add_edges(&self, record: &GraphRecord, addition: AddEdges) -> GraphRecordResult<Changes> {
+    fn pre_add_edges(
+        &self,
+        record: &GraphRecord,
+        addition: AddEdges,
+    ) -> GraphRecordResult<Changes> {
         Ok(addition.into())
     }
 
@@ -64,12 +74,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        addition: &AddEdges,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_add_edges_in_group(
+    fn pre_add_edges_in_group(
         &self,
         record: &GraphRecord,
         addition: AddEdgesInGroup,
@@ -82,12 +93,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        addition: &AddEdgesInGroup,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_remove_nodes(
+    fn pre_remove_nodes(
         &self,
         record: &GraphRecord,
         removal: RemoveNodes,
@@ -100,12 +112,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        removal: &RemoveNodes,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_remove_edges(
+    fn pre_remove_edges(
         &self,
         record: &GraphRecord,
         removal: RemoveEdges,
@@ -118,12 +131,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        removal: &RemoveEdges,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_set_node_attributes(
+    fn pre_set_node_attributes(
         &self,
         record: &GraphRecord,
         assignment: SetNodeAttributes,
@@ -136,12 +150,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        assignment: &SetNodeAttributes,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_replace_node_attributes(
+    fn pre_replace_node_attributes(
         &self,
         record: &GraphRecord,
         assignment: ReplaceNodeAttributes,
@@ -154,12 +169,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        assignment: &ReplaceNodeAttributes,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_remove_node_attributes(
+    fn pre_remove_node_attributes(
         &self,
         record: &GraphRecord,
         removal: RemoveNodeAttributes,
@@ -172,12 +188,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        removal: &RemoveNodeAttributes,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_set_edge_attributes(
+    fn pre_set_edge_attributes(
         &self,
         record: &GraphRecord,
         assignment: SetEdgeAttributes,
@@ -190,12 +207,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        assignment: &SetEdgeAttributes,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_replace_edge_attributes(
+    fn pre_replace_edge_attributes(
         &self,
         record: &GraphRecord,
         assignment: ReplaceEdgeAttributes,
@@ -208,12 +226,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        assignment: &ReplaceEdgeAttributes,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_remove_edge_attributes(
+    fn pre_remove_edge_attributes(
         &self,
         record: &GraphRecord,
         removal: RemoveEdgeAttributes,
@@ -226,12 +245,17 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        removal: &RemoveEdgeAttributes,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_add_group(&self, record: &GraphRecord, addition: AddGroup) -> GraphRecordResult<Changes> {
+    fn pre_add_group(
+        &self,
+        record: &GraphRecord,
+        addition: AddGroup,
+    ) -> GraphRecordResult<Changes> {
         Ok(addition.into())
     }
 
@@ -240,12 +264,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        addition: &AddGroup,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_remove_groups(
+    fn pre_remove_groups(
         &self,
         record: &GraphRecord,
         removal: RemoveGroups,
@@ -258,12 +283,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        removal: &RemoveGroups,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_add_nodes_to_group(
+    fn pre_add_nodes_to_group(
         &self,
         record: &GraphRecord,
         membership: AddNodesToGroup,
@@ -276,12 +302,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        membership: &AddNodesToGroup,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_remove_nodes_from_group(
+    fn pre_remove_nodes_from_group(
         &self,
         record: &GraphRecord,
         membership: RemoveNodesFromGroup,
@@ -294,12 +321,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        membership: &RemoveNodesFromGroup,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_add_edges_to_group(
+    fn pre_add_edges_to_group(
         &self,
         record: &GraphRecord,
         membership: AddEdgesToGroup,
@@ -312,12 +340,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        membership: &AddEdgesToGroup,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_remove_edges_from_group(
+    fn pre_remove_edges_from_group(
         &self,
         record: &GraphRecord,
         membership: RemoveEdgesFromGroup,
@@ -330,12 +359,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        membership: &RemoveEdgesFromGroup,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_set_schema(
+    fn pre_set_schema(
         &self,
         record: &GraphRecord,
         schema_change: SetSchema,
@@ -348,12 +378,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        schema_change: &SetSchema,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_freeze_schema(
+    fn pre_freeze_schema(
         &self,
         record: &GraphRecord,
         schema_change: FreezeSchema,
@@ -366,12 +397,13 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        schema_change: &FreezeSchema,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_unfreeze_schema(
+    fn pre_unfreeze_schema(
         &self,
         record: &GraphRecord,
         schema_change: UnfreezeSchema,
@@ -384,17 +416,23 @@ pub trait Plugin: Any + Send + Sync {
         &self,
         previous: &GraphRecord,
         candidate: &GraphRecord,
+        schema_change: &UnfreezeSchema,
     ) -> GraphRecordResult<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_clear(&self, record: &GraphRecord, clearing: Clear) -> GraphRecordResult<Changes> {
+    fn pre_clear(&self, record: &GraphRecord, clearing: Clear) -> GraphRecordResult<Changes> {
         Ok(clearing.into())
     }
 
     #[allow(unused_variables)]
-    fn post_clear(&self, previous: &GraphRecord, candidate: &GraphRecord) -> GraphRecordResult<()> {
+    fn post_clear(
+        &self,
+        previous: &GraphRecord,
+        candidate: &GraphRecord,
+        clearing: &Clear,
+    ) -> GraphRecordResult<()> {
         Ok(())
     }
 }
@@ -411,7 +449,8 @@ mod test {
     use crate::{
         errors::{GraphRecordError, GraphRecordResult},
         graphrecord::{
-            AttributeMap, GroupIndex, NodeBatch, NodeIndex, PluginName, Value, schema::Schema,
+            AttributeMap, AttributeName, GroupIndex, NodeBatch, NodeIndex, PluginName, Value,
+            schema::Schema,
         },
     };
     use std::{
@@ -439,7 +478,7 @@ mod test {
     struct RewritingPlugin;
 
     impl Plugin for RewritingPlugin {
-        fn on_add_nodes(
+        fn pre_add_nodes(
             &self,
             _record: &GraphRecord,
             addition: AddNodes,
@@ -464,7 +503,7 @@ mod test {
     }
 
     impl Plugin for ExpandingPlugin {
-        fn on_add_nodes(
+        fn pre_add_nodes(
             &self,
             _record: &GraphRecord,
             addition: AddNodes,
@@ -479,7 +518,7 @@ mod test {
     struct SwallowingPlugin;
 
     impl Plugin for SwallowingPlugin {
-        fn on_add_nodes(
+        fn pre_add_nodes(
             &self,
             _record: &GraphRecord,
             _addition: AddNodes,
@@ -504,7 +543,7 @@ mod test {
     struct VetoingPlugin;
 
     impl Plugin for VetoingPlugin {
-        fn on_add_nodes(
+        fn pre_add_nodes(
             &self,
             _record: &GraphRecord,
             _addition: AddNodes,
@@ -522,6 +561,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _addition: &AddNodes,
         ) -> GraphRecordResult<()> {
             Err(GraphRecordError::PluginFailure {
                 cause: Arc::new(VetoError { label: "ipsum" }),
@@ -535,13 +575,13 @@ mod test {
     }
 
     impl Plugin for RecordingPlugin {
-        fn on_add_nodes(
+        fn pre_add_nodes(
             &self,
             _record: &GraphRecord,
             addition: AddNodes,
         ) -> GraphRecordResult<Changes> {
             self.log.lock().unwrap().push(format!(
-                "{}:on_add_nodes:len={}",
+                "{}:pre_add_nodes:len={}",
                 self.label,
                 addition.batch().len()
             ));
@@ -551,19 +591,20 @@ mod test {
 
         fn post_add_nodes(
             &self,
-            previous: &GraphRecord,
-            candidate: &GraphRecord,
+            _previous: &GraphRecord,
+            _candidate: &GraphRecord,
+            addition: &AddNodes,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push(format!(
-                "{}:post_add_nodes:delta={}",
+                "{}:post_add_nodes:len={}",
                 self.label,
-                candidate.node_count() - previous.node_count()
+                addition.batch().len()
             ));
 
             Ok(())
         }
 
-        fn on_add_group(
+        fn pre_add_group(
             &self,
             _record: &GraphRecord,
             addition: AddGroup,
@@ -571,20 +612,47 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push(format!("{}:on_add_group", self.label));
+                .push(format!("{}:pre_add_group", self.label));
 
             Ok(addition.into())
         }
 
         fn post_add_group(
             &self,
-            previous: &GraphRecord,
-            candidate: &GraphRecord,
+            _previous: &GraphRecord,
+            _candidate: &GraphRecord,
+            addition: &AddGroup,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push(format!(
-                "{}:post_add_group:delta={}",
+                "{}:post_add_group:{}",
                 self.label,
-                candidate.group_count() - previous.group_count()
+                addition.group_index()
+            ));
+
+            Ok(())
+        }
+    }
+
+    struct PayloadRecordingPlugin {
+        log: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl Plugin for PayloadRecordingPlugin {
+        fn post_add_nodes(
+            &self,
+            _previous: &GraphRecord,
+            _candidate: &GraphRecord,
+            addition: &AddNodes,
+        ) -> GraphRecordResult<()> {
+            let rewritten_count = addition
+                .batch()
+                .attribute_values(&AttributeName::from("rewritten"))
+                .count();
+
+            self.log.lock().unwrap().push(format!(
+                "post_add_nodes:len={}:rewritten={}",
+                addition.batch().len(),
+                rewritten_count
             ));
 
             Ok(())
@@ -596,12 +664,12 @@ mod test {
     }
 
     impl Plugin for TracingPlugin {
-        fn on_add_nodes(
+        fn pre_add_nodes(
             &self,
             _record: &GraphRecord,
             addition: AddNodes,
         ) -> GraphRecordResult<Changes> {
-            self.log.lock().unwrap().push("on_add_nodes".into());
+            self.log.lock().unwrap().push("pre_add_nodes".into());
 
             Ok(addition.into())
         }
@@ -610,13 +678,14 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _addition: &AddNodes,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push("post_add_nodes".into());
 
             Ok(())
         }
 
-        fn on_add_nodes_in_group(
+        fn pre_add_nodes_in_group(
             &self,
             _record: &GraphRecord,
             addition: AddNodesInGroup,
@@ -624,7 +693,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_add_nodes_in_group".into());
+                .push("pre_add_nodes_in_group".into());
 
             Ok(addition.into())
         }
@@ -633,6 +702,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _addition: &AddNodesInGroup,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -642,12 +712,12 @@ mod test {
             Ok(())
         }
 
-        fn on_add_edges(
+        fn pre_add_edges(
             &self,
             _record: &GraphRecord,
             addition: AddEdges,
         ) -> GraphRecordResult<Changes> {
-            self.log.lock().unwrap().push("on_add_edges".into());
+            self.log.lock().unwrap().push("pre_add_edges".into());
 
             Ok(addition.into())
         }
@@ -656,13 +726,14 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _addition: &AddEdges,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push("post_add_edges".into());
 
             Ok(())
         }
 
-        fn on_add_edges_in_group(
+        fn pre_add_edges_in_group(
             &self,
             _record: &GraphRecord,
             addition: AddEdgesInGroup,
@@ -670,7 +741,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_add_edges_in_group".into());
+                .push("pre_add_edges_in_group".into());
 
             Ok(addition.into())
         }
@@ -679,6 +750,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _addition: &AddEdgesInGroup,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -688,12 +760,12 @@ mod test {
             Ok(())
         }
 
-        fn on_remove_nodes(
+        fn pre_remove_nodes(
             &self,
             _record: &GraphRecord,
             removal: RemoveNodes,
         ) -> GraphRecordResult<Changes> {
-            self.log.lock().unwrap().push("on_remove_nodes".into());
+            self.log.lock().unwrap().push("pre_remove_nodes".into());
 
             Ok(removal.into())
         }
@@ -702,18 +774,19 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _removal: &RemoveNodes,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push("post_remove_nodes".into());
 
             Ok(())
         }
 
-        fn on_remove_edges(
+        fn pre_remove_edges(
             &self,
             _record: &GraphRecord,
             removal: RemoveEdges,
         ) -> GraphRecordResult<Changes> {
-            self.log.lock().unwrap().push("on_remove_edges".into());
+            self.log.lock().unwrap().push("pre_remove_edges".into());
 
             Ok(removal.into())
         }
@@ -722,13 +795,14 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _removal: &RemoveEdges,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push("post_remove_edges".into());
 
             Ok(())
         }
 
-        fn on_set_node_attributes(
+        fn pre_set_node_attributes(
             &self,
             _record: &GraphRecord,
             assignment: SetNodeAttributes,
@@ -736,7 +810,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_set_node_attributes".into());
+                .push("pre_set_node_attributes".into());
 
             Ok(assignment.into())
         }
@@ -745,6 +819,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _assignment: &SetNodeAttributes,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -754,7 +829,7 @@ mod test {
             Ok(())
         }
 
-        fn on_replace_node_attributes(
+        fn pre_replace_node_attributes(
             &self,
             _record: &GraphRecord,
             assignment: ReplaceNodeAttributes,
@@ -762,7 +837,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_replace_node_attributes".into());
+                .push("pre_replace_node_attributes".into());
 
             Ok(assignment.into())
         }
@@ -771,6 +846,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _assignment: &ReplaceNodeAttributes,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -780,7 +856,7 @@ mod test {
             Ok(())
         }
 
-        fn on_remove_node_attributes(
+        fn pre_remove_node_attributes(
             &self,
             _record: &GraphRecord,
             removal: RemoveNodeAttributes,
@@ -788,7 +864,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_remove_node_attributes".into());
+                .push("pre_remove_node_attributes".into());
 
             Ok(removal.into())
         }
@@ -797,6 +873,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _removal: &RemoveNodeAttributes,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -806,7 +883,7 @@ mod test {
             Ok(())
         }
 
-        fn on_set_edge_attributes(
+        fn pre_set_edge_attributes(
             &self,
             _record: &GraphRecord,
             assignment: SetEdgeAttributes,
@@ -814,7 +891,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_set_edge_attributes".into());
+                .push("pre_set_edge_attributes".into());
 
             Ok(assignment.into())
         }
@@ -823,6 +900,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _assignment: &SetEdgeAttributes,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -832,7 +910,7 @@ mod test {
             Ok(())
         }
 
-        fn on_replace_edge_attributes(
+        fn pre_replace_edge_attributes(
             &self,
             _record: &GraphRecord,
             assignment: ReplaceEdgeAttributes,
@@ -840,7 +918,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_replace_edge_attributes".into());
+                .push("pre_replace_edge_attributes".into());
 
             Ok(assignment.into())
         }
@@ -849,6 +927,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _assignment: &ReplaceEdgeAttributes,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -858,7 +937,7 @@ mod test {
             Ok(())
         }
 
-        fn on_remove_edge_attributes(
+        fn pre_remove_edge_attributes(
             &self,
             _record: &GraphRecord,
             removal: RemoveEdgeAttributes,
@@ -866,7 +945,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_remove_edge_attributes".into());
+                .push("pre_remove_edge_attributes".into());
 
             Ok(removal.into())
         }
@@ -875,6 +954,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _removal: &RemoveEdgeAttributes,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -884,12 +964,12 @@ mod test {
             Ok(())
         }
 
-        fn on_add_group(
+        fn pre_add_group(
             &self,
             _record: &GraphRecord,
             addition: AddGroup,
         ) -> GraphRecordResult<Changes> {
-            self.log.lock().unwrap().push("on_add_group".into());
+            self.log.lock().unwrap().push("pre_add_group".into());
 
             Ok(addition.into())
         }
@@ -898,18 +978,19 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _addition: &AddGroup,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push("post_add_group".into());
 
             Ok(())
         }
 
-        fn on_remove_groups(
+        fn pre_remove_groups(
             &self,
             _record: &GraphRecord,
             removal: RemoveGroups,
         ) -> GraphRecordResult<Changes> {
-            self.log.lock().unwrap().push("on_remove_groups".into());
+            self.log.lock().unwrap().push("pre_remove_groups".into());
 
             Ok(removal.into())
         }
@@ -918,13 +999,14 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _removal: &RemoveGroups,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push("post_remove_groups".into());
 
             Ok(())
         }
 
-        fn on_add_nodes_to_group(
+        fn pre_add_nodes_to_group(
             &self,
             _record: &GraphRecord,
             membership: AddNodesToGroup,
@@ -932,7 +1014,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_add_nodes_to_group".into());
+                .push("pre_add_nodes_to_group".into());
 
             Ok(membership.into())
         }
@@ -941,6 +1023,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _membership: &AddNodesToGroup,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -950,7 +1033,7 @@ mod test {
             Ok(())
         }
 
-        fn on_remove_nodes_from_group(
+        fn pre_remove_nodes_from_group(
             &self,
             _record: &GraphRecord,
             membership: RemoveNodesFromGroup,
@@ -958,7 +1041,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_remove_nodes_from_group".into());
+                .push("pre_remove_nodes_from_group".into());
 
             Ok(membership.into())
         }
@@ -967,6 +1050,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _membership: &RemoveNodesFromGroup,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -976,7 +1060,7 @@ mod test {
             Ok(())
         }
 
-        fn on_add_edges_to_group(
+        fn pre_add_edges_to_group(
             &self,
             _record: &GraphRecord,
             membership: AddEdgesToGroup,
@@ -984,7 +1068,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_add_edges_to_group".into());
+                .push("pre_add_edges_to_group".into());
 
             Ok(membership.into())
         }
@@ -993,6 +1077,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _membership: &AddEdgesToGroup,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -1002,7 +1087,7 @@ mod test {
             Ok(())
         }
 
-        fn on_remove_edges_from_group(
+        fn pre_remove_edges_from_group(
             &self,
             _record: &GraphRecord,
             membership: RemoveEdgesFromGroup,
@@ -1010,7 +1095,7 @@ mod test {
             self.log
                 .lock()
                 .unwrap()
-                .push("on_remove_edges_from_group".into());
+                .push("pre_remove_edges_from_group".into());
 
             Ok(membership.into())
         }
@@ -1019,6 +1104,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _membership: &RemoveEdgesFromGroup,
         ) -> GraphRecordResult<()> {
             self.log
                 .lock()
@@ -1028,12 +1114,12 @@ mod test {
             Ok(())
         }
 
-        fn on_set_schema(
+        fn pre_set_schema(
             &self,
             _record: &GraphRecord,
             schema_change: SetSchema,
         ) -> GraphRecordResult<Changes> {
-            self.log.lock().unwrap().push("on_set_schema".into());
+            self.log.lock().unwrap().push("pre_set_schema".into());
 
             Ok(schema_change.into())
         }
@@ -1042,18 +1128,19 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _schema_change: &SetSchema,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push("post_set_schema".into());
 
             Ok(())
         }
 
-        fn on_freeze_schema(
+        fn pre_freeze_schema(
             &self,
             _record: &GraphRecord,
             schema_change: FreezeSchema,
         ) -> GraphRecordResult<Changes> {
-            self.log.lock().unwrap().push("on_freeze_schema".into());
+            self.log.lock().unwrap().push("pre_freeze_schema".into());
 
             Ok(schema_change.into())
         }
@@ -1062,18 +1149,19 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _schema_change: &FreezeSchema,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push("post_freeze_schema".into());
 
             Ok(())
         }
 
-        fn on_unfreeze_schema(
+        fn pre_unfreeze_schema(
             &self,
             _record: &GraphRecord,
             schema_change: UnfreezeSchema,
         ) -> GraphRecordResult<Changes> {
-            self.log.lock().unwrap().push("on_unfreeze_schema".into());
+            self.log.lock().unwrap().push("pre_unfreeze_schema".into());
 
             Ok(schema_change.into())
         }
@@ -1082,14 +1170,15 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _schema_change: &UnfreezeSchema,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push("post_unfreeze_schema".into());
 
             Ok(())
         }
 
-        fn on_clear(&self, _record: &GraphRecord, clearing: Clear) -> GraphRecordResult<Changes> {
-            self.log.lock().unwrap().push("on_clear".into());
+        fn pre_clear(&self, _record: &GraphRecord, clearing: Clear) -> GraphRecordResult<Changes> {
+            self.log.lock().unwrap().push("pre_clear".into());
 
             Ok(clearing.into())
         }
@@ -1098,6 +1187,7 @@ mod test {
             &self,
             _previous: &GraphRecord,
             _candidate: &GraphRecord,
+            _clearing: &Clear,
         ) -> GraphRecordResult<()> {
             self.log.lock().unwrap().push("post_clear".into());
 
@@ -1106,7 +1196,7 @@ mod test {
     }
 
     #[test]
-    fn test_dispatch() {
+    fn test_pre_dispatch() {
         let graphrecord = GraphRecord::new()
             .add_plugin("noop", PassThroughPlugin)
             .unwrap()
@@ -1138,11 +1228,11 @@ mod test {
         graphrecord.add_node("lorem", AttributeMap::new()).unwrap();
 
         assert_eq!(
-            Some(&"first:on_add_nodes:len=1".to_string()),
+            Some(&"first:pre_add_nodes:len=1".to_string()),
             log.lock().unwrap().first()
         );
         assert_eq!(
-            Some(&"second:on_add_nodes:len=1".to_string()),
+            Some(&"second:pre_add_nodes:len=1".to_string()),
             log.lock().unwrap().get(1)
         );
 
@@ -1162,13 +1252,13 @@ mod test {
             .unwrap();
 
         assert_eq!(
-            Some(&"recorder:on_add_nodes:len=0".to_string()),
+            Some(&"recorder:pre_add_nodes:len=0".to_string()),
             log.lock().unwrap().first()
         );
     }
 
     #[test]
-    fn test_dispatch_rewriting() {
+    fn test_pre_dispatch_rewriting() {
         let graphrecord = GraphRecord::new()
             .add_plugin("rewriter", RewritingPlugin)
             .unwrap()
@@ -1186,7 +1276,7 @@ mod test {
     }
 
     #[test]
-    fn test_dispatch_expansion() {
+    fn test_pre_dispatch_expansion() {
         let log = Arc::new(Mutex::new(Vec::new()));
         let graphrecord = GraphRecord::new()
             .add_plugin(
@@ -1213,17 +1303,17 @@ mod test {
         assert!(derived.contains_group("derived"));
         assert_eq!(
             vec![
-                "recorder:on_add_nodes:len=1".to_string(),
-                "recorder:on_add_group".to_string(),
-                "recorder:post_add_nodes:delta=1".to_string(),
-                "recorder:post_add_group:delta=1".to_string(),
+                "recorder:pre_add_nodes:len=1".to_string(),
+                "recorder:pre_add_group".to_string(),
+                "recorder:post_add_nodes:len=1".to_string(),
+                "recorder:post_add_group:\"derived\"".to_string(),
             ],
             *log.lock().unwrap()
         );
     }
 
     #[test]
-    fn test_dispatch_swallowing() {
+    fn test_pre_dispatch_swallowing() {
         let log = Arc::new(Mutex::new(Vec::new()));
         let with_plugins = GraphRecord::new()
             .add_node("existing", AttributeMap::new())
@@ -1250,7 +1340,7 @@ mod test {
     }
 
     #[test]
-    fn test_dispatch_veto() {
+    fn test_pre_dispatch_veto() {
         let original = GraphRecord::new()
             .add_plugin("vetoer", VetoingPlugin)
             .unwrap();
@@ -1289,8 +1379,8 @@ mod test {
 
         assert_eq!(
             vec![
-                "recorder:on_add_nodes:len=2".to_string(),
-                "recorder:post_add_nodes:delta=2".to_string(),
+                "recorder:pre_add_nodes:len=2".to_string(),
+                "recorder:post_add_nodes:len=2".to_string(),
             ],
             *log.lock().unwrap()
         );
@@ -1317,11 +1407,11 @@ mod test {
         graphrecord.add_node("lorem", AttributeMap::new()).unwrap();
 
         assert_eq!(
-            Some(&"first:post_add_nodes:delta=1".to_string()),
+            Some(&"first:post_add_nodes:len=1".to_string()),
             log.lock().unwrap().get(2)
         );
         assert_eq!(
-            Some(&"second:post_add_nodes:delta=1".to_string()),
+            Some(&"second:post_add_nodes:len=1".to_string()),
             log.lock().unwrap().get(3)
         );
 
@@ -1341,8 +1431,80 @@ mod test {
             .unwrap();
 
         assert_eq!(
-            Some(&"recorder:post_add_nodes:delta=0".to_string()),
+            Some(&"recorder:post_add_nodes:len=0".to_string()),
             log.lock().unwrap().get(1)
+        );
+    }
+
+    #[test]
+    fn test_post_dispatch_ordering() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let graphrecord = GraphRecord::new()
+            .add_plugin(
+                "expander",
+                ExpandingPlugin {
+                    group_index: "derived".into(),
+                },
+            )
+            .unwrap()
+            .add_plugin(
+                "first",
+                RecordingPlugin {
+                    label: "first",
+                    log: Arc::clone(&log),
+                },
+            )
+            .unwrap()
+            .add_plugin(
+                "second",
+                RecordingPlugin {
+                    label: "second",
+                    log: Arc::clone(&log),
+                },
+            )
+            .unwrap();
+
+        graphrecord.add_node("lorem", AttributeMap::new()).unwrap();
+
+        assert_eq!(
+            vec![
+                "first:pre_add_nodes:len=1".to_string(),
+                "first:pre_add_group".to_string(),
+                "second:pre_add_nodes:len=1".to_string(),
+                "second:pre_add_group".to_string(),
+                "first:post_add_nodes:len=1".to_string(),
+                "second:post_add_nodes:len=1".to_string(),
+                "first:post_add_group:\"derived\"".to_string(),
+                "second:post_add_group:\"derived\"".to_string(),
+            ],
+            *log.lock().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_post_dispatch_payloads() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let graphrecord = GraphRecord::new()
+            .add_plugin("rewriter", RewritingPlugin)
+            .unwrap()
+            .add_plugin(
+                "observer",
+                PayloadRecordingPlugin {
+                    log: Arc::clone(&log),
+                },
+            )
+            .unwrap();
+
+        graphrecord
+            .add_nodes(vec![
+                ("lorem", AttributeMap::new()),
+                ("ipsum", AttributeMap::new()),
+            ])
+            .unwrap();
+
+        assert_eq!(
+            vec!["post_add_nodes:len=2:rewritten=2".to_string()],
+            *log.lock().unwrap()
         );
     }
 
@@ -1388,7 +1550,38 @@ mod test {
         assert!(
             log.lock()
                 .unwrap()
-                .contains(&"recorder:post_add_nodes:delta=1".to_string())
+                .contains(&"recorder:post_add_nodes:len=1".to_string())
+        );
+
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let graphrecord = GraphRecord::new()
+            .add_plugin(
+                "expander",
+                ExpandingPlugin {
+                    group_index: "derived".into(),
+                },
+            )
+            .unwrap()
+            .add_plugin("post_vetoer", PostVetoingPlugin)
+            .unwrap()
+            .add_plugin(
+                "after",
+                RecordingPlugin {
+                    label: "after",
+                    log: Arc::clone(&log),
+                },
+            )
+            .unwrap();
+
+        let result = graphrecord.add_node("lorem", AttributeMap::new());
+
+        assert!(result.is_err());
+        assert_eq!(
+            vec![
+                "after:pre_add_nodes:len=1".to_string(),
+                "after:pre_add_group".to_string(),
+            ],
+            *log.lock().unwrap()
         );
     }
 
@@ -1489,49 +1682,49 @@ mod test {
         assert_eq!(0, graphrecord.node_count());
         assert_eq!(
             vec![
-                "on_add_group".to_string(),
+                "pre_add_group".to_string(),
                 "post_add_group".to_string(),
-                "on_add_nodes".to_string(),
+                "pre_add_nodes".to_string(),
                 "post_add_nodes".to_string(),
-                "on_add_nodes_in_group".to_string(),
+                "pre_add_nodes_in_group".to_string(),
                 "post_add_nodes_in_group".to_string(),
-                "on_add_edges".to_string(),
+                "pre_add_edges".to_string(),
                 "post_add_edges".to_string(),
-                "on_add_edges_in_group".to_string(),
+                "pre_add_edges_in_group".to_string(),
                 "post_add_edges_in_group".to_string(),
-                "on_add_nodes_to_group".to_string(),
+                "pre_add_nodes_to_group".to_string(),
                 "post_add_nodes_to_group".to_string(),
-                "on_add_edges_to_group".to_string(),
+                "pre_add_edges_to_group".to_string(),
                 "post_add_edges_to_group".to_string(),
-                "on_set_node_attributes".to_string(),
+                "pre_set_node_attributes".to_string(),
                 "post_set_node_attributes".to_string(),
-                "on_replace_node_attributes".to_string(),
+                "pre_replace_node_attributes".to_string(),
                 "post_replace_node_attributes".to_string(),
-                "on_remove_node_attributes".to_string(),
+                "pre_remove_node_attributes".to_string(),
                 "post_remove_node_attributes".to_string(),
-                "on_set_edge_attributes".to_string(),
+                "pre_set_edge_attributes".to_string(),
                 "post_set_edge_attributes".to_string(),
-                "on_replace_edge_attributes".to_string(),
+                "pre_replace_edge_attributes".to_string(),
                 "post_replace_edge_attributes".to_string(),
-                "on_remove_edge_attributes".to_string(),
+                "pre_remove_edge_attributes".to_string(),
                 "post_remove_edge_attributes".to_string(),
-                "on_set_schema".to_string(),
+                "pre_set_schema".to_string(),
                 "post_set_schema".to_string(),
-                "on_freeze_schema".to_string(),
+                "pre_freeze_schema".to_string(),
                 "post_freeze_schema".to_string(),
-                "on_unfreeze_schema".to_string(),
+                "pre_unfreeze_schema".to_string(),
                 "post_unfreeze_schema".to_string(),
-                "on_remove_nodes_from_group".to_string(),
+                "pre_remove_nodes_from_group".to_string(),
                 "post_remove_nodes_from_group".to_string(),
-                "on_remove_edges_from_group".to_string(),
+                "pre_remove_edges_from_group".to_string(),
                 "post_remove_edges_from_group".to_string(),
-                "on_remove_groups".to_string(),
+                "pre_remove_groups".to_string(),
                 "post_remove_groups".to_string(),
-                "on_remove_edges".to_string(),
+                "pre_remove_edges".to_string(),
                 "post_remove_edges".to_string(),
-                "on_remove_nodes".to_string(),
+                "pre_remove_nodes".to_string(),
                 "post_remove_nodes".to_string(),
-                "on_clear".to_string(),
+                "pre_clear".to_string(),
                 "post_clear".to_string(),
             ],
             *log.lock().unwrap()

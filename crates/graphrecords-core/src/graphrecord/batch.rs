@@ -2,26 +2,34 @@ use super::{
     AttributeMap,
     datatypes::{AttributeName, NodeIndex, Value},
 };
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Default)]
 pub struct NodeBatch {
-    elements: Vec<(NodeIndex, AttributeMap)>,
+    elements: Arc<Vec<(NodeIndex, AttributeMap)>>,
 }
 
 impl NodeBatch {
     #[must_use]
-    pub const fn from_tuples(elements: Vec<(NodeIndex, AttributeMap)>) -> Self {
-        Self { elements }
+    pub fn from_tuples(elements: Vec<(NodeIndex, AttributeMap)>) -> Self {
+        Self {
+            elements: Arc::new(elements),
+        }
     }
 
     #[must_use]
-    pub const fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.elements.len()
     }
 
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.elements.is_empty()
+    }
+
+    #[must_use]
+    pub fn get(&self, position: usize) -> Option<&(NodeIndex, AttributeMap)> {
+        self.elements.get(position)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&NodeIndex, &AttributeMap)> {
@@ -61,29 +69,36 @@ impl IntoIterator for NodeBatch {
     type Item = (NodeIndex, AttributeMap);
 
     fn into_iter(self) -> Self::IntoIter {
-        self.elements.into_iter()
+        Arc::unwrap_or_clone(self.elements).into_iter()
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct EdgeBatch {
-    elements: Vec<(NodeIndex, NodeIndex, AttributeMap)>,
+    elements: Arc<Vec<(NodeIndex, NodeIndex, AttributeMap)>>,
 }
 
 impl EdgeBatch {
     #[must_use]
-    pub const fn from_tuples(elements: Vec<(NodeIndex, NodeIndex, AttributeMap)>) -> Self {
-        Self { elements }
+    pub fn from_tuples(elements: Vec<(NodeIndex, NodeIndex, AttributeMap)>) -> Self {
+        Self {
+            elements: Arc::new(elements),
+        }
     }
 
     #[must_use]
-    pub const fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.elements.len()
     }
 
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.elements.is_empty()
+    }
+
+    #[must_use]
+    pub fn get(&self, position: usize) -> Option<&(NodeIndex, NodeIndex, AttributeMap)> {
+        self.elements.get(position)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&NodeIndex, &NodeIndex, &AttributeMap)> {
@@ -127,7 +142,7 @@ impl IntoIterator for EdgeBatch {
     type Item = (NodeIndex, NodeIndex, AttributeMap);
 
     fn into_iter(self) -> Self::IntoIter {
-        self.elements.into_iter()
+        Arc::unwrap_or_clone(self.elements).into_iter()
     }
 }
 
@@ -194,6 +209,14 @@ mod test {
     fn test_node_batch_is_empty() {
         assert!(!create_node_batch().is_empty());
         assert!(NodeBatch::default().is_empty());
+    }
+
+    #[test]
+    fn test_node_batch_get() {
+        let batch = create_node_batch();
+
+        assert_eq!(Some(&("ipsum".into(), AttributeMap::new())), batch.get(1));
+        assert_eq!(None, batch.get(3));
     }
 
     #[test]
@@ -275,6 +298,17 @@ mod test {
     fn test_edge_batch_is_empty() {
         assert!(!create_edge_batch().is_empty());
         assert!(EdgeBatch::default().is_empty());
+    }
+
+    #[test]
+    fn test_edge_batch_get() {
+        let batch = create_edge_batch();
+
+        assert_eq!(
+            Some(&("ipsum".into(), "dolor".into(), AttributeMap::new())),
+            batch.get(1)
+        );
+        assert_eq!(None, batch.get(2));
     }
 
     #[test]
