@@ -42,20 +42,19 @@ impl RemoveNodesFromGroup {
 impl Sealed for RemoveNodesFromGroup {}
 
 impl Change for RemoveNodesFromGroup {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        let Self {
-            group_index,
-            node_indices,
-        } = *self;
-
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
         let group_address = state
-            .resolve_group_address(&group_index)
-            .ok_or(GraphRecordError::GroupNotFound { group_index })?;
+            .resolve_group_address(&self.group_index)
+            .ok_or_else(|| GraphRecordError::GroupNotFound {
+                group_index: self.group_index.clone(),
+            })?;
 
-        for node_index in node_indices {
-            let node_address = state
-                .resolve_node_address(&node_index)
-                .ok_or(GraphRecordError::NodeNotFound { node_index })?;
+        for node_index in &self.node_indices {
+            let node_address = state.resolve_node_address(node_index).ok_or_else(|| {
+                GraphRecordError::NodeNotFound {
+                    node_index: node_index.clone(),
+                }
+            })?;
 
             state.remove_node_from_group(node_address, group_address)?;
         }
@@ -64,23 +63,22 @@ impl Change for RemoveNodesFromGroup {
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_remove_nodes_from_group(record, *self)
+        plugin.pre_remove_nodes_from_group(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_remove_nodes_from_group(previous, candidate)
+        plugin.post_remove_nodes_from_group(previous, candidate, self)
     }
 }
 

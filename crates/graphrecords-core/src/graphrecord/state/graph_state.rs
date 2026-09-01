@@ -435,12 +435,14 @@ impl GraphState {
 
     pub(crate) fn insert_node(
         &mut self,
-        key: NodeIndex,
+        key: &NodeIndex,
         attributes: &AttributeMap,
         group_addresses: &[GroupAddress],
     ) -> GraphRecordResult<NodeAddress> {
-        if self.resolve_node_address(&key).is_some() {
-            return Err(GraphRecordError::NodeAlreadyExists { node_index: key });
+        if self.resolve_node_address(key).is_some() {
+            return Err(GraphRecordError::NodeAlreadyExists {
+                node_index: key.clone(),
+            });
         }
 
         if self.next_node_address.index() == u32::MAX {
@@ -549,7 +551,7 @@ impl GraphState {
 
     pub(crate) fn insert_edges(
         &mut self,
-        resolved_edges: Vec<(NodeAddress, NodeAddress, AttributeMap)>,
+        resolved_edges: Vec<(NodeAddress, NodeAddress, &AttributeMap)>,
         group_addresses: &[GroupAddress],
     ) -> GraphRecordResult<()> {
         let first_address = self.next_edge_address;
@@ -559,7 +561,7 @@ impl GraphState {
         self.append_edge_epoch(first_address, edge_count);
 
         for (source_address, target_address, attributes) in resolved_edges {
-            self.insert_edge(source_address, target_address, &attributes, group_addresses)?;
+            self.insert_edge(source_address, target_address, attributes, group_addresses)?;
         }
 
         Ok(())
@@ -848,7 +850,7 @@ impl GraphState {
         self.transition_edge_to_ungrouped_if_memberless(edge_address)
     }
 
-    pub(crate) fn insert_group(&mut self, name: GroupIndex) -> GraphRecordResult<GroupAddress> {
+    pub(crate) fn insert_group(&mut self, name: &GroupIndex) -> GraphRecordResult<GroupAddress> {
         let group_address =
             self.groups
                 .add(name.clone())
@@ -858,14 +860,14 @@ impl GraphState {
 
         match self.schema.schema_type() {
             SchemaType::Inferred => {
-                if !self.schema.groups().contains_key(&name) {
+                if !self.schema.groups().contains_key(name) {
                     Arc::make_mut(&mut self.schema)
-                        .add_group(name, GroupSchema::default())
+                        .add_group(name.clone(), GroupSchema::default())
                         .expect("Group must be absent from the schema.");
                 }
             }
             SchemaType::Provided => {
-                self.schema.group(&name)?;
+                self.schema.group(name)?;
             }
         }
 
@@ -1057,8 +1059,8 @@ impl GraphState {
         Arc::make_mut(&mut self.schema).unfreeze();
     }
 
-    pub(crate) fn replace_schema(&mut self, schema: Schema) {
-        self.schema = Arc::new(schema);
+    pub(crate) fn replace_schema(&mut self, schema: Arc<Schema>) {
+        self.schema = schema;
     }
 
     pub(crate) fn clear_content(&mut self) {
@@ -1635,10 +1637,10 @@ mod test {
     fn create_state_with_two_nodes() -> (GraphState, NodeAddress, NodeAddress) {
         let mut state = GraphState::new();
         let first_address = state
-            .insert_node(NodeIndex::from("lorem"), &create_lorem_attributes(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &create_lorem_attributes(), &[])
             .unwrap();
         let second_address = state
-            .insert_node(NodeIndex::from("ipsum"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("ipsum"), &AttributeMap::new(), &[])
             .unwrap();
 
         (state, first_address, second_address)
@@ -1662,7 +1664,7 @@ mod test {
 
     fn create_state_with_one_group() -> (GraphState, GroupAddress) {
         let mut state = GraphState::new();
-        let group_address = state.insert_group(GroupIndex::from("dolor")).unwrap();
+        let group_address = state.insert_group(&GroupIndex::from("dolor")).unwrap();
 
         (state, group_address)
     }
@@ -1676,10 +1678,10 @@ mod test {
     ) {
         let (mut state, group_address) = create_state_with_one_group();
         let first_address = state
-            .insert_node(NodeIndex::from("lorem"), &create_lorem_attributes(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &create_lorem_attributes(), &[])
             .unwrap();
         let second_address = state
-            .insert_node(NodeIndex::from("ipsum"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("ipsum"), &AttributeMap::new(), &[])
             .unwrap();
         let edge_address = state
             .insert_edge(
@@ -2352,7 +2354,7 @@ mod test {
         let mut state = GraphState::new();
 
         let address = state
-            .insert_node(NodeIndex::from("lorem"), &create_lorem_attributes(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &create_lorem_attributes(), &[])
             .unwrap();
 
         assert_eq!(1, state.node_count());
@@ -2373,10 +2375,10 @@ mod test {
     fn test_invalid_insert_node() {
         let mut state = GraphState::new();
         state
-            .insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[])
             .unwrap();
 
-        let result = state.insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[]);
+        let result = state.insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[]);
 
         assert!(result.is_err_and(|error| matches!(
             error,
@@ -2387,7 +2389,7 @@ mod test {
         let mut state = GraphState::new();
         state.next_node_address = NodeAddress::new(u32::MAX);
 
-        let result = state.insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[]);
+        let result = state.insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[]);
 
         assert!(
             result.is_err_and(|error| matches!(error, GraphRecordError::AddressSpaceExhausted))
@@ -2427,7 +2429,7 @@ mod test {
 
         let mut state = GraphState::new();
         let address = state
-            .insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[])
             .unwrap();
         state
             .insert_edge(address, address, &AttributeMap::new(), &[])
@@ -2443,7 +2445,7 @@ mod test {
 
         let (mut state, group_address) = create_state_with_one_group();
         let address = state
-            .insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[])
             .unwrap();
         state.add_node_to_group(address, group_address).unwrap();
 
@@ -2471,7 +2473,7 @@ mod test {
         let (mut state, group_address) = create_state_with_one_group();
         state
             .insert_node(
-                NodeIndex::from("amet"),
+                &NodeIndex::from("amet"),
                 &AttributeMap::from([("sed".into(), 7.into())]),
                 &[group_address],
             )
@@ -2526,8 +2528,8 @@ mod test {
         state
             .insert_edges(
                 vec![
-                    (first_address, second_address, create_lorem_attributes()),
-                    (second_address, first_address, AttributeMap::new()),
+                    (first_address, second_address, &create_lorem_attributes()),
+                    (second_address, first_address, &AttributeMap::new()),
                 ],
                 &[],
             )
@@ -2622,7 +2624,7 @@ mod test {
     fn test_add_node_to_group() {
         let (mut state, group_address) = create_state_with_one_group();
         let address = state
-            .insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[])
             .unwrap();
 
         state.add_node_to_group(address, group_address).unwrap();
@@ -2646,7 +2648,7 @@ mod test {
     fn test_invalid_add_node_to_group() {
         let (mut state, group_address) = create_state_with_one_group();
         let address = state
-            .insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[])
             .unwrap();
         state.add_node_to_group(address, group_address).unwrap();
 
@@ -2663,7 +2665,7 @@ mod test {
     fn test_remove_node_from_group() {
         let (mut state, group_address) = create_state_with_one_group();
         let address = state
-            .insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[])
             .unwrap();
         state.add_node_to_group(address, group_address).unwrap();
 
@@ -2687,7 +2689,7 @@ mod test {
     fn test_invalid_remove_node_from_group() {
         let (mut state, group_address) = create_state_with_one_group();
         let address = state
-            .insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[])
             .unwrap();
 
         let result = state.remove_node_from_group(address, group_address);
@@ -2792,7 +2794,7 @@ mod test {
     fn test_insert_group() {
         let mut state = GraphState::new();
 
-        state.insert_group(GroupIndex::from("lorem")).unwrap();
+        state.insert_group(&GroupIndex::from("lorem")).unwrap();
 
         assert_eq!(1, state.group_count());
         assert_eq!(
@@ -2809,14 +2811,14 @@ mod test {
         let (mut state, group_address) = create_state_with_one_group();
         state
             .insert_node(
-                NodeIndex::from("amet"),
+                &NodeIndex::from("amet"),
                 &AttributeMap::from([("sed".into(), 7.into())]),
                 &[group_address],
             )
             .unwrap();
 
         state.remove_group(group_address).unwrap();
-        state.insert_group(GroupIndex::from("dolor")).unwrap();
+        state.insert_group(&GroupIndex::from("dolor")).unwrap();
 
         // The schema keeps a removed group's accumulated types; re-adding a group
         // under the same name reuses them.
@@ -2833,9 +2835,9 @@ mod test {
     #[test]
     fn test_invalid_insert_group() {
         let mut state = GraphState::new();
-        state.insert_group(GroupIndex::from("lorem")).unwrap();
+        state.insert_group(&GroupIndex::from("lorem")).unwrap();
 
-        let result = state.insert_group(GroupIndex::from("lorem"));
+        let result = state.insert_group(&GroupIndex::from("lorem"));
 
         assert!(result.is_err_and(|error| matches!(
             error,
@@ -2846,7 +2848,7 @@ mod test {
         let mut state = GraphState::new();
         state.schema = Arc::new(Schema::new_provided(HashMap::new(), GroupSchema::default()));
 
-        let result = state.insert_group(GroupIndex::from("lorem"));
+        let result = state.insert_group(&GroupIndex::from("lorem"));
 
         assert!(result.is_err());
         assert_eq!(1, state.group_count());
@@ -2856,7 +2858,7 @@ mod test {
     fn test_remove_group() {
         let (mut state, group_address) = create_state_with_one_group();
         let node_address = state
-            .insert_node(NodeIndex::from("lorem"), &create_lorem_attributes(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &create_lorem_attributes(), &[])
             .unwrap();
         state
             .add_node_to_group(node_address, group_address)
@@ -2906,7 +2908,7 @@ mod test {
 
         let (mut state, group_address) = create_state_with_one_group();
         let address = state
-            .insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[])
             .unwrap();
         state.add_node_to_group(address, group_address).unwrap();
 
@@ -3024,10 +3026,10 @@ mod test {
 
         let (mut state, group_address) = create_state_with_one_group();
         let first_address = state
-            .insert_node(NodeIndex::from("lorem"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &AttributeMap::new(), &[])
             .unwrap();
         let second_address = state
-            .insert_node(NodeIndex::from("ipsum"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("ipsum"), &AttributeMap::new(), &[])
             .unwrap();
         let edge_address = state
             .insert_edge(first_address, second_address, &AttributeMap::new(), &[])
@@ -3159,10 +3161,10 @@ mod test {
     fn test_replace_schema() {
         let mut state = GraphState::new();
 
-        state.replace_schema(Schema::new_provided(
+        state.replace_schema(Arc::new(Schema::new_provided(
             HashMap::new(),
             create_provided_group_schema(),
-        ));
+        )));
 
         assert_eq!(
             Schema::new_provided(HashMap::new(), create_provided_group_schema()),
@@ -3189,13 +3191,13 @@ mod test {
         let (mut state, group_address) = create_state_with_one_group();
 
         let first_address = state
-            .insert_node(NodeIndex::from("lorem"), &create_lorem_attributes(), &[])
+            .insert_node(&NodeIndex::from("lorem"), &create_lorem_attributes(), &[])
             .unwrap();
         let second_address = state
-            .insert_node(NodeIndex::from("ipsum"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("ipsum"), &AttributeMap::new(), &[])
             .unwrap();
         let third_address = state
-            .insert_node(NodeIndex::from("dolor"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("dolor"), &AttributeMap::new(), &[])
             .unwrap();
 
         let first_edge_address = state
@@ -3257,7 +3259,7 @@ mod test {
 
         let (mut state, _, second_address, _) = create_state_with_one_inserted_edge();
         let third_address = state
-            .insert_node(NodeIndex::from("dolor"), &AttributeMap::new(), &[])
+            .insert_node(&NodeIndex::from("dolor"), &AttributeMap::new(), &[])
             .unwrap();
         let second_edge_address = state
             .insert_edge(second_address, third_address, &AttributeMap::new(), &[])

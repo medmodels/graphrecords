@@ -20,7 +20,7 @@ use pyo3::{
     prelude::*,
     types::{PyBytes, PyBytesMethods, PyTuple},
 };
-use std::{collections::HashMap, hash::BuildHasher};
+use std::{collections::HashMap, hash::BuildHasher, sync::Arc};
 
 #[pyclass(frozen, eq, eq_int, hash, module = "graphrecords._graphrecords.schema")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -290,17 +290,23 @@ impl From<PySchemaType> for SchemaType {
 #[pyclass(frozen, eq, module = "graphrecords._graphrecords.schema")]
 #[repr(transparent)]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PySchema(Schema);
+pub struct PySchema(Arc<Schema>);
 
 impl From<Schema> for PySchema {
     fn from(value: Schema) -> Self {
+        Self(Arc::new(value))
+    }
+}
+
+impl From<Arc<Schema>> for PySchema {
+    fn from(value: Arc<Schema>) -> Self {
         Self(value)
     }
 }
 
 impl From<PySchema> for Schema {
     fn from(value: PySchema) -> Self {
-        value.0
+        Arc::unwrap_or_clone(value.0)
     }
 }
 
@@ -393,7 +399,7 @@ impl PySchema {
         attribute_type: PyAttributeType,
         group_index: Option<PyGroupIndex>,
     ) -> PyResult<Self> {
-        let mut schema = self.0.clone();
+        let mut schema = (*self.0).clone();
 
         schema
             .set_node_attribute(
@@ -415,7 +421,7 @@ impl PySchema {
         attribute_type: PyAttributeType,
         group_index: Option<PyGroupIndex>,
     ) -> PyResult<Self> {
-        let mut schema = self.0.clone();
+        let mut schema = (*self.0).clone();
 
         schema
             .set_edge_attribute(
@@ -437,7 +443,7 @@ impl PySchema {
         attribute_type: PyAttributeType,
         group_index: Option<PyGroupIndex>,
     ) -> PyResult<Self> {
-        let mut schema = self.0.clone();
+        let mut schema = (*self.0).clone();
 
         schema
             .update_node_attribute(
@@ -459,7 +465,7 @@ impl PySchema {
         attribute_type: PyAttributeType,
         group_index: Option<PyGroupIndex>,
     ) -> PyResult<Self> {
-        let mut schema = self.0.clone();
+        let mut schema = (*self.0).clone();
 
         schema
             .update_edge_attribute(
@@ -479,7 +485,7 @@ impl PySchema {
         attribute_name: PyAttributeName,
         group_index: Option<PyGroupIndex>,
     ) -> Self {
-        let mut schema = self.0.clone();
+        let mut schema = (*self.0).clone();
 
         schema.remove_node_attribute(&attribute_name.into(), group_index.map(Into::into).as_ref());
 
@@ -492,7 +498,7 @@ impl PySchema {
         attribute_name: PyAttributeName,
         group_index: Option<PyGroupIndex>,
     ) -> Self {
-        let mut schema = self.0.clone();
+        let mut schema = (*self.0).clone();
 
         schema.remove_edge_attribute(&attribute_name.into(), group_index.map(Into::into).as_ref());
 
@@ -504,7 +510,7 @@ impl PySchema {
         group_index: PyGroupIndex,
         group_schema: PyGroupSchema,
     ) -> PyResult<Self> {
-        let mut schema = self.0.clone();
+        let mut schema = (*self.0).clone();
 
         schema
             .add_group(group_index.into(), group_schema.into())
@@ -514,7 +520,7 @@ impl PySchema {
     }
 
     pub fn remove_group(&self, group_index: PyGroupIndex) -> Self {
-        let mut schema = self.0.clone();
+        let mut schema = (*self.0).clone();
 
         schema.remove_group(&group_index.into());
 
@@ -522,7 +528,7 @@ impl PySchema {
     }
 
     pub fn freeze(&self) -> Self {
-        let mut schema = self.0.clone();
+        let mut schema = (*self.0).clone();
 
         schema.freeze();
 
@@ -530,7 +536,7 @@ impl PySchema {
     }
 
     pub fn unfreeze(&self) -> Self {
-        let mut schema = self.0.clone();
+        let mut schema = (*self.0).clone();
 
         schema.unfreeze();
 
@@ -543,11 +549,11 @@ impl PySchema {
             PyGraphRecordError::Conversion("Failed to deserialize Schema".to_string())
         })?;
 
-        Ok(Self(schema))
+        Ok(schema.into())
     }
 
     pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
-        let bytes = bincode::serialize(&self.0).map_err(|_| {
+        let bytes = bincode::serialize(self.0.as_ref()).map_err(|_| {
             PyGraphRecordError::Conversion("Failed to serialize Schema".to_string())
         })?;
         let constructor = py.get_type::<Self>().getattr("_from_bytes")?.unbind();

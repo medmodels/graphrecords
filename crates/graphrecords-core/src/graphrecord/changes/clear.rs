@@ -23,29 +23,28 @@ impl Default for Clear {
 impl Sealed for Clear {}
 
 impl Change for Clear {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
         state.clear_content();
 
         Ok(state)
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_clear(record, *self)
+        plugin.pre_clear(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_clear(previous, candidate)
+        plugin.post_clear(previous, candidate, self)
     }
 }

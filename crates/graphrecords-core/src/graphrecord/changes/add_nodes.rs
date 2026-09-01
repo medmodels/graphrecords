@@ -27,31 +27,30 @@ impl AddNodes {
 impl Sealed for AddNodes {}
 
 impl Change for AddNodes {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        for (node_index, attributes) in self.batch {
-            state.insert_node(node_index, &attributes, &[])?;
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        for (node_index, attributes) in self.batch.iter() {
+            state.insert_node(node_index, attributes, &[])?;
         }
 
         Ok(state)
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_add_nodes(record, *self)
+        plugin.pre_add_nodes(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_add_nodes(previous, candidate)
+        plugin.post_add_nodes(previous, candidate, self)
     }
 }

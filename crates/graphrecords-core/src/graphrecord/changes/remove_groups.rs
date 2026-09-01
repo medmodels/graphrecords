@@ -30,11 +30,13 @@ impl RemoveGroups {
 impl Sealed for RemoveGroups {}
 
 impl Change for RemoveGroups {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        for group_index in self.group_indices {
-            let address = state
-                .resolve_group_address(&group_index)
-                .ok_or(GraphRecordError::GroupNotFound { group_index })?;
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        for group_index in &self.group_indices {
+            let address = state.resolve_group_address(group_index).ok_or_else(|| {
+                GraphRecordError::GroupNotFound {
+                    group_index: group_index.clone(),
+                }
+            })?;
 
             state.remove_group(address)?;
         }
@@ -43,23 +45,22 @@ impl Change for RemoveGroups {
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_remove_groups(record, *self)
+        plugin.pre_remove_groups(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_remove_groups(previous, candidate)
+        plugin.post_remove_groups(previous, candidate, self)
     }
 }
 

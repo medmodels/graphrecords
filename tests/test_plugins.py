@@ -63,6 +63,7 @@ class RecordingPlugin(Plugin):
         self.records: List[GraphRecord] = []
         self.payloads: List[object] = []
         self.observed: List[Tuple[GraphRecord, GraphRecord]] = []
+        self.applied: List[object] = []
         self.lifecycle: List[Tuple[str, GraphRecord]] = []
 
     def _change(self, name: str, record: GraphRecord, payload: object) -> None:
@@ -71,10 +72,15 @@ class RecordingPlugin(Plugin):
         self.payloads.append(payload)
 
     def _observation(
-        self, name: str, previous: GraphRecord, candidate: GraphRecord
+        self,
+        name: str,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        payload: object,
     ) -> None:
         self.calls.append(name)
         self.observed.append((previous, candidate))
+        self.applied.append(payload)
 
     def initialize(self, record: GraphRecord) -> None:
         self.lifecycle.append(("initialize", record))
@@ -82,198 +88,290 @@ class RecordingPlugin(Plugin):
     def finalize(self, record: GraphRecord) -> None:
         self.lifecycle.append(("finalize", record))
 
-    def on_add_nodes(self, record: GraphRecord, addition: AddNodes) -> None:
-        self._change("on_add_nodes", record, addition)
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> None:
+        self._change("pre_add_nodes", record, addition)
 
-    def post_add_nodes(self, previous: GraphRecord, candidate: GraphRecord) -> None:
-        self._observation("post_add_nodes", previous, candidate)
+    def post_add_nodes(
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        addition: AddNodes,
+    ) -> None:
+        self._observation("post_add_nodes", previous, candidate, addition)
 
-    def on_add_nodes_in_group(
+    def pre_add_nodes_in_group(
         self, record: GraphRecord, addition: AddNodesInGroup
     ) -> None:
-        self._change("on_add_nodes_in_group", record, addition)
+        self._change("pre_add_nodes_in_group", record, addition)
 
     def post_add_nodes_in_group(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        addition: AddNodesInGroup,
     ) -> None:
-        self._observation("post_add_nodes_in_group", previous, candidate)
+        self._observation("post_add_nodes_in_group", previous, candidate, addition)
 
-    def on_add_edges(self, record: GraphRecord, addition: AddEdges) -> None:
-        self._change("on_add_edges", record, addition)
+    def pre_add_edges(self, record: GraphRecord, addition: AddEdges) -> None:
+        self._change("pre_add_edges", record, addition)
 
-    def post_add_edges(self, previous: GraphRecord, candidate: GraphRecord) -> None:
-        self._observation("post_add_edges", previous, candidate)
+    def post_add_edges(
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        addition: AddEdges,
+    ) -> None:
+        self._observation("post_add_edges", previous, candidate, addition)
 
-    def on_add_edges_in_group(
+    def pre_add_edges_in_group(
         self, record: GraphRecord, addition: AddEdgesInGroup
     ) -> None:
-        self._change("on_add_edges_in_group", record, addition)
+        self._change("pre_add_edges_in_group", record, addition)
 
     def post_add_edges_in_group(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        addition: AddEdgesInGroup,
     ) -> None:
-        self._observation("post_add_edges_in_group", previous, candidate)
+        self._observation("post_add_edges_in_group", previous, candidate, addition)
 
-    def on_remove_nodes(self, record: GraphRecord, removal: RemoveNodes) -> None:
-        self._change("on_remove_nodes", record, removal)
+    def pre_remove_nodes(self, record: GraphRecord, removal: RemoveNodes) -> None:
+        self._change("pre_remove_nodes", record, removal)
 
-    def post_remove_nodes(self, previous: GraphRecord, candidate: GraphRecord) -> None:
-        self._observation("post_remove_nodes", previous, candidate)
+    def post_remove_nodes(
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        removal: RemoveNodes,
+    ) -> None:
+        self._observation("post_remove_nodes", previous, candidate, removal)
 
-    def on_remove_edges(self, record: GraphRecord, removal: RemoveEdges) -> None:
-        self._change("on_remove_edges", record, removal)
+    def pre_remove_edges(self, record: GraphRecord, removal: RemoveEdges) -> None:
+        self._change("pre_remove_edges", record, removal)
 
-    def post_remove_edges(self, previous: GraphRecord, candidate: GraphRecord) -> None:
-        self._observation("post_remove_edges", previous, candidate)
+    def post_remove_edges(
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        removal: RemoveEdges,
+    ) -> None:
+        self._observation("post_remove_edges", previous, candidate, removal)
 
-    def on_set_node_attributes(
+    def pre_set_node_attributes(
         self, record: GraphRecord, assignment: SetNodeAttributes
     ) -> None:
-        self._change("on_set_node_attributes", record, assignment)
+        self._change("pre_set_node_attributes", record, assignment)
 
     def post_set_node_attributes(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        assignment: SetNodeAttributes,
     ) -> None:
-        self._observation("post_set_node_attributes", previous, candidate)
+        self._observation("post_set_node_attributes", previous, candidate, assignment)
 
-    def on_replace_node_attributes(
+    def pre_replace_node_attributes(
         self, record: GraphRecord, assignment: ReplaceNodeAttributes
     ) -> None:
-        self._change("on_replace_node_attributes", record, assignment)
+        self._change("pre_replace_node_attributes", record, assignment)
 
     def post_replace_node_attributes(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        assignment: ReplaceNodeAttributes,
     ) -> None:
-        self._observation("post_replace_node_attributes", previous, candidate)
+        self._observation(
+            "post_replace_node_attributes", previous, candidate, assignment
+        )
 
-    def on_remove_node_attributes(
+    def pre_remove_node_attributes(
         self, record: GraphRecord, removal: RemoveNodeAttributes
     ) -> None:
-        self._change("on_remove_node_attributes", record, removal)
+        self._change("pre_remove_node_attributes", record, removal)
 
     def post_remove_node_attributes(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        removal: RemoveNodeAttributes,
     ) -> None:
-        self._observation("post_remove_node_attributes", previous, candidate)
+        self._observation("post_remove_node_attributes", previous, candidate, removal)
 
-    def on_set_edge_attributes(
+    def pre_set_edge_attributes(
         self, record: GraphRecord, assignment: SetEdgeAttributes
     ) -> None:
-        self._change("on_set_edge_attributes", record, assignment)
+        self._change("pre_set_edge_attributes", record, assignment)
 
     def post_set_edge_attributes(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        assignment: SetEdgeAttributes,
     ) -> None:
-        self._observation("post_set_edge_attributes", previous, candidate)
+        self._observation("post_set_edge_attributes", previous, candidate, assignment)
 
-    def on_replace_edge_attributes(
+    def pre_replace_edge_attributes(
         self, record: GraphRecord, assignment: ReplaceEdgeAttributes
     ) -> None:
-        self._change("on_replace_edge_attributes", record, assignment)
+        self._change("pre_replace_edge_attributes", record, assignment)
 
     def post_replace_edge_attributes(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        assignment: ReplaceEdgeAttributes,
     ) -> None:
-        self._observation("post_replace_edge_attributes", previous, candidate)
+        self._observation(
+            "post_replace_edge_attributes", previous, candidate, assignment
+        )
 
-    def on_remove_edge_attributes(
+    def pre_remove_edge_attributes(
         self, record: GraphRecord, removal: RemoveEdgeAttributes
     ) -> None:
-        self._change("on_remove_edge_attributes", record, removal)
+        self._change("pre_remove_edge_attributes", record, removal)
 
     def post_remove_edge_attributes(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        removal: RemoveEdgeAttributes,
     ) -> None:
-        self._observation("post_remove_edge_attributes", previous, candidate)
+        self._observation("post_remove_edge_attributes", previous, candidate, removal)
 
-    def on_add_group(self, record: GraphRecord, addition: AddGroup) -> None:
-        self._change("on_add_group", record, addition)
+    def pre_add_group(self, record: GraphRecord, addition: AddGroup) -> None:
+        self._change("pre_add_group", record, addition)
 
-    def post_add_group(self, previous: GraphRecord, candidate: GraphRecord) -> None:
-        self._observation("post_add_group", previous, candidate)
+    def post_add_group(
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        addition: AddGroup,
+    ) -> None:
+        self._observation("post_add_group", previous, candidate, addition)
 
-    def on_remove_groups(self, record: GraphRecord, removal: RemoveGroups) -> None:
-        self._change("on_remove_groups", record, removal)
+    def pre_remove_groups(self, record: GraphRecord, removal: RemoveGroups) -> None:
+        self._change("pre_remove_groups", record, removal)
 
-    def post_remove_groups(self, previous: GraphRecord, candidate: GraphRecord) -> None:
-        self._observation("post_remove_groups", previous, candidate)
+    def post_remove_groups(
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        removal: RemoveGroups,
+    ) -> None:
+        self._observation("post_remove_groups", previous, candidate, removal)
 
-    def on_add_nodes_to_group(
+    def pre_add_nodes_to_group(
         self, record: GraphRecord, membership: AddNodesToGroup
     ) -> None:
-        self._change("on_add_nodes_to_group", record, membership)
+        self._change("pre_add_nodes_to_group", record, membership)
 
     def post_add_nodes_to_group(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        membership: AddNodesToGroup,
     ) -> None:
-        self._observation("post_add_nodes_to_group", previous, candidate)
+        self._observation("post_add_nodes_to_group", previous, candidate, membership)
 
-    def on_remove_nodes_from_group(
+    def pre_remove_nodes_from_group(
         self, record: GraphRecord, membership: RemoveNodesFromGroup
     ) -> None:
-        self._change("on_remove_nodes_from_group", record, membership)
+        self._change("pre_remove_nodes_from_group", record, membership)
 
     def post_remove_nodes_from_group(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        membership: RemoveNodesFromGroup,
     ) -> None:
-        self._observation("post_remove_nodes_from_group", previous, candidate)
+        self._observation(
+            "post_remove_nodes_from_group", previous, candidate, membership
+        )
 
-    def on_add_edges_to_group(
+    def pre_add_edges_to_group(
         self, record: GraphRecord, membership: AddEdgesToGroup
     ) -> None:
-        self._change("on_add_edges_to_group", record, membership)
+        self._change("pre_add_edges_to_group", record, membership)
 
     def post_add_edges_to_group(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        membership: AddEdgesToGroup,
     ) -> None:
-        self._observation("post_add_edges_to_group", previous, candidate)
+        self._observation("post_add_edges_to_group", previous, candidate, membership)
 
-    def on_remove_edges_from_group(
+    def pre_remove_edges_from_group(
         self, record: GraphRecord, membership: RemoveEdgesFromGroup
     ) -> None:
-        self._change("on_remove_edges_from_group", record, membership)
+        self._change("pre_remove_edges_from_group", record, membership)
 
     def post_remove_edges_from_group(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        membership: RemoveEdgesFromGroup,
     ) -> None:
-        self._observation("post_remove_edges_from_group", previous, candidate)
+        self._observation(
+            "post_remove_edges_from_group", previous, candidate, membership
+        )
 
-    def on_set_schema(self, record: GraphRecord, schema_change: SetSchema) -> None:
-        self._change("on_set_schema", record, schema_change)
+    def pre_set_schema(self, record: GraphRecord, schema_change: SetSchema) -> None:
+        self._change("pre_set_schema", record, schema_change)
 
-    def post_set_schema(self, previous: GraphRecord, candidate: GraphRecord) -> None:
-        self._observation("post_set_schema", previous, candidate)
+    def post_set_schema(
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        schema_change: SetSchema,
+    ) -> None:
+        self._observation("post_set_schema", previous, candidate, schema_change)
 
-    def on_freeze_schema(
+    def pre_freeze_schema(
         self, record: GraphRecord, schema_change: FreezeSchema
     ) -> None:
-        self._change("on_freeze_schema", record, schema_change)
+        self._change("pre_freeze_schema", record, schema_change)
 
-    def post_freeze_schema(self, previous: GraphRecord, candidate: GraphRecord) -> None:
-        self._observation("post_freeze_schema", previous, candidate)
+    def post_freeze_schema(
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        schema_change: FreezeSchema,
+    ) -> None:
+        self._observation("post_freeze_schema", previous, candidate, schema_change)
 
-    def on_unfreeze_schema(
+    def pre_unfreeze_schema(
         self, record: GraphRecord, schema_change: UnfreezeSchema
     ) -> None:
-        self._change("on_unfreeze_schema", record, schema_change)
+        self._change("pre_unfreeze_schema", record, schema_change)
 
     def post_unfreeze_schema(
-        self, previous: GraphRecord, candidate: GraphRecord
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        schema_change: UnfreezeSchema,
     ) -> None:
-        self._observation("post_unfreeze_schema", previous, candidate)
+        self._observation("post_unfreeze_schema", previous, candidate, schema_change)
 
-    def on_clear(self, record: GraphRecord, clearing: Clear) -> None:
-        self._change("on_clear", record, clearing)
+    def pre_clear(self, record: GraphRecord, clearing: Clear) -> None:
+        self._change("pre_clear", record, clearing)
 
-    def post_clear(self, previous: GraphRecord, candidate: GraphRecord) -> None:
-        self._observation("post_clear", previous, candidate)
+    def post_clear(
+        self,
+        previous: GraphRecord,
+        candidate: GraphRecord,
+        clearing: Clear,
+    ) -> None:
+        self._observation("post_clear", previous, candidate, clearing)
 
 
 class SingleHookPlugin(Plugin):
     def __init__(self) -> None:
         self.batch_sizes: List[int] = []
 
-    def on_add_nodes(self, record: GraphRecord, addition: AddNodes) -> None:
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> None:
         self.batch_sizes.append(len(addition.batch))
 
 
@@ -287,12 +385,12 @@ class LookupRecordingPlugin(Plugin):
 
 
 class ReturningPlugin(Plugin):
-    def on_add_nodes(self, record: GraphRecord, addition: AddNodes) -> AddNodes:
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> AddNodes:
         return addition
 
 
 class TransformingPlugin(Plugin):
-    def on_add_nodes(self, record: GraphRecord, addition: AddNodes) -> AddNodes:
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> AddNodes:
         return AddNodes(
             NodeBatch(
                 [
@@ -302,7 +400,7 @@ class TransformingPlugin(Plugin):
             )
         )
 
-    def on_add_nodes_in_group(
+    def pre_add_nodes_in_group(
         self, record: GraphRecord, addition: AddNodesInGroup
     ) -> AddNodesInGroup:
         return AddNodesInGroup(
@@ -315,7 +413,7 @@ class TransformingPlugin(Plugin):
             addition.group_index,
         )
 
-    def on_add_edges(self, record: GraphRecord, addition: AddEdges) -> AddEdges:
+    def pre_add_edges(self, record: GraphRecord, addition: AddEdges) -> AddEdges:
         return AddEdges(
             EdgeBatch(
                 [
@@ -325,7 +423,7 @@ class TransformingPlugin(Plugin):
             )
         )
 
-    def on_add_edges_in_group(
+    def pre_add_edges_in_group(
         self, record: GraphRecord, addition: AddEdgesInGroup
     ) -> AddEdgesInGroup:
         return AddEdgesInGroup(
@@ -338,103 +436,117 @@ class TransformingPlugin(Plugin):
             addition.group_index,
         )
 
-    def on_remove_nodes(self, record: GraphRecord, removal: RemoveNodes) -> RemoveNodes:
+    def pre_remove_nodes(
+        self, record: GraphRecord, removal: RemoveNodes
+    ) -> RemoveNodes:
         return RemoveNodes(removal.node_indices[:1])
 
-    def on_remove_edges(self, record: GraphRecord, removal: RemoveEdges) -> RemoveEdges:
+    def pre_remove_edges(
+        self, record: GraphRecord, removal: RemoveEdges
+    ) -> RemoveEdges:
         return RemoveEdges(removal.edge_indices[:1])
 
-    def on_set_node_attributes(
+    def pre_set_node_attributes(
         self, record: GraphRecord, assignment: SetNodeAttributes
     ) -> SetNodeAttributes:
         return SetNodeAttributes(
             assignment.node_indices, {**assignment.attributes, "sed": 4}
         )
 
-    def on_replace_node_attributes(
+    def pre_replace_node_attributes(
         self, record: GraphRecord, assignment: ReplaceNodeAttributes
     ) -> ReplaceNodeAttributes:
         return ReplaceNodeAttributes(
             assignment.node_indices, {**assignment.attributes, "sed": 4}
         )
 
-    def on_remove_node_attributes(
+    def pre_remove_node_attributes(
         self, record: GraphRecord, removal: RemoveNodeAttributes
     ) -> RemoveNodeAttributes:
         return RemoveNodeAttributes(removal.node_indices, removal.attribute_names[:1])
 
-    def on_set_edge_attributes(
+    def pre_set_edge_attributes(
         self, record: GraphRecord, assignment: SetEdgeAttributes
     ) -> SetEdgeAttributes:
         return SetEdgeAttributes(
             assignment.edge_indices, {**assignment.attributes, "sed": 4}
         )
 
-    def on_replace_edge_attributes(
+    def pre_replace_edge_attributes(
         self, record: GraphRecord, assignment: ReplaceEdgeAttributes
     ) -> ReplaceEdgeAttributes:
         return ReplaceEdgeAttributes(
             assignment.edge_indices, {**assignment.attributes, "sed": 4}
         )
 
-    def on_remove_edge_attributes(
+    def pre_remove_edge_attributes(
         self, record: GraphRecord, removal: RemoveEdgeAttributes
     ) -> RemoveEdgeAttributes:
         return RemoveEdgeAttributes(removal.edge_indices, removal.attribute_names[:1])
 
-    def on_add_group(self, record: GraphRecord, addition: AddGroup) -> AddGroup:
+    def pre_add_group(self, record: GraphRecord, addition: AddGroup) -> AddGroup:
         return AddGroup("elit")
 
-    def on_remove_groups(
+    def pre_remove_groups(
         self, record: GraphRecord, removal: RemoveGroups
     ) -> RemoveGroups:
         return RemoveGroups(removal.group_indices[:1])
 
-    def on_add_nodes_to_group(
+    def pre_add_nodes_to_group(
         self, record: GraphRecord, membership: AddNodesToGroup
     ) -> AddNodesToGroup:
         return AddNodesToGroup(membership.node_indices[:1], membership.group_index)
 
-    def on_remove_nodes_from_group(
+    def pre_remove_nodes_from_group(
         self, record: GraphRecord, membership: RemoveNodesFromGroup
     ) -> RemoveNodesFromGroup:
         return RemoveNodesFromGroup(membership.node_indices[:1], membership.group_index)
 
-    def on_add_edges_to_group(
+    def pre_add_edges_to_group(
         self, record: GraphRecord, membership: AddEdgesToGroup
     ) -> AddEdgesToGroup:
         return AddEdgesToGroup(membership.edge_indices[:1], membership.group_index)
 
-    def on_remove_edges_from_group(
+    def pre_remove_edges_from_group(
         self, record: GraphRecord, membership: RemoveEdgesFromGroup
     ) -> RemoveEdgesFromGroup:
         return RemoveEdgesFromGroup(membership.edge_indices[:1], membership.group_index)
 
-    def on_set_schema(self, record: GraphRecord, schema_change: SetSchema) -> SetSchema:
+    def pre_set_schema(
+        self, record: GraphRecord, schema_change: SetSchema
+    ) -> SetSchema:
         return SetSchema(Schema.infer(record))
 
-    def on_freeze_schema(
+    def pre_freeze_schema(
         self, record: GraphRecord, schema_change: FreezeSchema
     ) -> List[Change]:
         return [AddGroup("elit"), FreezeSchema()]
 
-    def on_unfreeze_schema(
+    def pre_unfreeze_schema(
         self, record: GraphRecord, schema_change: UnfreezeSchema
     ) -> List[Change]:
         return [UnfreezeSchema(), AddGroup("elit")]
 
-    def on_clear(self, record: GraphRecord, clearing: Clear) -> List[Change]:
+    def pre_clear(self, record: GraphRecord, clearing: Clear) -> List[Change]:
         return [Clear(), AddGroup("elit")]
 
 
 class ExpandingPlugin(Plugin):
-    def on_add_nodes(self, record: GraphRecord, addition: AddNodes) -> List[Change]:
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> List[Change]:
         return [addition, AddGroup("elit")]
 
 
 class SwallowingPlugin(Plugin):
-    def on_add_nodes(self, record: GraphRecord, addition: AddNodes) -> List[Change]:
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> List[Change]:
         return []
+
+
+class DuplicatingPlugin(Plugin):
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> List[Change]:
+        return [
+            AddNodes(NodeBatch([("sit", {"amet": 3})])),
+            AddNodes(NodeBatch([("elit", {"amet": 4})])),
+        ]
 
 
 class LifecyclePlugin(Plugin):
@@ -446,29 +558,33 @@ class LifecyclePlugin(Plugin):
 
 
 class InvalidReturningPlugin(Plugin):
-    def on_add_nodes(self, record: GraphRecord, addition: AddNodes) -> int:
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> int:
         return 4
 
 
 class InvalidObservingPlugin(Plugin):
-    def post_add_nodes(self, previous: GraphRecord, candidate: GraphRecord) -> int:
+    def post_add_nodes(
+        self, previous: GraphRecord, candidate: GraphRecord, addition: AddNodes
+    ) -> int:
         return 4
 
 
 class RaisingPlugin(Plugin):
     failure: ClassVar[LookupError] = LookupError("lorem", "ipsum")
 
-    def on_add_nodes(self, record: GraphRecord, addition: AddNodes) -> None:
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> None:
         raise RaisingPlugin.failure
 
 
 class PicklePlugin(Plugin):
     calls: ClassVar[List[str]] = []
 
-    def on_add_nodes(self, record: GraphRecord, addition: AddNodes) -> None:
-        PicklePlugin.calls.append("on_add_nodes")
+    def pre_add_nodes(self, record: GraphRecord, addition: AddNodes) -> None:
+        PicklePlugin.calls.append("pre_add_nodes")
 
-    def post_add_nodes(self, previous: GraphRecord, candidate: GraphRecord) -> None:
+    def post_add_nodes(
+        self, previous: GraphRecord, candidate: GraphRecord, addition: AddNodes
+    ) -> None:
         PicklePlugin.calls.append("post_add_nodes")
 
 
@@ -605,7 +721,7 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.add_nodes([("sit", {"amet": 3}), ("elit", {"amet": 4})])
 
-        assert plugin.calls == ["on_add_nodes", "post_add_nodes"]
+        assert plugin.calls == ["pre_add_nodes", "post_add_nodes"]
 
         observed_record = plugin.records[0]
         payload = plugin.payloads[0]
@@ -616,6 +732,11 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload.batch, NodeBatch)
         assert len(payload.batch) == 2
         assert payload.batch.attribute_values("amet") == [("sit", 3), ("elit", 4)]
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, AddNodes)
+        assert applied.batch.attribute_values("amet") == [("sit", 3), ("elit", 4)]
 
         previous, candidate = plugin.observed[0]
 
@@ -631,7 +752,7 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.add_nodes_in_group([("sit", {"amet": 3})], "consectetur")
 
-        assert plugin.calls == ["on_add_nodes_in_group", "post_add_nodes_in_group"]
+        assert plugin.calls == ["pre_add_nodes_in_group", "post_add_nodes_in_group"]
 
         payload = plugin.payloads[0]
 
@@ -640,6 +761,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload.batch, NodeBatch)
         assert list(payload.batch) == [("sit", {"amet": 3})]
         assert payload.group_index == "consectetur"
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, AddNodesInGroup)
+        assert list(applied.batch) == [("sit", {"amet": 3})]
+        assert applied.group_index == "consectetur"
 
         previous, candidate = plugin.observed[0]
 
@@ -655,7 +782,7 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.add_edges([("dolor", "lorem", {"sed": 3})])
 
-        assert plugin.calls == ["on_add_edges", "post_add_edges"]
+        assert plugin.calls == ["pre_add_edges", "post_add_edges"]
 
         payload = plugin.payloads[0]
 
@@ -664,6 +791,11 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload.batch, EdgeBatch)
         assert len(payload.batch) == 1
         assert payload.batch.attribute_values("sed") == [("dolor", "lorem", 3)]
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, AddEdges)
+        assert applied.batch.attribute_values("sed") == [("dolor", "lorem", 3)]
 
         previous, candidate = plugin.observed[0]
 
@@ -681,7 +813,7 @@ class TestChangeHooks(unittest.TestCase):
             [("dolor", "lorem", {"sed": 3})], "consectetur"
         )
 
-        assert plugin.calls == ["on_add_edges_in_group", "post_add_edges_in_group"]
+        assert plugin.calls == ["pre_add_edges_in_group", "post_add_edges_in_group"]
 
         payload = plugin.payloads[0]
 
@@ -690,6 +822,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload.batch, EdgeBatch)
         assert list(payload.batch) == [("dolor", "lorem", {"sed": 3})]
         assert payload.group_index == "consectetur"
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, AddEdgesInGroup)
+        assert list(applied.batch) == [("dolor", "lorem", {"sed": 3})]
+        assert applied.group_index == "consectetur"
 
         previous, candidate = plugin.observed[0]
 
@@ -705,13 +843,18 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.remove_nodes("lorem")
 
-        assert plugin.calls == ["on_remove_nodes", "post_remove_nodes"]
+        assert plugin.calls == ["pre_remove_nodes", "post_remove_nodes"]
 
         payload = plugin.payloads[0]
 
         assert isinstance(plugin.records[0], GraphRecord)
         assert isinstance(payload, RemoveNodes)
         assert payload.node_indices == ["lorem"]
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, RemoveNodes)
+        assert applied.node_indices == ["lorem"]
 
         previous, candidate = plugin.observed[0]
 
@@ -728,7 +871,7 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.remove_edges(edge_index)
 
-        assert plugin.calls == ["on_remove_edges", "post_remove_edges"]
+        assert plugin.calls == ["pre_remove_edges", "post_remove_edges"]
 
         payload = plugin.payloads[0]
 
@@ -736,6 +879,11 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload, RemoveEdges)
         assert isinstance(payload.edge_indices[0], EdgeIndex)
         assert payload.edge_indices == [edge_index]
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, RemoveEdges)
+        assert applied.edge_indices == [edge_index]
 
         previous, candidate = plugin.observed[0]
 
@@ -751,7 +899,7 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.set_node_attributes("lorem", {"sed": 3})
 
-        assert plugin.calls == ["on_set_node_attributes", "post_set_node_attributes"]
+        assert plugin.calls == ["pre_set_node_attributes", "post_set_node_attributes"]
 
         payload = plugin.payloads[0]
 
@@ -759,6 +907,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload, SetNodeAttributes)
         assert payload.node_indices == ["lorem"]
         assert payload.attributes == {"sed": 3}
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, SetNodeAttributes)
+        assert applied.node_indices == ["lorem"]
+        assert applied.attributes == {"sed": 3}
 
         previous, candidate = plugin.observed[0]
 
@@ -775,7 +929,7 @@ class TestChangeHooks(unittest.TestCase):
         changed = record.replace_node_attributes("lorem", {"sed": 3})
 
         assert plugin.calls == [
-            "on_replace_node_attributes",
+            "pre_replace_node_attributes",
             "post_replace_node_attributes",
         ]
 
@@ -785,6 +939,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload, ReplaceNodeAttributes)
         assert payload.node_indices == ["lorem"]
         assert payload.attributes == {"sed": 3}
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, ReplaceNodeAttributes)
+        assert applied.node_indices == ["lorem"]
+        assert applied.attributes == {"sed": 3}
 
         previous, candidate = plugin.observed[0]
 
@@ -801,7 +961,7 @@ class TestChangeHooks(unittest.TestCase):
         changed = record.remove_node_attributes("lorem", ["ipsum"])
 
         assert plugin.calls == [
-            "on_remove_node_attributes",
+            "pre_remove_node_attributes",
             "post_remove_node_attributes",
         ]
 
@@ -811,6 +971,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload, RemoveNodeAttributes)
         assert payload.node_indices == ["lorem"]
         assert payload.attribute_names == ["ipsum"]
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, RemoveNodeAttributes)
+        assert applied.node_indices == ["lorem"]
+        assert applied.attribute_names == ["ipsum"]
 
         previous, candidate = plugin.observed[0]
 
@@ -827,7 +993,7 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.set_edge_attributes(edge_index, {"sed": 3})
 
-        assert plugin.calls == ["on_set_edge_attributes", "post_set_edge_attributes"]
+        assert plugin.calls == ["pre_set_edge_attributes", "post_set_edge_attributes"]
 
         payload = plugin.payloads[0]
 
@@ -836,6 +1002,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload.edge_indices[0], EdgeIndex)
         assert payload.edge_indices == [edge_index]
         assert payload.attributes == {"sed": 3}
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, SetEdgeAttributes)
+        assert applied.edge_indices == [edge_index]
+        assert applied.attributes == {"sed": 3}
 
         previous, candidate = plugin.observed[0]
 
@@ -853,7 +1025,7 @@ class TestChangeHooks(unittest.TestCase):
         changed = record.replace_edge_attributes(edge_index, {"sed": 3})
 
         assert plugin.calls == [
-            "on_replace_edge_attributes",
+            "pre_replace_edge_attributes",
             "post_replace_edge_attributes",
         ]
 
@@ -864,6 +1036,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload.edge_indices[0], EdgeIndex)
         assert payload.edge_indices == [edge_index]
         assert payload.attributes == {"sed": 3}
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, ReplaceEdgeAttributes)
+        assert applied.edge_indices == [edge_index]
+        assert applied.attributes == {"sed": 3}
 
         previous, candidate = plugin.observed[0]
 
@@ -881,7 +1059,7 @@ class TestChangeHooks(unittest.TestCase):
         changed = record.remove_edge_attributes(edge_index, ["sit"])
 
         assert plugin.calls == [
-            "on_remove_edge_attributes",
+            "pre_remove_edge_attributes",
             "post_remove_edge_attributes",
         ]
 
@@ -892,6 +1070,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload.edge_indices[0], EdgeIndex)
         assert payload.edge_indices == [edge_index]
         assert payload.attribute_names == ["sit"]
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, RemoveEdgeAttributes)
+        assert applied.edge_indices == [edge_index]
+        assert applied.attribute_names == ["sit"]
 
         previous, candidate = plugin.observed[0]
 
@@ -907,13 +1091,18 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.add_group("adipiscing")
 
-        assert plugin.calls == ["on_add_group", "post_add_group"]
+        assert plugin.calls == ["pre_add_group", "post_add_group"]
 
         payload = plugin.payloads[0]
 
         assert isinstance(plugin.records[0], GraphRecord)
         assert isinstance(payload, AddGroup)
         assert payload.group_index == "adipiscing"
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, AddGroup)
+        assert applied.group_index == "adipiscing"
 
         previous, candidate = plugin.observed[0]
 
@@ -929,13 +1118,18 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.remove_groups("consectetur")
 
-        assert plugin.calls == ["on_remove_groups", "post_remove_groups"]
+        assert plugin.calls == ["pre_remove_groups", "post_remove_groups"]
 
         payload = plugin.payloads[0]
 
         assert isinstance(plugin.records[0], GraphRecord)
         assert isinstance(payload, RemoveGroups)
         assert payload.group_indices == ["consectetur"]
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, RemoveGroups)
+        assert applied.group_indices == ["consectetur"]
 
         previous, candidate = plugin.observed[0]
 
@@ -951,7 +1145,7 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.add_nodes_to_group("lorem", "consectetur")
 
-        assert plugin.calls == ["on_add_nodes_to_group", "post_add_nodes_to_group"]
+        assert plugin.calls == ["pre_add_nodes_to_group", "post_add_nodes_to_group"]
 
         payload = plugin.payloads[0]
 
@@ -959,6 +1153,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload, AddNodesToGroup)
         assert payload.node_indices == ["lorem"]
         assert payload.group_index == "consectetur"
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, AddNodesToGroup)
+        assert applied.node_indices == ["lorem"]
+        assert applied.group_index == "consectetur"
 
         previous, candidate = plugin.observed[0]
 
@@ -976,7 +1176,7 @@ class TestChangeHooks(unittest.TestCase):
         changed = record.remove_nodes_from_group("lorem", "consectetur")
 
         assert plugin.calls == [
-            "on_remove_nodes_from_group",
+            "pre_remove_nodes_from_group",
             "post_remove_nodes_from_group",
         ]
 
@@ -986,6 +1186,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload, RemoveNodesFromGroup)
         assert payload.node_indices == ["lorem"]
         assert payload.group_index == "consectetur"
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, RemoveNodesFromGroup)
+        assert applied.node_indices == ["lorem"]
+        assert applied.group_index == "consectetur"
 
         previous, candidate = plugin.observed[0]
 
@@ -1002,7 +1208,7 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.add_edges_to_group(edge_index, "consectetur")
 
-        assert plugin.calls == ["on_add_edges_to_group", "post_add_edges_to_group"]
+        assert plugin.calls == ["pre_add_edges_to_group", "post_add_edges_to_group"]
 
         payload = plugin.payloads[0]
 
@@ -1011,6 +1217,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload.edge_indices[0], EdgeIndex)
         assert payload.edge_indices == [edge_index]
         assert payload.group_index == "consectetur"
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, AddEdgesToGroup)
+        assert applied.edge_indices == [edge_index]
+        assert applied.group_index == "consectetur"
 
         previous, candidate = plugin.observed[0]
 
@@ -1030,7 +1242,7 @@ class TestChangeHooks(unittest.TestCase):
         changed = record.remove_edges_from_group(edge_index, "consectetur")
 
         assert plugin.calls == [
-            "on_remove_edges_from_group",
+            "pre_remove_edges_from_group",
             "post_remove_edges_from_group",
         ]
 
@@ -1041,6 +1253,12 @@ class TestChangeHooks(unittest.TestCase):
         assert isinstance(payload.edge_indices[0], EdgeIndex)
         assert payload.edge_indices == [edge_index]
         assert payload.group_index == "consectetur"
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, RemoveEdgesFromGroup)
+        assert applied.edge_indices == [edge_index]
+        assert applied.group_index == "consectetur"
 
         previous, candidate = plugin.observed[0]
 
@@ -1062,7 +1280,7 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.set_schema(schema)
 
-        assert plugin.calls == ["on_set_schema", "post_set_schema"]
+        assert plugin.calls == ["pre_set_schema", "post_set_schema"]
 
         payload = plugin.payloads[0]
 
@@ -1074,6 +1292,11 @@ class TestChangeHooks(unittest.TestCase):
             "ipsum": AttributeDataType(Int(), AttributeType.Continuous)
         }
 
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, SetSchema)
+        assert applied.schema.schema_type == SchemaType.Provided
+
         previous, candidate = plugin.observed[0]
 
         assert isinstance(previous, GraphRecord)
@@ -1082,18 +1305,31 @@ class TestChangeHooks(unittest.TestCase):
         assert candidate.schema.schema_type == SchemaType.Provided
         assert candidate == changed
 
+        inferred = record.set_schema(Schema.infer(GraphRecord()))
+        applied = plugin.applied[1]
+
+        assert isinstance(applied, SetSchema)
+        assert applied.schema.ungrouped.nodes == {}
+        assert inferred.schema.ungrouped.nodes == {
+            "ipsum": AttributeDataType(Int(), AttributeType.Continuous)
+        }
+
     def test_freeze_schema(self) -> None:
         plugin = RecordingPlugin()
         record = create_graphrecord().add_plugin("observer", plugin)
 
         changed = record.freeze_schema()
 
-        assert plugin.calls == ["on_freeze_schema", "post_freeze_schema"]
+        assert plugin.calls == ["pre_freeze_schema", "post_freeze_schema"]
 
         payload = plugin.payloads[0]
 
         assert isinstance(plugin.records[0], GraphRecord)
         assert isinstance(payload, FreezeSchema)
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, FreezeSchema)
 
         previous, candidate = plugin.observed[0]
 
@@ -1110,12 +1346,16 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.unfreeze_schema()
 
-        assert plugin.calls == ["on_unfreeze_schema", "post_unfreeze_schema"]
+        assert plugin.calls == ["pre_unfreeze_schema", "post_unfreeze_schema"]
 
         payload = plugin.payloads[0]
 
         assert isinstance(plugin.records[0], GraphRecord)
         assert isinstance(payload, UnfreezeSchema)
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, UnfreezeSchema)
 
         previous, candidate = plugin.observed[0]
 
@@ -1131,12 +1371,16 @@ class TestChangeHooks(unittest.TestCase):
 
         changed = record.clear()
 
-        assert plugin.calls == ["on_clear", "post_clear"]
+        assert plugin.calls == ["pre_clear", "post_clear"]
 
         payload = plugin.payloads[0]
 
         assert isinstance(plugin.records[0], GraphRecord)
         assert isinstance(payload, Clear)
+
+        applied = plugin.applied[0]
+
+        assert isinstance(applied, Clear)
 
         previous, candidate = plugin.observed[0]
 
@@ -1411,7 +1655,7 @@ class TestPlugin(unittest.TestCase):
 
         assert record.plugins == ["observer", "auditor"]
         assert record.remove_plugin("observer").plugins == ["auditor"]
-        assert observer.calls == ["on_add_nodes", "post_add_nodes"]
+        assert observer.calls == ["pre_add_nodes", "post_add_nodes"]
         assert auditor.batch_sizes == [1]
 
     def test_undefined_hooks(self) -> None:
@@ -1437,7 +1681,7 @@ class TestPlugin(unittest.TestCase):
 
         assert plugin.lookups == [
             "initialize",
-            "on_add_nodes",
+            "pre_add_nodes",
             "post_add_nodes",
             "finalize",
         ]
@@ -1488,7 +1732,7 @@ class TestPlugin(unittest.TestCase):
     def test_invalid_observing_hook(self) -> None:
         record = create_graphrecord().add_plugin("observer", InvalidObservingPlugin())
 
-        with pytest.raises(TypeError, match="Plugin observer hooks must return None"):
+        with pytest.raises(TypeError, match="Plugin post hooks must return None"):
             record.add_nodes([("sit", {"amet": 3})])
 
     def test_failing_hook(self) -> None:
@@ -1499,6 +1743,45 @@ class TestPlugin(unittest.TestCase):
 
         assert raised.value is RaisingPlugin.failure
         assert raised.value.args == ("lorem", "ipsum")
+
+    def test_duplicating_hook(self) -> None:
+        recorder = RecordingPlugin()
+        record = create_graphrecord().add_plugin("splitter", DuplicatingPlugin())
+        record = record.add_plugin("observer", recorder)
+
+        changed = record.add_nodes([("sit", {"amet": 3})])
+
+        assert recorder.calls == [
+            "pre_add_nodes",
+            "pre_add_nodes",
+            "post_add_nodes",
+            "post_add_nodes",
+        ]
+
+        first_applied = recorder.applied[0]
+        second_applied = recorder.applied[1]
+
+        assert isinstance(first_applied, AddNodes)
+        assert isinstance(second_applied, AddNodes)
+        assert list(first_applied.batch) == [("sit", {"amet": 3})]
+        assert list(second_applied.batch) == [("elit", {"amet": 4})]
+        assert recorder.observed[0] == recorder.observed[1]
+        assert recorder.observed[0][1] == changed
+
+    def test_rewritten_observation(self) -> None:
+        recorder = RecordingPlugin()
+        record = create_graphrecord().add_plugin("observer", recorder)
+        record = record.add_plugin("transformer", TransformingPlugin())
+
+        record.add_nodes([("sit", {"amet": 3})])
+
+        payload = recorder.payloads[0]
+        applied = recorder.applied[0]
+
+        assert isinstance(payload, AddNodes)
+        assert isinstance(applied, AddNodes)
+        assert list(payload.batch) == [("sit", {"amet": 3})]
+        assert list(applied.batch) == [("sit", {"amet": 3, "sed": 4})]
 
     def test_pickle(self) -> None:
         record = create_graphrecord().add_plugin("observer", PicklePlugin())
@@ -1512,7 +1795,7 @@ class TestPlugin(unittest.TestCase):
 
         restored = restored.add_nodes([("sit", {"amet": 3})])
 
-        assert PicklePlugin.calls == ["on_add_nodes", "post_add_nodes"]
+        assert PicklePlugin.calls == ["pre_add_nodes", "post_add_nodes"]
         assert restored.node_count() == 3
 
 

@@ -39,41 +39,37 @@ impl SetNodeAttributes {
 impl Sealed for SetNodeAttributes {}
 
 impl Change for SetNodeAttributes {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        let Self {
-            node_indices,
-            attributes,
-        } = *self;
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        for node_index in &self.node_indices {
+            let address = state.resolve_node_address(node_index).ok_or_else(|| {
+                GraphRecordError::NodeNotFound {
+                    node_index: node_index.clone(),
+                }
+            })?;
 
-        for node_index in node_indices {
-            let address = state
-                .resolve_node_address(&node_index)
-                .ok_or(GraphRecordError::NodeNotFound { node_index })?;
-
-            state.set_node_attributes(address, &attributes)?;
+            state.set_node_attributes(address, &self.attributes)?;
         }
 
         Ok(state)
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_set_node_attributes(record, *self)
+        plugin.pre_set_node_attributes(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_set_node_attributes(previous, candidate)
+        plugin.post_set_node_attributes(previous, candidate, self)
     }
 }
 

@@ -184,15 +184,15 @@ Schemas are immutable like records: `set_node_attribute`, `add_group`, `freeze`,
 A plugin hooks into every change made to a record. A hook sees the pending change and can let it through, or return a modified one:
 
 ```python
-class Audit:
-    def on_add_nodes(self, record, payload):
-        print(f"adding {len(payload.batch)} nodes")
+class Audit(Plugin):
+    def pre_add_nodes(self, record, addition):
+        print(f"adding {len(addition.batch)} nodes")
 
 
 record = record.add_plugin("audit", Audit())
 ```
 
-Hooks exist for every change (`on_add_nodes`, `post_remove_edges`, ...). A plugin only pays for the hooks it defines. Returning `None` from a hook applies the change unchanged; returning a payload replaces it, and returning a list of payloads replaces it with several (an empty list drops it). The `post_*` hooks observe the applied result and can veto by raising.
+Hooks exist for every change (`pre_add_nodes`, `post_remove_edges`, ...). A plugin only pays for the hooks it defines. Returning `None` from a hook applies the change unchanged; returning a change replaces it, and returning a list of changes replaces it with several (an empty list drops it). The `post_*` hooks observe the records before and after together with the applied change, and can veto by raising.
 
 ## Serialization
 

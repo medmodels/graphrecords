@@ -1284,11 +1284,14 @@ class Plugin:
     """Base class for GraphRecord plugins.
 
     Every hook is optional: a GraphRecord calls a hook only when the plugin defines
-    it. A change hook returns what the GraphRecord applies in place of the change it
-    received: ``None`` keeps that change, a change or a list of changes replaces it,
-    and an empty list drops it. ``initialize`` and ``finalize`` return changes the
-    same way, but receive no change, so ``None`` means no changes. The ``post_``
-    hooks only look at the GraphRecord and must return ``None``. The hooks are
+    it. A ``pre_`` hook returns what the GraphRecord applies in place of the change
+    it received: ``None`` keeps that change, a change or a list of changes replaces
+    it, and an empty list drops it. ``initialize`` and ``finalize`` return changes
+    the same way, but receive no change, so ``None`` means no changes. A ``post_``
+    hook observes the GraphRecords before and after the applied changes together
+    with the change that was applied and must return ``None``. The two GraphRecords
+    bracket every change applied in the call, not only the change the hook
+    received. The hooks are
     declared for type checkers only, which keeps a plugin free of the hooks it does
     not implement and keeps a GraphRecord from building payloads nobody reads.
     """
@@ -1323,7 +1326,7 @@ class Plugin:
                 Optional[Changes]: The changes to apply, or None to apply none.
             """
 
-        def on_add_nodes(
+        def pre_add_nodes(
             self, record: GraphRecord, addition: AddNodes
         ) -> Optional[Changes]:
             """Handles nodes being added.
@@ -1337,15 +1340,21 @@ class Plugin:
                     the change unchanged.
             """
 
-        def post_add_nodes(self, previous: GraphRecord, candidate: GraphRecord) -> None:
+        def post_add_nodes(
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            addition: AddNodes,
+        ) -> None:
             """Observes the GraphRecord after nodes were added.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                addition (AddNodes): The change that was applied.
             """
 
-        def on_add_nodes_in_group(
+        def pre_add_nodes_in_group(
             self, record: GraphRecord, addition: AddNodesInGroup
         ) -> Optional[Changes]:
             """Handles nodes being added in a group.
@@ -1360,16 +1369,20 @@ class Plugin:
             """
 
         def post_add_nodes_in_group(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            addition: AddNodesInGroup,
         ) -> None:
             """Observes the GraphRecord after nodes were added in a group.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                addition (AddNodesInGroup): The change that was applied.
             """
 
-        def on_add_edges(
+        def pre_add_edges(
             self, record: GraphRecord, addition: AddEdges
         ) -> Optional[Changes]:
             """Handles edges being added.
@@ -1383,15 +1396,21 @@ class Plugin:
                     the change unchanged.
             """
 
-        def post_add_edges(self, previous: GraphRecord, candidate: GraphRecord) -> None:
+        def post_add_edges(
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            addition: AddEdges,
+        ) -> None:
             """Observes the GraphRecord after edges were added.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                addition (AddEdges): The change that was applied.
             """
 
-        def on_add_edges_in_group(
+        def pre_add_edges_in_group(
             self, record: GraphRecord, addition: AddEdgesInGroup
         ) -> Optional[Changes]:
             """Handles edges being added in a group.
@@ -1406,16 +1425,20 @@ class Plugin:
             """
 
         def post_add_edges_in_group(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            addition: AddEdgesInGroup,
         ) -> None:
             """Observes the GraphRecord after edges were added in a group.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                addition (AddEdgesInGroup): The change that was applied.
             """
 
-        def on_remove_nodes(
+        def pre_remove_nodes(
             self, record: GraphRecord, removal: RemoveNodes
         ) -> Optional[Changes]:
             """Handles nodes being removed.
@@ -1430,16 +1453,20 @@ class Plugin:
             """
 
         def post_remove_nodes(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            removal: RemoveNodes,
         ) -> None:
             """Observes the GraphRecord after nodes were removed.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                removal (RemoveNodes): The change that was applied.
             """
 
-        def on_remove_edges(
+        def pre_remove_edges(
             self, record: GraphRecord, removal: RemoveEdges
         ) -> Optional[Changes]:
             """Handles edges being removed.
@@ -1454,16 +1481,20 @@ class Plugin:
             """
 
         def post_remove_edges(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            removal: RemoveEdges,
         ) -> None:
             """Observes the GraphRecord after edges were removed.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                removal (RemoveEdges): The change that was applied.
             """
 
-        def on_set_node_attributes(
+        def pre_set_node_attributes(
             self, record: GraphRecord, assignment: SetNodeAttributes
         ) -> Optional[Changes]:
             """Handles node attributes being set.
@@ -1478,16 +1509,20 @@ class Plugin:
             """
 
         def post_set_node_attributes(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            assignment: SetNodeAttributes,
         ) -> None:
             """Observes the GraphRecord after node attributes were set.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                assignment (SetNodeAttributes): The change that was applied.
             """
 
-        def on_replace_node_attributes(
+        def pre_replace_node_attributes(
             self, record: GraphRecord, assignment: ReplaceNodeAttributes
         ) -> Optional[Changes]:
             """Handles node attributes being replaced.
@@ -1502,16 +1537,20 @@ class Plugin:
             """
 
         def post_replace_node_attributes(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            assignment: ReplaceNodeAttributes,
         ) -> None:
             """Observes the GraphRecord after node attributes were replaced.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                assignment (ReplaceNodeAttributes): The change that was applied.
             """
 
-        def on_remove_node_attributes(
+        def pre_remove_node_attributes(
             self, record: GraphRecord, removal: RemoveNodeAttributes
         ) -> Optional[Changes]:
             """Handles node attributes being removed.
@@ -1526,16 +1565,20 @@ class Plugin:
             """
 
         def post_remove_node_attributes(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            removal: RemoveNodeAttributes,
         ) -> None:
             """Observes the GraphRecord after node attributes were removed.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                removal (RemoveNodeAttributes): The change that was applied.
             """
 
-        def on_set_edge_attributes(
+        def pre_set_edge_attributes(
             self, record: GraphRecord, assignment: SetEdgeAttributes
         ) -> Optional[Changes]:
             """Handles edge attributes being set.
@@ -1550,16 +1593,20 @@ class Plugin:
             """
 
         def post_set_edge_attributes(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            assignment: SetEdgeAttributes,
         ) -> None:
             """Observes the GraphRecord after edge attributes were set.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                assignment (SetEdgeAttributes): The change that was applied.
             """
 
-        def on_replace_edge_attributes(
+        def pre_replace_edge_attributes(
             self, record: GraphRecord, assignment: ReplaceEdgeAttributes
         ) -> Optional[Changes]:
             """Handles edge attributes being replaced.
@@ -1574,16 +1621,20 @@ class Plugin:
             """
 
         def post_replace_edge_attributes(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            assignment: ReplaceEdgeAttributes,
         ) -> None:
             """Observes the GraphRecord after edge attributes were replaced.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                assignment (ReplaceEdgeAttributes): The change that was applied.
             """
 
-        def on_remove_edge_attributes(
+        def pre_remove_edge_attributes(
             self, record: GraphRecord, removal: RemoveEdgeAttributes
         ) -> Optional[Changes]:
             """Handles edge attributes being removed.
@@ -1598,16 +1649,20 @@ class Plugin:
             """
 
         def post_remove_edge_attributes(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            removal: RemoveEdgeAttributes,
         ) -> None:
             """Observes the GraphRecord after edge attributes were removed.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                removal (RemoveEdgeAttributes): The change that was applied.
             """
 
-        def on_add_group(
+        def pre_add_group(
             self, record: GraphRecord, addition: AddGroup
         ) -> Optional[Changes]:
             """Handles a group being added.
@@ -1621,15 +1676,21 @@ class Plugin:
                     the change unchanged.
             """
 
-        def post_add_group(self, previous: GraphRecord, candidate: GraphRecord) -> None:
+        def post_add_group(
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            addition: AddGroup,
+        ) -> None:
             """Observes the GraphRecord after a group was added.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                addition (AddGroup): The change that was applied.
             """
 
-        def on_remove_groups(
+        def pre_remove_groups(
             self, record: GraphRecord, removal: RemoveGroups
         ) -> Optional[Changes]:
             """Handles groups being removed.
@@ -1644,16 +1705,20 @@ class Plugin:
             """
 
         def post_remove_groups(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            removal: RemoveGroups,
         ) -> None:
             """Observes the GraphRecord after groups were removed.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                removal (RemoveGroups): The change that was applied.
             """
 
-        def on_add_nodes_to_group(
+        def pre_add_nodes_to_group(
             self, record: GraphRecord, membership: AddNodesToGroup
         ) -> Optional[Changes]:
             """Handles nodes being added to a group.
@@ -1668,16 +1733,20 @@ class Plugin:
             """
 
         def post_add_nodes_to_group(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            membership: AddNodesToGroup,
         ) -> None:
             """Observes the GraphRecord after nodes were added to a group.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                membership (AddNodesToGroup): The change that was applied.
             """
 
-        def on_remove_nodes_from_group(
+        def pre_remove_nodes_from_group(
             self, record: GraphRecord, membership: RemoveNodesFromGroup
         ) -> Optional[Changes]:
             """Handles nodes being removed from a group.
@@ -1692,16 +1761,20 @@ class Plugin:
             """
 
         def post_remove_nodes_from_group(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            membership: RemoveNodesFromGroup,
         ) -> None:
             """Observes the GraphRecord after nodes were removed from a group.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                membership (RemoveNodesFromGroup): The change that was applied.
             """
 
-        def on_add_edges_to_group(
+        def pre_add_edges_to_group(
             self, record: GraphRecord, membership: AddEdgesToGroup
         ) -> Optional[Changes]:
             """Handles edges being added to a group.
@@ -1716,16 +1789,20 @@ class Plugin:
             """
 
         def post_add_edges_to_group(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            membership: AddEdgesToGroup,
         ) -> None:
             """Observes the GraphRecord after edges were added to a group.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                membership (AddEdgesToGroup): The change that was applied.
             """
 
-        def on_remove_edges_from_group(
+        def pre_remove_edges_from_group(
             self, record: GraphRecord, membership: RemoveEdgesFromGroup
         ) -> Optional[Changes]:
             """Handles edges being removed from a group.
@@ -1740,16 +1817,20 @@ class Plugin:
             """
 
         def post_remove_edges_from_group(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            membership: RemoveEdgesFromGroup,
         ) -> None:
             """Observes the GraphRecord after edges were removed from a group.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                membership (RemoveEdgesFromGroup): The change that was applied.
             """
 
-        def on_set_schema(
+        def pre_set_schema(
             self, record: GraphRecord, schema_change: SetSchema
         ) -> Optional[Changes]:
             """Handles the schema being set.
@@ -1764,16 +1845,20 @@ class Plugin:
             """
 
         def post_set_schema(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            schema_change: SetSchema,
         ) -> None:
             """Observes the GraphRecord after the schema was set.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                schema_change (SetSchema): The change that was applied.
             """
 
-        def on_freeze_schema(
+        def pre_freeze_schema(
             self, record: GraphRecord, schema_change: FreezeSchema
         ) -> Optional[Changes]:
             """Handles the schema being frozen.
@@ -1788,16 +1873,20 @@ class Plugin:
             """
 
         def post_freeze_schema(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            schema_change: FreezeSchema,
         ) -> None:
             """Observes the GraphRecord after the schema was frozen.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                schema_change (FreezeSchema): The change that was applied.
             """
 
-        def on_unfreeze_schema(
+        def pre_unfreeze_schema(
             self, record: GraphRecord, schema_change: UnfreezeSchema
         ) -> Optional[Changes]:
             """Handles the schema being unfrozen.
@@ -1812,16 +1901,20 @@ class Plugin:
             """
 
         def post_unfreeze_schema(
-            self, previous: GraphRecord, candidate: GraphRecord
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            schema_change: UnfreezeSchema,
         ) -> None:
             """Observes the GraphRecord after the schema was unfrozen.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                schema_change (UnfreezeSchema): The change that was applied.
             """
 
-        def on_clear(self, record: GraphRecord, clearing: Clear) -> Optional[Changes]:
+        def pre_clear(self, record: GraphRecord, clearing: Clear) -> Optional[Changes]:
             """Handles the GraphRecord being cleared.
 
             Args:
@@ -1833,45 +1926,51 @@ class Plugin:
                     the change unchanged.
             """
 
-        def post_clear(self, previous: GraphRecord, candidate: GraphRecord) -> None:
+        def post_clear(
+            self,
+            previous: GraphRecord,
+            candidate: GraphRecord,
+            clearing: Clear,
+        ) -> None:
             """Observes the GraphRecord after it was cleared.
 
             Args:
-                previous (GraphRecord): The GraphRecord before the change.
-                candidate (GraphRecord): The GraphRecord with the change applied.
+                previous (GraphRecord): The GraphRecord before the applied changes.
+                candidate (GraphRecord): The GraphRecord with all changes applied.
+                clearing (Clear): The change that was applied.
             """
 
 
-#: The payload converter of every change hook a GraphRecord may call.
-_CHANGE_HOOKS: Final[Dict[str, Callable[..., object]]] = {
-    "on_add_nodes": AddNodes._from_py_add_nodes,
-    "on_add_nodes_in_group": AddNodesInGroup._from_py_add_nodes_in_group,
-    "on_add_edges": AddEdges._from_py_add_edges,
-    "on_add_edges_in_group": AddEdgesInGroup._from_py_add_edges_in_group,
-    "on_remove_nodes": RemoveNodes._from_py_remove_nodes,
-    "on_remove_edges": RemoveEdges._from_py_remove_edges,
-    "on_set_node_attributes": SetNodeAttributes._from_py_set_node_attributes,
-    "on_replace_node_attributes": ReplaceNodeAttributes._from_py_replace_node_attributes,
-    "on_remove_node_attributes": RemoveNodeAttributes._from_py_remove_node_attributes,
-    "on_set_edge_attributes": SetEdgeAttributes._from_py_set_edge_attributes,
-    "on_replace_edge_attributes": ReplaceEdgeAttributes._from_py_replace_edge_attributes,
-    "on_remove_edge_attributes": RemoveEdgeAttributes._from_py_remove_edge_attributes,
-    "on_add_group": AddGroup._from_py_add_group,
-    "on_remove_groups": RemoveGroups._from_py_remove_groups,
-    "on_add_nodes_to_group": AddNodesToGroup._from_py_add_nodes_to_group,
-    "on_remove_nodes_from_group": RemoveNodesFromGroup._from_py_remove_nodes_from_group,
-    "on_add_edges_to_group": AddEdgesToGroup._from_py_add_edges_to_group,
-    "on_remove_edges_from_group": RemoveEdgesFromGroup._from_py_remove_edges_from_group,
-    "on_set_schema": SetSchema._from_py_set_schema,
-    "on_freeze_schema": FreezeSchema._from_py_freeze_schema,
-    "on_unfreeze_schema": UnfreezeSchema._from_py_unfreeze_schema,
-    "on_clear": Clear._from_py_clear,
+#: The payload converter of every pre hook a GraphRecord may call.
+_PRE_HOOKS: Final[Dict[str, Callable[..., object]]] = {
+    "pre_add_nodes": AddNodes._from_py_add_nodes,
+    "pre_add_nodes_in_group": AddNodesInGroup._from_py_add_nodes_in_group,
+    "pre_add_edges": AddEdges._from_py_add_edges,
+    "pre_add_edges_in_group": AddEdgesInGroup._from_py_add_edges_in_group,
+    "pre_remove_nodes": RemoveNodes._from_py_remove_nodes,
+    "pre_remove_edges": RemoveEdges._from_py_remove_edges,
+    "pre_set_node_attributes": SetNodeAttributes._from_py_set_node_attributes,
+    "pre_replace_node_attributes": ReplaceNodeAttributes._from_py_replace_node_attributes,
+    "pre_remove_node_attributes": RemoveNodeAttributes._from_py_remove_node_attributes,
+    "pre_set_edge_attributes": SetEdgeAttributes._from_py_set_edge_attributes,
+    "pre_replace_edge_attributes": ReplaceEdgeAttributes._from_py_replace_edge_attributes,
+    "pre_remove_edge_attributes": RemoveEdgeAttributes._from_py_remove_edge_attributes,
+    "pre_add_group": AddGroup._from_py_add_group,
+    "pre_remove_groups": RemoveGroups._from_py_remove_groups,
+    "pre_add_nodes_to_group": AddNodesToGroup._from_py_add_nodes_to_group,
+    "pre_remove_nodes_from_group": RemoveNodesFromGroup._from_py_remove_nodes_from_group,
+    "pre_add_edges_to_group": AddEdgesToGroup._from_py_add_edges_to_group,
+    "pre_remove_edges_from_group": RemoveEdgesFromGroup._from_py_remove_edges_from_group,
+    "pre_set_schema": SetSchema._from_py_set_schema,
+    "pre_freeze_schema": FreezeSchema._from_py_freeze_schema,
+    "pre_unfreeze_schema": UnfreezeSchema._from_py_unfreeze_schema,
+    "pre_clear": Clear._from_py_clear,
 }
 
-#: The name of every observer hook a GraphRecord may call.
-_OBSERVER_HOOKS: Final[FrozenSet[str]] = frozenset(
-    "post_" + name.removeprefix("on_") for name in _CHANGE_HOOKS
-)
+#: The payload converter of every post hook a GraphRecord may call.
+_POST_HOOKS: Final[Dict[str, Callable[..., object]]] = {
+    "post_" + name.removeprefix("pre_"): convert for name, convert in _PRE_HOOKS.items()
+}
 
 #: The name of every lifecycle hook a GraphRecord may call.
 _LIFECYCLE_HOOKS: Final[FrozenSet[str]] = frozenset({"initialize", "finalize"})
@@ -1970,10 +2069,10 @@ class _PluginBridge:
 
         return _PluginBridge._change(returned)
 
-    def _change_hook(
+    def _pre_hook(
         self, name: str, convert: Callable[..., object]
     ) -> Callable[[PyGraphRecord, object], object]:
-        """Resolves a change hook of the plugin.
+        """Resolves a pre hook of the plugin.
 
         Args:
             name (str): The name of the hook.
@@ -1990,22 +2089,27 @@ class _PluginBridge:
 
         return call
 
-    def _observer_hook(
-        self, name: str
-    ) -> Callable[[PyGraphRecord, PyGraphRecord], object]:
-        """Resolves an observer hook of the plugin.
+    def _post_hook(
+        self, name: str, convert: Callable[..., object]
+    ) -> Callable[[PyGraphRecord, PyGraphRecord, object], object]:
+        """Resolves a post hook of the plugin.
 
         Args:
             name (str): The name of the hook.
+            convert (Callable[..., object]): The converter of the hook's payload.
 
         Returns:
-            Callable[[PyGraphRecord, PyGraphRecord], object]: The hook, converting its
-                arguments.
+            Callable[[PyGraphRecord, PyGraphRecord, object], object]: The hook,
+                converting its arguments.
         """
         hook = getattr(self._plugin, name)
 
-        def call(py_previous: PyGraphRecord, py_candidate: PyGraphRecord) -> object:
-            return hook(self._record(py_previous), self._record(py_candidate))
+        def call(
+            py_previous: PyGraphRecord, py_candidate: PyGraphRecord, payload: object
+        ) -> object:
+            return hook(
+                self._record(py_previous), self._record(py_candidate), convert(payload)
+            )
 
         return call
 
@@ -2039,12 +2143,13 @@ class _PluginBridge:
             AttributeError: If the name is not a hook, or the plugin does not
                 define it.
         """
-        convert = _CHANGE_HOOKS.get(name)
+        convert = _PRE_HOOKS.get(name)
         if convert is not None:
-            return self._change_hook(name, convert)
+            return self._pre_hook(name, convert)
 
-        if name in _OBSERVER_HOOKS:
-            return self._observer_hook(name)
+        convert = _POST_HOOKS.get(name)
+        if convert is not None:
+            return self._post_hook(name, convert)
 
         if name in _LIFECYCLE_HOOKS:
             return self._lifecycle_hook(name)

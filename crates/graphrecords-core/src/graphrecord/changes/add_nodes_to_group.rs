@@ -42,21 +42,18 @@ impl AddNodesToGroup {
 impl Sealed for AddNodesToGroup {}
 
 impl Change for AddNodesToGroup {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        let Self {
-            group_index,
-            node_indices,
-        } = *self;
-
-        let group_address = match state.resolve_group_address(&group_index) {
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
+        let group_address = match state.resolve_group_address(&self.group_index) {
             Some(group_address) => group_address,
-            None => state.insert_group(group_index)?,
+            None => state.insert_group(&self.group_index)?,
         };
 
-        for node_index in node_indices {
-            let node_address = state
-                .resolve_node_address(&node_index)
-                .ok_or(GraphRecordError::NodeNotFound { node_index })?;
+        for node_index in &self.node_indices {
+            let node_address = state.resolve_node_address(node_index).ok_or_else(|| {
+                GraphRecordError::NodeNotFound {
+                    node_index: node_index.clone(),
+                }
+            })?;
 
             state.add_node_to_group(node_address, group_address)?;
         }
@@ -65,23 +62,22 @@ impl Change for AddNodesToGroup {
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_add_nodes_to_group(record, *self)
+        plugin.pre_add_nodes_to_group(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_add_nodes_to_group(previous, candidate)
+        plugin.post_add_nodes_to_group(previous, candidate, self)
     }
 }
 

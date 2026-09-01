@@ -42,20 +42,19 @@ impl RemoveEdgesFromGroup {
 impl Sealed for RemoveEdgesFromGroup {}
 
 impl Change for RemoveEdgesFromGroup {
-    fn apply(self: Box<Self>, mut state: GraphState) -> GraphRecordResult<GraphState> {
-        let Self {
-            group_index,
-            edge_indices,
-        } = *self;
-
+    fn apply(&self, mut state: GraphState) -> GraphRecordResult<GraphState> {
         let group_address = state
-            .resolve_group_address(&group_index)
-            .ok_or(GraphRecordError::GroupNotFound { group_index })?;
+            .resolve_group_address(&self.group_index)
+            .ok_or_else(|| GraphRecordError::GroupNotFound {
+                group_index: self.group_index.clone(),
+            })?;
 
-        for edge_index in edge_indices {
-            let edge_address = state
-                .resolve_edge_address(&edge_index)
-                .ok_or(GraphRecordError::EdgeNotFound { edge_index })?;
+        for edge_index in &self.edge_indices {
+            let edge_address = state.resolve_edge_address(edge_index).ok_or_else(|| {
+                GraphRecordError::EdgeNotFound {
+                    edge_index: *edge_index,
+                }
+            })?;
 
             state.remove_edge_from_group(edge_address, group_address)?;
         }
@@ -64,23 +63,22 @@ impl Change for RemoveEdgesFromGroup {
     }
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes> {
-        plugin.on_remove_edges_from_group(record, *self)
+        plugin.pre_remove_edges_from_group(record, *self)
     }
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
     ) -> GraphRecordResult<()> {
-        |plugin, previous, candidate| plugin.post_remove_edges_from_group(previous, candidate)
+        plugin.post_remove_edges_from_group(previous, candidate, self)
     }
 }
 

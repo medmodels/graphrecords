@@ -41,19 +41,18 @@ use crate::graphrecord::{GraphRecord, plugins::Plugin};
 use crate::{errors::GraphRecordResult, graphrecord::state::GraphState};
 
 pub trait Change: sealed::Sealed {
-    fn apply(self: Box<Self>, state: GraphState) -> GraphRecordResult<GraphState>;
+    fn apply(&self, state: GraphState) -> GraphRecordResult<GraphState>;
 
     #[cfg(feature = "plugins")]
-    fn dispatch(
+    fn pre_dispatch(
         self: Box<Self>,
         plugin: &dyn Plugin,
         record: &GraphRecord,
     ) -> GraphRecordResult<Changes>;
 
     #[cfg(feature = "plugins")]
-    fn post_dispatch_hook(
+    fn post_dispatch(
         &self,
-    ) -> fn(
         plugin: &dyn Plugin,
         previous: &GraphRecord,
         candidate: &GraphRecord,
