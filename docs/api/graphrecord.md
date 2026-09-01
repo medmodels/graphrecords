@@ -10,9 +10,9 @@ modify, and query these records. Here's a list of all its submodules:
    :recursive:
 
    graphrecords.graphrecord.GraphRecord
-   graphrecords.builder.GraphRecordBuilder
    graphrecords.datatype
-   graphrecords.indexers
+   graphrecords.overview
+   graphrecords.plugins
    graphrecords.querying
    graphrecords.schema
    graphrecords.types
