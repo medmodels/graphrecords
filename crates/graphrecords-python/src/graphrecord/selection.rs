@@ -1,11 +1,10 @@
-use super::{
-    edge_index::PyEdgeIndex, errors::PyGraphRecordError, identifier::convert_pyobject_to_identifier,
-};
+use super::edge_index::PyEdgeIndex;
 use crate::querying::{PyArgument, PyExpression, PySeries};
 use graphrecords_core::{
     errors::{GraphRecordError, GraphRecordResult},
     graphrecord::{AttributeName, EdgeIndex, GraphRecord, GroupIndex, NodeIndex},
 };
+use graphrecords_pyo3::{PyAttributeName, PyGraphRecordError, PyGroupIndex, PyNodeIndex};
 use graphrecords_query::{dynamic::DynArgumentLane, registry::ArityDescriptor};
 use pyo3::{
     Bound, PyAny, PyResult,
@@ -83,9 +82,7 @@ impl ResolvedSelection {
         }
 
         if selection.is_instance_of::<PyString>() || selection.extract::<i64>().is_ok() {
-            return Ok(vec![NodeIndex::from(convert_pyobject_to_identifier(
-                selection,
-            )?)]);
+            return Ok(vec![NodeIndex::from(selection.extract::<PyNodeIndex>()?)]);
         }
         if selection.is_instance_of::<PyBytes>() {
             return Err(PyTypeError::new_err("Expected a selection of nodes"));
@@ -94,7 +91,7 @@ impl ResolvedSelection {
         selection
             .try_iter()
             .map_err(|_| PyTypeError::new_err("Expected a selection of nodes"))?
-            .map(|element| Ok(NodeIndex::from(convert_pyobject_to_identifier(&element?)?)))
+            .map(|element| Ok(NodeIndex::from(element?.extract::<PyNodeIndex>()?)))
             .collect()
     }
 
@@ -140,9 +137,7 @@ impl ResolvedSelection {
         }
 
         if selection.is_instance_of::<PyString>() || selection.extract::<i64>().is_ok() {
-            return Ok(vec![GroupIndex::from(convert_pyobject_to_identifier(
-                selection,
-            )?)]);
+            return Ok(vec![GroupIndex::from(selection.extract::<PyGroupIndex>()?)]);
         }
         if selection.is_instance_of::<PyBytes>() {
             return Err(PyTypeError::new_err("Expected a selection of groups"));
@@ -151,7 +146,7 @@ impl ResolvedSelection {
         selection
             .try_iter()
             .map_err(|_| PyTypeError::new_err("Expected a selection of groups"))?
-            .map(|element| Ok(GroupIndex::from(convert_pyobject_to_identifier(&element?)?)))
+            .map(|element| Ok(GroupIndex::from(element?.extract::<PyGroupIndex>()?)))
             .collect()
     }
 
@@ -165,11 +160,7 @@ impl ResolvedSelection {
         attribute_names
             .try_iter()
             .map_err(|_| PyTypeError::new_err("Expected attribute names"))?
-            .map(|element| {
-                Ok(AttributeName::from(convert_pyobject_to_identifier(
-                    &element?,
-                )?))
-            })
+            .map(|element| Ok(AttributeName::from(element?.extract::<PyAttributeName>()?)))
             .collect()
     }
 
@@ -178,7 +169,7 @@ impl ResolvedSelection {
         selection: &Bound<'_, PyAny>,
     ) -> PyResult<NodeIndex> {
         if selection.is_instance_of::<PyString>() || selection.extract::<i64>().is_ok() {
-            return Ok(NodeIndex::from(convert_pyobject_to_identifier(selection)?));
+            return Ok(NodeIndex::from(selection.extract::<PyNodeIndex>()?));
         }
         if !Self::single_arity(selection) {
             return Err(PyTypeError::new_err("Expected a single node selection"));
@@ -195,7 +186,7 @@ impl ResolvedSelection {
         selection: &Bound<'_, PyAny>,
     ) -> PyResult<GroupIndex> {
         if selection.is_instance_of::<PyString>() || selection.extract::<i64>().is_ok() {
-            return Ok(GroupIndex::from(convert_pyobject_to_identifier(selection)?));
+            return Ok(GroupIndex::from(selection.extract::<PyGroupIndex>()?));
         }
         if !Self::single_arity(selection) {
             return Err(PyTypeError::new_err("Expected a single group selection"));

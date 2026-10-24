@@ -1,8 +1,9 @@
 use crate::{
-    graphrecord::{PyAttributeName, PyEdgeIndex, PyGroupIndex, PyNodeIndex, value::PyValue},
+    graphrecord::PyEdgeIndex,
     querying::{endpoint::PyEdgeEndpointRole, failure_kind::PyFailureKind},
 };
 use graphrecords_core::graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value};
+use graphrecords_pyo3::{PyAttributeName, PyGroupIndex, PyNodeIndex, PyValue};
 use graphrecords_query::{
     FailureKind,
     dynamic::DynIndexOwned,

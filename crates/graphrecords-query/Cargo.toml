@@ -5,7 +5,7 @@ description = { workspace = true }
 edition = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
-readme = "../../README.md"
+readme = "README.md"
 
 [dependencies]
 chrono = { workspace = true }

@@ -5,7 +5,6 @@
     clippy::needless_pass_by_value
 )]
 
-pub mod conversion_lut;
 pub mod graphrecord;
 pub mod prelude;
 #[cfg(feature = "pyo3-bindings")]

@@ -1,5 +1,4 @@
-use super::{traits::DeepFrom, value::value_converter};
-use crate::graphrecord::errors::PyGraphRecordError;
+use crate::{errors::PyGraphRecordError, traits::DeepFrom, value::value_converter};
 use graphrecords_core::graphrecord::{
     AttributeName, GroupIndex, Identifier, NodeIndex, NodeIndexView, PluginName,
 };
@@ -13,6 +12,10 @@ use std::{hash::Hash, ops::Deref};
 #[repr(transparent)]
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct PyIdentifier(Identifier);
+pub type PyAttributeName = PyIdentifier;
+pub type PyGroupIndex = PyIdentifier;
+pub type PyNodeIndex = PyIdentifier;
+pub type PyPluginName = PyIdentifier;
 
 impl From<Identifier> for PyIdentifier {
     fn from(value: Identifier) -> Self {
@@ -91,28 +94,28 @@ impl Deref for PyIdentifier {
     }
 }
 
-pub(crate) fn convert_pyobject_to_identifier(ob: &Bound<'_, PyAny>) -> PyResult<Identifier> {
-    if ob.is_instance_of::<PyBytes>() {
+pub(crate) fn convert_pyobject_to_identifier(obj: &Bound<'_, PyAny>) -> PyResult<Identifier> {
+    if obj.is_instance_of::<PyBytes>() {
         return Err(PyTypeError::new_err(format!(
-            "Failed to convert {ob} into Identifier"
+            "Failed to convert {obj} into Identifier"
         )));
     }
 
-    let Some(convert) = value_converter(ob) else {
+    let Some(convert) = value_converter(obj) else {
         return Err(PyGraphRecordError::Conversion(format!(
-            "Failed to convert {ob} into Identifier"
+            "Failed to convert {obj} into Identifier"
         ))
         .into());
     };
 
-    Ok(convert(ob)?.try_into().map_err(PyGraphRecordError::from)?)
+    Ok(convert(obj)?.try_into().map_err(PyGraphRecordError::from)?)
 }
 
 impl FromPyObject<'_, '_> for PyIdentifier {
     type Error = PyErr;
 
-    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_identifier(&ob).map(Self::from)
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
+        convert_pyobject_to_identifier(&obj).map(Self::from)
     }
 }
 

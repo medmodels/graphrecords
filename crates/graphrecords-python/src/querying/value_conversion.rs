@@ -1,11 +1,11 @@
 use crate::{
-    graphrecord::{PyAttributeName, PyEdgeIndex, PyGroupIndex, PyNodeIndex, value::PyValue},
-    querying::{
-        exception::FailureConversion, failure_kind::PyFailureKind,
-        index_conversion::IndexConversion,
-    },
+    graphrecord::PyEdgeIndex,
+    querying::{failure_kind::PyFailureKind, index_conversion::IndexConversion},
 };
 use graphrecords_core::graphrecord::AttributeName;
+use graphrecords_pyo3::{
+    PyAttributeName, PyGroupIndex, PyNodeIndex, PyValue, exception::FailureConversion,
+};
 use graphrecords_query::{
     FailureKindValue, Scalar,
     dynamic::{DynEntityReferenceKind, DynIndexOwned, DynValue},

@@ -10,8 +10,16 @@ This crate provides a workaround by serializing `GraphRecord` to bytes (via binc
 
 ## Key Components
 
-- **`PyGraphRecord`** - A wrapper around `GraphRecord` implementing PyO3's `FromPyObject` and `IntoPyObject` traits via binary serialization
-- **Type Re-exports** - Common Python binding types (`PyNodeIndex`, `PyEdgeIndex`, `PyGroup`, `PyAttributes`, etc.)
+- **Serialized types** - `PyGraphRecord`, `PyEdgeIndex`, `PySchema`, `PyGroupSchema` and `PyAttributeDataType` cross the boundary as bincode bytes. The receiving side gets its own copy.
+- **Enums** - `PyAttributeType`, `PySchemaType`, `PyEdgeDirection` and `PyOnConflict` convert from and to the members of the corresponding `graphrecords` enums.
+- **Data types** - `PyDataType` converts from and to the `graphrecords` data type classes (`String`, `Int`, `Union`, `Option`, ...).
+- **Values and identifiers** - `PyValue`, `PyIdentifier`, `PyNodeIndex`, `PyGroupIndex` and `PyAttributes` map to Python builtins, re-exported from [`graphrecords-pyo3`](../graphrecords-pyo3).
+- **Errors** - `PyGraphRecordError` converts into Python exceptions. Query failures raise the query exception classes of the installed `graphrecords` package, so `except graphrecords.QueryError` catches them. Other errors raise the same builtin exceptions as the package itself.
+
+## Notes
+
+- Plugins attached to a `GraphRecord` are not carried across the boundary.
+- The extension must be built against the same graphrecords version as the installed `graphrecords` Python package, because the serialized layout follows the Rust types.
 
 ## Usage
 
@@ -27,4 +35,12 @@ fn process_graphrecord(record: PyGraphRecord) -> PyResult<PyGraphRecord> {
     // Process and return
     Ok(inner.into())
 }
+```
+
+```python
+import graphrecords as gr
+import my_extension
+
+record = gr.GraphRecord().add_nodes([("lorem", {})])
+processed = my_extension.process_graphrecord(record)
 ```

@@ -37,6 +37,9 @@ jobs:
 
   test-rust:
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        partition: ["1/4", "2/4", "3/4", "4/4"]
 
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +56,7 @@ jobs:
       - name: Run Rust tests
         run: >
           cargo hack test --feature-powerset --clean-per-run
-          -p graphrecords
+          --partition ${{ matrix.partition }}
           -p graphrecords-core
           -p graphrecords-macros
           -p graphrecords-overview

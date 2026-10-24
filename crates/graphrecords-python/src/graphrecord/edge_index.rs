@@ -1,5 +1,5 @@
-use super::{errors::PyGraphRecordError, traits::DeepFrom};
 use graphrecords_core::graphrecord::EdgeIndex;
+use graphrecords_pyo3::{PyGraphRecordError, traits::DeepFrom};
 use pyo3::{
     prelude::*,
     types::{PyBytes, PyBytesMethods, PyTuple},
@@ -54,12 +54,17 @@ impl PyEdgeIndex {
         Ok(Self(edge_index))
     }
 
-    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
+    pub fn _to_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let bytes = bincode::serialize(&self.0).map_err(|_| {
             PyGraphRecordError::Conversion("Failed to serialize EdgeIndex".to_string())
         })?;
+
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
         let constructor = py.get_type::<Self>().getattr("_from_bytes")?.unbind();
-        let arguments = (PyBytes::new(py, &bytes),).into_pyobject(py)?;
+        let arguments = (self._to_bytes(py)?,).into_pyobject(py)?;
 
         Ok((constructor, arguments))
     }

@@ -1,6 +1,7 @@
 import copy
 import pickle
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import List, Optional, Tuple, cast
@@ -1646,12 +1647,26 @@ class TestGraphRecord(unittest.TestCase):
         assert record.__deepcopy__({}) == record
 
     def test_reduce(self) -> None:
-        record = create_graphrecord()
+        record = create_graphrecord().add_nodes(
+            [
+                (
+                    "4",
+                    {
+                        "labore": datetime(2024, 1, 2, 3, 4, 5),
+                        "dolore": timedelta(seconds=90),
+                    },
+                ),
+                ("5", {"labore": None, "ut": None}),
+                ("6", {"ut": datetime(1969, 12, 31, 23, 59, 59)}),
+            ]
+        )
 
         restored = pickle.loads(pickle.dumps(record))
 
         assert restored == record
-        assert restored.node_indices() == ["0", "1", "2", "3"]
+        assert restored.node_indices() == ["0", "1", "2", "3", "4", "5", "6"]
+        assert restored.node("4").attribute("labore") == datetime(2024, 1, 2, 3, 4, 5)
+        assert restored.node("6").attribute("ut") == datetime(1969, 12, 31, 23, 59, 59)
 
         with_plugin = record.add_plugin("ipsum", RecordingPlugin())
         restored_with_plugin = pickle.loads(pickle.dumps(with_plugin))

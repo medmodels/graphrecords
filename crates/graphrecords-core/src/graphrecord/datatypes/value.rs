@@ -21,7 +21,13 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Bool(bool),
-    DateTime(NaiveDateTime),
+    DateTime(
+        #[cfg_attr(
+            any(feature = "serde", feature = "io"),
+            serde(with = "binary_datetime")
+        )]
+        NaiveDateTime,
+    ),
     Duration(TimeDelta),
     #[default]
     Null,
@@ -529,8 +535,50 @@ impl Uppercase for Value {
     }
 }
 
+#[cfg(any(feature = "serde", feature = "io"))]
+pub mod binary_datetime {
+    use chrono::{DateTime, NaiveDateTime};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
+
+    pub fn serialize<S: Serializer>(
+        value: &NaiveDateTime,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            return value.serialize(serializer);
+        }
+
+        parts(value).serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<NaiveDateTime, D::Error> {
+        if deserializer.is_human_readable() {
+            return NaiveDateTime::deserialize(deserializer);
+        }
+
+        let (seconds, nanoseconds) = Deserialize::deserialize(deserializer)?;
+
+        from_parts(seconds, nanoseconds)
+            .ok_or_else(|| D::Error::custom("datetime must be in range"))
+    }
+
+    pub const fn parts(value: &NaiveDateTime) -> (i64, u32) {
+        let utc = value.and_utc();
+
+        (utc.timestamp(), utc.timestamp_subsec_nanos())
+    }
+
+    pub fn from_parts(seconds: i64, nanoseconds: u32) -> Option<NaiveDateTime> {
+        DateTime::from_timestamp(seconds, nanoseconds).map(|value| value.naive_utc())
+    }
+}
+
 #[cfg(test)]
 mod test {
+    #[cfg(any(feature = "serde", feature = "io"))]
+    use super::binary_datetime;
     use super::{Contains, EndsWith, StartsWith, Value};
     use crate::{
         errors::GraphRecordError,
@@ -541,6 +589,21 @@ mod test {
     };
     use chrono::{NaiveDate, NaiveDateTime, NaiveTime, TimeDelta};
     use std::hash::{Hash, Hasher};
+
+    fn create_datetime(
+        year: i32,
+        month: u32,
+        day: u32,
+        hour: u32,
+        minute: u32,
+        second: u32,
+        nanosecond: u32,
+    ) -> NaiveDateTime {
+        NaiveDate::from_ymd_opt(year, month, day)
+            .unwrap()
+            .and_hms_nano_opt(hour, minute, second, nanosecond)
+            .unwrap()
+    }
 
     #[test]
     fn test_default() {
@@ -2692,5 +2755,77 @@ mod test {
         assert_ne!(a, b);
         assert_eq!(b, c);
         assert_ne!(a, c);
+    }
+
+    #[cfg(feature = "io")]
+    #[test]
+    fn test_binary_datetime_serialize() {
+        let value = Value::DateTime(create_datetime(2024, 1, 2, 3, 4, 5, 0));
+
+        assert_eq!(
+            "DateTime(\"2024-01-02T03:04:05\")",
+            ron::to_string(&value).unwrap()
+        );
+    }
+
+    #[cfg(feature = "io")]
+    #[test]
+    fn test_binary_datetime_deserialize() {
+        assert_eq!(
+            Value::DateTime(create_datetime(2024, 1, 2, 3, 4, 5, 0)),
+            ron::from_str("DateTime(\"2024-01-02T03:04:05\")").unwrap()
+        );
+    }
+
+    #[cfg(any(feature = "serde", feature = "io"))]
+    #[test]
+    fn test_binary_datetime_parts() {
+        assert_eq!(
+            (0, 0),
+            binary_datetime::parts(&create_datetime(1970, 1, 1, 0, 0, 0, 0))
+        );
+        assert_eq!(
+            (-1, 500_000_000),
+            binary_datetime::parts(&create_datetime(1969, 12, 31, 23, 59, 59, 500_000_000))
+        );
+        assert_eq!(
+            (1_704_164_645, 7),
+            binary_datetime::parts(&create_datetime(2024, 1, 2, 3, 4, 5, 7))
+        );
+        assert_eq!(
+            (1_704_164_699, 1_500_000_000),
+            binary_datetime::parts(&create_datetime(2024, 1, 2, 3, 4, 59, 1_500_000_000))
+        );
+        assert_eq!(
+            (-8_334_601_228_800, 0),
+            binary_datetime::parts(&NaiveDateTime::MIN)
+        );
+        assert_eq!(
+            (8_210_266_876_799, 999_999_999),
+            binary_datetime::parts(&NaiveDateTime::MAX)
+        );
+    }
+
+    #[cfg(any(feature = "serde", feature = "io"))]
+    #[test]
+    fn test_binary_datetime_from_parts() {
+        assert_eq!(
+            Some(create_datetime(1969, 12, 31, 23, 59, 59, 500_000_000)),
+            binary_datetime::from_parts(-1, 500_000_000)
+        );
+        assert_eq!(
+            Some(create_datetime(2024, 1, 2, 3, 4, 59, 1_500_000_000)),
+            binary_datetime::from_parts(1_704_164_699, 1_500_000_000)
+        );
+        assert_eq!(
+            Some(NaiveDateTime::MIN),
+            binary_datetime::from_parts(-8_334_601_228_800, 0)
+        );
+        assert_eq!(
+            Some(NaiveDateTime::MAX),
+            binary_datetime::from_parts(8_210_266_876_799, 999_999_999)
+        );
+        assert_eq!(None, binary_datetime::from_parts(i64::MAX, 0));
+        assert_eq!(None, binary_datetime::from_parts(0, 2_000_000_000));
     }
 }

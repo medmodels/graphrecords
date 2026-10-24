@@ -88,10 +88,7 @@ impl GraphState {
             }
         }
 
-        for (hash, address_index) in hashed_addresses {
-            self.node_dictionary.insert(hash, address_index);
-        }
-
+        self.node_dictionary.rebuild(&hashed_addresses);
         self.groups.rebuild_indices();
     }
 
@@ -155,7 +152,9 @@ impl GraphState {
     }
 
     pub fn contains_node_address(&self, address: NodeAddress) -> bool {
-        self.node_key(address).is_some()
+        self.node_keys
+            .get(address.chunk_index())
+            .is_some_and(|chunk| chunk.contains(address.chunk_local_address()))
     }
 
     pub fn contains_edge_address(&self, address: EdgeAddress) -> bool {
@@ -1772,6 +1771,29 @@ mod test {
             .unwrap()
             .node_members
             .insert(999);
+
+        assert!(!state.is_referentially_consistent());
+
+        let (mut state, _, edge_address) = create_state_with_one_edge();
+        state
+            .edge_memberships
+            .get_mut_or_default(edge_address.chunk_index())
+            .add(edge_address.chunk_local_address(), GroupAddress::new(999));
+
+        assert!(!state.is_referentially_consistent());
+
+        let (mut state, group_address) = create_state_with_one_raw_group();
+        state
+            .groups
+            .record_mut(group_address)
+            .unwrap()
+            .edge_members
+            .insert(999);
+
+        assert!(!state.is_referentially_consistent());
+
+        let mut state = create_state_with_one_edge().0;
+        state.edge_epochs = Arc::new(Vec::new());
 
         assert!(!state.is_referentially_consistent());
     }

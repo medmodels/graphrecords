@@ -179,7 +179,6 @@ impl<'a, I: IndexDomain, V: ValueDomain> CheckedIndexedLaneBuilder<'a, I, V> {
         Ok(())
     }
 
-    #[must_use]
     pub fn finish(self) -> BoxedIterator<'a, (I::Address, QueryResult<V::Value<'a>>)> {
         Box::new(self.elements.into_iter())
     }

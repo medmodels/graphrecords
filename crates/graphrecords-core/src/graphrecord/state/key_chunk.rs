@@ -96,6 +96,10 @@ impl KeyChunk {
         true
     }
 
+    pub const fn contains(&self, cell_index: usize) -> bool {
+        self.present.contains(cell_index)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.present.is_empty()
     }
@@ -197,6 +201,15 @@ mod test {
 
         assert_eq!(Some(IdentifierView::Int(i64::MIN)), chunk.get(0));
         assert_eq!(Some(IdentifierView::Int(i64::MAX)), chunk.get(1));
+    }
+
+    #[test]
+    fn test_contains() {
+        let chunk = create_chunk_with_three_strings();
+
+        assert!(chunk.contains(0));
+        assert!(chunk.contains(2));
+        assert!(!chunk.contains(3));
     }
 
     #[test]
