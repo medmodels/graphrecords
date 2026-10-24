@@ -1027,7 +1027,7 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
 name = "graphrecords"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "graphrecords-core",
  "graphrecords-overview",
@@ -1037,7 +1037,7 @@ dependencies = [
 
 [[package]]
 name = "graphrecords-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arrow",
  "chrono",
@@ -1050,7 +1050,7 @@ dependencies = [
 
 [[package]]
 name = "graphrecords-macros"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1060,7 +1060,7 @@ dependencies = [
 
 [[package]]
 name = "graphrecords-overview"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "graphrecords-core",
  "graphrecords-query",
@@ -1072,7 +1072,7 @@ dependencies = [
 
 [[package]]
 name = "graphrecords-pyo3"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "graphrecords-core",
  "graphrecords-overview",
@@ -1085,7 +1085,7 @@ dependencies = [
 
 [[package]]
 name = "graphrecords-pyo3-interop"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bincode 1.3.3",
  "graphrecords",
@@ -1095,7 +1095,7 @@ dependencies = [
 
 [[package]]
 name = "graphrecords-python"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arrow",
  "bincode 1.3.3",
@@ -1110,7 +1110,7 @@ dependencies = [
 
 [[package]]
 name = "graphrecords-query"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "elsa",
@@ -1123,7 +1123,7 @@ dependencies = [
 
 [[package]]
 name = "graphrecords-utils"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "hashbrown 0.16.1",
 ]
@@ -2551,7 +2551,7 @@ dependencies = [
 
 [[package]]
 name = "py-graphrecords"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "graphrecords-core",
  "graphrecords-python",

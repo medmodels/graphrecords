@@ -2,6 +2,17 @@
 
 All notable changes to the Python package will be documented in this file.
 
+## [0.8.0] - 2026-10-24
+
+### Breaking Changes
+
+- improve interop functionality and serialization speed (#94)
+
+### Features
+
+- implement seeed shuffle, random and sample (#96)
+- improve interop functionality and serialization speed (#94)
+
 ## [0.7.0] - 2026-09-01
 
 ### Breaking Changes
