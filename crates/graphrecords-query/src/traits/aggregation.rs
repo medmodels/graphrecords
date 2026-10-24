@@ -64,6 +64,12 @@ pub trait Random {
     fn random(&self) -> Self::Output;
 }
 
+pub trait RandomWithSeed {
+    type Output;
+
+    fn random_with_seed(&self, seed: u64) -> Self::Output;
+}
+
 pub trait StandardDeviation {
     type Output;
 

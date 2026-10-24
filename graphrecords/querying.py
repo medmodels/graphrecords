@@ -1821,6 +1821,7 @@ class Expression(Generic[BindingType, S, C, Unpack[Levels]]):
         self: Expression[
             BindingType, Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]
         ],
+        seed: Optional[int] = None,
     ) -> Expression[
         BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
     ]: ...
@@ -1830,12 +1831,69 @@ class Expression(Generic[BindingType, S, C, Unpack[Levels]]):
         self: Expression[
             BindingType, Bare[BareValueType], Multiple[OrderType], Unpack[Levels]
         ],
+        seed: Optional[int] = None,
     ) -> Expression[
         BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
     ]: ...
 
-    def shuffle(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
-        return self._rebuild(self._py_carrier.shuffle())
+    def shuffle(
+        self, seed: Optional[int] = None
+    ) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.shuffle(seed))
+
+    @overload
+    def sample(
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]
+        ],
+        elements: int,
+        seed: Optional[int] = None,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+    ]: ...
+
+    @overload
+    def sample(
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+        elements: int,
+        seed: Optional[int] = None,
+    ) -> Expression[
+        BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+    ]: ...
+
+    def sample(
+        self, elements: int, seed: Optional[int] = None
+    ) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.sample(elements, seed))
+
+    @overload
+    def sample_fraction(
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]
+        ],
+        fraction: float,
+        seed: Optional[int] = None,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+    ]: ...
+
+    @overload
+    def sample_fraction(
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[OrderType], Unpack[Levels]
+        ],
+        fraction: float,
+        seed: Optional[int] = None,
+    ) -> Expression[
+        BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+    ]: ...
+
+    def sample_fraction(
+        self, fraction: float, seed: Optional[int] = None
+    ) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.sample_fraction(fraction, seed))
 
     @overload
     def unorder(
@@ -2021,6 +2079,31 @@ class Expression(Generic[BindingType, S, C, Unpack[Levels]]):
 
     def take(self, elements: int) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
         return self._rebuild(self._py_carrier.take(elements))
+
+    @overload
+    def take_fraction(
+        self: Expression[
+            BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+        ],
+        fraction: float,
+    ) -> Expression[
+        BindingType, Indexed[IndexType, V], Multiple[Ordered], Unpack[Levels]
+    ]: ...
+
+    @overload
+    def take_fraction(
+        self: Expression[
+            BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+        ],
+        fraction: float,
+    ) -> Expression[
+        BindingType, Bare[BareValueType], Multiple[Ordered], Unpack[Levels]
+    ]: ...
+
+    def take_fraction(
+        self, fraction: float
+    ) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.take_fraction(fraction))
 
     @overload
     def is_bool(
@@ -9755,6 +9838,7 @@ class Expression(Generic[BindingType, S, C, Unpack[Levels]]):
         self: Expression[
             BindingType, Indexed[IndexType, V], Multiple[OrderType], Unpack[Levels]
         ],
+        seed: Optional[int] = None,
     ) -> Expression[BindingType, Indexed[IndexType, V], Single, Unpack[Levels]]: ...
 
     @overload
@@ -9762,10 +9846,13 @@ class Expression(Generic[BindingType, S, C, Unpack[Levels]]):
         self: Expression[
             BindingType, Bare[BareValueType], Multiple[OrderType], Unpack[Levels]
         ],
+        seed: Optional[int] = None,
     ) -> Expression[BindingType, Bare[BareValueType], Single, Unpack[Levels]]: ...
 
-    def random(self) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
-        return self._rebuild(self._py_carrier.random())
+    def random(
+        self, seed: Optional[int] = None
+    ) -> Expression[Any, Any, Any, Unpack[Tuple[Any, ...]]]:
+        return self._rebuild(self._py_carrier.random(seed))
 
     @overload
     def edges(

@@ -481,7 +481,7 @@ mod test {
 
         let method_names: Vec<_> = registry.method_names().collect();
 
-        assert_eq!(144, method_names.len());
+        assert_eq!(151, method_names.len());
         assert!(method_names.contains(&"sum"));
         assert!(method_names.contains(&"add"));
         assert!(method_names.contains(&"equal_to"));

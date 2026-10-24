@@ -2077,7 +2077,9 @@ impl Applier<'_> {
             "AttributeName" => quote!(invoke_attribute),
             "GroupIndex" => quote!(invoke_group),
             "EdgeDirection" => quote!(invoke_direction),
-            "usize" => quote!(invoke_position),
+            "usize" => quote!(invoke_size),
+            "u64" => quote!(invoke_integer),
+            "f64" => quote!(invoke_float),
             _ => {
                 return Err(Error::new(
                     field.field_type.span(),

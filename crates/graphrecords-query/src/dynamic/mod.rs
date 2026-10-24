@@ -17,8 +17,8 @@ pub use argument::{
 pub(crate) use dispatch::{
     DynApplier, DynEntityDomain, DynGroupedOperationContext, DynLaneKind, OperationCapture,
     apply_group_operation, apply_grouped_operation, apply_lane_operation, entity_domain,
-    innermost_lane_kind, invoke_argument_source, invoke_attribute, invoke_direction, invoke_group,
-    invoke_lane, invoke_position,
+    innermost_lane_kind, invoke_argument_source, invoke_attribute, invoke_direction, invoke_float,
+    invoke_group, invoke_integer, invoke_lane, invoke_size,
 };
 pub(crate) use expression::{
     DynArityHandle, DynGroupHandle, DynHandle, DynLaneHandle, DynLaneState, IntoDynArityHandle,

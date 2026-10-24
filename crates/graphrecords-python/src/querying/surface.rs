@@ -47,8 +47,42 @@ macro_rules! expression_surface {
                 self.invoke("reverse_order", &[])
             }
 
-            fn shuffle(&self) -> PyResult<Self> {
-                self.invoke("shuffle", &[])
+            #[pyo3(signature = (seed=None))]
+            fn shuffle(&self, seed: Option<u64>) -> PyResult<Self> {
+                match seed {
+                    Some(seed) => {
+                        self.invoke("shuffle_with_seed", &[DynInvokeArgument::Integer(seed)])
+                    }
+                    None => self.invoke("shuffle", &[]),
+                }
+            }
+
+            #[pyo3(signature = (elements, seed=None))]
+            fn sample(&self, elements: usize, seed: Option<u64>) -> PyResult<Self> {
+                match seed {
+                    Some(seed) => self.invoke(
+                        "sample_with_seed",
+                        &[
+                            DynInvokeArgument::Size(elements),
+                            DynInvokeArgument::Integer(seed),
+                        ],
+                    ),
+                    None => self.invoke("sample", &[DynInvokeArgument::Size(elements)]),
+                }
+            }
+
+            #[pyo3(signature = (fraction, seed=None))]
+            fn sample_fraction(&self, fraction: f64, seed: Option<u64>) -> PyResult<Self> {
+                match seed {
+                    Some(seed) => self.invoke(
+                        "sample_fraction_with_seed",
+                        &[
+                            DynInvokeArgument::Float(fraction),
+                            DynInvokeArgument::Integer(seed),
+                        ],
+                    ),
+                    None => self.invoke("sample_fraction", &[DynInvokeArgument::Float(fraction)]),
+                }
             }
 
             fn unorder(&self) -> PyResult<Self> {
@@ -76,7 +110,11 @@ macro_rules! expression_surface {
             }
 
             fn take(&self, elements: usize) -> PyResult<Self> {
-                self.invoke("take", &[DynInvokeArgument::Position(elements)])
+                self.invoke("take", &[DynInvokeArgument::Size(elements)])
+            }
+
+            fn take_fraction(&self, fraction: f64) -> PyResult<Self> {
+                self.invoke("take_fraction", &[DynInvokeArgument::Float(fraction)])
             }
 
             fn is_bool(&self) -> PyResult<Self> {
@@ -179,8 +217,8 @@ macro_rules! expression_surface {
                 self.invoke(
                     "slice",
                     &[
-                        DynInvokeArgument::Position(start),
-                        DynInvokeArgument::Position(end),
+                        DynInvokeArgument::Size(start),
+                        DynInvokeArgument::Size(end),
                     ],
                 )
             }
@@ -237,7 +275,7 @@ macro_rules! expression_surface {
                 self.invoke(
                     "pad_start",
                     &[
-                        DynInvokeArgument::Position(width),
+                        DynInvokeArgument::Size(width),
                         PyExpression::scalar_argument(character)?,
                     ],
                 )
@@ -247,7 +285,7 @@ macro_rules! expression_surface {
                 self.invoke(
                     "pad_end",
                     &[
-                        DynInvokeArgument::Position(width),
+                        DynInvokeArgument::Size(width),
                         PyExpression::scalar_argument(character)?,
                     ],
                 )
@@ -502,8 +540,14 @@ macro_rules! expression_surface {
                 self.invoke("n_unique", &[])
             }
 
-            fn random(&self) -> PyResult<Self> {
-                self.invoke("random", &[])
+            #[pyo3(signature = (seed=None))]
+            fn random(&self, seed: Option<u64>) -> PyResult<Self> {
+                match seed {
+                    Some(seed) => {
+                        self.invoke("random_with_seed", &[DynInvokeArgument::Integer(seed)])
+                    }
+                    None => self.invoke("random", &[]),
+                }
             }
 
             #[pyo3(signature = (direction=None))]
