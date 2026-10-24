@@ -23,7 +23,7 @@ pub use median::MedianOperation;
 pub use minimum::MinimumOperation;
 pub use mode::ModeOperation;
 pub use product::ProductOperation;
-pub use random::RandomOperation;
+pub use random::{RandomOperation, RandomWithSeedOperation};
 pub use standard_deviation::StandardDeviationOperation;
 pub use sum::SumOperation;
 pub use unique_count::UniqueCountOperation;
@@ -41,6 +41,7 @@ pub(super) fn operation_manifests() -> Vec<OperationManifest> {
         mode::operation_manifest(),
         product::operation_manifest(),
         random::operation_manifest(),
+        random::with_seed::operation_manifest(),
         standard_deviation::operation_manifest(),
         sum::operation_manifest(),
         unique_count::operation_manifest(),

@@ -117,7 +117,9 @@ pub enum DynInvokeArgument {
     Attribute(AttributeName),
     Group(GroupIndex),
     Direction(EdgeDirection),
-    Position(usize),
+    Size(usize),
+    Integer(u64),
+    Float(f64),
 }
 
 impl DynArgumentLane {
@@ -684,7 +686,9 @@ impl DynInvokeArgument {
             Self::Attribute(_) => ArgumentDescriptor::field::<AttributeName>(),
             Self::Group(_) => ArgumentDescriptor::field::<GroupIndex>(),
             Self::Direction(_) => ArgumentDescriptor::field::<EdgeDirection>(),
-            Self::Position(_) => ArgumentDescriptor::field::<usize>(),
+            Self::Size(_) => ArgumentDescriptor::field::<usize>(),
+            Self::Integer(_) => ArgumentDescriptor::field::<u64>(),
+            Self::Float(_) => ArgumentDescriptor::field::<f64>(),
         }
     }
 }

@@ -791,9 +791,25 @@ pub fn invoke_direction(arguments: &[DynInvokeArgument], position: usize) -> Edg
     *direction
 }
 
-pub fn invoke_position(arguments: &[DynInvokeArgument], position: usize) -> usize {
-    let Some(DynInvokeArgument::Position(value)) = arguments.get(position) else {
-        panic!("registry routed an operation without its declared position argument")
+pub fn invoke_size(arguments: &[DynInvokeArgument], position: usize) -> usize {
+    let Some(DynInvokeArgument::Size(value)) = arguments.get(position) else {
+        panic!("registry routed an operation without its declared size argument")
+    };
+
+    *value
+}
+
+pub fn invoke_integer(arguments: &[DynInvokeArgument], position: usize) -> u64 {
+    let Some(DynInvokeArgument::Integer(value)) = arguments.get(position) else {
+        panic!("registry routed an operation without its declared integer argument")
+    };
+
+    *value
+}
+
+pub fn invoke_float(arguments: &[DynInvokeArgument], position: usize) -> f64 {
+    let Some(DynInvokeArgument::Float(value)) = arguments.get(position) else {
+        panic!("registry routed an operation without its declared float argument")
     };
 
     *value

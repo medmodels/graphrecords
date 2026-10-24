@@ -505,6 +505,85 @@ class TestOrdering(unittest.TestCase):
         assert len(shuffled) == 4
         assert {value for _, value in shuffled} == {-2, 5, 8}
 
+        values = self.record.nodes().attribute("amet")
+
+        assert list(values.shuffle(seed=42).evaluate()) == [
+            ("sit", 5),
+            ("ipsum", 5),
+            ("lorem", -2),
+            ("dolor", 8),
+        ]
+        assert list(values.shuffle(seed=7).evaluate()) == [
+            ("lorem", -2),
+            ("ipsum", 5),
+            ("sit", 5),
+            ("dolor", 8),
+        ]
+        assert list(self.record.nodes().index().shuffle(seed=2**64 - 1).evaluate()) == [
+            ("ipsum", "ipsum"),
+            ("sit", "sit"),
+            ("lorem", "lorem"),
+            ("dolor", "dolor"),
+        ]
+
+    def test_sample(self) -> None:
+        values = self.record.nodes().attribute("amet")
+        sampled = list(values.sample(2).evaluate())
+
+        assert len(sampled) == 2
+        assert {value for _, value in sampled} <= {-2, 5, 8}
+        assert list(values.sample(2, seed=42).evaluate()) == [
+            ("sit", 5),
+            ("ipsum", 5),
+        ]
+        assert list(values.sample(10, seed=42).evaluate()) == list(
+            values.shuffle(seed=42).evaluate()
+        )
+        assert list(values.sample(0, seed=42).evaluate()) == []
+        assert list(
+            self.record.nodes()
+            .group_by(nodes().in_group("elit"))
+            .attribute("amet")
+            .sample(1, seed=1)
+            .ungroup()
+            .evaluate()
+        ) == [("ipsum", 5), ("sit", 5)]
+
+        cohort = (
+            self.record.nodes()
+            .filter(nodes().in_group("elit"))
+            .index()
+            .sample(1, seed=3)
+        )
+
+        assert list(cohort.evaluate()) == [("lorem", "lorem")]
+        assert self.record.keep_nodes(cohort).node_indices() == ["lorem"]
+        assert (
+            list(
+                self.record.nodes()
+                .filter(nodes().in_group("incididunt"))
+                .index()
+                .sample(2, seed=3)
+                .evaluate()
+            )
+            == []
+        )
+
+    def test_sample_fraction(self) -> None:
+        values = self.record.nodes().attribute("amet")
+
+        assert len(list(values.sample_fraction(0.5).evaluate())) == 2
+        assert list(values.sample_fraction(0.5, seed=42).evaluate()) == [
+            ("sit", 5),
+            ("ipsum", 5),
+        ]
+        assert len(list(values.sample_fraction(0.3, seed=42).evaluate())) == 1
+        assert len(list(values.sample_fraction(0.375, seed=42).evaluate())) == 2
+        assert len(list(values.sample_fraction(0.625, seed=42).evaluate())) == 2
+        assert len(list(values.sample_fraction(1.5, seed=42).evaluate())) == 4
+        assert list(values.sample_fraction(-0.5, seed=42).evaluate()) == []
+        assert list(values.sample_fraction(float("nan"), seed=42).evaluate()) == []
+
     def test_unorder(self) -> None:
         unordered = self.record.nodes().attribute("amet").sort().unorder()
 
@@ -514,6 +593,37 @@ class TestOrdering(unittest.TestCase):
         assert list(
             self.record.nodes().attribute("amet").sort().take(2).evaluate()
         ) == [("lorem", -2), ("ipsum", 5)]
+
+    def test_take_fraction(self) -> None:
+        values = self.record.nodes().attribute("amet").sort()
+
+        assert list(values.take_fraction(0.5).evaluate()) == [
+            ("lorem", -2),
+            ("ipsum", 5),
+        ]
+        assert list(values.take_fraction(0.375).evaluate()) == [
+            ("lorem", -2),
+            ("ipsum", 5),
+        ]
+        assert list(values.take_fraction(0.3).evaluate()) == [("lorem", -2)]
+        assert len(list(values.take_fraction(1.5).evaluate())) == 4
+        assert list(values.take_fraction(-0.5).evaluate()) == []
+        assert list(values.take_fraction(float("nan")).evaluate()) == []
+        assert list(
+            self.record.nodes()
+            .attribute("amet")
+            .shuffle(seed=42)
+            .take_fraction(0.5)
+            .evaluate()
+        ) == list(
+            self.record.nodes()
+            .attribute("amet")
+            .sample_fraction(0.5, seed=42)
+            .evaluate()
+        )
+        assert list(
+            self.record.nodes().index().sort().take_fraction(0.5).evaluate()
+        ) == [("dolor", "dolor"), ("ipsum", "ipsum")]
 
     def test_first(self) -> None:
         assert self.record.nodes().attribute("amet").sort().first().evaluate() == (
@@ -1082,6 +1192,7 @@ class TestAggregations(unittest.TestCase):
         deviation = self.values.std().evaluate()
         variance = self.values.var().evaluate()
         sample = self.values.random().evaluate()
+        seeded = self.values.random(seed=42).evaluate()
 
         assert isinstance(deviation, float)
         assert deviation > 0
@@ -1089,6 +1200,8 @@ class TestAggregations(unittest.TestCase):
         assert variance > 0
         assert sample is not None
         assert sample[1] in {-2, 5, 8}
+        assert seeded == ("sit", 5)
+        assert seeded == next(iter(self.values.shuffle(seed=42).evaluate()))
 
     def test_boolean_aggregations(self) -> None:
         assert self.values.greater_than(-10).all().evaluate()

@@ -34,8 +34,8 @@ use crate::{
 };
 pub use aggregation::{
     AllOperation, AnyOperation, CountOperation, MaximumOperation, MeanOperation, MedianOperation,
-    MinimumOperation, ModeOperation, ProductOperation, RandomOperation, StandardDeviationOperation,
-    SumOperation, UniqueCountOperation, VarianceOperation,
+    MinimumOperation, ModeOperation, ProductOperation, RandomOperation, RandomWithSeedOperation,
+    StandardDeviationOperation, SumOperation, UniqueCountOperation, VarianceOperation,
 };
 pub use argument::{
     AlignableArity, Alignment, Argument, ArgumentPlan, ArgumentSource, EnumerableArity,
@@ -99,8 +99,10 @@ pub use numeric::{
 pub use on_missing::{MissingPolicy, OnMissing, WithMissing};
 pub(crate) use ordering::IndexTiebreak;
 pub use ordering::{
-    FirstOperation, LastOperation, ReverseOrderOperation, ShuffleOperation, SortByOperation,
-    SortOperation, TakeOperation, UnorderOperation,
+    FirstOperation, LastOperation, ReverseOrderOperation, SampleFractionOperation,
+    SampleFractionWithSeedOperation, SampleOperation, SampleWithSeedOperation, ShuffleOperation,
+    ShuffleWithSeedOperation, SortByOperation, SortOperation, TakeFractionOperation, TakeOperation,
+    UnorderOperation,
 };
 use std::{
     any::Any,

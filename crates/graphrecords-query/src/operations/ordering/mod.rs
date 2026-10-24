@@ -1,6 +1,8 @@
 mod first;
 mod last;
 mod reverse_order;
+mod sample;
+mod sample_fraction;
 mod shuffle;
 mod sort;
 mod sort_by;
@@ -9,7 +11,7 @@ mod unorder;
 
 use crate::{
     EdgeEndpointRole, ExpandedIndex, FailureKind, IndexDomain, Positional,
-    capabilities::EnsureSortable, registry::OperationManifest,
+    capabilities::EnsureSortable, optimizer::Estimate, registry::OperationManifest,
 };
 pub use first::FirstOperation;
 use graphrecords_core::{
@@ -17,11 +19,14 @@ use graphrecords_core::{
     graphrecord::{AttributeName, EdgeIndex, GroupIndex, NodeIndex, Value},
 };
 pub use last::LastOperation;
+use rand::{Rng, RngExt};
 pub use reverse_order::ReverseOrderOperation;
-pub use shuffle::ShuffleOperation;
+pub use sample::{SampleOperation, SampleWithSeedOperation};
+pub use sample_fraction::{SampleFractionOperation, SampleFractionWithSeedOperation};
+pub use shuffle::{ShuffleOperation, ShuffleWithSeedOperation};
 pub use sort::SortOperation;
 pub use sort_by::SortByOperation;
-pub use take::TakeOperation;
+pub use take::{TakeFractionOperation, TakeOperation};
 pub use unorder::UnorderOperation;
 
 pub(super) fn operation_manifests() -> Vec<OperationManifest> {
@@ -29,12 +34,56 @@ pub(super) fn operation_manifests() -> Vec<OperationManifest> {
         first::operation_manifest(),
         last::operation_manifest(),
         reverse_order::operation_manifest(),
+        sample::operation_manifest(),
+        sample::with_seed::operation_manifest(),
+        sample_fraction::operation_manifest(),
+        sample_fraction::with_seed::operation_manifest(),
         shuffle::operation_manifest(),
+        shuffle::with_seed::operation_manifest(),
         sort::operation_manifest(),
         sort_by::operation_manifest(),
         take::operation_manifest(),
+        take::fraction::operation_manifest(),
         unorder::operation_manifest(),
     ]
+}
+
+pub(super) fn fraction_elements(fraction: f64, length: usize) -> usize {
+    ((fraction * length as f64).round_ties_even() as usize).min(length)
+}
+
+pub(super) fn fraction_estimate(fraction: f64, input: Estimate) -> Estimate {
+    let elements = input
+        .elements
+        .map(|elements| fraction_elements(fraction, elements));
+
+    Estimate {
+        elements,
+        distinct: input
+            .distinct
+            .zip(elements)
+            .map(|(distinct, elements)| distinct.min(elements)),
+        selectivity: None,
+        ..input
+    }
+}
+
+pub(super) fn shuffle_prefix<T, G: Rng>(
+    mut values: Vec<T>,
+    elements: usize,
+    generator: &mut G,
+) -> Vec<T> {
+    let length = values.len();
+    let elements = elements.min(length);
+
+    for position in 0..elements {
+        let chosen = generator.random_range(position as u64..length as u64);
+        values.swap(position, chosen as usize);
+    }
+
+    values.truncate(elements);
+
+    values
 }
 
 fn tiebreak_by_key<I, T, F>(graphrecord: &GraphRecord, run: &mut [T], address: F)

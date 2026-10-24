@@ -16,10 +16,40 @@ pub trait ReverseOrder {
     fn reverse_order(&self) -> Self::Output;
 }
 
+pub trait Sample {
+    type Output;
+
+    fn sample(&self, elements: usize) -> Self::Output;
+}
+
+pub trait SampleWithSeed {
+    type Output;
+
+    fn sample_with_seed(&self, elements: usize, seed: u64) -> Self::Output;
+}
+
+pub trait SampleFraction {
+    type Output;
+
+    fn sample_fraction(&self, fraction: f64) -> Self::Output;
+}
+
+pub trait SampleFractionWithSeed {
+    type Output;
+
+    fn sample_fraction_with_seed(&self, fraction: f64, seed: u64) -> Self::Output;
+}
+
 pub trait Shuffle {
     type Output;
 
     fn shuffle(&self) -> Self::Output;
+}
+
+pub trait ShuffleWithSeed {
+    type Output;
+
+    fn shuffle_with_seed(&self, seed: u64) -> Self::Output;
 }
 
 pub trait Sort {
@@ -38,6 +68,12 @@ pub trait Take {
     type Output;
 
     fn take(&self, elements: usize) -> Self::Output;
+}
+
+pub trait TakeFraction {
+    type Output;
+
+    fn take_fraction(&self, fraction: f64) -> Self::Output;
 }
 
 pub trait Unorder {
