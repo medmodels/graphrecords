@@ -1,12 +1,12 @@
 use graphrecords_utils::aliases::GrHashMap;
 use parking_lot::Mutex;
-use pyo3::{Py, types::PyType};
+use pyo3::{Bound, Py, PyAny, PyResult, types::PyType};
 use rustc_hash::FxBuildHasher;
 use std::hash::{Hash, Hasher};
 
 type FxGrHashMap<K, V> = GrHashMap<K, V, FxBuildHasher>;
 
-pub(crate) struct TypeObjectKey(Py<PyType>);
+pub struct TypeObjectKey(Py<PyType>);
 
 impl TypeObjectKey {
     fn address(&self) -> usize {
@@ -34,9 +34,10 @@ impl Hash for TypeObjectKey {
     }
 }
 
-pub(crate) struct ConversionLut<K, V>(Mutex<FxGrHashMap<K, V>>);
+pub struct ConversionLut<K, V>(Mutex<FxGrHashMap<K, V>>);
 
 impl<K, V> ConversionLut<K, V> {
+    #[must_use]
     pub const fn new() -> Self {
         Self(Mutex::new(FxGrHashMap::with_hasher(FxBuildHasher)))
     }
@@ -47,7 +48,21 @@ impl<K, V> ConversionLut<K, V> {
         V: Copy,
         F: FnOnce() -> V,
     {
-        let mut inner = self.0.lock();
-        *inner.entry(key).or_insert_with(insert_fn)
+        if let Some(value) = self.0.lock().get(&key) {
+            return *value;
+        }
+
+        let value = insert_fn();
+
+        *self.0.lock().entry(key).or_insert(value)
     }
 }
+
+impl<K, V> Default for ConversionLut<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub type Converter<T> = fn(&Bound<'_, PyAny>) -> PyResult<T>;
+pub type Lut<T> = ConversionLut<TypeObjectKey, Option<Converter<T>>>;

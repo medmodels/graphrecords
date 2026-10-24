@@ -1,12 +1,10 @@
 pub use crate::{
     graphrecord::{
-        PyAttributes, PyEdgeDirection, PyEdgeIndex, PyGraphRecord, PyGroupIndex, PyNodeIndex,
+        PyEdgeDirection, PyEdgeIndex, PyGraphRecord,
         datatype::{
             PyAny, PyBool, PyDateTime, PyDuration, PyFloat, PyInt, PyNull, PyOption, PyString,
             PyUnion,
         },
-        errors::PyGraphRecordError,
-        identifier::PyIdentifier,
         on_conflict::PyOnConflict,
         overview::{
             PyAttributeOverview, PyEdgeGroupOverview, PyGroupOverview, PyNodeGroupOverview,
@@ -23,7 +21,6 @@ pub use crate::{
         },
         record_batch::PyRecordBatch,
         schema::{PyAttributeDataType, PyAttributeType, PyGroupSchema, PySchema, PySchemaType},
-        value::PyValue,
         views::{PyEdgeView, PyGroupView, PyNodeView},
     },
     querying::{

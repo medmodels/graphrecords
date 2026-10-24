@@ -1,9 +1,7 @@
 pub mod datatype;
 pub mod direction;
 pub mod edge_index;
-pub mod errors;
 mod frame;
-pub mod identifier;
 pub mod on_conflict;
 pub mod overview;
 pub mod plugins;
@@ -11,13 +9,10 @@ pub mod record_batch;
 pub mod schema;
 pub mod selection;
 pub mod source;
-pub mod traits;
-pub mod value;
 pub mod views;
 pub mod writer;
 
 use crate::{
-    conversion_lut::{ConversionLut, TypeObjectKey},
     graphrecord::{
         overview::{PyGroupOverview, PyOverview},
         plugins::PyPlugin,
@@ -26,11 +21,12 @@ use crate::{
 };
 pub use direction::PyEdgeDirection;
 pub use edge_index::PyEdgeIndex;
-use errors::PyGraphRecordError;
 use graphrecords_core::graphrecord::{GraphRecord, GroupIndex, NodeIndex};
 use graphrecords_overview::{GroupOverviewable, Overviewable};
+use graphrecords_pyo3::{
+    PyAttributes, PyGraphRecordError, PyGroupIndex, PyNodeIndex, PyPluginName, traits::DeepInto,
+};
 use graphrecords_query::{Queryable, dynamic};
-use identifier::PyIdentifier;
 use on_conflict::PyOnConflict;
 use pyo3::{
     IntoPyObjectExt,
@@ -44,18 +40,8 @@ use schema::PySchema;
 use selection::ResolvedSelection;
 use source::{PyEdgeSource, PyNodeSource};
 use std::{any::Any, collections::HashMap, path::PathBuf, sync::Arc};
-use traits::DeepInto;
-use value::PyValue;
 use views::{PyEdgeView, PyGroupView, PyNodeView};
 use writer::PyWriter;
-
-pub type PyAttributeName = PyIdentifier;
-pub type PyAttributes = HashMap<PyAttributeName, PyValue>;
-pub type PyGroupIndex = PyIdentifier;
-pub type PyNodeIndex = PyIdentifier;
-pub type PyPluginName = PyIdentifier;
-type Converter<T> = fn(&Bound<'_, PyAny>) -> PyResult<T>;
-type Lut<T> = ConversionLut<TypeObjectKey, Option<Converter<T>>>;
 
 #[pyclass(frozen, eq, module = "graphrecords._graphrecords.graphrecord")]
 #[repr(transparent)]

@@ -70,33 +70,31 @@ impl MembershipChunk {
         }
 
         let rank = self.present.rank(cell_index);
-        match &self.cells[rank] {
+        let mut members = match &self.cells[rank] {
             Memberships::One(existing) => {
                 if *existing == group_address {
                     return false;
                 }
 
-                let mut members = vec![*existing, group_address];
-                members.sort_by_key(GroupAddress::index);
-
-                self.cells[rank] = Memberships::Several(Arc::from(members));
-
-                true
+                vec![*existing, group_address]
             }
             Memberships::Several(group_addresses) => {
                 if group_addresses.contains(&group_address) {
                     return false;
                 }
 
-                let mut members: Vec<_> = group_addresses.iter().copied().collect();
-                members.push(group_address);
-                members.sort_by_key(GroupAddress::index);
-
-                self.cells[rank] = Memberships::Several(Arc::from(members));
-
-                true
+                group_addresses
+                    .iter()
+                    .copied()
+                    .chain([group_address])
+                    .collect()
             }
-        }
+        };
+        members.sort_by_key(GroupAddress::index);
+
+        self.cells[rank] = Memberships::Several(Arc::from(members));
+
+        true
     }
 
     pub fn remove(&mut self, cell_index: usize, group_address: GroupAddress) -> bool {
@@ -113,8 +111,6 @@ impl MembershipChunk {
 
                 self.present.clear(cell_index);
                 self.cells.remove(rank);
-
-                true
             }
             Memberships::Several(group_addresses) => {
                 if !group_addresses.contains(&group_address) {
@@ -132,10 +128,10 @@ impl MembershipChunk {
                 } else {
                     Memberships::Several(Arc::from(remaining))
                 };
-
-                true
             }
         }
+
+        true
     }
 
     pub fn is_empty(&self) -> bool {

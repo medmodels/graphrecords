@@ -1,7 +1,7 @@
 mod argument;
 mod cast_target;
 mod endpoint;
-pub(crate) mod exception;
+mod exception;
 mod failure_kind;
 mod index_conversion;
 mod results;
@@ -10,10 +10,7 @@ mod surface;
 mod value_conversion;
 mod value_target;
 
-use crate::{
-    graphrecord::{PyAttributeName, PyEdgeDirection, PyGroupIndex},
-    querying::exception::FailureConversion,
-};
+use crate::graphrecord::PyEdgeDirection;
 pub use argument::PyArgument;
 pub use cast_target::PyCastTarget;
 pub use endpoint::PyEdgeEndpointRole;
@@ -37,6 +34,7 @@ use graphrecords_core::{
     errors::GraphRecordResult,
     graphrecord::{EdgeIndex, GraphRecord, GroupIndex, NodeIndex},
 };
+use graphrecords_pyo3::{PyAttributeName, PyGroupIndex, exception::FailureConversion};
 use graphrecords_query::{
     dynamic::{self, DynArgumentLane, DynExpression, DynInvokeArgument},
     registry::{ExpressionDescriptor, IndexDescriptor, LaneShapeDescriptor, ValueRole},

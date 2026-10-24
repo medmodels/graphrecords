@@ -1,10 +1,4 @@
-use super::{
-    PyAttributeName, PyAttributes, PyGraphRecord, PyGroupIndex, PyNodeIndex,
-    datatype::PyDataType,
-    edge_index::PyEdgeIndex,
-    errors::PyGraphRecordError,
-    traits::{DeepFrom, DeepInto},
-};
+use super::{PyGraphRecord, datatype::PyDataType, edge_index::PyEdgeIndex};
 use graphrecords_core::{
     errors::SchemaError,
     graphrecord::{
@@ -15,12 +9,16 @@ use graphrecords_core::{
         },
     },
 };
+use graphrecords_pyo3::{
+    PyAttributeName, PyAttributes, PyGraphRecordError, PyGroupIndex, PyNodeIndex,
+    traits::{DeepFrom, DeepInto},
+};
 use pyo3::{
     exceptions::PyTypeError,
     prelude::*,
     types::{PyBytes, PyBytesMethods, PyTuple},
 };
-use std::{collections::HashMap, hash::BuildHasher, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 #[pyclass(frozen, eq, eq_int, hash, module = "graphrecords._graphrecords.schema")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -91,16 +89,6 @@ impl DeepFrom<AttributeDataType> for PyAttributeDataType {
     }
 }
 
-impl<H: BuildHasher + Default> DeepFrom<&AttributeSchema>
-    for HashMap<PyAttributeName, PyAttributeDataType, H>
-{
-    fn deep_from(value: &AttributeSchema) -> Self {
-        let mapping: &HashMap<AttributeName, AttributeDataType> = value;
-
-        mapping.deep_into()
-    }
-}
-
 #[pymethods]
 impl PyAttributeDataType {
     #[new]
@@ -139,7 +127,7 @@ impl PyAttributeDataType {
         Ok(attribute_data_type.into())
     }
 
-    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
+    pub fn _to_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let attribute_data_type = AttributeDataType::from((
             DataType::from(self.data_type.clone()),
             AttributeType::from(self.attribute_type),
@@ -147,8 +135,13 @@ impl PyAttributeDataType {
         let bytes = bincode::serialize(&attribute_data_type).map_err(|_| {
             PyGraphRecordError::Conversion("Failed to serialize AttributeDataType".to_string())
         })?;
+
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
         let constructor = py.get_type::<Self>().getattr("_from_bytes")?.unbind();
-        let arguments = (PyBytes::new(py, &bytes),).into_pyobject(py)?;
+        let arguments = (self._to_bytes(py)?,).into_pyobject(py)?;
 
         Ok((constructor, arguments))
     }
@@ -183,6 +176,16 @@ impl DeepFrom<PyGroupSchema> for GroupSchema {
     }
 }
 
+impl PyGroupSchema {
+    fn attribute_data_types(
+        attribute_schema: &AttributeSchema,
+    ) -> HashMap<PyAttributeName, PyAttributeDataType> {
+        let mapping: &HashMap<AttributeName, AttributeDataType> = attribute_schema;
+
+        mapping.deep_into()
+    }
+}
+
 #[pymethods]
 impl PyGroupSchema {
     #[new]
@@ -212,12 +215,12 @@ impl PyGroupSchema {
 
     #[getter]
     pub fn nodes(&self) -> HashMap<PyAttributeName, PyAttributeDataType> {
-        self.0.nodes().deep_into()
+        Self::attribute_data_types(self.0.nodes())
     }
 
     #[getter]
     pub fn edges(&self) -> HashMap<PyAttributeName, PyAttributeDataType> {
-        self.0.edges().deep_into()
+        Self::attribute_data_types(self.0.edges())
     }
 
     pub fn validate_node(&self, node_index: PyNodeIndex, attributes: PyAttributes) -> PyResult<()> {
@@ -243,12 +246,17 @@ impl PyGroupSchema {
         Ok(Self(group_schema))
     }
 
-    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
+    pub fn _to_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let bytes = bincode::serialize(&self.0).map_err(|_| {
             PyGraphRecordError::Conversion("Failed to serialize GroupSchema".to_string())
         })?;
+
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
         let constructor = py.get_type::<Self>().getattr("_from_bytes")?.unbind();
-        let arguments = (PyBytes::new(py, &bytes),).into_pyobject(py)?;
+        let arguments = (self._to_bytes(py)?,).into_pyobject(py)?;
 
         Ok((constructor, arguments))
     }
@@ -552,12 +560,17 @@ impl PySchema {
         Ok(schema.into())
     }
 
-    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
+    pub fn _to_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let bytes = bincode::serialize(self.0.as_ref()).map_err(|_| {
             PyGraphRecordError::Conversion("Failed to serialize Schema".to_string())
         })?;
+
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    pub fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
         let constructor = py.get_type::<Self>().getattr("_from_bytes")?.unbind();
-        let arguments = (PyBytes::new(py, &bytes),).into_pyobject(py)?;
+        let arguments = (self._to_bytes(py)?,).into_pyobject(py)?;
 
         Ok((constructor, arguments))
     }

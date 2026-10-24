@@ -1,4 +1,3 @@
-use super::{PyAttributes, PyNodeIndex, errors::PyGraphRecordError, traits::DeepInto};
 use arrow::{
     array::RecordBatch,
     ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream},
@@ -7,6 +6,7 @@ use graphrecords_core::{
     errors::GraphRecordResult,
     graphrecord::{EdgeBatch, EdgeSource, NodeBatch, NodeIndex, NodeSource},
 };
+use graphrecords_pyo3::{PyAttributes, PyGraphRecordError, PyNodeIndex, traits::DeepInto};
 use polars::frame::DataFrame;
 use pyo3::{
     Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, exceptions::PyTypeError, prelude::*,
@@ -68,12 +68,12 @@ impl NodeSource for PyNodeSource {
 impl FromPyObject<'_, '_> for PyNodeSource {
     type Error = PyErr;
 
-    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
-        if let Ok(collector) = ob.getattr("collect_nodes") {
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
+        if let Ok(collector) = obj.getattr("collect_nodes") {
             return Self::from_rows(&collector.call0()?);
         }
 
-        if let Ok(source) = ob.extract::<(PyDataFrame, String)>() {
+        if let Ok(source) = obj.extract::<(PyDataFrame, String)>() {
             let batch = (DataFrame::from(source.0), source.1)
                 .collect_nodes()
                 .map_err(PyGraphRecordError::from)?;
@@ -81,7 +81,7 @@ impl FromPyObject<'_, '_> for PyNodeSource {
             return Ok(Self(batch));
         }
 
-        if let Ok(source) = ob.extract::<(Bound<'_, PyAny>, String)>()
+        if let Ok(source) = obj.extract::<(Bound<'_, PyAny>, String)>()
             && source.0.hasattr("__arrow_c_stream__")?
         {
             let table = PyArrowTable::read(&source.0)?;
@@ -92,7 +92,7 @@ impl FromPyObject<'_, '_> for PyNodeSource {
             return Ok(Self(batch));
         }
 
-        Self::from_rows(&ob)
+        Self::from_rows(&obj)
     }
 }
 
@@ -128,12 +128,12 @@ impl EdgeSource for PyEdgeSource {
 impl FromPyObject<'_, '_> for PyEdgeSource {
     type Error = PyErr;
 
-    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
-        if let Ok(collector) = ob.getattr("collect_edges") {
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
+        if let Ok(collector) = obj.getattr("collect_edges") {
             return Self::from_rows(&collector.call0()?);
         }
 
-        if let Ok(source) = ob.extract::<(PyDataFrame, String, String)>() {
+        if let Ok(source) = obj.extract::<(PyDataFrame, String, String)>() {
             let batch = (DataFrame::from(source.0), source.1, source.2)
                 .collect_edges()
                 .map_err(PyGraphRecordError::from)?;
@@ -141,7 +141,7 @@ impl FromPyObject<'_, '_> for PyEdgeSource {
             return Ok(Self(batch));
         }
 
-        if let Ok(source) = ob.extract::<(Bound<'_, PyAny>, String, String)>()
+        if let Ok(source) = obj.extract::<(Bound<'_, PyAny>, String, String)>()
             && source.0.hasattr("__arrow_c_stream__")?
         {
             let table = PyArrowTable::read(&source.0)?;
@@ -152,6 +152,6 @@ impl FromPyObject<'_, '_> for PyEdgeSource {
             return Ok(Self(batch));
         }
 
-        Self::from_rows(&ob)
+        Self::from_rows(&obj)
     }
 }

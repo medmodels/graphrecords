@@ -1,9 +1,9 @@
-use super::{Lut, traits::DeepFrom};
-use crate::{
-    conversion_lut::{ConversionLut, TypeObjectKey},
-    graphrecord::errors::PyGraphRecordError,
-};
 use graphrecords_core::graphrecord::datatypes::DataType;
+use graphrecords_pyo3::{
+    PyGraphRecordError,
+    conversion_lut::{ConversionLut, Lut, TypeObjectKey},
+    traits::DeepFrom,
+};
 use pyo3::{IntoPyObjectExt, prelude::*};
 
 macro_rules! implement_pymethods {
@@ -58,41 +58,41 @@ static DATATYPE_CONVERSION_LUT: Lut<DataType> = ConversionLut::new();
     clippy::unnecessary_wraps,
     reason = "the conversion table requires uniform fallible signatures"
 )]
-pub(crate) fn convert_pyobject_to_datatype(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
-    const fn convert_string(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+pub(crate) fn convert_pyobject_to_datatype(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_string(_obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::String)
     }
 
-    const fn convert_int(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_int(_obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Int)
     }
 
-    const fn convert_float(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_float(_obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Float)
     }
 
-    const fn convert_bool(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_bool(_obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Bool)
     }
 
-    const fn convert_datetime(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_datetime(_obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::DateTime)
     }
 
-    const fn convert_duration(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_duration(_obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Duration)
     }
 
-    const fn convert_null(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_null(_obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Null)
     }
 
-    const fn convert_any(_ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+    const fn convert_any(_obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
         Ok(DataType::Any)
     }
 
-    fn convert_union(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
-        let union = ob.extract::<PyRef<PyUnion>>()?;
+    fn convert_union(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+        let union = obj.extract::<PyRef<PyUnion>>()?;
 
         let datatypes = union.0.clone();
 
@@ -102,34 +102,34 @@ pub(crate) fn convert_pyobject_to_datatype(ob: &Bound<'_, pyo3::PyAny>) -> PyRes
         )))
     }
 
-    fn convert_option(ob: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
-        let option = ob.extract::<PyRef<PyOption>>()?;
+    fn convert_option(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<DataType> {
+        let option = obj.extract::<PyRef<PyOption>>()?;
 
         Ok(DataType::Option(Box::new(option.0.clone().into())))
     }
 
-    let type_object = TypeObjectKey::from(ob.get_type().unbind());
+    let type_object = TypeObjectKey::from(obj.get_type().unbind());
 
     let conversion_function = DATATYPE_CONVERSION_LUT.get_or_insert(type_object, || {
-        if ob.is_instance_of::<PyString>() {
+        if obj.is_instance_of::<PyString>() {
             Some(convert_string)
-        } else if ob.is_instance_of::<PyInt>() {
+        } else if obj.is_instance_of::<PyInt>() {
             Some(convert_int)
-        } else if ob.is_instance_of::<PyFloat>() {
+        } else if obj.is_instance_of::<PyFloat>() {
             Some(convert_float)
-        } else if ob.is_instance_of::<PyBool>() {
+        } else if obj.is_instance_of::<PyBool>() {
             Some(convert_bool)
-        } else if ob.is_instance_of::<PyDateTime>() {
+        } else if obj.is_instance_of::<PyDateTime>() {
             Some(convert_datetime)
-        } else if ob.is_instance_of::<PyDuration>() {
+        } else if obj.is_instance_of::<PyDuration>() {
             Some(convert_duration)
-        } else if ob.is_instance_of::<PyNull>() {
+        } else if obj.is_instance_of::<PyNull>() {
             Some(convert_null)
-        } else if ob.is_instance_of::<PyAny>() {
+        } else if obj.is_instance_of::<PyAny>() {
             Some(convert_any)
-        } else if ob.is_instance_of::<PyUnion>() {
+        } else if obj.is_instance_of::<PyUnion>() {
             Some(convert_union)
-        } else if ob.is_instance_of::<PyOption>() {
+        } else if obj.is_instance_of::<PyOption>() {
             Some(convert_option)
         } else {
             None
@@ -138,19 +138,19 @@ pub(crate) fn convert_pyobject_to_datatype(ob: &Bound<'_, pyo3::PyAny>) -> PyRes
 
     let Some(convert) = conversion_function else {
         return Err(PyGraphRecordError::Conversion(format!(
-            "Failed to convert {ob} into DataType"
+            "Failed to convert {obj} into DataType"
         ))
         .into());
     };
 
-    convert(ob)
+    convert(obj)
 }
 
 impl FromPyObject<'_, '_> for PyDataType {
     type Error = PyErr;
 
-    fn extract(ob: Borrowed<'_, '_, pyo3::PyAny>) -> PyResult<Self> {
-        convert_pyobject_to_datatype(&ob).map(Self)
+    fn extract(obj: Borrowed<'_, '_, pyo3::PyAny>) -> PyResult<Self> {
+        convert_pyobject_to_datatype(&obj).map(Self)
     }
 }
 

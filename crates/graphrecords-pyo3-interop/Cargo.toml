@@ -9,7 +9,7 @@ readme = "README.md"
 
 [dependencies]
 graphrecords = { workspace = true, features = ["serde"] }
-graphrecords-python = { workspace = true }
+graphrecords-pyo3 = { workspace = true }
 
 pyo3 = { workspace = true }
 bincode = { workspace = true }

@@ -35,6 +35,7 @@ graphrecords-query = { version = "0.7.0", path = "crates/graphrecords-query" }
 graphrecords-overview = { version = "0.7.0", path = "crates/graphrecords-overview" }
 graphrecords-macros = { version = "0.7.0", path = "crates/graphrecords-macros" }
 py-graphrecords = { version = "0.7.0", path = "crates/py-graphrecords" }
+graphrecords-pyo3 = { version = "0.7.0", path = "crates/graphrecords-pyo3" }
 graphrecords-pyo3-interop = { version = "0.7.0", path = "crates/graphrecords-pyo3-interop" }
 
 [profile.release]

@@ -1,13 +1,13 @@
-use super::{
-    PyAttributeName, PyAttributes, PyGroupIndex, PyNodeIndex, direction::PyEdgeDirection,
-    edge_index::PyEdgeIndex, errors::PyGraphRecordError, selection::ResolvedSelection,
-    traits::DeepInto, value::PyValue,
-};
+use super::{direction::PyEdgeDirection, edge_index::PyEdgeIndex, selection::ResolvedSelection};
 use graphrecords_core::{
     errors::GraphRecordError,
     graphrecord::{
         AttributeName, EdgeIndex, EdgeView, GraphRecord, GroupIndex, GroupView, NodeIndex, NodeView,
     },
+};
+use graphrecords_pyo3::{
+    PyAttributeName, PyAttributes, PyGraphRecordError, PyGroupIndex, PyNodeIndex, PyValue,
+    traits::DeepInto,
 };
 use pyo3::{Bound, PyAny, PyResult, prelude::*};
 

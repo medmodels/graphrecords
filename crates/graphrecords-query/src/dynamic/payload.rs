@@ -288,6 +288,7 @@ impl DynTerminalBucket {
         &self.members
     }
 
+    #[must_use]
     pub const fn payload(&self) -> &QueryResult<DynTerminal> {
         &self.payload
     }

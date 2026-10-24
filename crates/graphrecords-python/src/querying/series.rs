@@ -1,14 +1,15 @@
 use crate::{
-    graphrecord::{PyAttributeName, PyEdgeDirection, PyGroupIndex},
+    graphrecord::PyEdgeDirection,
     querying::{
-        PyArgument, PyCastTarget, PyExpression, PyValueTarget, exception::FailureConversion,
-        results::TerminalConversion, surface::expression_surface,
+        PyArgument, PyCastTarget, PyExpression, PyValueTarget, results::TerminalConversion,
+        surface::expression_surface,
     },
 };
 use graphrecords_core::{
     errors::GraphRecordResult,
     graphrecord::{EdgeIndex, GraphRecord, GroupIndex, NodeIndex},
 };
+use graphrecords_pyo3::{PyAttributeName, PyGroupIndex, exception::FailureConversion};
 use graphrecords_query::{
     Series,
     dynamic::{DynArgumentLane, DynExpression, DynInvokeArgument},

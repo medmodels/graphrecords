@@ -1,4 +1,4 @@
-use crate::querying::exception::FailureConversion;
+use crate::exception::FailureConversion;
 use graphrecords_core::errors::{ConversionError, GraphRecordError, IoError, SchemaError};
 use graphrecords_overview::OverviewError;
 use graphrecords_query::Failure;

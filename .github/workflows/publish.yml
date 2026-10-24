@@ -90,6 +90,11 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
+      - name: Publish graphrecords-pyo3
+        run: cargo publish -p graphrecords-pyo3
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
       - name: Publish graphrecords-python
         run: cargo publish -p graphrecords-python
         env:

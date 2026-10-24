@@ -11,7 +11,7 @@ pub enum AttributeChunk {
     Int(ScalarCells<i64>),
     Float(ScalarCells<f64>),
     Bool(BoolCells),
-    DateTime(ScalarCells<NaiveDateTime>),
+    DateTime(ScalarCells<DateTimeCell>),
     Duration(ScalarCells<TimeDelta>),
     String(StringCells),
     Mixed(ScalarCells<Value>),
@@ -50,7 +50,7 @@ impl AttributeChunk {
             Self::DateTime(scalar_cells) => match scalar_cells.get(cell_index) {
                 Cell::Absent => None,
                 Cell::Null => Some(ValueView::Null),
-                Cell::Value(value) => Some(ValueView::DateTime(*value)),
+                Cell::Value(value) => Some(ValueView::DateTime(value.0)),
             },
             Self::Duration(scalar_cells) => match scalar_cells.get(cell_index) {
                 Cell::Absent => None,
@@ -96,7 +96,7 @@ impl AttributeChunk {
             }
             (Self::Bool(bool_cells), Value::Bool(inner)) => bool_cells.set(cell_index, *inner),
             (Self::DateTime(scalar_cells), Value::DateTime(inner)) => {
-                scalar_cells.set(cell_index, *inner);
+                scalar_cells.set(cell_index, DateTimeCell(*inner));
             }
             (Self::Duration(scalar_cells), Value::Duration(inner)) => {
                 scalar_cells.set(cell_index, *inner);
@@ -157,7 +157,7 @@ impl AttributeChunk {
             }
             Self::Bool(bool_cells) => Self::rebuild_mixed_from_bool(bool_cells),
             Self::DateTime(scalar_cells) => {
-                Self::rebuild_mixed(scalar_cells, |value| Value::DateTime(*value))
+                Self::rebuild_mixed(scalar_cells, |value| Value::DateTime(value.0))
             }
             Self::Duration(scalar_cells) => {
                 Self::rebuild_mixed(scalar_cells, |value| Value::Duration(*value))
@@ -208,6 +208,20 @@ enum Cell<T> {
     Null,
     Value(T),
 }
+
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(
+    any(feature = "serde", feature = "io"),
+    derive(Serialize, Deserialize),
+    serde(transparent)
+)]
+pub struct DateTimeCell(
+    #[cfg_attr(
+        any(feature = "serde", feature = "io"),
+        serde(with = "crate::graphrecord::datatypes::binary_datetime")
+    )]
+    NaiveDateTime,
+);
 
 #[derive(Debug, Clone)]
 #[cfg_attr(any(feature = "serde", feature = "io"), derive(Serialize, Deserialize))]

@@ -5,6 +5,8 @@ use std::{
 
 const BITS_PER_LEVEL: u32 = 6;
 const LEVEL_MASK: u64 = (1 << BITS_PER_LEVEL) - 1;
+#[cfg(feature = "serde")]
+const CHILDREN_PER_BRANCH: usize = 1 << BITS_PER_LEVEL;
 
 #[derive(Clone, Default)]
 pub struct KeyDictionary {
@@ -54,6 +56,103 @@ impl KeyDictionary {
         }
 
         was_removed
+    }
+
+    #[cfg(feature = "serde")]
+    pub fn rebuild(&mut self, entries: &[(u64, u32)]) {
+        if entries.is_empty() {
+            self.root = None;
+            return;
+        }
+
+        let mut leaves: Vec<_> = entries
+            .iter()
+            .map(|entry| Some(Arc::new(Node::Leaf(entry.0, vec![entry.1]))))
+            .collect();
+        let mut hashed_positions: Vec<_> = entries
+            .iter()
+            .enumerate()
+            .map(|(position, entry)| (entry.0, position as u32))
+            .collect();
+        let mut scratch = vec![(0, 0); hashed_positions.len()];
+
+        self.root = Some(Self::build_subtree(
+            entries,
+            &mut hashed_positions,
+            &mut scratch,
+            &mut leaves,
+            0,
+        ));
+    }
+
+    #[cfg(feature = "serde")]
+    fn build_subtree(
+        entries: &[(u64, u32)],
+        hashed_positions: &mut [(u64, u32)],
+        scratch: &mut [(u64, u32)],
+        leaves: &mut [Option<Arc<Node>>],
+        level: u32,
+    ) -> Arc<Node> {
+        let first_hash = hashed_positions[0].0;
+
+        if hashed_positions
+            .iter()
+            .all(|hashed_position| hashed_position.0 == first_hash)
+        {
+            if hashed_positions.len() == 1 {
+                return leaves[hashed_positions[0].1 as usize]
+                    .take()
+                    .expect("Each leaf must be placed exactly once.");
+            }
+
+            return Arc::new(Node::Leaf(
+                first_hash,
+                hashed_positions
+                    .iter()
+                    .map(|hashed_position| entries[hashed_position.1 as usize].1)
+                    .collect(),
+            ));
+        }
+
+        let mut counts = [0; CHILDREN_PER_BRANCH];
+        for hashed_position in hashed_positions.iter() {
+            counts[Self::child_index(hashed_position.0, level) as usize] += 1;
+        }
+
+        let mut starts = [0; CHILDREN_PER_BRANCH];
+        let mut next_start = 0;
+        for (index, count) in counts.iter().enumerate() {
+            starts[index] = next_start;
+            next_start += count;
+        }
+
+        let mut cursors = starts;
+        for hashed_position in hashed_positions.iter() {
+            let index = Self::child_index(hashed_position.0, level) as usize;
+            scratch[cursors[index]] = *hashed_position;
+            cursors[index] += 1;
+        }
+        hashed_positions.copy_from_slice(scratch);
+
+        let mut bitmap = 0;
+        let mut children = Vec::new();
+        for (index, count) in counts.iter().enumerate() {
+            if *count == 0 {
+                continue;
+            }
+
+            bitmap |= 1 << index;
+            let range = starts[index]..starts[index] + count;
+            children.push(Self::build_subtree(
+                entries,
+                &mut hashed_positions[range.clone()],
+                &mut scratch[range],
+                leaves,
+                level + 1,
+            ));
+        }
+
+        Arc::new(Node::Branch(Branch { bitmap, children }))
     }
 
     const fn child_index(hash: u64, level: u32) -> u32 {
@@ -400,5 +499,44 @@ mod test {
         assert!(!dictionary.remove(42, 99));
         assert!(!dictionary.remove(43, 7));
         assert_eq!(vec![7], dictionary.candidates(42).collect::<Vec<_>>());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_rebuild() {
+        let mut dictionary = KeyDictionary::new();
+        dictionary.rebuild(&[]);
+
+        assert!(dictionary.root.is_none());
+
+        let (_, hashes, extra_hash) = create_populated_dictionary(42, 10_000);
+        let entries: Vec<_> = hashes
+            .iter()
+            .enumerate()
+            .map(|(address_index, hash)| (*hash, address_index as u32))
+            .collect();
+        let mut dictionary = KeyDictionary::new();
+        dictionary.rebuild(&entries);
+
+        for (address_index, hash) in hashes.iter().enumerate() {
+            assert_eq!(
+                vec![address_index as u32],
+                dictionary.candidates(*hash).collect::<Vec<_>>()
+            );
+        }
+        assert_eq!(0, dictionary.candidates(extra_hash).count());
+
+        let mut dictionary = KeyDictionary::new();
+        dictionary.rebuild(&[(42, 7), (43, 8), (42, 9), (1, 2), (65, 3)]);
+
+        assert_eq!(vec![7, 9], dictionary.candidates(42).collect::<Vec<_>>());
+        assert_eq!(vec![8], dictionary.candidates(43).collect::<Vec<_>>());
+        assert_eq!(vec![2], dictionary.candidates(1).collect::<Vec<_>>());
+        assert_eq!(vec![3], dictionary.candidates(65).collect::<Vec<_>>());
+
+        dictionary.rebuild(&[(1, 2)]);
+
+        assert_eq!(0, dictionary.candidates(42).count());
+        assert_eq!(vec![2], dictionary.candidates(1).collect::<Vec<_>>());
     }
 }

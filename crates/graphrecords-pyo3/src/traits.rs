@@ -12,10 +12,7 @@ pub trait DeepInto<T> {
     fn deep_into(self) -> T;
 }
 
-impl<T, F> DeepInto<T> for F
-where
-    T: DeepFrom<F>,
-{
+impl<T: DeepFrom<S>, S> DeepInto<T> for S {
     fn deep_into(self) -> T {
         T::deep_from(self)
     }
@@ -66,21 +63,13 @@ where
     }
 }
 
-impl<K, KF, V, VF> DeepFrom<(K, V)> for (KF, VF)
-where
-    KF: DeepFrom<K>,
-    VF: DeepFrom<V>,
-{
+impl<K, KF: DeepFrom<K>, V, VF: DeepFrom<V>> DeepFrom<(K, V)> for (KF, VF) {
     fn deep_from(value: (K, V)) -> Self {
         (value.0.deep_into(), value.1.deep_into())
     }
 }
 
-impl<K, KF, V, VF> DeepFrom<(K, K, V)> for (KF, KF, VF)
-where
-    KF: DeepFrom<K>,
-    VF: DeepFrom<V>,
-{
+impl<K, KF: DeepFrom<K>, V, VF: DeepFrom<V>> DeepFrom<(K, K, V)> for (KF, KF, VF) {
     fn deep_from(value: (K, K, V)) -> Self {
         (
             value.0.deep_into(),
@@ -90,20 +79,13 @@ where
     }
 }
 
-impl<V, VF> DeepFrom<Vec<V>> for Vec<VF>
-where
-    VF: DeepFrom<V>,
-{
+impl<V, VF: DeepFrom<V>> DeepFrom<Vec<V>> for Vec<VF> {
     fn deep_from(value: Vec<V>) -> Self {
         value.into_iter().map(VF::deep_from).collect()
     }
 }
 
-impl<V, VF> DeepFrom<&[V]> for Vec<VF>
-where
-    V: Clone,
-    VF: DeepFrom<V>,
-{
+impl<V: Clone, VF: DeepFrom<V>> DeepFrom<&[V]> for Vec<VF> {
     fn deep_from(value: &[V]) -> Self {
         value
             .iter()
@@ -112,10 +94,7 @@ where
     }
 }
 
-impl<V, VF> DeepFrom<Option<V>> for Option<VF>
-where
-    VF: DeepFrom<V>,
-{
+impl<V, VF: DeepFrom<V>> DeepFrom<Option<V>> for Option<VF> {
     fn deep_from(value: Option<V>) -> Self {
         value.map(DeepInto::deep_into)
     }

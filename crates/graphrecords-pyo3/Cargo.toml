@@ -1,0 +1,22 @@
+[package]
+name = "graphrecords-pyo3"
+version = { workspace = true }
+description = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+readme = "README.md"
+
+[dependencies]
+graphrecords-core = { workspace = true, features = ["io", "plugins"] }
+graphrecords-utils = { workspace = true }
+graphrecords-query = { workspace = true, features = ["dynamic"] }
+graphrecords-overview = { workspace = true }
+
+pyo3 = { workspace = true }
+parking_lot = { workspace = true }
+
+rustc-hash = "2.1.1"
+
+[lints]
+workspace = true

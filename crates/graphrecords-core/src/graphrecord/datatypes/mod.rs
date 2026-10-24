@@ -6,6 +6,8 @@ mod on_conflict;
 mod value;
 mod view;
 
+#[cfg(any(feature = "serde", feature = "io"))]
+pub(crate) use self::value::binary_datetime;
 pub use self::{
     edge_direction::EdgeDirection,
     edge_index::EdgeIndex,

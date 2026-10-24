@@ -1,7 +1,5 @@
-use crate::querying::{
-    exception::FailureConversion, index_conversion::IndexConversion,
-    value_conversion::ValueConversion,
-};
+use crate::querying::{index_conversion::IndexConversion, value_conversion::ValueConversion};
+use graphrecords_pyo3::exception::FailureConversion;
 use graphrecords_query::{
     QueryResult,
     dynamic::{

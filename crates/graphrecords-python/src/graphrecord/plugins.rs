@@ -1,11 +1,8 @@
 use super::{
-    PyAttributeName, PyAttributes, PyGraphRecord, PyGroupIndex, PyNodeIndex,
+    PyGraphRecord,
     edge_index::PyEdgeIndex,
-    errors::PyGraphRecordError,
     schema::PySchema,
     source::{PyEdgeSource, PyNodeSource},
-    traits::DeepInto,
-    value::PyValue,
 };
 use graphrecords_core::{
     errors::{GraphRecordError, GraphRecordResult},
@@ -19,6 +16,10 @@ use graphrecords_core::{
             SetNodeAttributes, SetSchema, UnfreezeSchema,
         },
     },
+};
+use graphrecords_pyo3::{
+    PyAttributeName, PyAttributes, PyGraphRecordError, PyGroupIndex, PyNodeIndex, PyValue,
+    traits::DeepInto,
 };
 use pyo3::{
     Bound, IntoPyObjectExt, Py, PyAny, PyErr, PyResult, Python,

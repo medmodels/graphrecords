@@ -1,13 +1,11 @@
-use crate::graphrecord::{
-    PyAttributeName, PyGroupIndex,
-    datatype::PyDataType,
-    schema::PyAttributeType,
-    traits::{DeepFrom, DeepInto},
-    value::PyValue,
-};
+use crate::graphrecord::{datatype::PyDataType, schema::PyAttributeType};
 use graphrecords_overview::{
     AttributeOverview, AttributeOverviewData, EdgeGroupOverview, GroupOverview, NodeGroupOverview,
     Overview,
+};
+use graphrecords_pyo3::{
+    PyAttributeName, PyGroupIndex, PyValue,
+    traits::{DeepFrom, DeepInto},
 };
 use pyo3::{prelude::*, types::PyDict};
 use std::collections::HashMap;
