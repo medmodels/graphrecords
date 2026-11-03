@@ -23,6 +23,8 @@ use graphrecords_core::{
         AttributeName, AttributeNameView, EdgeIndex, GroupIndex, NodeIndex, Value, ValueView,
     },
 };
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     fmt::{self, Display, Formatter},
@@ -32,6 +34,7 @@ use std::{
 };
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DynEntityReferenceKind {
     Node(NodeIndex),
     Edge(EdgeIndex),
@@ -39,6 +42,7 @@ pub enum DynEntityReferenceKind {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DynEntityReference {
     kind: DynEntityReferenceKind,
 }
@@ -221,6 +225,7 @@ pub enum DynEquivalenceKey<'a> {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DynValue {
     Scalar(Value),
     Attribute(AttributeName),

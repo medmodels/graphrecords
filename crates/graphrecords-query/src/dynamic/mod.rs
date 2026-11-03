@@ -6,6 +6,8 @@ mod optimizer;
 pub(crate) mod payload;
 pub(crate) mod projection;
 mod selection;
+#[cfg(feature = "serde")]
+mod serde;
 pub(crate) mod stream;
 mod value;
 
@@ -22,7 +24,7 @@ pub(crate) use dispatch::{
 };
 pub(crate) use expression::{
     DynArityHandle, DynGroupHandle, DynHandle, DynLaneHandle, DynLaneState, IntoDynArityHandle,
-    IntoDynExpression, IntoDynLaneHandle,
+    IntoDynHandle, IntoDynLaneHandle,
 };
 pub use expression::{DynExplanation, DynExpression, edges, groups, nodes};
 pub(crate) use graphrecords_core::graphrecord::{EdgeIndex, GroupIndex, NodeIndex};

@@ -15,9 +15,14 @@ graphrecords-macros = { workspace = true }
 elsa = "1.11.2"
 rand = "0.10.2"
 regex = "1.11.2"
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+bincode = { workspace = true }
 
 [features]
 dynamic = []
+serde = ["dep:serde", "graphrecords-core/serde"]
 
 [lints]
 workspace = true

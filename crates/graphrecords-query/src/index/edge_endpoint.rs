@@ -1,8 +1,11 @@
 use crate::{IndexDomain, OwnedIndex, QueryResult};
 use graphrecords_core::GraphRecord;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EdgeEndpointRole {
     Source,
     Target,

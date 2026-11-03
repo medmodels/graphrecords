@@ -9,7 +9,7 @@ use crate::{
     ReturnExpression, Single, Unit, Unordered,
     error::dispatch::OperationNotApplicable,
     execution::{CacheableShape, EvaluationCache},
-    explain::{CompactPlan, write_truncated_plan},
+    explain::CompactPlan,
     expressions::{
         AllEdges, AllGroups, AllNodes, EdgesExpression, ExpressionHandle, GroupedExpression,
         GroupsExpression, NodesExpression,
@@ -26,9 +26,11 @@ use graphrecords_core::{
     GraphRecord,
     graphrecord::{EdgeIndex, GroupIndex, NodeIndex},
 };
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Display, Formatter},
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
 };
 
 pub type DynGroupHandle = GroupedExpression<DynIndex, DynIndex, DynPayload>;
@@ -55,10 +57,24 @@ pub enum DynHandle {
     Group(DynGroupHandle),
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Program {
+    Nodes,
+    Edges,
+    Groups,
+    Cache(DynExpression),
+    Invoke {
+        input: DynExpression,
+        method: String,
+        arguments: Vec<DynInvokeArgument>,
+    },
+}
+
 #[derive(Clone)]
 pub struct DynExpression {
-    pub(crate) handle: DynHandle,
+    program: Arc<Program>,
     descriptor: ExpressionDescriptor,
+    pub(crate) handle: DynHandle,
 }
 
 pub struct DynExplanation {
@@ -79,7 +95,7 @@ pub fn nodes() -> DynExpression {
         },
     };
 
-    DynExpression::from_lane(handle, descriptor)
+    DynExpression::new(Program::Nodes, descriptor, handle.into_dyn())
 }
 
 #[must_use]
@@ -95,7 +111,7 @@ pub fn edges() -> DynExpression {
         },
     };
 
-    DynExpression::from_lane(handle, descriptor)
+    DynExpression::new(Program::Edges, descriptor, handle.into_dyn())
 }
 
 #[must_use]
@@ -111,7 +127,7 @@ pub fn groups() -> DynExpression {
         },
     };
 
-    DynExpression::from_lane(handle, descriptor)
+    DynExpression::new(Program::Groups, descriptor, handle.into_dyn())
 }
 
 pub trait IntoDynArityHandle: DynArity + Sized {
@@ -182,8 +198,8 @@ pub trait DynLaneState: IntoDynLaneHandle {
     fn handles(handle: &DynLaneHandle) -> &DynArityHandle<Self>;
 }
 
-pub trait IntoDynExpression: Expression + Sized {
-    fn into_dyn(self, descriptor: ExpressionDescriptor) -> DynExpression;
+pub trait IntoDynHandle: Expression + Sized {
+    fn into_dyn(self) -> DynHandle;
 }
 
 impl IntoDynLaneHandle for Indexed<DynIndex, DynValue> {
@@ -261,19 +277,19 @@ impl DynLaneState for Bare<Mask> {
     }
 }
 
-impl<S, C> IntoDynExpression for ExpressionHandle<S, C>
+impl<S, C> IntoDynHandle for ExpressionHandle<S, C>
 where
     S: IntoDynLaneHandle,
     C: IntoDynArityHandle,
 {
-    fn into_dyn(self, descriptor: ExpressionDescriptor) -> DynExpression {
-        DynExpression::from_lane(self, descriptor)
+    fn into_dyn(self) -> DynHandle {
+        DynHandle::Lane(S::into_lane(self))
     }
 }
 
-impl IntoDynExpression for DynGroupHandle {
-    fn into_dyn(self, descriptor: ExpressionDescriptor) -> DynExpression {
-        DynExpression::from_group(self, descriptor)
+impl IntoDynHandle for DynGroupHandle {
+    fn into_dyn(self) -> DynHandle {
+        DynHandle::Group(self)
     }
 }
 
@@ -454,29 +470,34 @@ impl Explain for DynLaneHandle {
 }
 
 impl DynExpression {
-    #[must_use]
-    pub fn from_lane<S, C>(handle: ExpressionHandle<S, C>, descriptor: ExpressionDescriptor) -> Self
-    where
-        S: IntoDynLaneHandle,
-        C: IntoDynArityHandle,
-    {
-        let handle = DynHandle::Lane(S::into_lane(handle));
-        Self::new(handle, descriptor)
-    }
-
-    #[must_use]
-    pub fn from_group(handle: DynGroupHandle, descriptor: ExpressionDescriptor) -> Self {
-        Self::new(DynHandle::Group(handle), descriptor)
-    }
-
-    fn new(handle: DynHandle, descriptor: ExpressionDescriptor) -> Self {
+    fn new(program: Program, descriptor: ExpressionDescriptor, handle: DynHandle) -> Self {
         Self::verify_descriptor(&handle, &descriptor);
-        Self { handle, descriptor }
+
+        Self {
+            program: Arc::new(program),
+            descriptor,
+            handle,
+        }
+    }
+
+    fn with_plan(&self, descriptor: ExpressionDescriptor, handle: DynHandle) -> Self {
+        Self::verify_descriptor(&handle, &descriptor);
+
+        Self {
+            program: Arc::clone(&self.program),
+            descriptor,
+            handle,
+        }
     }
 
     #[must_use]
     pub const fn descriptor(&self) -> &ExpressionDescriptor {
         &self.descriptor
+    }
+
+    #[cfg(feature = "serde")]
+    pub(crate) fn program(&self) -> &Program {
+        &self.program
     }
 
     #[must_use]
@@ -485,7 +506,12 @@ impl DynExpression {
             DynHandle::Lane(handle) => DynHandle::Lane(handle.cache()),
             DynHandle::Group(handle) => DynHandle::Group(handle.cache()),
         };
-        Self::new(handle, self.descriptor.clone())
+
+        Self::new(
+            Program::Cache(self.clone()),
+            self.descriptor.clone(),
+            handle,
+        )
     }
 
     pub fn invoke(&self, method: &str, arguments: &[DynInvokeArgument]) -> QueryResult<Self> {
@@ -504,7 +530,13 @@ impl DynExpression {
             return self.inapplicable(method, argument_descriptors);
         };
 
-        Ok(applier(self, arguments, output))
+        let program = Program::Invoke {
+            input: self.clone(),
+            method: method.to_string(),
+            arguments: arguments.to_vec(),
+        };
+
+        Ok(Self::new(program, output, applier(self, arguments)))
     }
 
     pub(crate) fn inapplicable(
@@ -538,46 +570,44 @@ impl DynExpression {
         let operation = DynamicOperation::new(operation);
 
         let DynHandle::Lane(handle) = &self.handle else {
-            return match self.descriptor().lane_arity() {
+            let handle = match self.descriptor().lane_arity() {
                 ArityDescriptor::Multiple {
                     order: OrderDescriptor::Ordered,
-                } => apply_grouped_operation::<DynamicShape, Multiple<Ordered>, _>(
-                    self, operation, output,
-                ),
+                } => apply_grouped_operation::<DynamicShape, Multiple<Ordered>, _>(self, operation),
                 ArityDescriptor::Multiple {
                     order: OrderDescriptor::Unordered,
-                } => apply_grouped_operation::<DynamicShape, Multiple<Unordered>, _>(
-                    self, operation, output,
-                ),
+                } => {
+                    apply_grouped_operation::<DynamicShape, Multiple<Unordered>, _>(self, operation)
+                }
                 ArityDescriptor::Single => {
-                    apply_grouped_operation::<DynamicShape, Single, _>(self, operation, output)
+                    apply_grouped_operation::<DynamicShape, Single, _>(self, operation)
                 }
                 ArityDescriptor::Definite => {
-                    apply_grouped_operation::<DynamicShape, Definite, _>(self, operation, output)
+                    apply_grouped_operation::<DynamicShape, Definite, _>(self, operation)
                 }
             };
+
+            return self.with_plan(output, handle);
         };
 
         let handles = <DynamicShape as DynLaneState>::handles(handle);
 
-        match handles {
+        let handle = match handles {
             DynArityHandle::MultipleOrdered(_) => {
-                apply_lane_operation::<DynamicShape, Multiple<Ordered>, _>(
-                    handles, operation, output,
-                )
+                apply_lane_operation::<DynamicShape, Multiple<Ordered>, _>(handles, operation)
             }
             DynArityHandle::MultipleUnordered(_) => {
-                apply_lane_operation::<DynamicShape, Multiple<Unordered>, _>(
-                    handles, operation, output,
-                )
+                apply_lane_operation::<DynamicShape, Multiple<Unordered>, _>(handles, operation)
             }
             DynArityHandle::Single(_) => {
-                apply_lane_operation::<DynamicShape, Single, _>(handles, operation, output)
+                apply_lane_operation::<DynamicShape, Single, _>(handles, operation)
             }
             DynArityHandle::Definite(_) => {
-                apply_lane_operation::<DynamicShape, Definite, _>(handles, operation, output)
+                apply_lane_operation::<DynamicShape, Definite, _>(handles, operation)
             }
-        }
+        };
+
+        self.with_plan(output, handle)
     }
 
     pub fn evaluate(&self, graphrecord: &GraphRecord) -> QueryResult<DynTerminal> {
@@ -626,7 +656,7 @@ impl DynExpression {
             }
         };
 
-        (Self::new(handle, self.descriptor.clone()), report)
+        (self.with_plan(self.descriptor.clone(), handle), report)
     }
 
     fn verify_descriptor(handle: &DynHandle, descriptor: &ExpressionDescriptor) {
@@ -695,9 +725,48 @@ impl Explain for DynExpression {
 
 impl fmt::Debug for DynExpression {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        formatter.write_str("Expression [")?;
-        write_truncated_plan(formatter, self)?;
-        formatter.write_str("]")
+        self.program.fmt(formatter)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Program {
+    pub(crate) fn compile(self) -> QueryResult<DynExpression> {
+        match self {
+            Self::Nodes => Ok(nodes()),
+            Self::Edges => Ok(edges()),
+            Self::Groups => Ok(groups()),
+            Self::Cache(input) => Ok(input.cache()),
+            Self::Invoke {
+                input,
+                method,
+                arguments,
+            } => input.invoke(&method, &arguments),
+        }
+    }
+}
+
+impl Display for Program {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Nodes => formatter.write_str("nodes()"),
+            Self::Edges => formatter.write_str("edges()"),
+            Self::Groups => formatter.write_str("groups()"),
+            Self::Cache(input) => write!(formatter, "{input:?}.cache()"),
+            Self::Invoke {
+                input,
+                method,
+                arguments,
+            } => {
+                let arguments = arguments
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(formatter, "{input:?}.{method}({arguments})")
+            }
+        }
     }
 }
 

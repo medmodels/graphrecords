@@ -233,15 +233,13 @@ impl Applier<'_> {
 
                 let #query::dynamic::DynHandle::Lane(handle) = &input.handle else {
                     return #query::dynamic::apply_grouped_operation::<DynamicShape, #arity, _>(
-                        input, operation, output,
-                    );
+                        input, operation);
                 };
 
                 let handles = <DynamicShape as #query::dynamic::DynLaneState>::handles(handle);
 
                 #query::dynamic::apply_lane_operation::<DynamicShape, #arity, _>(
-                    handles, operation, output,
-                )
+                    handles, operation)
             }
         }
     }
@@ -601,7 +599,6 @@ impl Applier<'_> {
         quote! {
             {
                 let operation = #operation_value;
-                let output = output;
 
                 let #query::dynamic::DynHandle::Lane(handle) = &input.handle else {
                     return match input.descriptor().lane_arity() {
@@ -611,23 +608,21 @@ impl Applier<'_> {
                             DynamicShape,
                             #query::Multiple<#query::Ordered>,
                             _,
-                        >(input, operation, output),
+                        >(input, operation),
                         #query::registry::ArityDescriptor::Multiple {
                             order: #query::registry::OrderDescriptor::Unordered,
                         } => #query::dynamic::apply_grouped_operation::<
                             DynamicShape,
                             #query::Multiple<#query::Unordered>,
                             _,
-                        >(input, operation, output),
+                        >(input, operation),
                         #query::registry::ArityDescriptor::Single => {
                             #query::dynamic::apply_grouped_operation::<DynamicShape, #query::Single, _>(
-                                input, operation, output,
-                            )
+                                input, operation)
                         }
                         #query::registry::ArityDescriptor::Definite => {
                             #query::dynamic::apply_grouped_operation::<DynamicShape, #query::Definite, _>(
-                                input, operation, output,
-                            )
+                                input, operation)
                         }
                     };
                 };
@@ -640,24 +635,22 @@ impl Applier<'_> {
                             DynamicShape,
                             #query::Multiple<#query::Ordered>,
                             _,
-                        >(handles, operation, output)
+                        >(handles, operation)
                     }
                     #query::dynamic::DynArityHandle::MultipleUnordered(_) => {
                         #query::dynamic::apply_lane_operation::<
                             DynamicShape,
                             #query::Multiple<#query::Unordered>,
                             _,
-                        >(handles, operation, output)
+                        >(handles, operation)
                     }
                     #query::dynamic::DynArityHandle::Single(_) => {
                         #query::dynamic::apply_lane_operation::<DynamicShape, #query::Single, _>(
-                            handles, operation, output,
-                        )
+                            handles, operation)
                     }
                     #query::dynamic::DynArityHandle::Definite(_) => {
                         #query::dynamic::apply_lane_operation::<DynamicShape, #query::Definite, _>(
-                            handles, operation, output,
-                        )
+                            handles, operation)
                     }
                 }
             }
@@ -715,7 +708,7 @@ impl Applier<'_> {
             let capture = #query::dynamic::OperationCapture::<#operation>::capture();
             let operation = capture.#method(#policy).operation();
 
-            #query::dynamic::apply_group_operation(input, operation, output)
+            #query::dynamic::apply_group_operation(input, operation)
         };
 
         self.apply_function(&body)
@@ -955,7 +948,7 @@ impl Applier<'_> {
                     #payload_arity,
                 >::new(operation);
 
-                #query::dynamic::apply_group_operation(input, operation, output)
+                #query::dynamic::apply_group_operation(input, operation)
             }
         }
     }
@@ -1018,7 +1011,7 @@ impl Applier<'_> {
         let query = self.query;
 
         quote! {
-            { #query::dynamic::apply_group_operation(input, operation, output) }
+            { #query::dynamic::apply_group_operation(input, operation) }
         }
     }
 
@@ -1032,7 +1025,7 @@ impl Applier<'_> {
 
                 let operation = DynamicOperation::new(operation);
 
-                #query::dynamic::apply_group_operation(input, operation, output)
+                #query::dynamic::apply_group_operation(input, operation)
             }
         }
     }
@@ -2099,8 +2092,7 @@ impl Applier<'_> {
                 fn apply(
                     input: &#query::dynamic::DynExpression,
                     arguments: &[#query::dynamic::DynInvokeArgument],
-                    output: #query::registry::ExpressionDescriptor,
-                ) -> #query::dynamic::DynExpression {
+                ) -> #query::dynamic::DynHandle {
                     #body
                 }
 

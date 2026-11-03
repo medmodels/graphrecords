@@ -1,7 +1,7 @@
 use super::{
     DynArgumentLane, DynArgumentSource, DynArity, DynArityHandle, DynExpression, DynGroupHandle,
     DynHandle, DynIndex, DynInvokeArgument, DynPayload, DynPayloadOutput, DynStream,
-    DynStreamShape, DynYield, IntoDynArityHandle, IntoDynExpression, IntoDynLaneHandle,
+    DynStreamShape, DynYield, IntoDynArityHandle, IntoDynHandle, IntoDynLaneHandle,
 };
 use crate::{
     EdgeDirection, EvaluateContext, EvaluateExpression, Explain, Expression, Mask, QueryResult,
@@ -27,8 +27,7 @@ use std::{
     sync::Arc,
 };
 
-pub type DynApplier =
-    fn(&DynExpression, &[DynInvokeArgument], ExpressionDescriptor) -> DynExpression;
+pub type DynApplier = fn(&DynExpression, &[DynInvokeArgument]) -> DynHandle;
 
 #[derive(Clone, Copy)]
 pub enum DynEntityDomain {
@@ -253,32 +252,24 @@ where
     }
 }
 
-pub fn apply_operation<I, P>(
-    input: I,
-    operation: P,
-    descriptor: ExpressionDescriptor,
-) -> DynExpression
+pub fn apply_operation<I, P>(input: I, operation: P) -> DynHandle
 where
     I: Apply<P>,
     P: Operation,
-    I::Output: IntoDynExpression,
+    I::Output: IntoDynHandle,
 {
-    <I as Apply<P>>::Output::new(OperationContext::new(input, operation)).into_dyn(descriptor)
+    <I as Apply<P>>::Output::new(OperationContext::new(input, operation)).into_dyn()
 }
 
-pub fn apply_lane_operation<S, C, P>(
-    handles: &DynArityHandle<S>,
-    operation: P,
-    descriptor: ExpressionDescriptor,
-) -> DynExpression
+pub fn apply_lane_operation<S, C, P>(handles: &DynArityHandle<S>, operation: P) -> DynHandle
 where
     S: DynStreamShape + IntoDynLaneHandle,
     C: IntoDynArityHandle,
     P: Operation,
     ExpressionHandle<S, C>: Apply<P>,
-    <ExpressionHandle<S, C> as Apply<P>>::Output: IntoDynExpression,
+    <ExpressionHandle<S, C> as Apply<P>>::Output: IntoDynHandle,
 {
-    apply_operation(C::clone_handle(handles), operation, descriptor)
+    apply_operation(C::clone_handle(handles), operation)
 }
 
 impl<P: Operation, S, C> MatchInputs for DynGroupedOperationContext<P, S, C> {
@@ -431,11 +422,7 @@ where
     }
 }
 
-pub fn apply_grouped_operation<S, C, P>(
-    input: &DynExpression,
-    operation: P,
-    descriptor: ExpressionDescriptor,
-) -> DynExpression
+pub fn apply_grouped_operation<S, C, P>(input: &DynExpression, operation: P) -> DynHandle
 where
     S: DynStreamShape,
     C: DynArity,
@@ -447,13 +434,11 @@ where
         panic!("registry selected dynamic grouped lifting for an ungrouped expression")
     };
 
-    let handle = DynGroupHandle::new(DynGroupedOperationContext {
+    DynHandle::Group(DynGroupHandle::new(DynGroupedOperationContext {
         input: input.clone(),
         operation,
         marker: PhantomData,
-    });
-
-    DynExpression::from_group(handle, descriptor)
+    }))
 }
 
 fn lift_grouped_operation<'a, S, C, P>(
@@ -534,7 +519,7 @@ impl<P: Operation> MatchInputs for DynNestedGroupContext<P> {
 impl<P> PlanNode for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynExpression,
+    P::Output: DynPayloadOutput + IntoDynHandle,
 {
     fn inputs(&self) -> Vec<&dyn PlanNode> {
         let mut inputs = vec![self.input.as_plan_node()];
@@ -564,7 +549,7 @@ where
 impl<P> OptimizerHints for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynExpression,
+    P::Output: DynPayloadOutput + IntoDynHandle,
 {
     fn commutes_with_filter(&self) -> bool {
         self.operation.commutes_with_filter()
@@ -586,7 +571,7 @@ where
 impl<P> Explain for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynExpression,
+    P::Output: DynPayloadOutput + IntoDynHandle,
 {
     fn describe<'a>(&'a self, formatter: &mut ExplainFormatter<'a, '_>) -> fmt::Result {
         formatter.child(&self.input);
@@ -597,7 +582,7 @@ where
 impl<P> Estimated for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynExpression,
+    P::Output: DynPayloadOutput + IntoDynHandle,
 {
     fn estimate(&self, stats: &Stats) -> Estimate {
         estimate_nested_group_operation(
@@ -612,7 +597,7 @@ where
 impl<P> OptimizePlan for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynExpression,
+    P::Output: DynPayloadOutput + IntoDynHandle,
 {
     type Output = DynGroupHandle;
 
@@ -635,7 +620,7 @@ where
 impl<P> EvaluateContext for DynNestedGroupContext<P>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynExpression,
+    P::Output: DynPayloadOutput + IntoDynHandle,
 {
     type Expression = DynGroupHandle;
 
@@ -656,14 +641,10 @@ where
     }
 }
 
-pub fn apply_group_operation<P>(
-    input: &DynExpression,
-    operation: P,
-    descriptor: ExpressionDescriptor,
-) -> DynExpression
+pub fn apply_group_operation<P>(input: &DynExpression, operation: P) -> DynHandle
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynExpression,
+    P::Output: DynPayloadOutput + IntoDynHandle,
 {
     let DynHandle::Group(handle) = &input.handle else {
         panic!("registry selected a dynamic group operation for an ungrouped expression")
@@ -672,16 +653,14 @@ where
     let depth = input.descriptor().group_depth();
 
     if depth == 1 {
-        return apply_operation(handle.clone(), operation, descriptor);
+        return apply_operation(handle.clone(), operation);
     }
 
-    let handle = DynGroupHandle::new(DynNestedGroupContext {
+    DynHandle::Group(DynGroupHandle::new(DynNestedGroupContext {
         input: handle.clone(),
         operation,
         layers: depth - 1,
-    });
-
-    DynExpression::from_group(handle, descriptor)
+    }))
 }
 
 fn apply_nested_group_operation<'a, P>(
@@ -692,7 +671,7 @@ fn apply_nested_group_operation<'a, P>(
 ) -> Partition<'a, DynIndex, DynIndex, DynPayload>
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynExpression,
+    P::Output: DynPayloadOutput + IntoDynHandle,
 {
     if layers != 0 {
         return partition.map_payloads(|_, _, payload| {
@@ -731,7 +710,7 @@ fn estimate_nested_group_operation<P>(
 ) -> Estimate
 where
     P: GroupKernel<DynIndex, DynIndex, DynPayload>,
-    P::Output: DynPayloadOutput + IntoDynExpression,
+    P::Output: DynPayloadOutput + IntoDynHandle,
 {
     let Some(payload) = estimate.per_group.take() else {
         panic!("registry selected a nested group operation for an estimate without group payload")
