@@ -1,3 +1,4 @@
+import pickle
 import unittest
 from datetime import datetime
 from typing import Any
@@ -226,7 +227,7 @@ class TestExpressionSurface(unittest.TestCase):
         ]
 
     def test_repr(self) -> None:
-        assert repr(nodes()) == "Expression(Expression [AllNodes])"
+        assert repr(nodes()) == "Expression(nodes())"
         assert repr(self.record.nodes()) == "Series(Series [AllNodes])"
 
     def test_explain(self) -> None:
@@ -235,6 +236,50 @@ class TestExpressionSurface(unittest.TestCase):
         assert (
             "Attribute" in self.record.nodes().attribute("amet").explain_unoptimized()
         )
+
+    def test_pickle(self) -> None:
+        expression = nodes().attribute("amet").greater_than(3)
+        restored = pickle.loads(pickle.dumps(expression))
+
+        assert isinstance(restored, Expression)
+        assert repr(restored) == 'Expression(nodes().attribute("amet").greater_than(3))'
+        assert list(self.record.query(restored).evaluate()) == [
+            ("lorem", False),
+            ("ipsum", True),
+            ("dolor", True),
+            ("sit", True),
+        ]
+
+        with_series = (
+            nodes()
+            .attribute("amet")
+            .cache()
+            .greater_than(self.record.nodes().attribute("amet"))
+        )
+        restored_with_series = pickle.loads(pickle.dumps(with_series))
+
+        assert repr(restored_with_series) == (
+            'Expression(nodes().attribute("amet").cache()'
+            '.greater_than(series(nodes().attribute("amet"))))'
+        )
+        assert list(self.record.query(restored_with_series).evaluate()) == [
+            ("lorem", False),
+            ("ipsum", False),
+            ("dolor", False),
+            ("sit", False),
+        ]
+
+    def test_invalid_pickle(self) -> None:
+        kinds = self.record.nodes().attribute("amet").lowercase().errors().kind()
+        kind = next(iter(kinds.evaluate()))[1]
+        assert isinstance(kind, FailureKind)
+        with_kind = nodes().attribute("amet").lowercase().errors().kind().is_in([kind])
+
+        with pytest.raises(RuntimeError, match="a failure kind cannot be saved"):
+            pickle.dumps(with_kind)
+
+        with pytest.raises(TypeError, match="must be free"):
+            pickle.dumps(self.record.nodes())
 
     def test_invalid_binding(self) -> None:
         unbound: Expression[Any, Any, Any] = nodes()

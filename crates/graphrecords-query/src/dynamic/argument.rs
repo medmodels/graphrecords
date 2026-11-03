@@ -28,12 +28,15 @@ use graphrecords_core::{
     GraphRecord,
     graphrecord::{AttributeName, GroupIndex, NodeIndex, Value},
 };
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Display, Write},
     hash::{Hash, Hasher},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DynCastTarget {
     Bool,
     DateTime,
@@ -44,6 +47,7 @@ pub enum DynCastTarget {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DynValueTarget {
     Value,
     ValueIndex,
@@ -59,12 +63,14 @@ pub enum DynValueTarget {
 }
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DynArgumentLane {
     Expression(DynExpression),
     Series(Box<Series<DynExpression>>),
 }
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 enum DynArgumentReplacement {
     Value(DynValue),
     Mask(bool),
@@ -73,6 +79,7 @@ enum DynArgumentReplacement {
 }
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 enum DynArgumentSourceKind {
     Value(DynValue),
     Values(Vec<DynValue>),
@@ -87,6 +94,7 @@ enum DynArgumentSourceKind {
 }
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DynArgumentSource {
     kind: Box<DynArgumentSourceKind>,
 }
@@ -109,6 +117,7 @@ pub trait DynArgumentBuilder<A: Alignment, R: Retention>: ValueDomain {
 }
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DynInvokeArgument {
     Source(DynArgumentSource),
     Lane(DynArgumentLane),
@@ -483,6 +492,26 @@ impl DynArgumentReplacement {
     }
 }
 
+impl Display for DynArgumentLane {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Expression(expression) => write!(formatter, "{expression:?}"),
+            Self::Series(series) => write!(formatter, "series({:?})", series.expression()),
+        }
+    }
+}
+
+impl Display for DynArgumentReplacement {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Value(value) => value.fmt(formatter),
+            Self::Mask(value) => value.fmt(formatter),
+            Self::Lane(lane) => lane.fmt(formatter),
+            Self::Source(source) => source.fmt(formatter),
+        }
+    }
+}
+
 impl DynArgumentSource {
     #[must_use]
     pub fn value(value: DynValue) -> Self {
@@ -646,6 +675,41 @@ impl DynArgumentSource {
     }
 }
 
+impl Display for DynArgumentSource {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind.as_ref() {
+            DynArgumentSourceKind::Value(value) => value.fmt(formatter),
+            DynArgumentSourceKind::Mask(value) => value.fmt(formatter),
+            DynArgumentSourceKind::Values(values) => {
+                let values = values
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(formatter, "[{values}]")
+            }
+            DynArgumentSourceKind::MaskValues(values) => {
+                let values = values
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(formatter, "[{values}]")
+            }
+            DynArgumentSourceKind::Lane(lane) => lane.fmt(formatter),
+            DynArgumentSourceKind::DropMissing(lane) => {
+                write!(formatter, "{lane}.on_missing_drop()")
+            }
+            DynArgumentSourceKind::ReplaceMissing {
+                source,
+                replacement,
+            } => write!(formatter, "{source}.on_missing_replace({replacement})"),
+        }
+    }
+}
+
 impl DynInvokeArgument {
     #[must_use]
     pub fn descriptor(&self) -> ArgumentDescriptor {
@@ -689,6 +753,23 @@ impl DynInvokeArgument {
             Self::Size(_) => ArgumentDescriptor::field::<usize>(),
             Self::Integer(_) => ArgumentDescriptor::field::<u64>(),
             Self::Float(_) => ArgumentDescriptor::field::<f64>(),
+        }
+    }
+}
+
+impl Display for DynInvokeArgument {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Source(source) => source.fmt(formatter),
+            Self::Lane(lane) => lane.fmt(formatter),
+            Self::CastTarget(target) => write!(formatter, "{target:?}"),
+            Self::ValueTarget(target) => write!(formatter, "{target:?}"),
+            Self::Attribute(attribute) => attribute.fmt(formatter),
+            Self::Group(group) => group.fmt(formatter),
+            Self::Direction(direction) => direction.fmt(formatter),
+            Self::Size(size) => size.fmt(formatter),
+            Self::Integer(integer) => integer.fmt(formatter),
+            Self::Float(float) => float.fmt(formatter),
         }
     }
 }

@@ -11,6 +11,8 @@ use graphrecords_core::{
         GroupIndexView, NodeAddress, NodeIndex, NodeIndexView, Value,
     },
 };
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     fmt::{self, Display, Formatter},
@@ -20,6 +22,7 @@ use std::{
 pub struct DynIndex;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DynIndexOwned {
     Positional(Position),
     Node(NodeIndex),
@@ -64,6 +67,7 @@ pub enum DynIndexAddress {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DynExpandedOwned {
     parent: DynIndexOwned,
     child: Option<DynIndexOwned>,

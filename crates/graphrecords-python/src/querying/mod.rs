@@ -34,12 +34,17 @@ use graphrecords_core::{
     errors::GraphRecordResult,
     graphrecord::{EdgeIndex, GraphRecord, GroupIndex, NodeIndex},
 };
-use graphrecords_pyo3::{PyAttributeName, PyGroupIndex, exception::FailureConversion};
+use graphrecords_pyo3::{
+    PyAttributeName, PyGraphRecordError, PyGroupIndex, exception::FailureConversion,
+};
 use graphrecords_query::{
     dynamic::{self, DynArgumentLane, DynExpression, DynInvokeArgument},
     registry::{ExpressionDescriptor, IndexDescriptor, LaneShapeDescriptor, ValueRole},
 };
-use pyo3::prelude::*;
+use pyo3::{
+    prelude::*,
+    types::{PyBytes, PyTuple},
+};
 pub use results::{PyGroupedResult, PyResultView};
 pub use series::PySeries;
 use surface::expression_surface;
@@ -121,6 +126,38 @@ expression_surface! {
 
         fn explain(&self) -> String {
             self.expression().explanation().to_string()
+        }
+
+        #[staticmethod]
+        fn _from_bytes(py: Python<'_>, data: &Bound<'_, PyBytes>) -> PyResult<Self> {
+            let bytes = data.as_bytes();
+            let expression: DynExpression =
+                py.detach(|| bincode::deserialize(bytes)).map_err(|error| {
+                    PyGraphRecordError::Conversion(format!(
+                        "Failed to deserialize Expression: {error}"
+                    ))
+                })?;
+
+            Ok(expression.into())
+        }
+
+        fn _to_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+            let bytes = py
+                .detach(|| bincode::serialize(self.expression()))
+                .map_err(|error| {
+                    PyGraphRecordError::Conversion(format!(
+                        "Failed to serialize Expression: {error}"
+                    ))
+                })?;
+
+            Ok(PyBytes::new(py, &bytes))
+        }
+
+        fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Py<PyAny>, Bound<'py, PyTuple>)> {
+            let constructor = py.get_type::<Self>().getattr("_from_bytes")?.unbind();
+            let arguments = (self._to_bytes(py)?,).into_pyobject(py)?;
+
+            Ok((constructor, arguments))
         }
 
         fn __repr__(&self) -> String {

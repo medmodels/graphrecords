@@ -4,6 +4,7 @@ from __future__ import annotations
 from enum import Enum, auto
 from typing import (
     Any,
+    Callable,
     ClassVar,
     Generic,
     Iterator,
@@ -925,6 +926,14 @@ class Expression(Generic[BindingType, S, C, Unpack[Levels]]):
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._py_carrier!r})"
+
+    def __reduce__(
+        self,
+    ) -> Tuple[
+        Callable[[PyExpression], Expression[BindingType, S, C, Unpack[Levels]]],
+        Tuple[PyExpression],
+    ]:
+        return self._from_py_expression, (self._py_expression,)
 
     @overload
     def evaluate(

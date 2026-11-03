@@ -10,7 +10,7 @@ This crate provides a workaround by serializing `GraphRecord` to bytes (via binc
 
 ## Key Components
 
-- **Serialized types** - `PyGraphRecord`, `PyEdgeIndex`, `PySchema`, `PyGroupSchema` and `PyAttributeDataType` cross the boundary as bincode bytes. The receiving side gets its own copy.
+- **Serialized types** - `PyGraphRecord`, `PyEdgeIndex`, `PySchema`, `PyGroupSchema`, `PyAttributeDataType` and `PyExpression` cross the boundary as bincode bytes. The receiving side gets its own copy.
 - **Enums** - `PyAttributeType`, `PySchemaType`, `PyEdgeDirection` and `PyOnConflict` convert from and to the members of the corresponding `graphrecords` enums.
 - **Data types** - `PyDataType` converts from and to the `graphrecords` data type classes (`String`, `Int`, `Union`, `Option`, ...).
 - **Values and identifiers** - `PyValue`, `PyIdentifier`, `PyNodeIndex`, `PyGroupIndex` and `PyAttributes` map to Python builtins, re-exported from [`graphrecords-pyo3`](../graphrecords-pyo3).
@@ -19,6 +19,7 @@ This crate provides a workaround by serializing `GraphRecord` to bytes (via binc
 ## Notes
 
 - Plugins attached to a `GraphRecord` are not carried across the boundary.
+- An expression holding a failure kind cannot cross the boundary or be saved, since failure kinds have no serialized form. A series argument inside an expression carries its bound `GraphRecord` along.
 - The extension must be built against the same graphrecords version as the installed `graphrecords` Python package, because the serialized layout follows the Rust types.
 
 ## Usage

@@ -1,6 +1,9 @@
+#[cfg(any(feature = "serde", feature = "io"))]
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(any(feature = "serde", feature = "io"), derive(Serialize, Deserialize))]
 pub enum EdgeDirection {
     Incoming,
     Outgoing,

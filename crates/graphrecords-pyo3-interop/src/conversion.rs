@@ -1,6 +1,9 @@
-use graphrecords::prelude::{
-    AttributeDataType, AttributeType, DataType, EdgeDirection, EdgeIndex, GraphRecord, GroupSchema,
-    OnConflict, Schema, SchemaType,
+use graphrecords::{
+    prelude::{
+        AttributeDataType, AttributeType, DataType, EdgeDirection, EdgeIndex, GraphRecord,
+        GroupSchema, OnConflict, Schema, SchemaType,
+    },
+    query::dynamic::DynExpression,
 };
 use graphrecords_pyo3::PyGraphRecordError;
 use pyo3::{
@@ -214,6 +217,15 @@ implement_bytes_conversion!(
     internal_class = "PySchema",
     internal_attribute = "_py_schema",
     constructor = "_from_py_schema",
+);
+implement_bytes_conversion!(
+    PyExpression,
+    DynExpression,
+    class = "Expression",
+    internal_module = "graphrecords._graphrecords.querying",
+    internal_class = "PyExpression",
+    internal_attribute = "_py_expression",
+    constructor = "_from_py_expression",
 );
 
 implement_enum_conversion!(

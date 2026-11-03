@@ -14,6 +14,8 @@ pub mod prelude;
 pub mod registry;
 pub mod returns;
 mod selection;
+#[cfg(feature = "serde")]
+mod serde;
 pub mod series;
 pub mod traits;
 pub mod value;
@@ -67,6 +69,14 @@ mod test {
         },
         expressions::{groups, nodes},
         operations::policy::Drop,
+    };
+    #[cfg(all(feature = "dynamic", feature = "serde"))]
+    use crate::{
+        FailureKind,
+        dynamic::{
+            self, DynArgumentLane, DynArgumentSource, DynArityContainer, DynExpression,
+            DynIndexOwned, DynInvokeArgument, DynTerminal, DynTerminalLane, DynValue,
+        },
     };
     use graphrecords_core::{
         GraphRecord,
@@ -1054,5 +1064,77 @@ Graph: skipped (no rules)",
             GraphRecordError::NodesNotFound { node_indices }
                 if node_indices == vec![NodeIndex::from("3")]
         )));
+    }
+
+    #[cfg(all(feature = "dynamic", feature = "serde"))]
+    #[test]
+    fn test_serialize() {
+        let graphrecord = create_graphrecord();
+        let other = create_other_graphrecord();
+        let attribute = dynamic::nodes()
+            .invoke("attribute", &[DynInvokeArgument::Attribute("lorem".into())])
+            .unwrap();
+        let expression = attribute
+            .cache()
+            .invoke(
+                "equal_to",
+                &[DynInvokeArgument::Source(DynArgumentSource::lane(
+                    DynArgumentLane::Series(Box::new(other.query(attribute))),
+                ))],
+            )
+            .unwrap();
+
+        let bytes = bincode::serialize(&expression).unwrap();
+        let restored: DynExpression = bincode::deserialize(&bytes).unwrap();
+
+        assert_eq!(
+            "nodes().attribute(\"lorem\").cache().equal_to(series(nodes().attribute(\"lorem\")))",
+            format!("{restored:?}")
+        );
+
+        let DynTerminal::Lane(DynTerminalLane::IndexedMask(DynArityContainer::MultipleUnordered(
+            elements,
+        ))) = restored.evaluate(&graphrecord).unwrap()
+        else {
+            panic!("the restored expression must yield an unordered mask lane");
+        };
+        let elements: HashSet<_> = elements
+            .into_iter()
+            .map(|(index, outcome)| (index, outcome.ok()))
+            .collect();
+
+        assert_eq!(
+            HashSet::from([
+                (DynIndexOwned::Node("0".into()), Some(true)),
+                (DynIndexOwned::Node("1".into()), None),
+                (DynIndexOwned::Node("2".into()), None),
+                (DynIndexOwned::Node("3".into()), None),
+            ]),
+            elements
+        );
+    }
+
+    #[cfg(all(feature = "dynamic", feature = "serde"))]
+    #[test]
+    fn test_invalid_serialize() {
+        let kind = DynValue::FailureKind(FailureKind::of::<MissingAttribute>());
+        let expression = dynamic::nodes()
+            .invoke("attribute", &[DynInvokeArgument::Attribute("lorem".into())])
+            .unwrap()
+            .invoke("errors", &[])
+            .unwrap()
+            .invoke("kind", &[])
+            .unwrap()
+            .invoke(
+                "is_in",
+                &[DynInvokeArgument::Source(DynArgumentSource::values(vec![
+                    kind,
+                ]))],
+            )
+            .unwrap();
+
+        let error = bincode::serialize(&expression).unwrap_err();
+
+        assert_eq!("a failure kind cannot be saved", error.to_string());
     }
 }
