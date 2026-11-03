@@ -2,6 +2,12 @@
 
 All notable changes to the Rust crates will be documented in this file.
 
+## [0.8.1] - 2026-11-03
+
+### Features
+
+- implement serialization of dynamic expressions (#101)
+
 ## [0.8.0] - 2026-10-24
 
 ### Breaking Changes
